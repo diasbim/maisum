@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dart pub *)",
+      "Bash(flutter create *)",
+      "Read(//c/Dev/**)",
+      "Bash(SQLITE3_LIBRARY=\"C:\\\\\\\\Users\\\\\\\\X200078\\\\\\\\.cache\\\\\\\\codex-runtimes\\\\\\\\codex-primary-runtime\\\\\\\\dependencies\\\\\\\\python\\\\\\\\DLLs\\\\\\\\sqlite3.dll\" flutter test --no-pub)",
+      "Bash(NO_PROXY=\"localhost,127.0.0.1\" no_proxy=\"localhost,127.0.0.1\" flutter test --no-pub test/unit/constants/app_constants_test.dart)",
+      "Bash(NO_PROXY=\"localhost,127.0.0.1\" no_proxy=\"localhost,127.0.0.1\" flutter test --no-pub --concurrency=1)",
+      "Bash(NO_PROXY=\"dart.dev,pub.dev,storage.googleapis.com,*.googleapis.com\" no_proxy=\"dart.dev,pub.dev,storage.googleapis.com,*.googleapis.com\" flutter pub get)",
+      "Bash(flutterfire configure *)",
+      "Bash(netsh winhttp *)",
+      "Bash(reg query *)",
+      "Bash(wmic logicaldisk *)",
+      "Bash(powershell -Command \"Get-PSDrive C | Select-Object Used,Free | Format-List\")",
+      "Bash(python3 -c ' *)",
+      "PowerShell(Get-Process dart -ErrorAction SilentlyContinue)"
+    ],
+    "additionalDirectories": [
+      "C:\\Dev\\flutter\\loyaltyapp\\assets",
+      "C:\\Users\\X200078\\.gradle",
+      "c:\\Dev\\flutter\\loyaltyapp\\lib\\features\\auth\\presentation"
+    ]
+  }
+}

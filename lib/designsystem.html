@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Somestre — Design System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      /* ── Brand Colors ── */
+      --navy:    oklch(20% 0.055 258);
+      --navy2:   oklch(17% 0.05  258);
+      --navy3:   oklch(14% 0.04  258);
+      --gold:    oklch(82% 0.18  82);
+      --goldDk:  oklch(75% 0.18  82);
+      --goldLt:  oklch(97% 0.04  82);
+      --white:   oklch(99% 0.004 82);
+      --off:     oklch(97% 0.006 82);
+      /* ── Neutral ── */
+      --g100:    oklch(94% 0.006 250);
+      --g300:    oklch(82% 0.01  250);
+      --g500:    oklch(56% 0.015 250);
+      --g800:    oklch(22% 0.02  250);
+      /* ── Status ── */
+      --green:   oklch(62% 0.18  145);
+      --red:     oklch(52% 0.22  25);
+      --amber:   oklch(78% 0.17  60);
+      /* ── Radius ── */
+      --r:   12px;
+      --rL:  18px;
+      --rXL: 24px;
+      /* ── Shadow ── */
+      --sh:  0 2px 10px oklch(20% 0.055 258 / 0.10);
+      --shM: 0 6px 24px oklch(20% 0.055 258 / 0.16);
+      --shL: 0 16px 56px oklch(20% 0.055 258 / 0.24);
+      /* ── Typography ── */
+      --f-head: 'Bricolage Grotesque', system-ui, sans-serif;
+      --f-body: 'Outfit', system-ui, sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; }
+    body { font-family: var(--f-body); background: var(--off); color: var(--g800); -webkit-font-smoothing: antialiased; line-height: 1.6; }
+
+    /* ── PAGE SHELL ── */
+    .ds-header {
+      background: var(--navy); padding: 0;
+      position: sticky; top: 0; z-index: 100;
+      border-bottom: 1px solid oklch(100% 0 0 / 0.07);
+    }
+    .ds-header__inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 24px;
+      height: 60px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .ds-header__logo {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--f-head); font-size: 1rem; font-weight: 800; color: var(--white);
+    }
+    .ds-header__logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gold); }
+    .ds-header__tag {
+      background: oklch(82% 0.18 82 / 0.15); color: var(--gold);
+      font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      padding: 4px 12px; border-radius: 999px; border: 1px solid oklch(82% 0.18 82 / 0.2);
+    }
+    .ds-nav {
+      background: var(--white); border-bottom: 1px solid var(--g100);
+      overflow-x: auto;
+    }
+    .ds-nav__inner {
+      max-width: 1200px; margin: 0 auto; padding: 0 24px;
+      display: flex; gap: 0;
+    }
+    .ds-nav a {
+      padding: 14px 18px; font-size: .82rem; font-weight: 600; color: var(--g500);
+      text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .ds-nav a:hover, .ds-nav a.active { color: var(--navy); border-bottom-color: var(--gold); }
+
+    .ds-body { max-width: 1200px; margin: 0 auto; padding: 48px 24px 96px; }
+
+    /* ── SECTION ── */
+    .ds-section { margin-bottom: 72px; }
+    .ds-section-head {
+      display: flex; align-items: baseline; gap: 14px; margin-bottom: 28px;
+      padding-bottom: 14px; border-bottom: 2px solid var(--g100);
+    }
+    .ds-section-head h2 {
+      font-family: var(--f-head); font-size: 1.3rem; font-weight: 800; color: var(--navy);
+    }
+    .ds-section-head span {
+      font-size: .75rem; color: var(--g500); font-weight: 500;
+    }
+
+    /* ── SUBSECTION ── */
+    .ds-sub { margin-bottom: 40px; }
+    .ds-sub-label {
+      font-size: .7rem; font-weight: 700; color: var(--g500);
+      letter-spacing: .1em; text-transform: uppercase; margin-bottom: 16px;
+    }
+
+    /* ── COLOR SWATCHES ── */
+    .swatch-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    .swatch {
+      display: flex; flex-direction: column; gap: 0; border-radius: var(--r);
+      overflow: hidden; box-shadow: var(--sh); min-width: 120px;
+    }
+    .swatch__color { height: 72px; }
+    .swatch__info { background: var(--white); padding: 10px 12px; }
+    .swatch__name { font-size: .78rem; font-weight: 700; color: var(--g800); }
+    .swatch__val { font-size: .68rem; color: var(--g500); font-family: 'Courier New', monospace; }
+
+    /* ── TYPE SCALE ── */
+    .type-row {
+      display: flex; align-items: baseline; gap: 20px; padding: 14px 0;
+      border-bottom: 1px solid var(--g100);
+    }
+    .type-row:last-child { border-bottom: none; }
+    .type-row__meta { width: 140px; flex-shrink: 0; font-size: .72rem; color: var(--g500); font-family: 'Courier New', monospace; line-height: 1.6; }
+    .type-row__sample { flex: 1; }
+
+    /* ── SPACING ── */
+    .space-grid { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+    .space-item { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    .space-item__bar { background: var(--gold); border-radius: 4px; width: 32px; }
+    .space-item__label { font-size: .68rem; color: var(--g500); font-family: 'Courier New', monospace; text-align: center; }
+
+    /* ── RADIUS ── */
+    .radius-grid { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+    .radius-item {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .radius-item__box {
+      width: 64px; height: 64px; background: var(--navy);
+    }
+    .radius-item__label { font-size: .68rem; color: var(--g500); font-family: 'Courier New', monospace; text-align: center; }
+
+    /* ── SHADOW ── */
+    .shadow-grid { display: flex; flex-wrap: wrap; gap: 24px; }
+    .shadow-item {
+      background: var(--white); border-radius: var(--rL);
+      padding: 24px 28px; min-width: 160px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .shadow-item__label { font-size: .72rem; font-weight: 700; color: var(--g500); font-family: 'Courier New', monospace; }
+    .shadow-item__desc { font-size: .75rem; color: var(--g500); }
+
+    /* ── BUTTONS ── */
+    .btn-grid { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 13px 24px; border-radius: var(--r);
+      font-family: var(--f-body); font-size: .92rem; font-weight: 700;
+      cursor: pointer; border: none; transition: all .18s; white-space: nowrap;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn-gold { background: var(--gold); color: var(--navy); }
+    .btn-gold:hover { background: var(--goldDk); box-shadow: var(--shM); }
+    .btn-navy { background: var(--navy); color: var(--white); }
+    .btn-navy:hover { background: var(--navy2); box-shadow: var(--shM); }
+    .btn-outline { background: transparent; color: var(--navy); border: 1.5px solid var(--g300); }
+    .btn-outline:hover { border-color: var(--navy); }
+    .btn-ghost-dark { background: transparent; color: var(--white); border: 1.5px solid rgba(255,255,255,.3); }
+    .btn-sm { padding: 8px 16px; font-size: .8rem; border-radius: 8px; }
+    .btn-lg { padding: 16px 32px; font-size: 1.05rem; border-radius: var(--rL); }
+    .btn-icon { padding: 12px; border-radius: var(--r); }
+    .btn-icon svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .btn-destructive { background: oklch(52% 0.22 25 / 0.08); color: var(--red); border: 1.5px solid oklch(52% 0.22 25 / 0.2); }
+
+    /* ── FORM ── */
+    .form-demo { max-width: 480px; }
+    .field { margin-bottom: 16px; }
+    .field label { display: block; font-size: .72rem; font-weight: 700; color: var(--g500); margin-bottom: 6px; letter-spacing: .05em; text-transform: uppercase; }
+    .field input, .field select, .field textarea {
+      width: 100%; padding: 12px 15px;
+      border: 1.5px solid var(--g300); border-radius: var(--r);
+      font-family: var(--f-body); font-size: .92rem; color: var(--g800); background: var(--white);
+    }
+    .field input:focus, .field select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px oklch(82% 0.18 82 / 0.18); }
+    .field input::placeholder { color: var(--g300); }
+    .field--error input { border-color: var(--red); }
+    .field__hint { font-size: .75rem; color: var(--g500); margin-top: 5px; }
+    .field__error { font-size: .75rem; color: var(--red); margin-top: 5px; }
+    .field__success { font-size: .75rem; color: var(--green); margin-top: 5px; }
+
+    /* ── BADGES ── */
+    .badge-grid { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 10px; border-radius: 999px;
+      font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    }
+    .badge svg { width: 10px; height: 10px; }
+    .badge-gold { background: var(--goldLt); color: var(--navy); }
+    .badge-navy { background: oklch(20% 0.055 258 / 0.1); color: var(--navy); }
+    .badge-green { background: oklch(62% 0.18 145 / 0.12); color: var(--green); }
+    .badge-red { background: oklch(52% 0.22 25 / 0.1); color: var(--red); }
+    .badge-amber { background: oklch(78% 0.17 60 / 0.15); color: oklch(50% 0.15 60); }
+    .badge-live { background: var(--green); color: var(--white); }
+    .badge-verified { background: var(--gold); color: var(--navy); }
+
+    /* ── CARDS ── */
+    .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 760px) { .card-grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--white); border-radius: var(--rL);
+      padding: 24px; box-shadow: var(--sh);
+      border: 1.5px solid var(--g100);
+    }
+    .card--navy { background: var(--navy); border-color: transparent; }
+    .card--gold { background: var(--gold); border-color: transparent; }
+    .card__label { font-size: .7rem; font-weight: 700; color: var(--g500); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 4px; }
+    .card--navy .card__label { color: oklch(100% 0 0 / 0.45); }
+    .card--gold .card__label { color: oklch(20% 0.055 258 / 0.5); }
+    .card__val { font-family: var(--f-head); font-size: 2rem; font-weight: 800; color: var(--navy); }
+    .card--navy .card__val { color: var(--gold); }
+    .card--gold .card__val { color: var(--navy); }
+    .card__sub { font-size: .78rem; color: var(--g500); margin-top: 2px; }
+    .card--navy .card__sub { color: oklch(100% 0 0 / 0.4); }
+
+    /* stat card */
+    .stat-card {
+      background: var(--white); border-radius: var(--rL);
+      padding: 20px 24px; box-shadow: var(--sh); border: 1.5px solid var(--g100);
+      display: flex; align-items: center; gap: 14px;
+    }
+    .stat-card__icon {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--goldLt); display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .stat-card__icon svg { width: 22px; height: 22px; stroke: var(--navy); stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .stat-card__label { font-size: .72rem; color: var(--g500); font-weight: 500; }
+    .stat-card__val { font-size: 1rem; font-weight: 700; color: var(--navy); }
+    .stat-card__badge { margin-left: auto; }
+
+    /* job card */
+    .job-card {
+      background: var(--white); border-radius: var(--rL);
+      border: 1.5px solid var(--g100); overflow: hidden;
+      box-shadow: var(--sh); transition: box-shadow .2s, border-color .2s;
+    }
+    .job-card:hover { box-shadow: var(--shM); border-color: var(--gold); }
+    .job-card__head {
+      padding: 18px 20px 14px;
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+    }
+    .job-card__svc { font-weight: 700; color: var(--navy); font-size: .92rem; margin-bottom: 2px; }
+    .job-card__desc { font-size: .78rem; color: var(--g500); line-height: 1.5; }
+    .job-card__meta {
+      padding: 12px 20px; background: var(--off);
+      display: flex; gap: 16px; flex-wrap: wrap;
+    }
+    .job-card__meta-item { font-size: .72rem; color: var(--g500); display: flex; align-items: center; gap: 4px; }
+    .job-card__meta-item svg { width: 12px; height: 12px; stroke: var(--g500); stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .job-card__footer {
+      padding: 14px 20px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .job-card__price { font-family: var(--f-head); font-size: 1.1rem; font-weight: 800; color: var(--navy); }
+    .job-card__price-note { font-size: .68rem; color: var(--g500); display: block; }
+
+    /* mestre card */
+    .mestre-card {
+      background: var(--white); border-radius: var(--rL);
+      padding: 20px; box-shadow: var(--sh); border: 1.5px solid var(--g100);
+      display: flex; gap: 14px; align-items: center;
+    }
+    .mestre-av {
+      width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+      background: var(--navy); color: var(--gold);
+      font-family: var(--f-head); font-size: .9rem; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .mestre-name { font-weight: 700; color: var(--navy); font-size: .92rem; }
+    .mestre-svc { font-size: .75rem; color: var(--g500); }
+    .mestre-stars { color: var(--gold); font-size: .8rem; margin-top: 2px; }
+    .mestre-verified {
+      margin-left: auto; flex-shrink: 0;
+      background: var(--goldLt); color: var(--navy);
+      font-size: .65rem; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+    }
+
+    /* ── TOGGLE ── */
+    .ptog {
+      display: inline-flex; background: var(--g100); border-radius: 999px; padding: 4px;
+    }
+    .ptog input { display: none; }
+    .ptog label {
+      padding: 9px 18px; border-radius: 999px; font-size: .85rem; font-weight: 600;
+      color: var(--g500); cursor: pointer; transition: all .18s; font-family: var(--f-body);
+    }
+    .ptog input:checked + label { background: var(--navy); color: var(--white); box-shadow: var(--sh); }
+    #ds-pt2:checked + label { background: var(--gold); color: var(--navy); }
+
+    /* ── ICONS  ── */
+    .icon-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    .icon-item {
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+      width: 72px;
+    }
+    .icon-box {
+      width: 48px; height: 48px; border-radius: var(--r);
+      background: var(--g100); display: flex; align-items: center; justify-content: center;
+    }
+    .icon-box svg { width: 22px; height: 22px; stroke: var(--navy); stroke-width: 1.8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .icon-item span { font-size: .62rem; color: var(--g500); text-align: center; line-height: 1.3; }
+
+    /* ── TESTIMONIAL ── */
+    .testi-demo {
+      background: var(--navy3); border-radius: var(--rXL);
+      padding: 28px; max-width: 400px;
+    }
+    .testi-demo__stars { color: var(--gold); font-size: .9rem; margin-bottom: 12px; }
+    .testi-demo__quote { color: oklch(100% 0 0 / 0.75); font-size: .88rem; line-height: 1.7; margin-bottom: 18px; font-style: italic; }
+    .testi-demo__author { display: flex; align-items: center; gap: 10px; }
+    .testi-demo__av { width: 38px; height: 38px; border-radius: 50%; background: var(--gold); color: var(--navy); font-size: .8rem; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .testi-demo__name { color: var(--white); font-size: .85rem; font-weight: 700; }
+    .testi-demo__role { color: oklch(100% 0 0 / 0.4); font-size: .72rem; }
+
+    /* ── PROGRESS ── */
+    .progress-demo {
+      display: flex; align-items: center; max-width: 520px;
+    }
+    .pd-step { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; position: relative; }
+    .pd-step:not(:last-child)::after {
+      content: ''; position: absolute; top: 16px; left: 50%; width: 100%; height: 2px;
+      background: var(--g300); z-index: 0;
+    }
+    .pd-step.done:not(:last-child)::after { background: var(--gold); }
+    .pd-dot {
+      width: 32px; height: 32px; border-radius: 50%; z-index: 1;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .78rem; font-weight: 800; border: 2px solid var(--g300);
+      background: var(--white); color: var(--g500);
+    }
+    .pd-step.done .pd-dot { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+    .pd-step.active .pd-dot { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+    .pd-label { font-size: .65rem; color: var(--g500); font-weight: 600; text-align: center; }
+    .pd-step.active .pd-label { color: var(--navy); font-weight: 700; }
+
+    /* ── FAQ item ── */
+    .faq-demo { max-width: 560px; }
+    .faq-item { border-bottom: 1px solid var(--g100); }
+    .faq-item:first-child { border-top: 1px solid var(--g100); }
+    .faq-q-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; gap: 12px; }
+    .faq-q-row span { font-size: .9rem; font-weight: 600; color: var(--navy); }
+    .faq-icon { width: 26px; height: 26px; border-radius: 50%; background: var(--g100); display: flex; align-items: center; justify-content: center; font-size: 1rem; color: var(--navy); flex-shrink: 0; }
+    .faq-item.open .faq-icon { background: var(--gold); }
+    .faq-ans { font-size: .85rem; color: var(--g500); padding-bottom: 14px; line-height: 1.65; }
+
+    /* ── EYEBROW ── */
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+      padding: 5px 12px; border-radius: 999px;
+    }
+    .eyebrow-light { background: var(--goldLt); color: var(--navy); }
+    .eyebrow-dark { background: oklch(82% 0.18 82 / 0.15); color: var(--gold); border: 1px solid oklch(82% 0.18 82 / 0.2); }
+    .eyebrow-neutral { background: oklch(20% 0.055 258 / 0.08); color: var(--navy); }
+
+    /* ── STATS STRIP ── */
+    .stats-strip { background: var(--gold); padding: 20px 28px; border-radius: var(--rL); }
+    .stats-strip__i { display: flex; gap: 0; flex-wrap: wrap; justify-content: center; }
+    .stat-s { text-align: center; padding: 8px 24px; border-right: 1px solid oklch(20% 0.055 258 / 0.15); }
+    .stat-s:last-child { border-right: none; }
+    .stat-s__n { font-family: var(--f-head); font-size: 1.7rem; font-weight: 800; color: var(--navy); display: block; }
+    .stat-s__l { font-size: .68rem; font-weight: 600; color: oklch(20% 0.055 258 / 0.5); letter-spacing: .05em; text-transform: uppercase; }
+
+    /* ── DARK SECTION BG ── */
+    .on-dark { background: var(--navy); border-radius: var(--rXL); padding: 32px; }
+    .on-dark2 { background: var(--navy3); border-radius: var(--rXL); padding: 32px; }
+
+    /* ── MOTION ── */
+    .motion-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+    .motion-box {
+      background: var(--white); border-radius: var(--r); padding: 16px 20px;
+      border: 1.5px solid var(--g100); font-size: .82rem; color: var(--g800);
+      display: flex; flex-direction: column; gap: 4px; min-width: 160px;
+    }
+    .motion-box__label { font-size: .68rem; font-weight: 700; color: var(--g500); letter-spacing: .06em; text-transform: uppercase; }
+
+    /* ── CODE TOKEN ── */
+    code { font-family: 'Courier New', monospace; font-size: .78rem; background: var(--g100); padding: 2px 6px; border-radius: 4px; color: var(--navy); }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="ds-header">
+  <div class="ds-header__inner">
+    <div class="ds-header__logo">
+      <div class="ds-header__logo-dot"></div>
+      Somestre · Design System
+    </div>
+    <span class="ds-header__tag">v1.0 · 2026</span>
+  </div>
+</header>
+<nav class="ds-nav">
+  <div class="ds-nav__inner">
+    <a href="#cores" class="active">Cores</a>
+    <a href="#tipografia">Tipografia</a>
+    <a href="#espacamento">Espaçamento</a>
+    <a href="#botoes">Botões</a>
+    <a href="#formularios">Formulários</a>
+    <a href="#badges">Badges</a>
+    <a href="#cards">Cards</a>
+    <a href="#patterns">Padrões</a>
+    <a href="#icones">Ícones</a>
+    <a href="#movimento">Movimento</a>
+  </div>
+</nav>
+
+<div class="ds-body">
+
+  <!-- ══ INTRO ══ -->
+  <div style="margin-bottom:56px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <img src="./transparent_logo.png" alt="Somestre" style="height:52px;mix-blend-mode:multiply;" onerror="this.style.display='none'"/>
+    </div>
+    <h1 style="font-family:var(--f-head);font-size:2.2rem;font-weight:800;color:var(--navy);line-height:1.1;margin-bottom:10px;">Design System</h1>
+    <p style="color:var(--g500);font-size:.95rem;max-width:560px;line-height:1.7;">Referência completa de tokens, componentes e padrões visuais usados na plataforma Somestre. Fontes: <strong>Bricolage Grotesque</strong> (títulos) + <strong>Outfit</strong> (corpo).</p>
+  </div>
+
+  <!-- ══ CORES ══ -->
+  <section class="ds-section" id="cores">
+    <div class="ds-section-head">
+      <h2>Cores</h2>
+      <span>Paleta completa de tokens</span>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Brand</p>
+      <div class="swatch-grid">
+        <div class="swatch">
+          <div class="swatch__color" style="background:var(--navy)"></div>
+          <div class="swatch__info"><div class="swatch__name">Navy</div><div class="swatch__val">--navy</div><div class="swatch__val">oklch(20% .055 258)</div></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch__color" style="background:var(--navy2)"></div>
+          <div class="swatch__info"><div class="swatch__name">Navy 2</div><div class="swatch__val">--navy2</div></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch__color" style="background:var(--navy3)"></div>
+          <div class="swatch__info"><div class="swatch__name">Navy 3</div><div class="swatch__val">--navy3</div></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch__color" style="background:var(--gold)"></div>
+          <div class="swatch__info"><div class="swatch__name">Gold</div><div class="swatch__val">--gold</div><div class="swatch__val">oklch(82% .18 82)</div></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch__color" style="background:var(--goldDk)"></div>
+          <div class="swatch__info"><div class="swatch__name">Gold Dark</div><div class="swatch__val">--goldDk</div></div>
+        </div>
+        <div class="swatch">
+          <div class="swatch__color" style="background:var(--goldLt);border:1px solid var(--g100)"></div>
+          <div class="swatch__info"><div class="swatch__name">Gold Light</div><div class="swatch__val">--goldLt</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Neutros</p>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch__color" style="background:var(--g800)"></div><div class="swatch__info"><div class="swatch__name">Grey 800</div><div class="swatch__val">--g800</div></div></div>
+        <div class="swatch"><div class="swatch__color" style="background:var(--g500)"></div><div class="swatch__info"><div class="swatch__name">Grey 500</div><div class="swatch__val">--g500</div></div></div>
+        <div class="swatch"><div class="swatch__color" style="background:var(--g300);border:1px solid var(--g100)"></div><div class="swatch__info"><div class="swatch__name">Grey 300</div><div class="swatch__val">--g300</div></div></div>
+        <div class="swatch"><div class="swatch__color" style="background:var(--g100);border:1px solid #e0e0e0"></div><div class="swatch__info"><div class="swatch__name">Grey 100</div><div class="swatch__val">--g100</div></div></div>
+        <div class="swatch"><div class="swatch__color" style="background:var(--off);border:1px solid #e0e0e0"></div><div class="swatch__info"><div class="swatch__name">Off White</div><div class="swatch__val">--off</div></div></div>
+        <div class="swatch"><div class="swatch__color" style="background:var(--white);border:1px solid #e0e0e0"></div><div class="swatch__info"><div class="swatch__name">White</div><div class="swatch__val">--white</div></div></div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Status</p>
+      <div class="swatch-grid">
+        <div class="swatch"><div class="swatch__color" style="background:var(--green)"></div><div class="swatch__info"><div class="swatch__name">Green</div><div class="swatch__val">--green · Sucesso</div></div></div>
+        <div class="swatch"><div class="swatch__color" style="background:var(--red)"></div><div class="swatch__info"><div class="swatch__name">Red</div><div class="swatch__val">--red · Erro</div></div></div>
+        <div class="swatch"><div class="swatch__color" style="background:var(--amber)"></div><div class="swatch__info"><div class="swatch__name">Amber</div><div class="swatch__val">--amber · Aviso</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ TIPOGRAFIA ══ -->
+  <section class="ds-section" id="tipografia">
+    <div class="ds-section-head">
+      <h2>Tipografia</h2>
+      <span>Bricolage Grotesque + Outfit</span>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Escala de títulos — Bricolage Grotesque</p>
+      <div>
+        <div class="type-row">
+          <div class="type-row__meta">h1<br/>clamp(2.4–4rem)<br/>weight 800</div>
+          <div class="type-row__sample" style="font-family:var(--f-head);font-size:clamp(2.4rem,5vw,4rem);font-weight:800;color:var(--navy);line-height:1.1;">Profissionais verificados</div>
+        </div>
+        <div class="type-row">
+          <div class="type-row__meta">h2<br/>clamp(1.8–2.6rem)<br/>weight 800</div>
+          <div class="type-row__sample" style="font-family:var(--f-head);font-size:clamp(1.8rem,4vw,2.6rem);font-weight:800;color:var(--navy);line-height:1.1;">Simples. Em 3 passos.</div>
+        </div>
+        <div class="type-row">
+          <div class="type-row__meta">h3<br/>1.3rem<br/>weight 700</div>
+          <div class="type-row__sample" style="font-family:var(--f-head);font-size:1.3rem;font-weight:700;color:var(--navy);">Descreve a tua tarefa</div>
+        </div>
+        <div class="type-row">
+          <div class="type-row__meta">h4 / label<br/>.9rem<br/>weight 700</div>
+          <div class="type-row__sample" style="font-family:var(--f-head);font-size:.9rem;font-weight:700;color:var(--navy);">Verificação de identidade</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Corpo — Outfit</p>
+      <div>
+        <div class="type-row">
+          <div class="type-row__meta">body-lg<br/>1.05rem · 400<br/>line-height 1.65</div>
+          <div class="type-row__sample" style="font-size:1.05rem;color:var(--g800);">Reserva um canalizador, electricista ou esteticista tão facilmente como pedes um táxi. Pagamento via M-Pesa.</div>
+        </div>
+        <div class="type-row">
+          <div class="type-row__meta">body<br/>.92rem · 400<br/>line-height 1.6</div>
+          <div class="type-row__sample" style="font-size:.92rem;color:var(--g500);">Todos os Mestres passam por verificação de BI antes de serem listados na plataforma.</div>
+        </div>
+        <div class="type-row">
+          <div class="type-row__meta">caption<br/>.75rem · 600<br/>uppercase</div>
+          <div class="type-row__sample" style="font-size:.75rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--g500);">Nome completo</div>
+        </div>
+        <div class="type-row">
+          <div class="type-row__meta">micro<br/>.72rem · 500</div>
+          <div class="type-row__sample" style="font-size:.72rem;color:var(--g500);">Os teus dados estão seguros · Sem spam · Registo 100% gratuito</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Eyebrows</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <span class="eyebrow eyebrow-light">Serviços populares</span>
+        <span class="eyebrow eyebrow-dark">Segurança</span>
+        <span class="eyebrow eyebrow-neutral">Como funciona</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ESPAÇAMENTO ══ -->
+  <section class="ds-section" id="espacamento">
+    <div class="ds-section-head">
+      <h2>Espaçamento & Radius</h2>
+      <span>Tokens de layout</span>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Escala de espaçamento</p>
+      <div class="space-grid">
+        <div class="space-item"><div class="space-item__bar" style="height:4px"></div><div class="space-item__label">4px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:8px"></div><div class="space-item__label">8px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:12px"></div><div class="space-item__label">12px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:16px"></div><div class="space-item__label">16px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:20px"></div><div class="space-item__label">20px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:24px"></div><div class="space-item__label">24px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:28px"></div><div class="space-item__label">28px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:32px"></div><div class="space-item__label">32px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:40px"></div><div class="space-item__label">40px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:48px"></div><div class="space-item__label">48px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:64px"></div><div class="space-item__label">64px</div></div>
+        <div class="space-item"><div class="space-item__bar" style="height:80px"></div><div class="space-item__label">80px</div></div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Border Radius</p>
+      <div class="radius-grid">
+        <div class="radius-item">
+          <div class="radius-item__box" style="border-radius:4px"></div>
+          <div class="radius-item__label">4px<br/>Micro</div>
+        </div>
+        <div class="radius-item">
+          <div class="radius-item__box" style="border-radius:8px"></div>
+          <div class="radius-item__label">8px<br/>Pequeno</div>
+        </div>
+        <div class="radius-item">
+          <div class="radius-item__box" style="border-radius:var(--r)"></div>
+          <div class="radius-item__label">12px<br/>--r</div>
+        </div>
+        <div class="radius-item">
+          <div class="radius-item__box" style="border-radius:var(--rL)"></div>
+          <div class="radius-item__label">18px<br/>--rL</div>
+        </div>
+        <div class="radius-item">
+          <div class="radius-item__box" style="border-radius:var(--rXL)"></div>
+          <div class="radius-item__label">24px<br/>--rXL</div>
+        </div>
+        <div class="radius-item">
+          <div class="radius-item__box" style="border-radius:999px"></div>
+          <div class="radius-item__label">999px<br/>Pill</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Sombras</p>
+      <div class="shadow-grid">
+        <div class="shadow-item" style="box-shadow:var(--sh)">
+          <div class="shadow-item__label">--sh</div>
+          <div class="shadow-item__desc">Cards, form inputs</div>
+        </div>
+        <div class="shadow-item" style="box-shadow:var(--shM)">
+          <div class="shadow-item__label">--shM</div>
+          <div class="shadow-item__desc">Hover states, dropdowns</div>
+        </div>
+        <div class="shadow-item" style="box-shadow:var(--shL)">
+          <div class="shadow-item__label">--shL</div>
+          <div class="shadow-item__desc">Modais, form cards</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ BOTÕES ══ -->
+  <section class="ds-section" id="botoes">
+    <div class="ds-section-head">
+      <h2>Botões</h2>
+      <span>Variantes e tamanhos</span>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Variantes principais</p>
+      <div class="btn-grid">
+        <button class="btn btn-gold">Garantir acesso</button>
+        <button class="btn btn-navy">Registar grátis</button>
+        <button class="btn btn-outline">Como funciona</button>
+        <button class="btn btn-destructive">Cancelar job</button>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Tamanhos</p>
+      <div class="btn-grid">
+        <button class="btn btn-gold btn-sm">Pequeno</button>
+        <button class="btn btn-gold">Médio (padrão)</button>
+        <button class="btn btn-gold btn-lg">Grande</button>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Em fundo escuro</p>
+      <div class="on-dark" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+        <button class="btn btn-gold">Começar a ganhar</button>
+        <button class="btn btn-ghost-dark">Saber mais</button>
+        <button class="btn btn-icon btn-ghost-dark">
+          <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Estados</p>
+      <div class="btn-grid">
+        <button class="btn btn-gold">Normal</button>
+        <button class="btn btn-gold" style="transform:translateY(-2px);box-shadow:var(--shM)">Hover</button>
+        <button class="btn btn-gold" disabled style="opacity:.5;cursor:not-allowed">Disabled</button>
+        <button class="btn btn-gold" style="opacity:.7">
+          <span style="width:14px;height:14px;border:2px solid rgba(26,43,74,.25);border-top-color:var(--navy);border-radius:50%;animation:rot .6s linear infinite;display:inline-block;"></span>
+          A guardar…
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ FORMULÁRIOS ══ -->
+  <section class="ds-section" id="formularios">
+    <div class="ds-section-head">
+      <h2>Formulários</h2>
+      <span>Campos, estados e toggle</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;flex-wrap:wrap;">
+      <div class="form-demo">
+        <p class="ds-sub-label" style="margin-bottom:16px;">Estados de campo</p>
+        <div class="field">
+          <label>Normal</label>
+          <input type="text" placeholder="Ex: Carlos Mondlane"/>
+          <div class="field__hint">O teu nome completo conforme no BI.</div>
+        </div>
+        <div class="field">
+          <label>Foco</label>
+          <input type="text" value="Carlos Mondlane" style="border-color:var(--gold);box-shadow:0 0 0 3px oklch(82% 0.18 82 / 0.18)"/>
+        </div>
+        <div class="field field--error">
+          <label>Erro</label>
+          <input type="tel" value="123" style="border-color:var(--red)"/>
+          <div class="field__error">Número de telefone inválido.</div>
+        </div>
+        <div class="field">
+          <label>Sucesso</label>
+          <input type="text" value="+258 84 123 4567" style="border-color:var(--green)"/>
+          <div class="field__success">✓ Número válido</div>
+        </div>
+        <div class="field">
+          <label>Desactivado</label>
+          <input type="text" value="carlos@somestre.co.mz" disabled style="opacity:.5;cursor:not-allowed;background:var(--g100)"/>
+        </div>
+      </div>
+
+      <div>
+        <p class="ds-sub-label" style="margin-bottom:16px;">Toggle pill</p>
+        <div class="ptog" style="margin-bottom:24px;">
+          <input type="radio" name="ds-pt" id="ds-pt1" checked/>
+          <label for="ds-pt1">Sou cliente</label>
+          <input type="radio" name="ds-pt" id="ds-pt2"/>
+          <label for="ds-pt2">Sou prestador</label>
+        </div>
+
+        <p class="ds-sub-label" style="margin-bottom:16px;">Select</p>
+        <div class="field" style="margin-bottom:24px;">
+          <label>Bairro</label>
+          <select>
+            <option>Sommerschield</option>
+            <option>Polana</option>
+            <option>Malhangalene</option>
+          </select>
+        </div>
+
+        <p class="ds-sub-label" style="margin-bottom:16px;">Textarea</p>
+        <div class="field">
+          <label>Descrição do serviço</label>
+          <textarea placeholder="Descreve o que sabes fazer…" style="min-height:80px;resize:none;"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ BADGES ══ -->
+  <section class="ds-section" id="badges">
+    <div class="ds-section-head">
+      <h2>Badges & Labels</h2>
+      <span>Status, verificação e categorias</span>
+    </div>
+    <div class="badge-grid">
+      <span class="badge badge-gold">Mais pedido</span>
+      <span class="badge badge-verified">✓ Verificado</span>
+      <span class="badge badge-live">● Ao vivo</span>
+      <span class="badge badge-green">✓ Pago</span>
+      <span class="badge badge-green">✓ Concluído</span>
+      <span class="badge badge-amber">⏱ Pendente</span>
+      <span class="badge badge-red">✕ Cancelado</span>
+      <span class="badge badge-navy">M-Pesa</span>
+      <span class="badge badge-gold" style="background:var(--goldLt)">Maputo</span>
+    </div>
+  </section>
+
+  <!-- ══ CARDS ══ -->
+  <section class="ds-section" id="cards">
+    <div class="ds-section-head">
+      <h2>Cards</h2>
+      <span>Métricas, jobs, mestres</span>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Metric cards</p>
+      <div class="card-grid">
+        <div class="card">
+          <div class="card__label">Ganhos este mês</div>
+          <div class="card__val">15.000 MT</div>
+          <div class="card__sub">+12% vs mês anterior</div>
+        </div>
+        <div class="card card--navy">
+          <div class="card__label">Jobs concluídos</div>
+          <div class="card__val">48</div>
+          <div class="card__sub">este mês</div>
+        </div>
+        <div class="card card--gold">
+          <div class="card__label">Avaliação média</div>
+          <div class="card__val">4.9 ★</div>
+          <div class="card__sub">de 38 avaliações</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Stat card (com ícone)</p>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;max-width:600px;">
+        <div class="stat-card">
+          <div class="stat-card__icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <div><div class="stat-card__label">Tempo de resposta</div><div class="stat-card__val">15 min</div></div>
+          <div class="stat-card__badge"><span class="badge badge-green">Rápido</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card__icon"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+          <div><div class="stat-card__label">Mestres verificados</div><div class="stat-card__val">30+</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Job card</p>
+      <div style="max-width:400px;">
+        <div class="job-card">
+          <div class="job-card__head">
+            <div>
+              <div class="job-card__svc">Canalização urgente</div>
+              <div class="job-card__desc">Torneira a pingar na cozinha. Precisa de reparação rápida.</div>
+            </div>
+            <span class="badge badge-amber">Pendente</span>
+          </div>
+          <div class="job-card__meta">
+            <div class="job-card__meta-item"><svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Sommerschield</div>
+            <div class="job-card__meta-item"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Hoje · urgente</div>
+            <div class="job-card__meta-item"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>3 propostas</div>
+          </div>
+          <div class="job-card__footer">
+            <div>
+              <div class="job-card__price">800 – 1.500 MT</div>
+              <span class="job-card__price-note">estimativa</span>
+            </div>
+            <button class="btn btn-gold btn-sm">Ver propostas</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Mestre card</p>
+      <div style="max-width:400px;display:flex;flex-direction:column;gap:10px;">
+        <div class="mestre-card">
+          <div class="mestre-av">JM</div>
+          <div>
+            <div class="mestre-name">João Mondlane</div>
+            <div class="mestre-svc">Canalizador · Sommerschield</div>
+            <div class="mestre-stars">★★★★★ <span style="font-size:.72rem;color:var(--g500);">4.9 · 48 jobs</span></div>
+          </div>
+          <span class="mestre-verified">✓ Verificado</span>
+        </div>
+        <div class="mestre-card">
+          <div class="mestre-av" style="background:var(--gold);color:var(--navy)">AF</div>
+          <div>
+            <div class="mestre-name">Ana Fumo</div>
+            <div class="mestre-svc">Limpeza doméstica · Polana</div>
+            <div class="mestre-stars">★★★★★ <span style="font-size:.72rem;color:var(--g500);">5.0 · 22 jobs</span></div>
+          </div>
+          <span class="mestre-verified">✓ Verificado</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Testimonial card</p>
+      <div class="testi-demo">
+        <div class="testi-demo__stars">★★★★★</div>
+        <p class="testi-demo__quote">"Em menos de 20 minutos tinha alguém em casa. O João foi profissional e o pagamento foi pelo M-Pesa."</p>
+        <div class="testi-demo__author">
+          <div class="testi-demo__av">IC</div>
+          <div>
+            <div class="testi-demo__name">Inês C.</div>
+            <div class="testi-demo__role">Sommerschield · Canalização urgente</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ PADRÕES ══ -->
+  <section class="ds-section" id="patterns">
+    <div class="ds-section-head">
+      <h2>Padrões UI</h2>
+      <span>Componentes de página recorrentes</span>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Stats strip</p>
+      <div class="stats-strip">
+        <div class="stats-strip__i">
+          <div class="stat-s"><span class="stat-s__n">30+</span><span class="stat-s__l">Verificados</span></div>
+          <div class="stat-s"><span class="stat-s__n">M-Pesa</span><span class="stat-s__l">Pagamento</span></div>
+          <div class="stat-s"><span class="stat-s__n">4.9★</span><span class="stat-s__l">Avaliação</span></div>
+          <div class="stat-s"><span class="stat-s__n">15 min</span><span class="stat-s__l">Resposta</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Progress steps (4 passos)</p>
+      <div class="progress-demo">
+        <div class="pd-step done"><div class="pd-dot">✓</div><div class="pd-label">Dados</div></div>
+        <div class="pd-step done"><div class="pd-dot">✓</div><div class="pd-label">Serviço</div></div>
+        <div class="pd-step active"><div class="pd-dot">3</div><div class="pd-label">Disponib.</div></div>
+        <div class="pd-step"><div class="pd-dot">4</div><div class="pd-label">Verificação</div></div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">FAQ accordion</p>
+      <div class="faq-demo">
+        <div class="faq-item open">
+          <div class="faq-q-row">
+            <span>Existe alguma taxa de registo?</span>
+            <div class="faq-icon" style="background:var(--gold);transform:rotate(45deg)">+</div>
+          </div>
+          <p class="faq-ans">Não. O registo é completamente gratuito. Só cobramos comissão sobre jobs completados.</p>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q-row">
+            <span>Como é feito o pagamento?</span>
+            <div class="faq-icon">+</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ds-sub">
+      <p class="ds-sub-label">Info box</p>
+      <div style="max-width:480px;background:var(--goldLt);border:1px solid oklch(82% 0.18 82 / 0.3);border-radius:var(--r);padding:14px 16px;display:flex;gap:10px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <p style="font-size:.82rem;color:var(--navy);line-height:1.55;"><strong>O teu BI é processado em 24–48h.</strong> Recebes uma notificação no teu telemóvel quando for aprovado.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ ÍCONES ══ -->
+  <section class="ds-section" id="icones">
+    <div class="ds-section-head">
+      <h2>Ícones</h2>
+      <span>Estilo: stroke, 2px, round caps — Lucide Icons</span>
+    </div>
+    <div class="icon-grid">
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div><span>Limpeza</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></div><span>Reparações</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div><span>Electricidade</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></div><span>Explicações</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div><span>Beleza</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div><span>Localização</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div><span>Segurança</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><span>Verificado</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><span>Tempo</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><span>M-Pesa</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="var(--gold)" stroke="var(--gold)"/></svg></div><span>Avaliação</span></div>
+      <div class="icon-item"><div class="icon-box"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><span>Mestres</span></div>
+    </div>
+    <p style="margin-top:16px;font-size:.78rem;color:var(--g500);">Biblioteca: <strong>Lucide Icons</strong> · Stroke width: <code>1.8–2px</code> · Stroke-linecap: <code>round</code> · Fill: <code>none</code> (excepto estrela)</p>
+  </section>
+
+  <!-- ══ MOVIMENTO ══ -->
+  <section class="ds-section" id="movimento">
+    <div class="ds-section-head">
+      <h2>Movimento & Animação</h2>
+      <span>Transições e timings</span>
+    </div>
+    <div class="motion-row">
+      <div class="motion-box">
+        <div class="motion-box__label">Micro</div>
+        <div><code>transition: all .15s</code></div>
+        <div style="font-size:.78rem;color:var(--g500);margin-top:2px;">Links, hover de cor</div>
+      </div>
+      <div class="motion-box">
+        <div class="motion-box__label">Default</div>
+        <div><code>transition: all .18s</code></div>
+        <div style="font-size:.78rem;color:var(--g500);margin-top:2px;">Botões, inputs</div>
+      </div>
+      <div class="motion-box">
+        <div class="motion-box__label">Médio</div>
+        <div><code>transition: all .25s</code></div>
+        <div style="font-size:.78rem;color:var(--g500);margin-top:2px;">Cards, modais</div>
+      </div>
+      <div class="motion-box">
+        <div class="motion-box__label">Lento</div>
+        <div><code>transition: all .3s ease</code></div>
+        <div style="font-size:.78rem;color:var(--g500);margin-top:2px;">FAQ accordion</div>
+      </div>
+      <div class="motion-box">
+        <div class="motion-box__label">Scroll reveal</div>
+        <div><code>opacity + translateY(22px)</code></div>
+        <div style="font-size:.78rem;color:var(--g500);margin-top:2px;">IntersectionObserver, .5s</div>
+      </div>
+      <div class="motion-box">
+        <div class="motion-box__label">Hover lift</div>
+        <div><code>translateY(-2px)</code></div>
+        <div style="font-size:.78rem;color:var(--g500);margin-top:2px;">Todos os botões primários</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // Nav highlight on scroll
+  const sections = document.querySelectorAll('.ds-section');
+  const navLinks = document.querySelectorAll('.ds-nav a');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  });
+
+  // Smooth scroll
+  navLinks.forEach(a => {
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const target = document.querySelector(a.getAttribute('href'));
+      if (target) window.scrollTo({ top: target.offsetTop - 80, behavior: 'smooth' });
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter build *)",
+      "Bash(rm -f /c/Dev/flutter/loyaltyapp/lib/features/sales/new_sale_screen.dart)",
+      "Bash(rmdir /c/Dev/flutter/loyaltyapp/lib/core/db /c/Dev/flutter/loyaltyapp/lib/core/models /c/Dev/flutter/loyaltyapp/lib/providers /c/Dev/flutter/loyaltyapp/lib/ui/widgets /c/Dev/flutter/loyaltyapp/lib/ui)",
+      "Bash(where sqlite3.dll)",
+      "Bash(dir /s /b \"C:\\\\Users\\\\X200078\\\\AppData\\\\Local\\\\Pub\\\\Cache\\\\downloads\\\\sqlite3*\")",
+      "Bash(dir /s /b \"C:\\\\Users\\\\X200078\\\\.pub-cache\\\\hosted\\\\pub.dev\\\\sqlite3*\")",
+      "Bash(HTTPS_PROXY=\"\" HTTP_PROXY=\"\" flutter pub get)",
+      "Bash(NO_PROXY=\"localhost,127.0.0.1\" no_proxy=\"localhost,127.0.0.1\" flutter test --no-pub test/widget/pin_entry_screen_test.dart test/widget/pin_setup_screen_test.dart)"
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "517299605672",
+    "project_id": "loyaltyos-fc4dd",
+    "storage_bucket": "loyaltyos-fc4dd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:517299605672:android:69efc1c492e71637c7329d",
+        "android_client_info": {
+          "package_name": "com.loyaltyos.loyaltyos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUuadd7-Osnf8BGsOQ1H52EaFwXj42s1I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

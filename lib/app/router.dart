@@ -1,0 +1,126 @@
+﻿import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:hooks_riverpod/hooks_riverpod.dart';
+
+import '../features/auth/presentation/auth_controller.dart';
+import '../features/auth/presentation/otp_verification_screen.dart';
+import '../features/auth/presentation/phone_auth_screen.dart';
+import '../features/auth/presentation/pin_entry_screen.dart';
+import '../features/auth/presentation/pin_setup_screen.dart';
+import '../features/auth/presentation/splash_screen.dart';
+import '../features/customers/presentation/customer_detail_screen.dart';
+import '../features/customers/presentation/customer_list_screen.dart';
+import '../features/dashboard/presentation/dashboard_screen.dart';
+import '../features/rewards/presentation/create_reward_screen.dart';
+import '../features/rewards/presentation/rewards_screen.dart';
+import '../features/sales/presentation/new_sale_screen.dart';
+import '../features/sales/presentation/sales_history_screen.dart';
+import '../features/settings/presentation/settings_screen.dart';
+import '../features/sync/presentation/pending_sync_screen.dart';
+
+const _publicRoutes = {
+  '/splash',
+  '/login',
+  '/otp',
+  '/pin-setup',
+  '/pin-entry',
+};
+
+final routerProvider = Provider<GoRouter>((ref) {
+  final authNotifier = ValueNotifier<bool>(false);
+
+  ref.listen(authControllerProvider, (_, next) {
+    authNotifier.value = next.valueOrNull != null;
+  });
+
+  return GoRouter(
+    initialLocation: '/splash',
+    refreshListenable: authNotifier,
+    redirect: (context, state) {
+      final isPublic = _publicRoutes.contains(state.matchedLocation) ||
+          state.matchedLocation.startsWith('/otp');
+      final isAuthenticated =
+          ref.read(authControllerProvider).valueOrNull != null;
+
+      if (!isAuthenticated && !isPublic) return '/login';
+      if (isAuthenticated && state.matchedLocation == '/login') {
+        return '/dashboard';
+      }
+      return null;
+    },
+    routes: [
+      GoRoute(
+        path: '/splash',
+        builder: (_, __) => const SplashScreen(),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (_, __) => const PhoneAuthScreen(),
+      ),
+      GoRoute(
+        path: '/otp',
+        builder: (_, state) {
+          final args = state.extra as OtpScreenArgs;
+          return OTPVerificationScreen(
+            phoneNumber: args.phone,
+            verificationId: args.verificationId,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/pin-setup',
+        builder: (_, __) => const PinSetupScreen(),
+      ),
+      GoRoute(
+        path: '/pin-entry',
+        builder: (_, __) => const PinEntryScreen(),
+      ),
+      GoRoute(
+        path: '/dashboard',
+        builder: (_, __) => const DashboardScreen(),
+      ),
+      GoRoute(
+        path: '/new-sale',
+        builder: (_, state) =>
+            NewSaleScreen(args: state.extra as NewSaleArgs?),
+      ),
+      GoRoute(
+        path: '/customers',
+        builder: (_, __) => const CustomerListScreen(),
+        routes: [
+          GoRoute(
+            path: ':id',
+            builder: (_, state) =>
+                CustomerDetailScreen(id: state.pathParameters['id']!),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/rewards',
+        builder: (_, __) => const RewardsScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (_, __) => const CreateRewardScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/sales',
+        builder: (_, __) => const SalesHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/pending-sync',
+        builder: (_, __) => const PendingSyncScreen(),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (_, __) => const SettingsScreen(),
+      ),
+    ],
+    errorBuilder: (_, state) => Scaffold(
+      body:
+          Center(child: Text('Página não encontrada: ${state.error}')),
+    ),
+  );
+});
