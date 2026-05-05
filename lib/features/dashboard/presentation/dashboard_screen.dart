@@ -121,7 +121,65 @@ class DashboardScreen extends ConsumerWidget {
                   data: (s) => Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── Stats grid ────────────────────────────────────────
+                      _PrimarySaleCard(
+                        onTap: () async {
+                          await context.push('/new-sale');
+                          ref.read(dashboardControllerProvider.notifier).refresh();
+                        },
+                      ),
+                      const SizedBox(height: 28),
+                      const _SectionLabel('Atalhos'),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MiniActionTile(
+                              label: AppStrings.clientes,
+                              subtitle: 'Pesquisar e editar',
+                              icon: Icons.people_alt_rounded,
+                              onTap: () => context.push('/customers'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _MiniActionTile(
+                              label: AppStrings.recompensas,
+                              subtitle: 'Definir resgates',
+                              icon: Icons.card_giftcard_rounded,
+                              onTap: () => context.push('/rewards'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MiniActionTile(
+                              label: AppStrings.historicoVendas,
+                              subtitle: 'Conferência rápida',
+                              icon: Icons.receipt_long_rounded,
+                              onTap: () => context.push('/sales'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _MiniActionTile(
+                              label: AppStrings.pendentes,
+                              subtitle: '${syncStatus.pendingCount} por sincronizar',
+                              icon: syncStatus.pendingCount > 0
+                                  ? Icons.cloud_upload_rounded
+                                  : Icons.cloud_done_rounded,
+                              accent: syncStatus.pendingCount > 0
+                                  ? AppColors.amber
+                                  : AppColors.green,
+                              onTap: () => context.push('/pending-sync'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+
                       const _SectionLabel('Hoje'),
                       const SizedBox(height: 12),
                       Row(
@@ -145,63 +203,12 @@ class DashboardScreen extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _StatCard(
-                              label: AppStrings.totalClientes,
-                              value: '${s.totalCustomers}',
-                              accent: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => context.push('/pending-sync'),
-                              child: _StatCard(
-                                label: AppStrings.pendentes,
-                                value: '${syncStatus.pendingCount}',
-                                accent: syncStatus.pendingCount > 0
-                                    ? AppColors.amber
-                                    : AppColors.green,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 32),
-
-                      // ── Quick actions ─────────────────────────────────────
-                      const _SectionLabel('Acoes rapidas'),
-                      const SizedBox(height: 12),
-                      _ActionTile(
-                        label: AppStrings.novaVenda,
-                        subtitle: 'Registe uma venda e atribua pontos',
-                        gold: true,
-                        onTap: () async {
-                          await context.push('/new-sale');
-                          ref
-                              .read(dashboardControllerProvider.notifier)
-                              .refresh();
-                        },
-                      ),
-                      const SizedBox(height: 10),
-                      _ActionTile(
-                        label: AppStrings.clientes,
-                        subtitle: 'Gerir e pesquisar clientes',
-                        onTap: () => context.push('/customers'),
-                      ),
-                      const SizedBox(height: 10),
-                      _ActionTile(
-                        label: AppStrings.recompensas,
-                        subtitle: 'Configurar premios e resgates',
-                        onTap: () => context.push('/rewards'),
-                      ),
-                      const SizedBox(height: 10),
-                      _ActionTile(
-                        label: AppStrings.historicoVendas,
-                        subtitle: 'Ver todas as vendas registadas',
-                        onTap: () => context.push('/sales'),
+                      Text(
+                        '${s.totalCustomers} clientes registados',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ],
                   ),
@@ -253,6 +260,99 @@ class _SectionLabel extends StatelessWidget {
       );
 }
 
+class _PrimarySaleCard extends StatelessWidget {
+  const _PrimarySaleCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: AppColors.primary,
+      borderRadius: BorderRadius.circular(24),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.primaryDark],
+            ),
+            boxShadow: AppTheme.shadowMd,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: AppColors.secondary,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(
+                  Icons.add_shopping_cart_rounded,
+                  color: AppColors.primary,
+                  size: 26,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                AppStrings.novaVenda,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Registe uma venda em segundos e atribua pontos no momento.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.72),
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.secondary,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Começar agora',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.arrow_forward_rounded,
+                    color: Colors.white.withValues(alpha: 0.82),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StatCard extends StatelessWidget {
   const _StatCard({
     required this.label,
@@ -275,80 +375,69 @@ class _StatCard extends StatelessWidget {
         : AppColors.onSurfaceVariant;
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-      decoration: BoxDecoration(
+  class _MiniActionTile extends StatelessWidget {
+    const _MiniActionTile({
         color: bg,
         borderRadius: BorderRadius.circular(18),
+      required this.icon,
         border: Border.all(
-            color: dark ? Colors.transparent : AppColors.g100, width: 1.5),
+      this.accent = AppColors.primary,
         boxShadow: dark ? AppTheme.shadowMd : AppTheme.shadowSm,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+    final IconData icon;
         children: [
-          Container(
+    final Color accent;
             width: 36,
             height: 36,
             decoration: BoxDecoration(
               color: dark
                   ? AppColors.primary.withValues(alpha: 0.12)
-                  : accent.withValues(alpha: 0.1),
+        color: AppColors.white,
               borderRadius: BorderRadius.circular(10),
             ),
             child: const BrandMark(
               size: 18,
               padding: EdgeInsets.all(8),
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           ),
           const SizedBox(height: 10),
-          Text(
-            value,
+              border: Border.all(color: AppColors.g100, width: 1.5),
+              boxShadow: AppTheme.shadowSm,
             style: GoogleFonts.bricolageGrotesque(
-                fontSize: 22, fontWeight: FontWeight.w800, color: fgStrong),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
           ),
           const SizedBox(height: 2),
-          Text(
-            label,
+                  width: 40,
+                  height: 40,
             style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: fgMuted, letterSpacing: 0),
+                    color: accent.withValues(alpha: 0.1),
             maxLines: 2,
           ),
-        ],
-      ),
-    );
+                  child: Icon(
+                    icon,
+                    color: accent,
+                    size: 20,
   }
 }
-
-class _ActionTile extends StatelessWidget {
-  const _ActionTile({
-    required this.label,
-    required this.subtitle,
-    required this.onTap,
-    this.gold = false,
-  });
-
-  final String label;
-  final String subtitle;
-  final VoidCallback onTap;
-  final bool gold;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: gold ? AppColors.primary : AppColors.white,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
+                const SizedBox(height: 14),
+                Text(
+                  label,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: AppColors.onSurface,
+                    fontWeight: FontWeight.w700,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: gold ? null : Border.all(color: AppColors.g100, width: 1.5),
-            boxShadow: gold ? AppTheme.shadowMd : AppTheme.shadowSm,
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
           ),
           child: Row(
             children: [

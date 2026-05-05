@@ -36,74 +36,94 @@ class _SlowDashboardController extends DashboardController {
 // overrideWith requires () => Controller; capture stats via closure.
 extension on DashboardStats {
   Widget buildDashboard({bool isOnline = true}) => ProviderScope(
-        overrides: [
-          dashboardControllerProvider.overrideWith(() => _FakeDashboardController(this)),
-          syncControllerProvider.overrideWith(_FakeSyncController.new),
-          isOnlineProvider.overrideWith((ref) => Stream.value(isOnline)),
-        ],
-        child: const MaterialApp(home: DashboardScreen()),
-      );
+    overrides: [
+      dashboardControllerProvider.overrideWith(
+        () => _FakeDashboardController(this),
+      ),
+      syncControllerProvider.overrideWith(_FakeSyncController.new),
+      isOnlineProvider.overrideWith((ref) => Stream.value(isOnline)),
+    ],
+    child: const MaterialApp(home: DashboardScreen()),
+  );
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 void main() {
   group('DashboardScreen — stat cards', () {
-    testWidgets('displays all three stat card labels', (tester) async {
+    testWidgets('displays the today stat labels', (tester) async {
       await tester.pumpWidget(const DashboardStats().buildDashboard());
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.vendasHoje), findsOneWidget);
       expect(find.text(AppStrings.pontosHoje), findsOneWidget);
-      expect(find.text(AppStrings.pendentes), findsOneWidget);
+      expect(find.text('0 clientes registados'), findsOneWidget);
     });
 
     testWidgets('shows correct numeric values from stats', (tester) async {
       await tester.pumpWidget(
-        const DashboardStats(todaySaleCount: 7, todayPoints: 14, pendingSyncCount: 3).buildDashboard(),
+        const DashboardStats(
+          todaySaleCount: 7,
+          todayPoints: 14,
+          pendingSyncCount: 3,
+        ).buildDashboard(),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('7'), findsOneWidget);
       expect(find.text('14'), findsOneWidget);
-      expect(find.text('3'), findsOneWidget);
+      expect(find.text('0 por sincronizar'), findsOneWidget);
     });
 
     testWidgets('shows zeros for empty stats', (tester) async {
       await tester.pumpWidget(
-        const DashboardStats(todaySaleCount: 0, todayPoints: 0, pendingSyncCount: 0).buildDashboard(),
+        const DashboardStats(
+          todaySaleCount: 0,
+          todayPoints: 0,
+          pendingSyncCount: 0,
+        ).buildDashboard(),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('0'), findsNWidgets(3));
+      expect(find.text('0'), findsNWidgets(2));
     });
   });
 
-  group('DashboardScreen — action buttons', () {
-    testWidgets('renders Nova Venda, Clientes, and Recompensas buttons', (tester) async {
+  group('DashboardScreen — primary action', () {
+    testWidgets('renders a dominant Nova Venda card', (tester) async {
       await tester.pumpWidget(const DashboardStats().buildDashboard());
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.novaVenda), findsOneWidget);
-      expect(find.text(AppStrings.clientes), findsOneWidget);
-      expect(find.text(AppStrings.recompensas), findsOneWidget);
+      expect(find.text('Começar agora'), findsOneWidget);
+      expect(
+        find.text('Registe uma venda em segundos e atribua pontos no momento.'),
+        findsOneWidget,
+      );
     });
+  });
 
-    testWidgets('renders exactly three ElevatedButtons', (tester) async {
+  group('DashboardScreen — shortcuts', () {
+    testWidgets('renders support shortcuts below the primary action', (
+      tester,
+    ) async {
       await tester.pumpWidget(const DashboardStats().buildDashboard());
       await tester.pumpAndSettle();
 
-      expect(find.byType(ElevatedButton), findsNWidgets(3));
+      expect(find.text(AppStrings.clientes), findsOneWidget);
+      expect(find.text(AppStrings.recompensas), findsOneWidget);
+      expect(find.text(AppStrings.historicoVendas), findsOneWidget);
+      expect(find.text(AppStrings.pendentes), findsOneWidget);
     });
   });
 
   group('DashboardScreen — section headers', () {
-    testWidgets('shows Hoje and Ações rápidas headers', (tester) async {
+    testWidgets('shows Atalhos and Hoje headers', (tester) async {
       await tester.pumpWidget(const DashboardStats().buildDashboard());
       await tester.pumpAndSettle();
 
       expect(find.text('Hoje'), findsOneWidget);
-      expect(find.text('Ações rápidas'), findsOneWidget);
+      expect(find.text('Atalhos'), findsOneWidget);
     });
   });
 
@@ -124,16 +144,23 @@ void main() {
   });
 
   group('DashboardScreen — loading state', () {
-    testWidgets('shows CircularProgressIndicator while loading', (tester) async {
-      await tester.pumpWidget(ProviderScope(
-        overrides: [
-          dashboardControllerProvider.overrideWith(_SlowDashboardController.new),
-          syncControllerProvider.overrideWith(_FakeSyncController.new),
-          isOnlineProvider.overrideWith((ref) => Stream.value(true)),
-        ],
-        child: const MaterialApp(home: DashboardScreen()),
-      ));
-      await tester.pump(); // one pump — don't settle so loading state is visible
+    testWidgets('shows CircularProgressIndicator while loading', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            dashboardControllerProvider.overrideWith(
+              _SlowDashboardController.new,
+            ),
+            syncControllerProvider.overrideWith(_FakeSyncController.new),
+            isOnlineProvider.overrideWith((ref) => Stream.value(true)),
+          ],
+          child: const MaterialApp(home: DashboardScreen()),
+        ),
+      );
+      await tester
+          .pump(); // one pump — don't settle so loading state is visible
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });

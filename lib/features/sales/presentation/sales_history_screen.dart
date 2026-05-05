@@ -1,11 +1,7 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/empty_state.dart';
@@ -24,12 +20,6 @@ class SalesHistoryScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Histórico de Vendas'),
         actions: [
-          if (sales != null && sales.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.share_rounded),
-              tooltip: 'Exportar relatório',
-              onPressed: () => _exportCSV(sales),
-            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () => ref.invalidate(allSalesWithCustomerProvider),
@@ -38,23 +28,29 @@ class SalesHistoryScreen extends ConsumerWidget {
       ),
       body: salesAsync.when(
         data: (list) => list.isEmpty
-            ? const EmptyState(
-                title: 'Nenhuma venda ainda',
-              )
+            ? const EmptyState(title: 'Nenhuma venda ainda')
             : RefreshIndicator(
                 color: AppColors.secondary,
                 onRefresh: () async =>
                     ref.invalidate(allSalesWithCustomerProvider),
                 child: ListView.separated(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  itemCount: list.length,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  itemCount: list.length + 1,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _SaleHistoryTile(data: list[i]),
+                  itemBuilder: (_, i) {
+                    if (i == 0) {
+                      return _HistorySummary(totalSales: list.length);
+                    }
+                    return _SaleHistoryTile(data: list[i - 1]);
+                  },
                 ),
               ),
         loading: () => const Center(
-            child: CircularProgressIndicator(color: AppColors.secondary)),
+          child: CircularProgressIndicator(color: AppColors.secondary),
+        ),
         error: (e, _) => Center(
           child: TextButton.icon(
             icon: const Icon(Icons.refresh),
@@ -65,28 +61,61 @@ class SalesHistoryScreen extends ConsumerWidget {
       ),
     );
   }
+}
 
-  void _exportCSV(List<Map<String, dynamic>> sales) {
-    final fmt = DateFormat('dd/MM/yyyy HH:mm', 'pt');
-    final buf = StringBuffer();
-    buf.writeln('Data,Cliente,Valor (MZN),Pontos,Sincronizado');
-    for (final s in sales) {
-      final date = fmt
-          .format(DateTime.fromMillisecondsSinceEpoch(s['created_at'] as int));
-      final name =
-          (s['customer_name'] as String? ?? 'Cliente').replaceAll(',', ' ');
-      final amount = (s['amount'] as num).toStringAsFixed(0);
-      final points = s['points'] as int;
-      final synced = (s['synced'] as int? ?? 0) == 1 ? 'Sim' : 'Nao';
-      buf.writeln('$date,$name,$amount,$points,$synced');
-    }
+class _HistorySummary extends StatelessWidget {
+  const _HistorySummary({required this.totalSales});
 
-    final bytes = Uint8List.fromList(utf8.encode(buf.toString()));
-    final fileName =
-        'relatorio_vendas_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv';
-    Share.shareXFiles(
-      [XFile.fromData(bytes, name: fileName, mimeType: 'text/csv')],
-      subject: 'Relatório de Vendas – MaisUm',
+  final int totalSales;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.g100, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.07),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.receipt_long_rounded,
+              color: AppColors.primary,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$totalSales vendas registadas',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Histórico simples para conferência rápida.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -99,8 +128,9 @@ class _SaleHistoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final fmt = DateFormat('dd MMM yyyy, HH:mm', 'pt');
-    final createdAt =
-        DateTime.fromMillisecondsSinceEpoch(data['created_at'] as int);
+    final createdAt = DateTime.fromMillisecondsSinceEpoch(
+      data['created_at'] as int,
+    );
     final amount = (data['amount'] as num).toDouble();
     final points = data['points'] as int;
     final customerName = data['customer_name'] as String? ?? 'Cliente';
@@ -122,8 +152,11 @@ class _SaleHistoryTile extends StatelessWidget {
               color: AppColors.primary.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.receipt_rounded,
-                color: AppColors.primary, size: 22),
+            child: const Icon(
+              Icons.receipt_rounded,
+              color: AppColors.primary,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -133,7 +166,9 @@ class _SaleHistoryTile extends StatelessWidget {
                 Text(
                   customerName,
                   style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700, color: AppColors.onSurface),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -152,8 +187,10 @@ class _SaleHistoryTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.secondaryLight,
                   borderRadius: BorderRadius.circular(10),
@@ -161,9 +198,10 @@ class _SaleHistoryTile extends StatelessWidget {
                 child: Text(
                   '+$points pts',
                   style: GoogleFonts.outfit(
-                      color: AppColors.secondaryDark,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12),
+                    color: AppColors.secondaryDark,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
                 ),
               ),
               const SizedBox(height: 4),

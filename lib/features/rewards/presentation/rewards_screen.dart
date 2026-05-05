@@ -17,16 +17,7 @@ class RewardsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        title: const Text(AppStrings.recompensasTitle),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.group_rounded),
-            tooltip: AppStrings.clientesElegiveis,
-            onPressed: () => context.push('/rewards/eligible'),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text(AppStrings.recompensasTitle)),
       body: rewards.when(
         data: (list) => list.isEmpty
             ? EmptyState(
@@ -52,7 +43,8 @@ class RewardsScreen extends ConsumerWidget {
                 ),
               ),
         loading: () => const Center(
-            child: CircularProgressIndicator(color: AppColors.secondary)),
+          child: CircularProgressIndicator(color: AppColors.secondary),
+        ),
         error: (e, _) => Center(
           child: TextButton.icon(
             icon: const Icon(Icons.refresh),

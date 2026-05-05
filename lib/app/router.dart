@@ -13,7 +13,6 @@ import '../features/customers/presentation/customer_detail_screen.dart';
 import '../features/customers/presentation/customer_list_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/rewards/presentation/create_reward_screen.dart';
-import '../features/rewards/presentation/eligible_customers_screen.dart';
 import '../features/rewards/presentation/rewards_screen.dart';
 import '../features/sales/presentation/new_sale_screen.dart';
 import '../features/sales/presentation/sales_history_screen.dart';
@@ -43,7 +42,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: authNotifier,
     redirect: (context, state) async {
-      final isPublic = _publicRoutes.contains(state.matchedLocation) ||
+      final isPublic =
+          _publicRoutes.contains(state.matchedLocation) ||
           state.matchedLocation.startsWith('/otp');
       final isAuthenticated =
           ref.read(authControllerProvider).valueOrNull != null;
@@ -56,14 +56,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(
-        path: '/splash',
-        builder: (_, __) => const SplashScreen(),
-      ),
-      GoRoute(
-        path: '/login',
-        builder: (_, __) => const PhoneAuthScreen(),
-      ),
+      GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
+      GoRoute(path: '/login', builder: (_, __) => const PhoneAuthScreen()),
       GoRoute(
         path: '/otp',
         builder: (_, state) {
@@ -74,18 +68,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(
-        path: '/pin-setup',
-        builder: (_, __) => const PinSetupScreen(),
-      ),
-      GoRoute(
-        path: '/pin-entry',
-        builder: (_, __) => const PinEntryScreen(),
-      ),
-      GoRoute(
-        path: '/dashboard',
-        builder: (_, __) => const DashboardScreen(),
-      ),
+      GoRoute(path: '/pin-setup', builder: (_, __) => const PinSetupScreen()),
+      GoRoute(path: '/pin-entry', builder: (_, __) => const PinEntryScreen()),
+      GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
       GoRoute(
         path: '/new-sale',
         builder: (_, state) => NewSaleScreen(args: state.extra as NewSaleArgs?),
@@ -105,36 +90,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/rewards',
         builder: (_, __) => const RewardsScreen(),
         routes: [
-          GoRoute(
-            path: 'new',
-            builder: (_, __) => const CreateRewardScreen(),
-          ),
-          GoRoute(
-            path: 'eligible',
-            builder: (_, __) => const EligibleCustomersScreen(),
-          ),
+          GoRoute(path: 'new', builder: (_, __) => const CreateRewardScreen()),
         ],
       ),
-      GoRoute(
-        path: '/sales',
-        builder: (_, __) => const SalesHistoryScreen(),
-      ),
+      GoRoute(path: '/sales', builder: (_, __) => const SalesHistoryScreen()),
       GoRoute(
         path: '/pending-sync',
         builder: (_, __) => const PendingSyncScreen(),
       ),
-      GoRoute(
-        path: '/settings',
-        builder: (_, __) => const SettingsScreen(),
-      ),
-      GoRoute(
-        path: '/terms',
-        builder: (_, __) => const TermsScreen(),
-      ),
-      GoRoute(
-        path: '/privacy',
-        builder: (_, __) => const PrivacyScreen(),
-      ),
+      GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+      GoRoute(path: '/terms', builder: (_, __) => const TermsScreen()),
+      GoRoute(path: '/privacy', builder: (_, __) => const PrivacyScreen()),
     ],
     errorBuilder: (_, state) => Scaffold(
       body: Center(child: Text('Página não encontrada: ${state.error}')),

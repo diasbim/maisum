@@ -88,7 +88,8 @@ class AppStrings {
 
   // PIN Setup
   static const String pinSetupTitle = 'Criar PIN de acesso';
-  static const String pinSetupSubtitle = 'Escolha um PIN de 4 dígitos para aceder rapidamente';
+  static const String pinSetupSubtitle =
+      'Escolha um PIN de 4 dígitos para aceder rapidamente';
   static const String pinConfirmTitle = 'Confirmar PIN';
   static const String pinConfirmSubtitle = 'Introduza o mesmo PIN novamente';
   static const String pinCreatedSuccess = 'PIN criado com sucesso!';
@@ -99,11 +100,9 @@ class AppStrings {
   static const String pinEntrySubtitle = 'Introduza o seu PIN para continuar';
   static const String pinIncorrect = 'PIN incorreto';
   static const String pinForgot = 'Esqueci o PIN';
-  static const String pinBlocked = 'Demasiadas tentativas. Faça login novamente.';
+  static const String pinBlocked =
+      'Demasiadas tentativas. Faça login novamente.';
 
-  // Eligible customers
-  static const String clientesElegiveis = 'Clientes elegíveis';
-  static const String nenhumClienteElegivel = 'Sem clientes elegíveis';
   static const String resgatarBtn = 'Resgatar';
 
   // Customer edit

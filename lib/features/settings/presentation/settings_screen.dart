@@ -37,27 +37,6 @@ class SettingsScreen extends ConsumerWidget {
             ),
           ],
 
-          const _Section('Negocio'),
-          _SettingsTile(
-            icon: Icons.star_rate_rounded,
-            iconColor: AppColors.secondary,
-            title: AppStrings.taxaPontos,
-            subtitle: AppStrings.taxaDesc,
-            trailing: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.secondaryLight,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '1 / ${AppConstants.pointsPerMzn} MZN',
-                style: theme.textTheme.labelSmall?.copyWith(
-                    color: AppColors.secondaryDark,
-                    fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-
           // ── Security ────────────────────────────────────────────────────────
           const _Section('Segurança'),
           _SettingsTile(
@@ -66,8 +45,11 @@ class SettingsScreen extends ConsumerWidget {
             title: 'PIN de acesso',
             subtitle: 'Alterar o PIN de segurança',
             brandAccent: true,
-            trailing: const Icon(Icons.chevron_right_rounded,
-                color: AppColors.g300, size: 20),
+            trailing: const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.g300,
+              size: 20,
+            ),
             onTap: () => _showPinVerifySheet(context, ref),
           ),
           _SettingsTile(
@@ -76,40 +58,15 @@ class SettingsScreen extends ConsumerWidget {
             title: 'Bloquear agora',
             subtitle: 'Exige PIN para continuar',
             brandAccent: true,
-            trailing: const Icon(Icons.chevron_right_rounded,
-                color: AppColors.g300, size: 20),
+            trailing: const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.g300,
+              size: 20,
+            ),
             onTap: () {
               ref.read(appLockedProvider.notifier).state = true;
               context.pop();
             },
-          ),
-
-          const _Section('Aplicacao'),
-          _SettingsTile(
-            icon: Icons.info_outline_rounded,
-            iconColor: AppColors.g500,
-            title: AppStrings.versao,
-            trailing: Text('1.0.0',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: AppColors.onSurfaceVariant)),
-          ),
-          _SettingsTile(
-            icon: Icons.gavel_rounded,
-            iconColor: AppColors.g500,
-            title: 'Termos e Condições',
-            subtitle: 'Lei moçambicana aplicável',
-            trailing: const Icon(Icons.chevron_right_rounded,
-                color: AppColors.g300, size: 20),
-            onTap: () => context.push('/terms'),
-          ),
-          _SettingsTile(
-            icon: Icons.shield_outlined,
-            iconColor: AppColors.g500,
-            title: 'Política de Privacidade',
-            subtitle: 'Proteção de dados pessoais',
-            trailing: const Icon(Icons.chevron_right_rounded,
-                color: AppColors.g300, size: 20),
-            onTap: () => context.push('/privacy'),
           ),
 
           const SizedBox(height: 8),
@@ -121,8 +78,10 @@ class SettingsScreen extends ConsumerWidget {
               onTap: () => _confirmLogout(context, ref),
               borderRadius: BorderRadius.circular(16),
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 child: Row(
                   children: [
                     Container(
@@ -132,14 +91,19 @@ class SettingsScreen extends ConsumerWidget {
                         color: AppColors.errorContainer,
                         borderRadius: BorderRadius.circular(11),
                       ),
-                      child: const Icon(Icons.logout_rounded,
-                          color: AppColors.error, size: 20),
+                      child: const Icon(
+                        Icons.logout_rounded,
+                        color: AppColors.error,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 14),
                     Text(
                       AppStrings.logout,
                       style: theme.textTheme.titleSmall?.copyWith(
-                          color: AppColors.error, fontWeight: FontWeight.w600),
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -206,16 +170,16 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
-        child: Text(
-          title.toUpperCase(),
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: AppColors.onSurfaceVariant,
-                letterSpacing: 0.9,
-                fontWeight: FontWeight.w700,
-              ),
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+    child: Text(
+      title.toUpperCase(),
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: AppColors.onSurfaceVariant,
+        letterSpacing: 0.9,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
 }
 
 // ── PIN Verify Sheet ──────────────────────────────────────────────────────────
@@ -281,9 +245,9 @@ class _PinVerifySheetState extends State<_PinVerifySheet>
 
     if (result.isBlocked) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.pinBlocked)),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text(AppStrings.pinBlocked)));
         Navigator.of(context).pop(false);
       }
       return;
@@ -309,7 +273,11 @@ class _PinVerifySheetState extends State<_PinVerifySheet>
     final theme = Theme.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          24, 16, 24, MediaQuery.of(context).viewInsets.bottom + 32),
+        24,
+        16,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 32,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -317,15 +285,18 @@ class _PinVerifySheetState extends State<_PinVerifySheet>
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-                color: AppColors.g300, borderRadius: BorderRadius.circular(2)),
+              color: AppColors.g300,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
           const SizedBox(height: 24),
           Text('Verificar PIN atual', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 6),
           Text(
             'Introduza o PIN atual para continuar',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: AppColors.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 32),
           PinVerificationFeedback(
@@ -391,10 +362,7 @@ class _SettingsTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: AppColors.g100),
                   ),
-                  child: const BrandMark(
-                    size: 10,
-                    padding: EdgeInsets.all(3),
-                  ),
+                  child: const BrandMark(size: 10, padding: EdgeInsets.all(3)),
                 ),
               ),
           ],
@@ -404,9 +372,12 @@ class _SettingsTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                title,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
                 Text(subtitle!, style: theme.textTheme.bodySmall),
@@ -433,8 +404,10 @@ class _SettingsTile extends StatelessWidget {
                 onTap: onTap,
                 borderRadius: BorderRadius.circular(16),
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   child: content,
                 ),
               ),
