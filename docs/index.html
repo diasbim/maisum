@@ -1,1037 +1,710 @@
 <!DOCTYPE html>
-<html lang="pt">
+<html lang="pt-MZ">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MaisUm — O app que faz clientes voltarem</title>
+<title>MaisUm | App de fidelização para barbearias e salões em Maputo</title>
+<meta name="description" content="MaisUm é uma app de fidelização para barbearias e salões em Maputo. Regista vendas, atribui pontos e traz clientes de volta pelo WhatsApp sem complicar o atendimento.">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+<meta name="application-name" content="MaisUm">
+<meta name="plausible-domain" content="">
+<meta property="og:title" content="MaisUm | App de fidelização para barbearias e salões em Maputo">
+<meta property="og:description" content="Regista a venda, atribui pontos e chama o cliente de volta no WhatsApp sem travar o atendimento.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_MZ">
+<meta property="og:site_name" content="MaisUm">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MaisUm | Fidelização simples para barbearias em Maputo">
+<meta name="twitter:description" content="Mais clientes a voltar com menos confusão no balcão, Android no centro e WhatsApp como canal de retorno.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous">
-<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{
-  --navy:oklch(20% 0.055 258);
-  --navy2:oklch(17% 0.05 258);
-  --navy3:oklch(14% 0.04 258);
-  --gold:oklch(82% 0.18 82);
-  --goldDk:oklch(75% 0.18 82);
-  --goldLt:oklch(97% 0.04 82);
-  --white:oklch(99% 0.004 82);
-  --off:oklch(97% 0.006 82);
-  --g100:oklch(94% 0.006 250);
-  --g300:oklch(82% 0.01 250);
-  --g500:oklch(56% 0.015 250);
-  --g800:oklch(22% 0.02 250);
-  --green:oklch(62% 0.18 145);
-  --green2:oklch(57% 0.17 145);
-  --green-pale:oklch(96% 0.05 145);
-  --bg:var(--navy3);
-  --bg2:var(--navy);
-  --muted:var(--g500);
-  --muted2:oklch(88% 0.01 250 / 0.78);
-  --border:oklch(100% 0 0 / 0.08);
-  --glass:oklch(100% 0 0 / 0.04);
-  --r:12px;
-  --r-sm:12px;
-  --rL:18px;
-  --rXL:24px;
-  --sh:0 2px 10px oklch(20% 0.055 258 / 0.10);
-  --shM:0 6px 24px oklch(20% 0.055 258 / 0.16);
-  --shL:0 16px 56px oklch(20% 0.055 258 / 0.24);
-  --fh:'Bricolage Grotesque',system-ui,sans-serif;
-  --fb:'Outfit',system-ui,sans-serif;
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "MaisUm",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Android",
+      "description": "App de fidelização para barbearias e salões em Maputo. Ajuda a registar vendas, atribuir pontos e trazer clientes de volta pelo WhatsApp.",
+      "areaServed": {
+        "@type": "City",
+        "name": "Maputo"
+      },
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "MZN",
+        "availability": "https://schema.org/PreOrder"
+      }
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "O cliente também precisa de instalar a app?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Não. O cliente recebe tudo no WhatsApp, o que reduz a fricção e aumenta a chance de voltar."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Funciona quando a internet falha?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sim. A venda pode ser guardada e sincronizada depois. A equipa não precisa parar por causa da internet."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "É simples para equipas pequenas?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Sim. O foco é uso rápido, pouco texto e pouca aprendizagem. Foi feito para equipas pequenas e ambientes corridos."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Como dou o próximo passo?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Falas connosco no WhatsApp, vês rapidamente se o fluxo encaixa no teu balcão e decides sem complicação."
+          }
+        }
+      ]
+    }
+  ]
 }
+</script>
+<style>
+:root{
+  --bg:#f5efe3;
+  --ink:#111717;
+  --ink-soft:#455154;
+  --panel:#fffaf1;
+  --panel-strong:#fffdf8;
+  --panel-dark:#12212a;
+  --line:rgba(17,23,23,.12);
+  --line-strong:rgba(17,23,23,.22);
+  --sand:#eadfc9;
+  --brand:#f66b2d;
+  --brand-deep:#c94b14;
+  --leaf:#1f8f61;
+  --sky:#87c7df;
+  --gold:#ebb84f;
+  --cream:#fff4dd;
+  --shadow:0 24px 60px rgba(78,48,20,.12);
+  --shadow-soft:0 14px 36px rgba(78,48,20,.08);
+  --radius-xl:32px;
+  --radius-lg:24px;
+  --radius-md:18px;
+  --max:1180px;
+}
+*,:before,:after{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{background:radial-gradient(circle at top right,oklch(82% 0.18 82 / 0.16),transparent 0 26%),linear-gradient(180deg,var(--navy2) 0%,var(--navy3) 100%);color:var(--white);font-family:var(--fb);-webkit-font-smoothing:antialiased;overflow-x:hidden;line-height:1.6}
-::-webkit-scrollbar{width:4px}
-::-webkit-scrollbar-track{background:var(--bg)}
-::-webkit-scrollbar-thumb{background:oklch(82% 0.18 82 / 0.45);border-radius:4px}
+body,h1,h2,h3,p,ul{margin:0}
+body{
+  font-family:"Manrope",sans-serif;
+  background:
+    radial-gradient(circle at top left,rgba(246,107,45,.14),transparent 28%),
+    radial-gradient(circle at top right,rgba(31,143,97,.12),transparent 24%),
+    linear-gradient(180deg,#f8f3e8 0%,#f4eadc 42%,#f7f1e8 100%);
+  color:var(--ink);
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
 a{text-decoration:none;color:inherit}
-img{display:block;width:100%;object-fit:cover}
-
-/* ── NAV ─────────────────────────────────────────── */
-nav{position:fixed;top:0;left:0;right:0;z-index:200;padding:0;transition:all .3s;background:rgba(15,23,42,.8);border-bottom:1px solid rgba(255,255,255,.07)}
-nav.scrolled{background:rgba(15,23,42,.92);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:1px solid rgba(251,191,36,.14)}
-.nav-inner{max-width:1200px;margin:0 auto;padding:0 32px;height:72px;display:flex;align-items:center;justify-content:space-between}
-.logo{font-family:var(--fh);font-size:22px;font-weight:800;display:flex;align-items:center;gap:12px;color:var(--white);letter-spacing:-0.02em}
-.logo-mark{width:48px;height:48px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.logo-mark img{width:48px;height:48px;object-fit:contain;filter:drop-shadow(0 8px 24px oklch(82% 0.18 82 / 0.18))}
-.logo-word{display:flex;flex-direction:column;gap:1px;line-height:1}
-.logo-word strong{font-size:1rem;font-weight:800}
-.logo-word span{font-size:.68rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.46)}
-.nav-links{display:flex;align-items:center;gap:22px;list-style:none}
-.nav-links a{font-size:.84rem;font-weight:600;color:rgba(255,255,255,.66);transition:color .18s,border-color .18s;padding:25px 6px;border-bottom:2px solid transparent}
-.nav-links a:hover{color:var(--white);border-bottom-color:var(--gold)}
-.nav-btn{background:var(--gold);color:var(--navy) !important;padding:13px 22px;border-radius:var(--r);font-weight:800 !important;font-size:.86rem !important;box-shadow:var(--sh);border-bottom:none !important;transition:transform .18s,box-shadow .18s !important}
-.nav-btn:hover{transform:translateY(-2px);box-shadow:var(--shM)}
-.hamburger{display:none;background:none;border:none;color:#fff;cursor:pointer;font-size:20px;padding:4px}
-@media(max-width:768px){.nav-links{display:none}.hamburger{display:block}}
-
-/* ── HERO ─────────────────────────────────────────── */
-.hero{position:relative;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.hero-bg{position:absolute;inset:0;z-index:0}
-.hero-bg img{height:100%;object-position:center 30%}
-.hero-overlay{position:absolute;inset:0;background:linear-gradient(135deg,rgba(8,12,20,.88) 0%,rgba(8,12,20,.70) 60%,rgba(8,12,20,.85) 100%)}
-.hero-content{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:140px 32px 80px;width:100%}
-.hero-kicker{display:inline-flex;align-items:center;gap:8px;background:rgba(251,191,36,.14);border:1px solid rgba(251,191,36,.24);border-radius:999px;padding:7px 16px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:28px}
-.hero-kicker-dot{width:7px;height:7px;background:var(--gold);border-radius:50%;animation:blink 2s infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.hero h1{font-family:var(--fh);font-size:clamp(52px,7vw,96px);font-weight:800;line-height:1.0;letter-spacing:-3px;margin-bottom:24px;max-width:780px}
-.hero h1 em{font-style:normal;color:var(--gold)}
-.hero-sub{font-size:clamp(17px,2vw,22px);color:rgba(255,255,255,.72);max-width:520px;line-height:1.65;margin-bottom:44px;font-weight:400}
-.hero-actions{display:flex;gap:14px;flex-wrap:wrap}
-.btn-green{background:var(--gold);color:var(--navy);border:none;cursor:pointer;font-family:var(--fb);font-size:16px;font-weight:800;padding:17px 30px;border-radius:var(--r);display:inline-flex;align-items:center;gap:9px;transition:transform .18s,box-shadow .18s;box-shadow:var(--sh)}
-.btn-green:hover{transform:translateY(-2px);box-shadow:var(--shM);background:var(--goldDk)}
-.btn-ghost{background:transparent;border:1.5px solid rgba(255,255,255,.26);color:#fff;cursor:pointer;font-family:var(--fb);font-size:16px;font-weight:600;padding:17px 30px;border-radius:var(--r);display:inline-flex;align-items:center;gap:9px;transition:background .18s,border-color .18s,-webkit-backdrop-filter .18s,backdrop-filter .18s;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-.btn-ghost:hover{background:rgba(255,255,255,.07);border-color:rgba(251,191,36,.34)}
-.hero-badges{display:flex;flex-wrap:wrap;gap:10px;margin-top:48px}
-.hbadge{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:999px;padding:7px 14px;font-size:12px;font-weight:600;color:rgba(255,255,255,.75)}
-.hbadge i{color:var(--gold);font-size:11px}
-.hero-scroll{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;color:rgba(255,255,255,.3);font-size:12px;z-index:1;animation:scrollBounce 2s infinite}
-@keyframes scrollBounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
-
-/* ── TRUST BAR ─────────────────────────────────────── */
-.trust{background:var(--gold);border-top:none;border-bottom:none;padding:24px 0;box-shadow:var(--shM)}
-.trust-inner{max-width:1200px;margin:0 auto;padding:0 32px;display:flex;align-items:center;justify-content:center;gap:48px;flex-wrap:wrap}
-.trust-item{display:flex;align-items:center;gap:10px;font-size:14px;color:rgba(15,23,42,.62)}
-.trust-item strong{color:var(--navy);font-family:var(--fh);font-size:18px;font-weight:800}
-.trust-dot{width:4px;height:4px;background:rgba(15,23,42,.18);border-radius:50%}
-
-/* ── SECTION LAYOUT ─────────────────────────────────── */
-.section{padding:100px 0}
-.container{max-width:1200px;margin:0 auto;padding:0 32px}
-.label{font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:14px}
-.h2{font-family:var(--fh);font-size:clamp(32px,4vw,56px);font-weight:800;letter-spacing:-2px;line-height:1.1;margin-bottom:16px}
-.h3{font-family:var(--fh);font-size:22px;font-weight:700;margin-bottom:8px}
-.sub{font-size:17px;color:var(--muted2);line-height:1.7;max-width:540px}
-
-/* ── PROBLEM ─────────────────────────────────────────── */
-.problem-section{background:linear-gradient(180deg,var(--bg) 0%,#050810 100%)}
-.problem-grid{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;margin-top:64px}
-@media(max-width:900px){.problem-grid{grid-template-columns:1fr}}
-.problem-photo{position:relative;border-radius:24px;overflow:hidden;aspect-ratio:4/5}
-.problem-photo-overlay{position:absolute;inset:0;background:linear-gradient(to top,rgba(8,12,20,1) 0%,rgba(8,12,20,.3) 60%,transparent 100%)}
-.problem-stat{position:absolute;bottom:32px;left:32px;right:32px}
-.big-stat{font-family:var(--fh);font-size:80px;font-weight:800;color:var(--green);line-height:1;letter-spacing:-4px}
-.big-stat-label{font-size:18px;color:#fff;font-weight:500;margin-top:4px}
-.problem-intro{margin-bottom:36px}
-.problem-points{display:flex;flex-direction:column;gap:24px;margin-top:40px}
-.problem-point{display:flex;align-items:flex-start;gap:16px;padding:24px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:var(--r);transition:border-color .3s,transform .3s}
-.problem-point:hover{border-color:rgba(239,68,68,.25);transform:translateX(4px)}
-.pp-icon{width:44px;height:44px;border-radius:12px;background:rgba(239,68,68,.1);display:flex;align-items:center;justify-content:center;color:#ef4444;font-size:18px;flex-shrink:0}
-.pp-title{font-family:var(--fh);font-size:16px;font-weight:700;margin-bottom:4px}
-.pp-desc{font-size:14px;color:var(--muted2);line-height:1.55}
-
-/* ── SOLUTION STRIP ─────────────────────────────────── */
-.solution-strip{background:var(--green);padding:80px 0;overflow:hidden;position:relative}
-.solution-strip::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
-.strip-inner{max-width:1200px;margin:0 auto;padding:0 32px;display:grid;grid-template-columns:auto 1fr;gap:60px;align-items:center}
-@media(max-width:768px){.strip-inner{grid-template-columns:1fr;gap:32px}}
-.strip-quote{font-family:var(--fh);font-size:clamp(28px,4vw,48px);font-weight:800;color:#000;letter-spacing:-2px;line-height:1.1;max-width:600px}
-.strip-quote em{font-style:normal;background:rgba(0,0,0,.1);border-radius:8px;padding:0 6px}
-.strip-steps{display:flex;flex-direction:column;gap:16px}
-.strip-step{display:flex;align-items:center;gap:14px;background:rgba(0,0,0,.08);border-radius:14px;padding:16px 20px}
-.strip-step-num{width:36px;height:36px;background:#000;color:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-size:16px;font-weight:800;flex-shrink:0}
-.strip-step-text{font-size:14px;font-weight:600;color:#000}
-
-/* ── FEATURES ─────────────────────────────────────────── */
-.features-section{background:var(--bg2)}
-.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:64px;border-radius:24px;overflow:hidden}
-@media(max-width:900px){.feat-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:560px){.feat-grid{grid-template-columns:1fr}}
-.feat-card{background:rgba(255,255,255,.03);padding:36px 32px;transition:background .3s;cursor:default;border:1px solid var(--border)}
-.feat-card:hover{background:rgba(255,255,255,.06)}
-.feat-card.featured-feat{background:rgba(34,197,94,.07);border-color:rgba(34,197,94,.2)}
-.feat-card.featured-feat:hover{background:rgba(34,197,94,.1)}
-.fc-icon{width:52px;height:52px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:20px}
-.fc-icon.g{background:rgba(34,197,94,.12);color:var(--green)}
-.fc-icon.a{background:rgba(251,191,36,.12);color:var(--gold)}
-.fc-icon.b{background:rgba(99,102,241,.12);color:#818cf8}
-.fc-icon.r{background:rgba(239,68,68,.12);color:#f87171}
-.fc-title{font-family:var(--fh);font-size:18px;font-weight:700;margin-bottom:8px}
-.fc-desc{font-size:14px;color:var(--muted2);line-height:1.6}
-.fc-tag{display:inline-block;margin-top:14px;font-size:11px;font-weight:700;letter-spacing:.5px;padding:4px 10px;border-radius:6px}
-.fc-tag.green{background:rgba(34,197,94,.12);color:var(--green)}
-.fc-tag.gold{background:rgba(251,191,36,.12);color:var(--gold)}
-
-/* ── APP SCREENSHOTS ─────────────────────────────────── */
-.screenshots-section{background:var(--off);overflow:hidden;color:var(--g800)}
-.screenshots-tabs{display:flex;gap:8px;margin-top:48px;flex-wrap:wrap}
-.stab{padding:10px 20px;border-radius:999px;font-size:14px;font-weight:600;cursor:pointer;border:1.5px solid var(--g300);background:none;color:var(--g500);transition:all .18s;font-family:var(--fb)}
-.stab.active{background:var(--navy);border-color:var(--navy);color:var(--white);box-shadow:var(--sh)}
-.screenshots-display{display:grid;grid-template-columns:1fr 1.4fr;gap:64px;align-items:center;margin-top:48px}
-@media(max-width:900px){.screenshots-display{grid-template-columns:1fr}}
-.screen-title{font-family:var(--fh);font-size:32px;font-weight:800;letter-spacing:-1px;margin-bottom:12px;color:var(--navy)}
-.screen-desc{font-size:16px;color:var(--g500);line-height:1.7;margin-bottom:28px}
-.screen-points{display:flex;flex-direction:column;gap:12px}
-.screen-point{display:flex;align-items:center;gap:12px;font-size:15px;color:var(--g500)}
-.screen-point i{color:var(--gold);width:20px;text-align:center}
-.screen-phone{display:flex;justify-content:center}
-.phone-wrap{width:280px;background:#14181F;border-radius:42px;border:2px solid rgba(255,255,255,.1);padding:16px;box-shadow:0 40px 120px rgba(0,0,0,.7),0 0 80px rgba(34,197,94,.06)}
-.phone-screen{background:#0a0d14;border-radius:30px;overflow:hidden;min-height:500px}
-.ps-header{background:#111827;padding:20px 18px 14px;display:flex;align-items:center;gap:12px}
-.ps-logo{font-family:var(--fh);font-size:17px;font-weight:800;color:var(--green);flex:1}
-.ps-avatar{width:34px;height:34px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#000;font-size:12px}
-.ps-body{padding:16px}
-.ps-stat-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
-.ps-stat{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:12px;padding:14px}
-.ps-stat-val{font-family:var(--fh);font-size:24px;font-weight:800;line-height:1}
-.ps-stat-val.g{color:var(--green)}
-.ps-stat-val.gold{color:var(--gold)}
-.ps-stat-label{font-size:10px;color:var(--muted2);margin-top:3px;text-transform:uppercase;letter-spacing:.3px}
-.ps-cta{width:100%;background:var(--green);border:none;border-radius:12px;padding:15px;color:#000;font-family:var(--fh);font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px}
-.ps-list-title{font-size:11px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-.ps-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
-.ps-row:last-child{border:none}
-.ps-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
-.ps-name{flex:1;font-size:13px;font-weight:500}
-.ps-pts{font-size:11px;color:var(--gold);font-weight:600}
-
-/* ── TESTIMONIALS ─────────────────────────────────────── */
-.testi-section{background:linear-gradient(180deg,var(--bg2) 0%,var(--bg) 100%)}
-.testi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:64px}
-@media(max-width:900px){.testi-grid{grid-template-columns:1fr}}
-.section-head{max-width:560px;margin:0 auto}
-.section-head.centered{text-align:center}
-.sub-centered{margin:0 auto}
-.tcard{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:22px;padding:32px;transition:transform .3s,border-color .3s;cursor:default}
-.tcard:hover{transform:translateY(-6px);border-color:rgba(34,197,94,.2)}
-.tcard-proof{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
-.tproof-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.18);font-size:11px;font-weight:700;color:var(--green);letter-spacing:.3px;text-transform:uppercase}
-.tcard-stars{display:flex;gap:3px;margin-bottom:16px}
-.tcard-stars i{color:var(--gold);font-size:13px}
-.tcard-quote{font-size:16px;color:rgba(255,255,255,.85);line-height:1.7;margin-bottom:24px;font-style:italic}
-.tcard-author{display:flex;align-items:center;gap:14px}
-.tcard-photo{width:48px;height:48px;border-radius:50%;border:2px solid rgba(255,255,255,.1);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:var(--fh);font-size:15px;font-weight:800;background:linear-gradient(135deg,rgba(34,197,94,.18),rgba(34,197,94,.04));color:var(--off)}
-.tcard-name{font-family:var(--fh);font-size:15px;font-weight:700}
-.tcard-role{font-size:12px;color:var(--muted2)}
-
-/* ── PRICING ─────────────────────────────────────────── */
-.pricing-section{background:var(--off);color:var(--g800)}
-.price-kicker{display:inline-flex;align-items:center;gap:8px;margin:18px auto 0;padding:10px 16px;border-radius:999px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.18);font-size:13px;font-weight:600;color:var(--green)}
-.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:64px;align-items:stretch}
-@media(max-width:900px){.price-grid{grid-template-columns:1fr}}
-.pcard{background:var(--white);border:1.5px solid var(--g100);border-radius:var(--rL);padding:36px 30px;display:flex;flex-direction:column;position:relative;overflow:hidden;transition:transform .18s,box-shadow .18s;box-shadow:var(--sh)}
-.pcard:hover{transform:translateY(-4px);box-shadow:var(--shM)}
-.pcard.hot{background:var(--white);border-color:var(--gold);box-shadow:var(--shL);transform:scale(1.03)}
-.pcard.hot:hover{transform:scale(1.03) translateY(-4px)}
-.hot-badge{position:absolute;top:20px;right:20px;background:var(--gold);color:var(--navy);font-size:10px;font-weight:800;letter-spacing:1px;padding:5px 12px;border-radius:999px}
-.pcard-name{font-family:var(--fh);font-size:20px;font-weight:800;margin-bottom:6px;color:var(--navy)}
-.pcard-desc{font-size:13px;color:var(--g500);margin-bottom:24px}
-.pcard-price{font-family:var(--fh);font-size:44px;font-weight:800;letter-spacing:-2px;line-height:1;color:var(--navy)}
-.pcard-price sup{font-size:18px;font-weight:600;vertical-align:top;margin-top:8px;display:inline-block;letter-spacing:0}
-.pcard-price sub{font-size:14px;font-weight:500;color:var(--g500);letter-spacing:0;vertical-align:bottom}
-.pcard-period{font-size:13px;color:var(--g500);margin-top:4px;margin-bottom:24px}
-hr.pdivider{border:none;border-top:1px solid var(--g100);margin:20px 0}
-.pfeat{display:flex;align-items:flex-start;gap:10px;font-size:14px;margin-bottom:11px;color:var(--g500)}
-.pfeat .ci{color:var(--green);flex-shrink:0;margin-top:2px}
-.pfeat .ci-muted{color:var(--muted2)}
-.pfeat.on{color:var(--g800)}
-.pfeat.off{opacity:.35}
-.pdivider-hot{border-color:rgba(34,197,94,.2)}
-.pcta{margin-top:auto;padding-top:24px;width:100%;padding:14px;border-radius:var(--r);font-family:var(--fb);font-size:15px;font-weight:700;cursor:pointer;border:1.5px solid var(--g300);background:none;color:var(--navy);transition:all .18s}
-.pcta-link{display:flex;align-items:center;justify-content:center;text-decoration:none}
-.pcta:hover{background:var(--goldLt);border-color:var(--gold)}
-.pcta.hot-cta{background:var(--gold);border-color:var(--gold);color:var(--navy);box-shadow:var(--shM)}
-.pcta.hot-cta:hover{background:var(--goldDk);box-shadow:var(--shL)}
-
-/* ── FAQ ─────────────────────────────────────────────── */
-.faq-section{background:var(--white)}
-.faq-list{max-width:740px;margin:64px auto 0;display:flex;flex-direction:column;gap:10px}
-.faq-item{background:var(--white);border:1.5px solid var(--g100);border-radius:16px;overflow:hidden;transition:border-color .18s,box-shadow .18s;box-shadow:var(--sh)}
-.faq-item.open{border-color:var(--gold);box-shadow:var(--shM)}
-.faq-q{width:100%;background:none;border:none;display:flex;align-items:center;justify-content:space-between;padding:22px 24px;color:var(--navy);cursor:pointer;text-align:left;font-family:var(--fb);font-size:16px;font-weight:700;gap:16px}
-.faq-q i{color:var(--gold);flex-shrink:0;transition:transform .3s;font-size:14px}
-.faq-item.open .faq-q i{transform:rotate(45deg)}
-.faq-a{padding:0 24px;max-height:0;overflow:hidden;transition:max-height .35s ease,padding .3s}
-.faq-item.open .faq-a{max-height:300px;padding:0 24px 22px}
-.faq-a p{font-size:15px;color:var(--g500);line-height:1.7}
-
-/* ── APP DOWNLOAD ─────────────────────────────────────── */
-.app-section{background:var(--off);color:var(--g800)}
-.app-inner{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
-@media(max-width:900px){.app-inner{grid-template-columns:1fr}}
-.app-store-btns{display:flex;gap:12px;flex-wrap:wrap;margin-top:36px}
-.store-btn{display:flex;align-items:center;gap:14px;background:var(--white);border:1.5px solid var(--g100);border-radius:var(--rL);padding:14px 22px;transition:all .18s;cursor:pointer;box-shadow:var(--sh)}
-.store-btn:hover{background:var(--goldLt);border-color:var(--gold);transform:translateY(-2px);box-shadow:var(--shM)}
-.store-btn.primary{background:var(--goldLt);border-color:rgba(251,191,36,.28)}
-.store-btn.primary:hover{background:var(--gold);border-color:var(--gold)}
-.store-btn i{font-size:30px;flex-shrink:0}
-.store-btn-icon-green{color:var(--green)}
-.store-btn-icon-wa{color:#25D366}
-.store-btn .sblabel{font-size:10px;color:var(--g500);letter-spacing:1px;text-transform:uppercase}
-.store-btn .sbname{font-family:var(--fh);font-size:19px;font-weight:700;line-height:1.2;color:var(--navy)}
-.app-perks{display:flex;gap:32px;flex-wrap:wrap;margin-top:32px}
-.app-perk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--g500)}
-.app-perk i{color:var(--gold)}
-.app-visual{position:relative;display:flex;justify-content:center}
-.app-sub{margin-top:16px}
-.app-photo{width:100%;max-width:480px;border-radius:24px;overflow:hidden;box-shadow:0 40px 100px rgba(0,0,0,.6)}
-.app-photo img{height:480px}
-.app-rating{position:absolute;bottom:32px;right:0;background:var(--gold);border-radius:16px;padding:14px 18px;box-shadow:var(--shL);text-align:center}
-.app-rating-num{font-family:var(--fh);font-size:26px;font-weight:800;color:var(--navy);line-height:1}
-.app-rating-sub{font-size:11px;color:rgba(15,23,42,.6);font-weight:700}
-
-/* ── FINAL CTA ─────────────────────────────────────────── */
-.final-section{background:var(--gold);position:relative;overflow:hidden;padding:100px 0}
-.final-section::before{content:'';position:absolute;inset:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23000' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")}
-.final-inner{position:relative;z-index:1;text-align:center;max-width:680px;margin:0 auto;padding:0 32px}
-.final-section h2{font-family:var(--fh);font-size:clamp(36px,5vw,64px);font-weight:800;color:#000;letter-spacing:-2.5px;line-height:1.05;margin-bottom:16px}
-.final-section p{font-size:18px;color:rgba(0,0,0,.65);margin-bottom:40px}
-.final-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-.btn-dark{background:var(--navy);color:var(--white);border:none;cursor:pointer;font-family:var(--fb);font-size:16px;font-weight:800;padding:18px 32px;border-radius:var(--r);display:inline-flex;align-items:center;gap:9px;transition:opacity .18s,transform .18s;box-shadow:var(--shM)}
-.btn-dark:hover{opacity:.9;transform:translateY(-2px)}
-.btn-wa{background:var(--white);color:var(--navy);border:none;cursor:pointer;font-family:var(--fb);font-size:16px;font-weight:800;padding:18px 32px;border-radius:var(--r);display:inline-flex;align-items:center;gap:9px;transition:opacity .18s,transform .18s;box-shadow:var(--sh)}
-.btn-wa:hover{opacity:.95;transform:translateY(-2px)}
-.btn-wa i{color:#25D366;font-size:18px}
-
-/* ── FOOTER ─────────────────────────────────────────────── */
-footer{background:var(--navy3);border-top:1px solid rgba(255,255,255,.07);padding:60px 0 32px}
-.footer-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:48px;margin-bottom:48px}
-@media(max-width:900px){.footer-grid{grid-template-columns:1fr 1fr}}
-@media(max-width:560px){.footer-grid{grid-template-columns:1fr}}
-.footer-brand p{font-size:14px;color:var(--muted2);line-height:1.7;margin-top:12px;max-width:260px}
-.footer-col h4{font-family:var(--fh);font-size:13px;font-weight:700;color:#fff;margin-bottom:16px;letter-spacing:.5px}
-.footer-col ul{list-style:none;display:flex;flex-direction:column;gap:10px}
-.footer-col a{font-size:14px;color:var(--muted2);transition:color .2s}
-.footer-col a:hover{color:#fff}
-.social-row-top{margin-top:20px}
-.footer-bottom{display:flex;justify-content:space-between;align-items:center;padding-top:32px;border-top:1px solid var(--border);flex-wrap:wrap;gap:16px}
-.footer-copy{font-size:13px;color:var(--muted)}
-.social-row{display:flex;gap:10px}
-.soc{width:36px;height:36px;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:14px;transition:all .2s;cursor:pointer}
-.soc:hover{background:rgba(255,255,255,.1);color:#fff}
-
-/* ── SCROLL ANIMATION ─────────────────────────────────── */
-.reveal{opacity:0;transform:translateY(28px);transition:opacity .65s ease,transform .65s ease}
+img{display:block;max-width:100%}
+button,input,select,textarea{font:inherit}
+.wrap{width:min(var(--max),calc(100% - 28px));margin:0 auto}
+.skip-link{position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden}
+.skip-link:focus{left:16px;top:16px;width:auto;height:auto;padding:10px 14px;border-radius:12px;background:#111;color:#fff;z-index:100}
+.site-header{position:sticky;top:0;z-index:30;background:rgba(248,243,232,.88);border-bottom:1px solid rgba(17,23,23,.08);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+.site-header .wrap{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 0}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.brand img{width:42px;height:42px;object-fit:contain}
+.brand-copy{display:flex;flex-direction:column;line-height:1}
+.brand-copy strong,.brand-copy span{font-family:"Space Grotesk",sans-serif}
+.brand-copy strong{font-size:1rem;letter-spacing:-.04em}
+.brand-copy span{font-size:.76rem;color:var(--ink-soft)}
+.nav{display:none;align-items:center;gap:20px}
+.nav a{font-size:.95rem;color:var(--ink-soft);transition:color .18s ease}
+.nav a:hover,.nav a:focus-visible,.footer-links a:hover,.footer-links a:focus-visible{color:var(--ink)}
+.header-actions{display:flex;align-items:center;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:50px;padding:0 18px;border-radius:999px;border:1px solid transparent;font-size:.96rem;font-weight:800;letter-spacing:-.02em;transition:transform .18s ease,box-shadow .18s ease,background-color .18s ease,border-color .18s ease,color .18s ease;cursor:pointer}
+.btn:hover,.btn:focus-visible{transform:translateY(-1px)}
+.btn:focus-visible,.nav a:focus-visible,.text-link:focus-visible,.faq-item summary:focus-visible{outline:3px solid rgba(246,107,45,.26);outline-offset:3px}
+.btn-primary{background:linear-gradient(135deg,var(--brand) 0%,#ff8d49 100%);color:#fff;box-shadow:0 18px 42px rgba(246,107,45,.25)}
+.btn-secondary{background:rgba(255,255,255,.62);border-color:var(--line);color:var(--ink)}
+.btn-secondary:hover,.btn-secondary:focus-visible{background:#fff}
+.btn-dark{background:var(--panel-dark);color:#fff;box-shadow:0 18px 42px rgba(18,33,42,.18)}
+.btn-ghost{border-color:var(--line);color:var(--ink-soft);background:transparent}
+.text-link{display:inline-flex;align-items:center;gap:10px;font-weight:800;color:var(--brand-deep)}
+.section{padding:72px 0}
+.eyebrow{display:inline-flex;align-items:center;gap:10px;padding:8px 12px;border-radius:999px;background:rgba(255,255,255,.64);border:1px solid rgba(17,23,23,.08);font-size:.77rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+.eyebrow::before{content:"";width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--gold))}
+.section-copy{max-width:700px}
+.section-copy h2,.cta-copy h2,.hero-copy h1{font-family:"Space Grotesk",sans-serif}
+.section-copy h2{font-size:clamp(2rem,5vw,3.35rem);line-height:1.02;letter-spacing:-.06em;margin:16px 0 12px}
+.section-copy p{font-size:1.04rem;color:var(--ink-soft);max-width:60ch}
+.hero{padding:34px 0 26px}
+.hero-shell{position:relative;overflow:hidden;border:1px solid rgba(17,23,23,.08);border-radius:40px;background:linear-gradient(180deg,rgba(255,250,241,.92),rgba(255,255,255,.8));box-shadow:var(--shadow)}
+.hero-shell::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 10% 12%,rgba(246,107,45,.16),transparent 26%),radial-gradient(circle at 88% 16%,rgba(135,199,223,.26),transparent 28%),linear-gradient(180deg,rgba(255,255,255,.34),transparent 60%);pointer-events:none}
+.hero-grid{position:relative;display:grid;gap:24px;padding:24px}
+.hero-copy h1{font-size:clamp(2.7rem,8vw,5.5rem);line-height:.92;letter-spacing:-.08em;max-width:10.5ch;margin:18px 0 18px}
+.hero-copy p{font-size:1.08rem;color:#394447;max-width:58ch}
+.hero-actions{display:flex;flex-direction:column;gap:12px;margin-top:26px}
+.hero-note{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:10px 12px;border-radius:999px;background:rgba(255,255,255,.72);border:1px solid rgba(17,23,23,.08);font-size:.88rem;color:var(--ink-soft)}
+.pill strong{color:var(--ink)}
+.launch-chip{display:inline-flex;align-items:center;gap:8px;padding:11px 14px;border-radius:16px;background:var(--cream);border:1px solid rgba(246,107,45,.18);color:#7a3b1b;font-size:.92rem;font-weight:700}
+.launch-chip .dot{width:10px;height:10px;border-radius:50%;background:var(--brand)}
+.hero-layout{display:grid;gap:16px}
+.hero-panel,.product-card,.metric-card,.reason-card,.faq-item,.cta-shell,.proof-band,.story-card,.phone-card,.chat-card,.hero-side-note{border:1px solid rgba(17,23,23,.08);border-radius:var(--radius-lg);background:rgba(255,255,255,.7);box-shadow:var(--shadow-soft)}
+.hero-panel{padding:18px;background:rgba(18,33,42,.96);color:#eef8f5}
+.hero-panel h3,.phone-top strong,.product-card h3,.reason-card h3,.story-card h3,.faq-item summary,.metric-card h3{font-size:1.05rem;letter-spacing:-.03em}
+.hero-panel p,.hero-panel li{color:rgba(238,248,245,.82)}
+.hero-panel ul{padding-left:18px;margin-top:12px}
+.hero-panel li+li{margin-top:8px}
+.hero-proof{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+.proof-mini{padding:16px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08)}
+.proof-mini strong{display:block;font-family:"Space Grotesk",sans-serif;font-size:1.4rem;letter-spacing:-.05em}
+.proof-mini span{font-size:.9rem;color:rgba(238,248,245,.76)}
+.hero-visual{display:grid;gap:14px}
+.chat-card{padding:14px;background:linear-gradient(180deg,#0d3d2f,#11533f);color:#effcf4;overflow:hidden}
+.chat-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.chat-top strong{font-size:1.02rem;letter-spacing:-.02em}
+.chat-tag{padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.12);font-size:.76rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.chat-shell{padding:12px;border-radius:24px;background:linear-gradient(180deg,#efe3d0,#e5d6c2);display:grid;gap:12px;color:#17222a}
+.chat-meta{display:flex;justify-content:space-between;gap:12px;font-size:.84rem;color:#5e6a6e}
+.chat-thread{display:grid;gap:10px}
+.bubble{max-width:85%;padding:12px 14px;border-radius:18px;box-shadow:0 10px 22px rgba(30,26,12,.08)}
+.bubble strong{display:block;font-size:.94rem;margin-bottom:4px}
+.bubble small{display:block;margin-top:6px;font-size:.73rem;opacity:.72}
+.bubble.in{justify-self:start;background:#fff6ea;border-top-left-radius:8px}
+.bubble.out{justify-self:end;background:#d7f9cf;border-top-right-radius:8px}
+.chat-progress{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:18px;background:#fffaf2;border:1px solid rgba(17,23,23,.08)}
+.progress-copy strong{display:block;font-size:.96rem}
+.progress-copy span{font-size:.84rem;color:#5e6a6e}
+.progress-chip{padding:8px 10px;border-radius:999px;background:#143022;color:#effcf4;font-size:.8rem;font-weight:800}
+.hero-side-note{padding:18px;background:linear-gradient(180deg,rgba(255,255,255,.84),rgba(249,241,228,.98))}
+.hero-side-note h3{font-size:1rem;margin-bottom:10px;letter-spacing:-.02em}
+.hero-side-note ul{padding-left:18px;color:var(--ink-soft)}
+.hero-side-note li+li{margin-top:8px}
+.phone-card{padding:14px;background:linear-gradient(180deg,#17242c,#223640);color:#eaf3ef;overflow:hidden}
+.phone-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.phone-tag{padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.1);font-size:.76rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.screen{padding:14px;border-radius:22px;background:linear-gradient(180deg,#fef8f0,#f4eadb);color:var(--ink);display:grid;gap:12px}
+.screen-bar{display:flex;justify-content:space-between;gap:10px;font-size:.9rem;color:var(--ink-soft)}
+.screen-title{font-family:"Space Grotesk",sans-serif;font-size:1.36rem;letter-spacing:-.05em}
+.sale-flow{display:grid;gap:10px}
+.sale-step{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:18px;background:#fffdf9;border:1px solid rgba(17,23,23,.08)}
+.sale-step strong{font-size:.96rem}
+.sale-step span{font-size:.86rem;color:var(--ink-soft)}
+.reward-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;border-radius:18px;background:#143022;color:#eaf8f0}
+.reward-banner strong{font-family:"Space Grotesk",sans-serif;font-size:1.15rem}
+.mock-phone-image{border-radius:24px;overflow:hidden;border:1px solid rgba(255,255,255,.1)}
+.mock-phone-image img{width:100%;height:246px;object-fit:cover;filter:saturate(1.05)}
+.proof-section{padding-top:24px}
+.proof-band{padding:22px;background:linear-gradient(135deg,rgba(255,255,255,.76),rgba(255,248,235,.92))}
+.proof-grid,.metrics-grid,.reasons-grid,.story-grid,.faq-grid{display:grid;gap:14px}
+.proof-grid{margin-top:18px}
+.metric-card{padding:20px;background:var(--panel-strong)}
+.metric-card h3{margin-bottom:8px}
+.metric-card p{color:var(--ink-soft)}
+.product-grid{display:grid;gap:16px;margin-top:22px}
+.product-card{padding:22px;background:rgba(255,255,255,.74)}
+.product-card h3{margin-bottom:10px}
+.product-card p{color:var(--ink-soft)}
+.step-line{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:16px;background:linear-gradient(135deg,var(--brand),#ffa56a);color:#fff;font-family:"Space Grotesk",sans-serif;font-size:1.1rem;margin-bottom:14px}
+.story-grid{margin-top:22px}
+.story-card{padding:22px;background:linear-gradient(180deg,rgba(255,255,255,.76),rgba(249,241,228,.96))}
+.story-card p{color:var(--ink-soft)}
+.story-card p + p{margin-top:12px}
+.story-card ul{padding-left:18px;margin-top:12px;color:var(--ink-soft)}
+.story-card li+li{margin-top:8px}
+.story-link{margin-top:18px}
+.reasons-grid{margin-top:22px}
+.reason-card{padding:22px;background:linear-gradient(180deg,rgba(255,255,255,.86),rgba(255,253,248,.96))}
+.reason-card p{color:var(--ink-soft)}
+.reason-icon{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:16px;background:rgba(246,107,45,.12);border:1px solid rgba(246,107,45,.18);color:var(--brand-deep);margin-bottom:14px}
+.reason-icon svg{width:22px;height:22px;display:block}
+.faq-grid{margin-top:22px}
+.faq-item{overflow:hidden;background:rgba(255,255,255,.82)}
+.faq-item summary{list-style:none;cursor:pointer;padding:20px 22px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.faq-item summary::-webkit-details-marker{display:none}
+.faq-item summary::after{content:"+";font-size:1.4rem;color:var(--brand-deep);transition:transform .2s ease}
+.faq-item[open] summary::after{transform:rotate(45deg)}
+.faq-item p{padding:0 22px 20px;color:var(--ink-soft)}
+.cta-shell{padding:28px;background:linear-gradient(140deg,#102029 0%,#18323d 60%,#21495b 100%);color:#f4fbfb;overflow:hidden;position:relative}
+.cta-shell::before{content:"";position:absolute;inset:auto -100px -120px auto;width:260px;height:260px;border-radius:50%;background:rgba(235,184,79,.18);filter:blur(8px)}
+.cta-layout{position:relative;display:grid;gap:18px}
+.cta-copy h2{font-size:clamp(2rem,5vw,3.3rem);line-height:1.01;letter-spacing:-.06em;margin:16px 0 12px}
+.cta-copy p{font-size:1.03rem;color:rgba(244,251,251,.8);max-width:58ch}
+.cta-actions{display:flex;flex-direction:column;gap:12px;margin-top:22px}
+.cta-side{padding:18px;border-radius:20px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1)}
+.cta-side h3{font-size:1rem;margin-bottom:10px}
+.cta-side p,.cta-side li{color:rgba(244,251,251,.78)}
+.cta-side ul{padding-left:18px}
+.cta-side li+li{margin-top:8px}
+.site-footer{padding:24px 0 94px}
+.footer-shell{display:grid;gap:10px;padding:18px 0;color:var(--ink-soft);font-size:.94rem}
+.footer-links{display:flex;flex-wrap:wrap;gap:14px}
+.mobile-cta{position:fixed;left:12px;right:12px;bottom:12px;z-index:40;display:flex;justify-content:center;padding-bottom:calc(env(safe-area-inset-bottom,0px))}
+.mobile-cta .btn{width:min(100%,560px)}
+.mobile-cta{opacity:0;transform:translateY(18px);pointer-events:none;transition:opacity .22s ease,transform .22s ease}
+.mobile-cta.is-visible{opacity:1;transform:none;pointer-events:auto}
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .55s ease,transform .55s ease}
 .reveal.in{opacity:1;transform:none}
-.reveal-left{opacity:0;transform:translateX(-28px);transition:opacity .65s ease,transform .65s ease}
-.reveal-left.in{opacity:1;transform:none}
-.reveal-right{opacity:0;transform:translateX(28px);transition:opacity .65s ease,transform .65s ease}
-.reveal-right.in{opacity:1;transform:none}
-
-/* ── MODAL ────────────────────────────────────────────── */
-.modal-overlay{position:fixed;inset:0;z-index:1000;background:rgba(15,23,42,.68);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);display:flex;align-items:center;justify-content:center;padding:20px;opacity:0;pointer-events:none;transition:opacity .25s}
-.modal-overlay.open{opacity:1;pointer-events:all}
-.modal-box{background:var(--white);border:1.5px solid var(--g100);border-radius:var(--rXL);width:100%;max-width:480px;padding:40px;position:relative;transform:translateY(20px) scale(.97);transition:transform .3s;box-shadow:var(--shL)}
-.modal-overlay.open .modal-box{transform:none}
-.modal-close{position:absolute;top:18px;right:18px;background:var(--off);border:1.5px solid var(--g100);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;color:var(--g500);cursor:pointer;font-size:15px;transition:background .18s,border-color .18s}
-.modal-close:hover{background:var(--goldLt);border-color:var(--gold)}
-.modal-field{margin-bottom:16px}
-.modal-label{display:block;font-size:13px;font-weight:700;color:var(--g500);margin-bottom:7px;letter-spacing:.05em;text-transform:uppercase}
-.modal-input{width:100%;background:var(--white);border:1.5px solid var(--g300);border-radius:var(--r);padding:14px 16px;color:var(--g800);font-size:15px;font-family:var(--fb);outline:none;transition:border-color .18s,box-shadow .18s}
-.modal-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(251,191,36,.18)}
-.modal-input.err{border-color:#ef4444}
-.modal-err{font-size:12px;color:#ef4444;margin-top:5px}
-.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.modal-submit{width:100%;background:var(--gold);color:var(--navy);border:none;border-radius:var(--r);padding:16px;font-family:var(--fh);font-size:16px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;margin-top:8px;transition:opacity .18s,box-shadow .18s}
-.modal-submit:hover:not(:disabled){box-shadow:var(--shM)}
-.modal-submit:disabled{opacity:.7;cursor:not-allowed}
-.modal-note{text-align:center;font-size:12px;color:var(--g500);margin-top:12px}
-.success-icon{width:80px;height:80px;background:var(--goldLt);border:1px solid rgba(251,191,36,.3);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--goldDk);margin:0 auto 24px;animation:pop .5s cubic-bezier(.175,.885,.32,1.275)}
-@keyframes pop{0%{transform:scale(.5);opacity:0}100%{transform:scale(1);opacity:1}}
-
-@media(max-width:768px){
-  .h2{letter-spacing:-1px}
-  .section{padding:72px 0}
-  .feat-grid{grid-template-columns:1fr}
-  .price-grid{grid-template-columns:1fr}
-  .pcard.hot{transform:none}
-  .testi-grid{grid-template-columns:1fr}
+@media (max-width:759px){
+  .site-header .wrap{gap:10px;padding:10px 0;align-items:flex-start}
+  .brand{flex:1 1 auto;min-width:0}
+  .brand img{width:38px;height:38px}
+  .brand-copy strong{font-size:.94rem}
+  .brand-copy span{font-size:.72rem}
+  .header-actions{flex:0 0 auto}
+  .header-actions .btn-ghost{display:none}
+  .header-actions .btn-primary{min-height:44px;padding:0 14px;font-size:.88rem;white-space:nowrap}
+  .section{padding:56px 0}
+  .hero{padding:20px 0 16px}
+  .hero-shell{border-radius:28px}
+  .hero-grid{gap:18px;padding:18px}
+  .hero-copy h1{font-size:clamp(2.4rem,14vw,4.2rem);max-width:8.6ch;margin:14px 0 14px}
+  .hero-copy p{font-size:1rem;max-width:34ch}
+  .hero-actions{margin-top:18px}
+  .hero-note{margin-top:14px}
+  .launch-chip{width:100%;justify-content:flex-start}
+  .pill{font-size:.84rem;padding:9px 11px}
+  .hero-panel,.phone-card,.chat-card,.hero-side-note,.product-card,.metric-card,.reason-card,.story-card,.cta-shell{padding:16px}
+  .hero-proof{grid-template-columns:1fr}
+  .proof-mini{padding:14px}
+  .bubble{max-width:92%}
+  .chat-progress{align-items:flex-start;flex-direction:column}
+  .screen-title{font-size:1.2rem}
+  .sale-step{padding:11px 12px}
+  .reward-banner{align-items:flex-start;flex-direction:column}
+  .mock-phone-image img{height:200px}
+  .section-copy h2{font-size:clamp(1.8rem,10vw,2.4rem)}
+  .proof-band{padding:18px}
+  .product-grid,.story-grid,.reasons-grid,.faq-grid,.proof-grid{gap:12px}
+  .step-line{width:38px;height:38px}
+  .faq-item summary{padding:18px}
+  .faq-item p{padding:0 18px 18px}
+  .cta-copy h2{font-size:clamp(1.85rem,10vw,2.5rem)}
+  .cta-actions .btn{width:100%}
+  .footer-shell{padding-bottom:10px}
+}
+@media (min-width:760px){
+  .wrap{width:min(var(--max),calc(100% - 56px))}
+  .nav{display:flex}
+  .hero-grid{grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);padding:36px}
+  .hero-actions,.cta-actions{flex-direction:row;flex-wrap:wrap}
+  .proof-grid,.metrics-grid,.reasons-grid,.faq-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .product-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .story-grid{grid-template-columns:1.15fr .85fr}
+  .cta-layout{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);align-items:start}
+  .mobile-cta{display:none}
+  .site-footer{padding-bottom:32px}
+}
+@media (min-width:1040px){
+  .proof-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .reasons-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .btn,.reveal,.faq-item summary::after,.nav a{transition:none}
 }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#main">Ir para o conteúdo</a>
 
-<!-- NAV -->
-<nav id="nav">
-  <div class="nav-inner">
-    <a href="#" class="logo">
-      <div class="logo-mark">
-        <img src="../assets/images/logo.png" alt="MaisUm logo">
-      </div>
-      <div class="logo-word">
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="MaisUm">
+      <img src="../assets/images/logo.png" alt="MaisUm logo" width="42" height="42">
+      <div class="brand-copy">
         <strong>MaisUm</strong>
-        <span>Clientes voltam</span>
+        <span>Maputo. Clientes voltam.</span>
       </div>
     </a>
-    <ul class="nav-links">
-      <li><a href="#problema">Problema</a></li>
-      <li><a href="#funcionalidades">Funcionalidades</a></li>
-      <li><a href="#precos">Preços</a></li>
-      <li><a href="#faq">FAQ</a></li>
-      <li><a href="https://wa.me/258823262347?text=Ol%C3%A1%21%20Quero%20ver%20como%20o%20MaisUm%20me%20ajuda%20a%20trazer%20clientes%20de%20volta." class="nav-btn" target="_blank" rel="noopener">Falar no WhatsApp</a></li>
-    </ul>
-    <button class="hamburger" id="hamburger"><i class="fa-solid fa-bars"></i></button>
-  </div>
-</nav>
-
-<!-- HERO -->
-<section class="hero">
-  <div class="hero-bg">
-    <img src="https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=1920&q=85&auto=format&fit=crop" alt="Barbershop Maputo">
-  </div>
-  <div class="hero-overlay"></div>
-  <div class="hero-content">
-    <div class="hero-kicker">
-      <div class="hero-kicker-dot"></div>
-      Onboarding pelo WhatsApp em Maputo
-    </div>
-    <h1>Regista a venda.<br><em>O cliente volta.</em></h1>
-    <p class="hero-sub">Em menos de 5 segundos: registas a venda, o cliente ganha pontos e podes avisá-lo no WhatsApp. Simples para a tua equipa, claro para o teu negócio.</p>
-    <div class="hero-actions">
-      <a href="https://wa.me/258823262347?text=Ol%C3%A1%21%20Quero%20come%C3%A7ar%20com%20o%20MaisUm%20e%20ver%20uma%20demonstra%C3%A7%C3%A3o." class="btn-green" target="_blank" rel="noopener">
-        <i class="fab fa-whatsapp"></i> Falar no WhatsApp
-      </a>
-      <a href="#problema" class="btn-ghost">
-        <i class="fa-solid fa-play"></i> Ver como funciona
-      </a>
-    </div>
-    <div class="hero-badges">
-      <div class="hbadge"><i class="fa-solid fa-bolt"></i> Venda registada em &lt; 5s</div>
-      <div class="hbadge"><i class="fab fa-whatsapp"></i> WhatsApp num toque</div>
-      <div class="hbadge"><i class="fa-solid fa-tower-broadcast"></i> Funciona sem internet</div>
-      <div class="hbadge"><span>🇲🇿</span> Feito para Maputo e Matola</div>
+    <nav class="nav" aria-label="Navegação principal">
+      <a href="#before-after">Antes e depois</a>
+      <a href="#whatsapp">WhatsApp</a>
+      <a href="#why-maisum">Porque resulta</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="header-actions">
+      <a class="btn btn-ghost" href="#whatsapp">Ver exemplo no WhatsApp</a>
+      <a class="btn btn-primary" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20perceber%20como%20o%20MaisUm%20me%20ajuda%20a%20trazer%20clientes%20de%20volta." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_header_primary">Falar no WhatsApp</a>
     </div>
   </div>
-  <div class="hero-scroll">
-    <span>Scroll</span>
-    <i class="fa-solid fa-chevron-down"></i>
-  </div>
-</section>
+</header>
 
-<!-- TRUST BAR -->
-<div class="trust">
-  <div class="trust-inner">
-    <div class="trust-item"><strong>Maputo</strong> onboarding simples pelo WhatsApp</div>
-    <div class="trust-dot"></div>
-    <div class="trust-item"><strong>&lt; 5 seg</strong> para registar uma venda</div>
-    <div class="trust-dot"></div>
-    <div class="trust-item"><strong>Offline</strong> mesmo com rede instável</div>
-    <div class="trust-dot"></div>
-    <div class="trust-item">🇲🇿 <strong>Mais clientes de volta</strong></div>
-  </div>
-</div>
+<main id="main">
+  <section class="hero" id="top">
+    <div class="wrap">
+      <div class="hero-shell reveal in">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <span class="eyebrow">Feito para barbearias com fila, pressa e internet fraca</span>
+            <h1>Mais clientes a voltar. Menos confusão no balcão.</h1>
+            <p>MaisUm ajuda a registar a venda, atribuir pontos e chamar o cliente de volta no WhatsApp sem criar mais trabalho para a equipa.</p>
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20trazer%20mais%20clientes%20de%20volta%20para%20a%20minha%20barbearia." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_hero_primary">Quero trazer clientes de volta</a>
+              <a class="btn btn-secondary" href="#before-after">Ver como funciona</a>
+            </div>
+            <div class="hero-note">
+              <span class="launch-chip"><span class="dot" aria-hidden="true"></span>Se a tua equipa usa Android e WhatsApp, já percebe a lógica</span>
+              <span class="pill"><strong>Venda em segundos</strong> sem travar o atendimento</span>
+              <span class="pill"><strong>Sem aprendizagem longa</strong> para equipas cansadas</span>
+              <span class="pill"><strong>Funciona offline</strong> quando a rede falha</span>
+            </div>
+          </div>
 
-<!-- PROBLEM -->
-<section class="section problem-section" id="problema">
-  <div class="container">
-    <div class="label reveal">O Problema</div>
-    <h2 class="h2 reveal">Sabes quantos clientes<br>não voltaram este mês?</h2>
-    <div class="problem-grid">
-      <div class="problem-photo reveal-left">
-        <img src="https://images.unsplash.com/photo-1605497788044-5a32c7078486?w=800&q=80&auto=format&fit=crop&crop=faces,top" alt="Young Black man at barbershop">
-        <div class="problem-photo-overlay"></div>
-        <div class="problem-stat">
-          <div class="big-stat">80%</div>
-          <div class="big-stat-label">dos clientes não voltam<br>sem um motivo para o fazer</div>
-        </div>
-      </div>
-      <div class="reveal-right">
-        <p class="sub problem-intro">Sem um sistema de fidelização, cada corte pode ser o último. O cliente vai embora satisfeito — e nunca mais pensas nele. Até ele aparecer na barbearia da concorrência.</p>
-        <div class="problem-points">
-          <div class="problem-point">
-            <div class="pp-icon"><i class="fa-solid fa-user-slash"></i></div>
-            <div>
-              <div class="pp-title">Clientes não regressam</div>
-              <div class="pp-desc">Sem recompensa, não há razão para escolher-te a ti em vez da barbearia do lado.</div>
+          <div class="hero-layout">
+            <div class="hero-panel">
+              <h3>O que muda no dia a dia</h3>
+              <ul>
+                <li>Cada venda deixa de acabar no esquecimento.</li>
+                <li>O cliente vê progresso e tem motivo para voltar.</li>
+                <li>A equipa não precisa lembrar tudo de cabeça.</li>
+              </ul>
+              <div class="hero-proof">
+                <div class="proof-mini">
+                  <strong>&lt; 5s</strong>
+                  <span>para registar uma venda</span>
+                </div>
+                <div class="proof-mini">
+                  <strong>0 confusão</strong>
+                  <span>para equipas com pouco tempo</span>
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="problem-point">
-            <div class="pp-icon"><i class="fa-solid fa-id-card"></i></div>
-            <div>
-              <div class="pp-title">Cartões físicos não funcionam</div>
-              <div class="pp-desc">Perdem-se, esquecem-se, não se usam. É dinheiro deixado na mesa.</div>
-            </div>
-          </div>
-          <div class="problem-point">
-            <div class="pp-icon"><i class="fa-solid fa-wifi"></i></div>
-            <div>
-              <div class="pp-title">Sistemas complexos falham</div>
-              <div class="pp-desc">Sem internet, sem sistema. E em Maputo, a rede é imprevisível.</div>
-            </div>
-          </div>
-          <div class="problem-point">
-            <div class="pp-icon"><i class="fa-solid fa-clock"></i></div>
-            <div>
-              <div class="pp-title">Não tens tempo para complicações</div>
-              <div class="pp-desc">Tens clientes à espera. O sistema tem de funcionar em segundos.</div>
+
+            <div class="hero-visual">
+              <div class="chat-card" aria-label="Prévia de conversa no WhatsApp">
+                <div class="chat-top">
+                  <strong>Exemplo real de retorno no WhatsApp</strong>
+                  <span class="chat-tag">WhatsApp</span>
+                </div>
+                <div class="chat-shell">
+                  <div class="chat-meta">
+                    <span>Cliente: Paulo</span>
+                    <span>Hoje, 14:32</span>
+                  </div>
+                  <div class="chat-thread">
+                    <div class="bubble in">
+                      <strong>Barbearia MaisUm</strong>
+                      Obrigado pela visita de hoje. Ganhou 5 pontos com o seu corte.
+                      <small>14:32</small>
+                    </div>
+                    <div class="bubble in">
+                      <strong>Faltam só 2 pontos</strong>
+                      Quando voltar, fica mais perto da recompensa. Guarda esta mensagem.
+                      <small>14:33</small>
+                    </div>
+                    <div class="bubble out">
+                      Vou voltar esta semana.
+                      <small>14:35</small>
+                    </div>
+                  </div>
+                  <div class="chat-progress">
+                    <div class="progress-copy">
+                      <strong>O cliente percebe progresso imediatamente</strong>
+                      <span>Sem app para o cliente. Sem explicação longa no balcão.</span>
+                    </div>
+                    <div class="progress-chip">8/10 pontos</div>
+                  </div>
+                </div>
+              </div>
+              <div class="hero-side-note">
+                <h3>Porque isto parece simples para a equipa</h3>
+                <ul>
+                  <li>O cliente recebe tudo no canal que já usa.</li>
+                  <li>A equipa não precisa aprender CRM, dashboards ou campanhas.</li>
+                  <li>Uma venda vira um motivo concreto para o cliente regressar.</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- SOLUTION STRIP -->
-<div class="solution-strip">
-  <div class="strip-inner">
-    <div class="strip-quote reveal-left">
-      MaisUm cria a razão para<br><em>voltarem sempre.</em>
-    </div>
-    <div class="strip-steps reveal-right">
-      <div class="strip-step">
-        <div class="strip-step-num">1</div>
-        <div class="strip-step-text">Registas a venda em menos de 5 segundos</div>
-      </div>
-      <div class="strip-step">
-        <div class="strip-step-num">2</div>
-        <div class="strip-step-text">O cliente ganha pontos automaticamente</div>
-      </div>
-      <div class="strip-step">
-        <div class="strip-step-num">3</div>
-        <div class="strip-step-text">Avisas no WhatsApp e o cliente volta com contexto</div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- FEATURES -->
-<section class="section features-section" id="funcionalidades">
-  <div class="container">
-    <div class="label reveal">Funcionalidades</div>
-    <h2 class="h2 reveal">Tudo o que precisas.<br>Nada do que não usas.</h2>
-    <div class="feat-grid reveal">
-      <div class="feat-card featured-feat">
-        <div class="fc-icon g"><i class="fa-solid fa-bolt"></i></div>
-        <div class="fc-title">Registo em 5 segundos</div>
-        <div class="fc-desc">Venda registada antes do próximo cliente se sentar. Zero fricção, zero espera.</div>
-        <span class="fc-tag green">&lt; 5 seg</span>
-      </div>
-      <div class="feat-card">
-        <div class="fc-icon a"><i class="fa-solid fa-star"></i></div>
-        <div class="fc-title">Pontos automáticos</div>
-        <div class="fc-desc">Cada venda atribui pontos sem que tenhas de fazer nada. O sistema trabalha por ti.</div>
-      </div>
-      <div class="feat-card">
-        <div class="fc-icon g"><i class="fab fa-whatsapp"></i></div>
-        <div class="fc-title">WhatsApp num toque</div>
-        <div class="fc-desc">Abres a conversa certa no momento certo para confirmar pontos ou resgates sem complicar o atendimento.</div>
-      </div>
-      <div class="feat-card">
-        <div class="fc-icon b"><i class="fa-solid fa-signal"></i></div>
-        <div class="fc-title">100% offline-first</div>
-        <div class="fc-desc">Funciona mesmo sem internet. Sincroniza automaticamente quando a rede volta.</div>
-        <span class="fc-tag gold">Offline</span>
-      </div>
-      <div class="feat-card">
-        <div class="fc-icon g"><i class="fa-solid fa-users"></i></div>
-        <div class="fc-title">Gestão de clientes</div>
-        <div class="fc-desc">Perfil de cada cliente, histórico de visitas, pontos acumulados e recompensas resgatadas.</div>
-      </div>
-      <div class="feat-card">
-        <div class="fc-icon a"><i class="fa-solid fa-gift"></i></div>
-        <div class="fc-title">Recompensas à medida</div>
-        <div class="fc-desc">Define as tuas próprias recompensas. Corte grátis, desconto, o que funcionar para o teu negócio.</div>
-      </div>
-      <div class="feat-card">
-        <div class="fc-icon b"><i class="fab fa-android"></i></div>
-        <div class="fc-title">Android-first</div>
-        <div class="fc-desc">Desenhado para telemóveis Android. Botões grandes, utilizável com uma mão, sem treino necessário.</div>
-      </div>
-      <div class="feat-card">
-        <div class="fc-icon g"><i class="fa-solid fa-chart-line"></i></div>
-        <div class="fc-title">Histórico de vendas</div>
-        <div class="fc-desc">Consulta rápida das vendas registadas para confirmar movimento, pontos e sincronização.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- APP SCREENSHOTS -->
-<section class="section screenshots-section" id="app-preview">
-  <div class="container">
-    <div class="label reveal">App Preview</div>
-    <h2 class="h2 reveal">Simples de usar.<br>Poderoso por dentro.</h2>
-    <div id="screenshotsRoot"></div>
-  </div>
-</section>
-
-<!-- TESTIMONIALS -->
-<section class="section testi-section">
-  <div class="container">
-    <div class="section-head centered">
-      <div class="label reveal">Barbearias reais</div>
-      <h2 class="h2 reveal">O que dizem<br>os primeiros utilizadores</h2>
-    </div>
-    <div class="testi-grid">
-      <div class="tcard reveal">
-        <div class="tcard-proof">
-          <span class="tproof-chip"><i class="fa-solid fa-bolt"></i> Venda em &lt; 5s</span>
-          <span class="tproof-chip"><i class="fa-solid fa-repeat"></i> Mais clientes a regressar</span>
+  <section class="section proof-section" aria-label="Resumo do valor">
+    <div class="wrap">
+      <div class="proof-band reveal">
+        <div class="section-copy">
+          <span class="eyebrow">O que interessa mesmo</span>
+          <h2>O barbeiro não quer software. Quer clientes a voltar mais vezes.</h2>
+          <p>Se a fidelização criar mais trabalho, ninguém usa. Se ela ajudar a trazer clientes de volta sem atrasar o atendimento, vira rotina.</p>
         </div>
-        <div class="tcard-stars">
-          <i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i>
+        <div class="proof-grid">
+          <article class="metric-card">
+            <h3>Mais retorno</h3>
+            <p>Cada venda passa a ser uma oportunidade de trazer o cliente de volta.</p>
+          </article>
+          <article class="metric-card">
+            <h3>Menos caos</h3>
+            <p>A equipa deixa de depender de memória, papel ou cartões perdidos.</p>
+          </article>
+          <article class="metric-card">
+            <h3>Mais rapidez</h3>
+            <p>O fluxo foi desenhado para balcões com fila, pressão e pouca paciência.</p>
+          </article>
+          <article class="metric-card">
+            <h3>Menos esforço</h3>
+            <p>O cliente recebe o incentivo no WhatsApp sem precisar instalar outra app.</p>
+          </article>
         </div>
-        <p class="tcard-quote">"Antes eu só cortava e esperava que o cliente lembrasse de voltar. Agora registo a venda, ele recebe os pontos e já pergunta quanto falta para a próxima recompensa."</p>
-        <div class="tcard-author">
-          <div class="tcard-photo" aria-hidden="true">PM</div>
-          <div>
-            <div class="tcard-name">Paulo Macuácua</div>
-            <div class="tcard-role">Barber Shop Maputo • Sommerschield</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="before-after">
+    <div class="wrap">
+      <div class="section-copy reveal">
+        <span class="eyebrow">Antes e depois</span>
+        <h2>O problema não é só vender. É não perder a próxima visita.</h2>
+        <p>Sem um sistema simples, muitos clientes saem, esquecem e não voltam. Com MaisUm, a próxima visita começa no momento da venda.</p>
+      </div>
+      <div class="product-grid reveal">
+        <article class="product-card">
+          <div class="step-line">-</div>
+          <h3>Antes</h3>
+          <p>O cliente sai. A equipa volta ao corre-corre. Ninguém acompanha. A próxima visita fica ao acaso.</p>
+        </article>
+        <article class="product-card">
+          <div class="step-line">+</div>
+          <h3>Depois</h3>
+          <p>A venda é registada, os pontos entram e o cliente recebe no WhatsApp um motivo claro para voltar.</p>
+        </article>
+        <article class="product-card">
+          <div class="step-line">=</div>
+          <h3>Resultado</h3>
+          <p>Menos clientes esquecidos. Menos confusão no balcão. Mais visitas repetidas sem mais trabalho manual.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="how-it-works">
+    <div class="wrap">
+      <div class="section-copy reveal">
+        <span class="eyebrow">Como funciona</span>
+        <h2>O fluxo principal cabe no ritmo real de uma barbearia ocupada.</h2>
+        <p>Sem passos desnecessários. Sem aprendizagem longa. Sem depender de internet boa a toda hora.</p>
+      </div>
+      <div class="story-grid reveal">
+        <article class="story-card">
+          <h3>1. Registar a venda</h3>
+          <ul>
+            <li><strong>Procurar cliente:</strong> nome ou telefone.</li>
+            <li><strong>Inserir valor:</strong> com botões rápidos.</li>
+            <li><strong>Confirmar:</strong> e voltar ao atendimento.</li>
+          </ul>
+        </article>
+        <article class="story-card">
+          <h3>2. Pontos entram. 3. Cliente volta.</h3>
+          <p>Os pontos são atribuídos automaticamente e o cliente recebe no WhatsApp uma mensagem simples com progresso e recompensa.</p>
+          <p>Ele não precisa aprender nada. Só percebe que vale a pena voltar.</p>
+          <div class="story-link">
+            <a class="text-link" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20ver%20como%20o%20MaisUm%20funciona%20no%20dia%20a%20dia%20da%20barbearia." target="_blank" rel="noopener" data-plausible-event="cta_demo_story">Ver o fluxo no WhatsApp</a>
           </div>
-        </div>
+        </article>
       </div>
-      <div class="tcard reveal">
-        <div class="tcard-proof">
-          <span class="tproof-chip"><i class="fab fa-whatsapp"></i> WhatsApp rápido</span>
-          <span class="tproof-chip"><i class="fa-solid fa-scissors"></i> Sem parar o atendimento</span>
-        </div>
-        <div class="tcard-stars">
-          <i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i>
-        </div>
-        <p class="tcard-quote">"O melhor é que não me atrasa. Faço o registo rápido, continuo a atender e abro logo a mensagem certa no WhatsApp. A barbearia ficou mais organizada sem ficar mais complicada."</p>
-        <div class="tcard-author">
-          <div class="tcard-photo" aria-hidden="true">CM</div>
-          <div>
-            <div class="tcard-name">Carlos Mahumane</div>
-            <div class="tcard-role">Barbearia Elite • Matola</div>
+    </div>
+  </section>
+
+  <section class="section" id="whatsapp">
+    <div class="wrap">
+      <div class="section-copy reveal">
+        <span class="eyebrow">WhatsApp no centro</span>
+        <h2>O cliente já está no WhatsApp. É lá que ele deve ser chamado de volta.</h2>
+        <p>O cliente não precisa instalar nada. Recebe a mensagem, vê os pontos e entende rapidamente porque deve voltar à tua barbearia ou salão.</p>
+      </div>
+      <div class="story-grid reveal">
+        <article class="story-card">
+          <h3>Exemplo de mensagem</h3>
+          <ul>
+            <li><strong>Obrigado pela visita.</strong></li>
+            <li><strong>Ganhou 5 pontos.</strong></li>
+            <li><strong>Faltam 2 para a recompensa.</strong></li>
+            <li><strong>Volte para aproveitar.</strong></li>
+          </ul>
+        </article>
+        <article class="story-card">
+          <h3>Porque converte melhor</h3>
+          <p>É familiar. É rápido. Não exige treino ao cliente. E reduz o risco de a fidelização virar só mais uma ideia esquecida.</p>
+          <p>No momento certo, a mensagem certa aumenta a hipótese de nova visita.</p>
+          <div class="story-link">
+            <a class="text-link" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20receber%20um%20exemplo%20de%20mensagem%20do%20MaisUm%20no%20WhatsApp." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_example">Receber exemplo no WhatsApp</a>
           </div>
-        </div>
-      </div>
-      <div class="tcard reveal">
-        <div class="tcard-proof">
-          <span class="tproof-chip"><i class="fa-solid fa-wifi"></i> Rede instável</span>
-          <span class="tproof-chip"><i class="fa-solid fa-shield-halved"></i> Continua a funcionar offline</span>
-        </div>
-        <div class="tcard-stars">
-          <i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i><i class="fa-solid fa-star"></i>
-        </div>
-        <p class="tcard-quote">"Na minha zona a internet cai muito. Com o MaisUm continuo a registar tudo e depois sincroniza. Isso era o que faltava para eu confiar num sistema assim."</p>
-        <div class="tcard-author">
-          <div class="tcard-photo" aria-hidden="true">AD</div>
-          <div>
-            <div class="tcard-name">António Dhlakama</div>
-            <div class="tcard-role">Style Barber • Maxaquene</div>
-          </div>
-        </div>
+        </article>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- PRICING -->
-<section class="section pricing-section" id="precos">
-  <div class="container">
-    <div class="section-head centered">
-      <div class="label reveal">Preços</div>
-      <h2 class="h2 reveal">Se 2 clientes voltarem,<br>o sistema paga-se.</h2>
-      <p class="sub reveal sub-centered">Primeiro vendes mais visitas. Só depois pensas no software. Os preços ficam claros, mas o foco é trazer clientes de volta.</p>
-      <div class="price-kicker reveal"><i class="fab fa-whatsapp"></i> O plano certo é escolhido contigo no WhatsApp</div>
-    </div>
-    <div class="price-grid">
-      <div class="pcard reveal">
-        <div class="pcard-name">Starter</div>
-        <div class="pcard-desc">Para testar o fluxo e ver clientes a voltar</div>
-        <div class="pcard-price">Grátis</div>
-        <div class="pcard-period">para sempre</div>
-        <hr class="pdivider">
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Até 50 clientes</div>
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Registo de vendas</div>
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Pontos básicos</div>
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Funciona offline</div>
-        <div class="pfeat off"><i class="fa-solid fa-xmark ci ci-muted"></i> WhatsApp assistido</div>
-        <div class="pfeat off"><i class="fa-solid fa-xmark ci ci-muted"></i> Recompensas avançadas</div>
-        <a class="pcta pcta-link" href="https://wa.me/258823262347?text=Ol%C3%A1%21%20Quero%20come%C3%A7ar%20com%20o%20plano%20Starter%20do%20MaisUm." target="_blank" rel="noopener">Falar sobre Starter</a>
+  <section class="section" id="why-maisum">
+    <div class="wrap">
+      <div class="section-copy reveal">
+        <span class="eyebrow">Confiança prática</span>
+        <h2>Feito para o ritmo real de uma barbearia em Maputo.</h2>
+        <p>Não foi pensado para impressionar numa demo. Foi pensado para funcionar com fila, pressa, Android e internet instável.</p>
       </div>
-      <div class="pcard hot reveal">
-        <div class="hot-badge">POPULAR</div>
-        <div class="pcard-name">Pro</div>
-        <div class="pcard-desc">Para quem quer operar o programa completo sem fricção</div>
-        <div class="pcard-price"><sup>MZN</sup>2.000<sub>/mês</sub></div>
-        <div class="pcard-period">cobrado mensalmente</div>
-        <hr class="pdivider pdivider-hot">
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Clientes ilimitados</div>
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> WhatsApp num toque</div>
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Pontos avançados</div>
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Histórico de vendas simples</div>
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Suporte via WhatsApp</div>
-        <div class="pfeat on"><i class="fa-solid fa-check ci"></i> Funciona offline</div>
-        <a class="pcta pcta-link hot-cta" href="https://wa.me/258823262347?text=Ol%C3%A1%21%20Quero%20ver%20uma%20demonstra%C3%A7%C3%A3o%20do%20MaisUm%20Pro." target="_blank" rel="noopener">Ver demonstração Pro</a>
+      <div class="reasons-grid reveal">
+        <article class="reason-card">
+          <div class="reason-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 4v8l5 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg></div>
+          <h3>Sem aprendizagem longa</h3>
+          <p>Se a equipa usa Android e WhatsApp, a lógica do MaisUm já faz sentido quase de imediato.</p>
+        </article>
+        <article class="reason-card">
+          <div class="reason-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2"/></svg></div>
+          <h3>Offline sem medo</h3>
+          <p>A venda pode continuar a ser registada mesmo quando a ligação falha. O atendimento não precisa parar.</p>
+        </article>
+        <article class="reason-card">
+          <div class="reason-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 19c4.5-1.2 7.5-4.4 9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M15 5h4v4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 5h6v6H5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div>
+          <h3>Feito para equipas cansadas</h3>
+          <p>Poucos passos, texto simples e menos dependência de memória quando o balcão está sob pressão.</p>
+        </article>
       </div>
     </div>
-  </div>
-</section>
+  </section>
 
-<!-- FAQ -->
-<section class="section faq-section" id="faq">
-  <div class="container">
-    <div class="section-head centered">
-      <div class="label reveal">FAQ</div>
-      <h2 class="h2 reveal">Perguntas frequentes</h2>
+  <section class="section" id="faq">
+    <div class="wrap">
+      <div class="section-copy reveal">
+        <span class="eyebrow">FAQ</span>
+        <h2>Respostas curtas para quem não tem tempo a perder.</h2>
+      </div>
+      <div class="faq-grid reveal">
+        <details class="faq-item">
+          <summary>O cliente também precisa de instalar a app?</summary>
+          <p>Não. O cliente recebe tudo no WhatsApp, o que reduz a fricção e aumenta a chance de voltar.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Funciona quando a internet falha?</summary>
+          <p>Sim. A venda pode ser guardada e sincronizada depois. A equipa não precisa parar por causa da internet.</p>
+        </details>
+        <details class="faq-item">
+          <summary>É simples para equipas pequenas?</summary>
+          <p>Sim. O foco é uso rápido, pouco texto e pouca aprendizagem. Foi feito para equipas pequenas e ambientes corridos.</p>
+        </details>
+        <details class="faq-item">
+          <summary>Como dou o próximo passo?</summary>
+          <p>Falas connosco no WhatsApp, vês rapidamente se o fluxo encaixa no teu balcão e decides sem complicação.</p>
+        </details>
+      </div>
     </div>
-    <div class="faq-list" id="faqRoot"></div>
-  </div>
-</section>
+  </section>
 
-<!-- APP DOWNLOAD -->
-<section class="section app-section" id="download">
-  <div class="container">
-    <div class="app-inner">
-      <div class="reveal-left">
-        <div class="label">App Mobile</div>
-        <h2 class="h2">O MaisUm<br>no teu bolso.</h2>
-        <p class="sub app-sub">Android, uma mão, sem complicação. Se já usas WhatsApp, consegues usar o MaisUm e registar uma venda em segundos.</p>
-        <div class="app-store-btns">
-          <a href="https://wa.me/258823262347?text=Ol%C3%A1%21%20Quero%20receber%20o%20link%20do%20MaisUm%20e%20instru%C3%A7%C3%B5es%20de%20instala%C3%A7%C3%A3o." class="store-btn primary" target="_blank" rel="noopener">
-            <i class="fab fa-whatsapp store-btn-icon-green"></i>
-            <div>
-              <div class="sblabel">Receber pelo</div>
-              <div class="sbname">WhatsApp</div>
+  <section class="section" id="cta-final">
+    <div class="wrap">
+      <div class="cta-shell reveal">
+        <div class="cta-layout">
+          <div class="cta-copy">
+            <span class="eyebrow">Próximo passo</span>
+            <h2>Se hoje estás a perder clientes que podiam voltar, vale a pena ver isto agora.</h2>
+            <p>Fala connosco no WhatsApp e percebe rapidamente se o MaisUm pode ajudar a tua equipa a trazer mais clientes de volta sem aumentar o caos no balcão.</p>
+            <div class="cta-actions">
+              <a class="btn btn-primary" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20ver%20se%20o%20MaisUm%20me%20ajuda%20a%20trazer%20mais%20clientes%20de%20volta." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_final_primary">Falar no WhatsApp agora</a>
+              <a class="btn btn-secondary" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20ver%20uma%20demonstra%C3%A7%C3%A3o%20r%C3%A1pida%20do%20MaisUm." target="_blank" rel="noopener" data-plausible-event="cta_demo_final">Ver demonstração rápida</a>
             </div>
-          </a>
-          <a href="#" class="store-btn" data-waitlist>
-            <i class="fab fa-whatsapp store-btn-icon-wa"></i>
-            <div>
-              <div class="sblabel">Preferes que</div>
-              <div class="sbname">nós te liguemos</div>
-            </div>
-          </a>
-        </div>
-        <div class="app-perks">
-          <div class="app-perk"><i class="fa-solid fa-shield-halved"></i> Dados seguros</div>
-          <div class="app-perk"><i class="fa-solid fa-download"></i> Instalação simples</div>
-          <div class="app-perk"><i class="fa-solid fa-rotate"></i> Actualizações auto</div>
-        </div>
-      </div>
-      <div class="app-visual reveal-right">
-        <div class="app-photo">
-          <img src="https://images.unsplash.com/photo-1621605815971-fbc98d665033?w=800&q=80&auto=format&fit=crop" alt="Barber using app">
-        </div>
-        <div class="app-rating">
-          <div class="app-rating-num">4.9</div>
-          <div class="app-rating-sub"><i class="fa-solid fa-star"></i> Rating</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- FINAL CTA -->
-<section class="final-section">
-  <div class="final-inner">
-    <h2 class="reveal">Mais um cliente<br>a voltar. Sempre.</h2>
-    <p class="reveal">Escreve no WhatsApp, vê a demonstração e decide em minutos se faz sentido para a tua barbearia.</p>
-    <div class="final-btns reveal">
-      <a href="https://wa.me/258823262347?text=Ol%C3%A1%21%20Quero%20ver%20o%20MaisUm%20a%20funcionar%20na%20minha%20barbearia." class="btn-dark" target="_blank" rel="noopener">
-        <i class="fab fa-whatsapp"></i> Ver no WhatsApp
-      </a>
-      <a href="#" class="btn-wa" data-waitlist>
-        <i class="fa-solid fa-phone"></i> Pedir contacto
-      </a>
-    </div>
-  </div>
-</section>
-
-<!-- FOOTER -->
-<footer>
-  <div class="container">
-    <div class="footer-grid">
-      <div class="footer-brand">
-        <div class="logo">
-          <div class="logo-mark">
-            <img src="../assets/images/logo.png" alt="MaisUm logo">
           </div>
-          <div class="logo-word">
-            <strong>MaisUm</strong>
-            <span>Clientes voltam</span>
+          <div class="cta-side">
+            <h3>O que vais perceber rapidamente</h3>
+            <ul>
+              <li>Se o fluxo encaixa no teu atendimento sem travar a equipa.</li>
+              <li>Como o cliente recebe o incentivo no WhatsApp.</li>
+              <li>Se o MaisUm pode ajudar-te a recuperar visitas que hoje estás a perder.</li>
+            </ul>
           </div>
         </div>
-        <p>O sistema de fidelização feito para negócios reais em Moçambique. Simples, offline e pelo WhatsApp.</p>
-        <div class="social-row social-row-top">
-          <a class="soc" href="https://wa.me/258823262347" title="WhatsApp"><i class="fab fa-whatsapp"></i></a>
-          <a class="soc" href="#" title="Instagram"><i class="fab fa-instagram"></i></a>
-          <a class="soc" href="#" title="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-        </div>
-      </div>
-      <div class="footer-col">
-        <h4>Produto</h4>
-        <ul>
-          <li><a href="#funcionalidades">Funcionalidades</a></li>
-          <li><a href="#app-preview">App Preview</a></li>
-          <li><a href="#precos">Preços</a></li>
-          <li><a href="#download">Download</a></li>
-        </ul>
-      </div>
-      <div class="footer-col">
-        <h4>Empresa</h4>
-        <ul>
-          <li><a href="#">Sobre nós</a></li>
-          <li><a href="#">Blog</a></li>
-          <li><a href="#">Contacto</a></li>
-          <li><a href="https://wa.me/258823262347">+258 82 326 2347</a></li>
-        </ul>
-      </div>
-      <div class="footer-col">
-        <h4>Legal</h4>
-        <ul>
-          <li><a href="#">Política de Privacidade</a></li>
-          <li><a href="#">Termos de Serviço</a></li>
-        </ul>
       </div>
     </div>
-    <div class="footer-bottom">
-      <div class="footer-copy">© 2025 MaisUm. Todos os direitos reservados.</div>
-      <div class="footer-copy">Made in Mozambique 🇲🇿</div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-shell">
+    <div><strong>MaisUm</strong> ajuda barbearias e salões a trazer clientes de volta sem complicar o atendimento.</div>
+    <div class="footer-links">
+      <a href="#before-after">Antes e depois</a>
+      <a href="#whatsapp">WhatsApp</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://wa.me/258823262347" target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_footer">WhatsApp comercial</a>
     </div>
   </div>
 </footer>
 
-<div id="modalRoot"></div>
+<div class="mobile-cta">
+  <a class="btn btn-dark" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20perceber%20como%20o%20MaisUm%20me%20ajuda%20a%20trazer%20clientes%20de%20volta." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_mobile">Falar no WhatsApp</a>
+</div>
 
 <script>
-// Nav scroll
-window.addEventListener('scroll',()=>{
-  document.getElementById('nav').classList.toggle('scrolled',scrollY>30);
-});
+window.plausible=window.plausible||function(){(window.plausible.q=window.plausible.q||[]).push(arguments);};
 
-// Reveal on scroll
-const ro = new IntersectionObserver(entries=>{
-  entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');ro.unobserve(e.target);}});
-},{threshold:0.1});
-document.querySelectorAll('.reveal,.reveal-left,.reveal-right').forEach(el=>ro.observe(el));
-</script>
+(function(){
+  const configuredDomain=document.querySelector('meta[name="plausible-domain"]')?.content.trim();
+  const host=window.location.hostname;
+  const skipPlausible=window.location.protocol==='file:'||!host||host==='localhost'||host==='127.0.0.1';
 
-<script type="text/babel">
-// ── SCREENSHOTS COMPONENT ───────────────────────────────
-const SCREENS = [
-  {
-    id:'dashboard', label:'Dashboard',
-    title:'Tudo num relance.',
-    desc:'Vendas do dia, clientes activos e recompensas pendentes. A informação que precisas sem ruído.',
-    points:['Vendas em tempo real','Top clientes do mês','Alertas de recompensas pendentes'],
-    stats:[{val:'24',unit:'',label:'Vendas hoje',c:'g'},{val:'8',unit:'',label:'Recompensas',c:'gold'},{val:'142',unit:'',label:'Clientes',c:''},{val:'4.2k',unit:'MZN',label:'Semana',c:'g'}],
-    rows:[{av:'AM',bg:'#3b82f6',name:'Abel Machava',pts:'45 pts'},{av:'JC',bg:'#8b5cf6',name:'João Chissano',pts:'30 pts'},{av:'MN',bg:'#f59e0b',name:'Maria Nhancale',pts:'10 pts'}]
-  },
-  {
-    id:'venda', label:'Nova Venda',
-    title:'5 segundos. Feito.',
-    desc:'Selecciona o cliente, confirma o valor, regista. O sistema atribui os pontos e deixa o aviso pronto para WhatsApp.',
-    points:['Busca rápida de clientes','Valor configurável por serviço','Confirmação instantânea'],
-    stats:[{val:'5s',unit:'',label:'Tempo médio',c:'g'},{val:'0',unit:'',label:'Erros',c:'gold'},{val:'✓',unit:'',label:'WhatsApp pronto',c:'g'},{val:'∞',unit:'',label:'Vendas/dia',c:''}],
-    rows:[{av:'AM',bg:'#3b82f6',name:'Abel Machava',pts:'✓ Selecionado'},{av:'JC',bg:'#8b5cf6',name:'João Chissano',pts:'30 pts'},{av:'MN',bg:'#f59e0b',name:'Maria Nhancale',pts:'10 pts'}]
-  },
-  {
-    id:'clientes', label:'Clientes',
-    title:'Conhece cada cliente.',
-    desc:'Histórico completo de visitas, pontos acumulados e recompensas resgatadas. Nunca esqueças um cliente fiel.',
-    points:['Perfil completo','Histórico de visitas','Pontos e recompensas'],
-    stats:[{val:'142',unit:'',label:'Total',c:''},{val:'38',unit:'',label:'Activos/mês',c:'g'},{val:'12',unit:'',label:'Inativos',c:'gold'},{val:'92',unit:'',label:'Com pontos',c:'g'}],
-    rows:[{av:'AM',bg:'#3b82f6',name:'Abel Machava',pts:'45 pts'},{av:'JC',bg:'#8b5cf6',name:'João Chissano',pts:'30 pts'},{av:'MN',bg:'#f59e0b',name:'Maria Nhancale',pts:'10 pts'}]
-  },
-  {
-    id:'recompensas', label:'Recompensas',
-    title:'Cria as tuas recompensas.',
-    desc:'Define o que ofereças quando o cliente chega ao objetivo. Corte grátis, desconto — o que funcionar para o teu negócio.',
-    points:['Recompensas personalizadas','Notificação automática','Resgate em 1 clique'],
-    stats:[{val:'8',unit:'',label:'Pendentes',c:'gold'},{val:'3',unit:'',label:'Resgatadas',c:'g'},{val:'50',unit:'',label:'Meta pontos',c:''},{val:'MZN 0',unit:'',label:'Custo tech',c:'g'}],
-    rows:[{av:'AM',bg:'#3b82f6',name:'Abel Machava',pts:'🎁 Resgatou'},{av:'JC',bg:'#8b5cf6',name:'João Chissano',pts:'30/50 pts'},{av:'MN',bg:'#f59e0b',name:'Maria Nhancale',pts:'10/50 pts'}]
-  },
-];
+  if(!skipPlausible){
+    const script=document.createElement('script');
+    script.defer=true;
+    script.dataset.domain=configuredDomain||host;
+    script.src='https://plausible.io/js/script.js';
+    document.head.appendChild(script);
+  }
 
-function Screenshots() {
-  const [active, setActive] = React.useState(0);
-  const s = SCREENS[active];
-  return (
-    <div>
-      <div className="screenshots-tabs">
-        {SCREENS.map((sc,i)=>(
-          <button key={sc.id} className={`stab${active===i?' active':''}`} onClick={()=>setActive(i)}>
-            {sc.label}
-          </button>
-        ))}
-      </div>
-      <div className="screenshots-display">
-        <div className="screen-info">
-          <div className="screen-title">{s.title}</div>
-          <div className="screen-desc">{s.desc}</div>
-          <div className="screen-points">
-            {s.points.map(p=>(
-              <div key={p} className="screen-point">
-                <i className="fa-solid fa-circle-check"></i> {p}
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="screen-phone">
-          <div className="phone-wrap">
-            <div className="phone-screen">
-              <div className="ps-header">
-                <div className="ps-logo">MaisUm</div>
-                <div className="ps-avatar">PM</div>
-              </div>
-              <div className="ps-body">
-                <div className="ps-stat-row">
-                  {s.stats.map(st=>(
-                    <div key={st.label} className="ps-stat">
-                      <div className={`ps-stat-val${st.c?' '+st.c:''}`}>{st.unit&&<span style={{fontSize:'10px',opacity:.7}}>{st.unit} </span>}{st.val}</div>
-                      <div className="ps-stat-label">{st.label}</div>
-                    </div>
-                  ))}
-                </div>
-                <button className="ps-cta">
-                  <i className="fa-solid fa-plus"></i> Nova Venda
-                </button>
-                <div className="ps-list-title">Clientes Recentes</div>
-                {s.rows.map(r=>(
-                  <div key={r.name} className="ps-row">
-                    <div className="ps-av" style={{background:r.bg,color:r.bg==='#f59e0b'?'#000':'#fff'}}>{r.av}</div>
-                    <div className="ps-name">{r.name}</div>
-                    <div className="ps-pts">{r.pts}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-ReactDOM.createRoot(document.getElementById('screenshotsRoot')).render(<Screenshots/>);
+  document.querySelectorAll('[data-plausible-event]').forEach((link)=>{
+    link.addEventListener('click',()=>{
+      const eventName=link.getAttribute('data-plausible-event');
+      window.plausible(eventName,{props:{cta_text:link.textContent.trim(),cta_href:link.getAttribute('href')||''}});
+    });
+  });
 
-// ── FAQ COMPONENT ───────────────────────────────────────
-const FAQS = [
-  {q:'O MaisUm funciona sem internet?',a:'Sim. O MaisUm foi construído offline-first. Podes registar vendas, gerir clientes e atribuir pontos sem qualquer ligação. Quando a rede voltar, tudo sincroniza automaticamente.'},
-  {q:'Como funciona o envio de mensagens WhatsApp?',a:'Depois de registar uma venda ou um resgate, o MaisUm abre rapidamente a conversa certa no WhatsApp para avisares o cliente sem perder tempo no balcão.'},
-  {q:'É difícil de usar para alguém com pouca experiência digital?',a:'Não. O MaisUm foi desenhado especificamente para barbeiros ocupados com baixa literacia digital. Registo de venda em 5 segundos, botões grandes, interface simples. Se consegues usar o WhatsApp, consegues usar o MaisUm.'},
-  {q:'Quantos clientes posso ter no plano gratuito?',a:'O plano Starter permite até 50 clientes sem qualquer custo, para sempre. Quando o teu negócio crescer, podes passar para o Pro com clientes ilimitados.'},
-  {q:'O que acontece aos meus dados se cancelar?',a:'Os teus dados continuam organizados no sistema e ajudamos-te a rever a melhor forma de os preservar conforme o plano activo.'},
-  {q:'Funciona em que dispositivos?',a:'O MaisUm é optimizado para Android, que é o sistema operativo mais comum em Moçambique. Funciona em qualquer smartphone Android sem necessidade de hardware especial.'},
-];
-
-function FAQ() {
-  const [open, setOpen] = React.useState(null);
-  return (
-    <div>
-      {FAQS.map((f,i)=>(
-        <div key={i} className={`faq-item${open===i?' open':''}`}>
-          <button className="faq-q" onClick={()=>setOpen(open===i?null:i)}>
-            {f.q}
-            <i className="fa-solid fa-plus"></i>
-          </button>
-          <div className="faq-a"><p>{f.a}</p></div>
-        </div>
-      ))}
-    </div>
-  );
-}
-ReactDOM.createRoot(document.getElementById('faqRoot')).render(<FAQ/>);
-
-// ── CONTACT MODAL ───────────────────────────────────────
-function Modal() {
-  const [open, setOpen] = React.useState(false);
-  const [step, setStep] = React.useState('form');
-  const [loading, setLoading] = React.useState(false);
-  const [form, setForm] = React.useState({name:'',business:'',phone:'',city:''});
-  const [errors, setErrors] = React.useState({});
-
-  React.useEffect(()=>{
-    function onClick(e){
-      if(e.target.closest('[data-waitlist]')){e.preventDefault();setOpen(true);setStep('form');setErrors({});}
+  const mobileCta=document.querySelector('.mobile-cta');
+  const heroSection=document.querySelector('.hero');
+  const syncMobileCta=()=>{
+    if(!mobileCta||!heroSection) return;
+    if(window.innerWidth>=760){
+      mobileCta.classList.remove('is-visible');
+      return;
     }
-    document.addEventListener('click',onClick);
-    return()=>document.removeEventListener('click',onClick);
-  },[]);
+    const heroBottom=heroSection.getBoundingClientRect().bottom;
+    const shouldShow=heroBottom<window.innerHeight*.55;
+    mobileCta.classList.toggle('is-visible',shouldShow);
+  };
 
-  React.useEffect(()=>{document.body.style.overflow=open?'hidden':'';},[open]);
+  syncMobileCta();
+  window.addEventListener('scroll',syncMobileCta,{passive:true});
+  window.addEventListener('resize',syncMobileCta);
 
-  function validate(){
-    const e={};
-    if(!form.name.trim())e.name='Obrigatório';
-    if(!form.business.trim())e.business='Obrigatório';
-    if(!form.phone.trim())e.phone='Obrigatório';
-    else if(!/^\+?[\d\s]{8,}$/.test(form.phone))e.phone='Número inválido';
-    if(!form.city.trim())e.city='Obrigatório';
-    return e;
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.querySelectorAll('.reveal').forEach((el)=>el.classList.add('in'));
+    return;
   }
 
-  function submit(e){
-    e.preventDefault();
-    const errs=validate();
-    if(Object.keys(errs).length){setErrors(errs);return;}
-    setLoading(true);
-    setTimeout(()=>{setLoading(false);setStep('success');},1400);
-  }
+  const observer=new IntersectionObserver((entries)=>{
+    entries.forEach((entry)=>{
+      if(entry.isIntersecting){
+        entry.target.classList.add('in');
+        observer.unobserve(entry.target);
+      }
+    });
+  },{threshold:.14});
 
-  function set(k,v){setForm(f=>({...f,[k]:v}));setErrors(er=>({...er,[k]:undefined}));}
-
-  return (
-    <div className={`modal-overlay${open?' open':''}`} onClick={e=>{if(e.target===e.currentTarget)setOpen(false);}}>
-      <div className="modal-box">
-        <button className="modal-close" onClick={()=>setOpen(false)}><i className="fa-solid fa-xmark"></i></button>
-
-        {step==='form'?(
-          <>
-            <div style={{marginBottom:'28px'}}>
-              <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'12px'}}>
-                <div style={{width:'36px',height:'36px',background:'var(--gold)',borderRadius:'10px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                  <i className="fa-solid fa-phone-volume" style={{color:'var(--navy)',fontSize:'16px'}}></i>
-                </div>
-                <span style={{fontSize:'12px',fontWeight:700,color:'var(--gold)',letterSpacing:'1px',textTransform:'uppercase'}}>Contacto rápido</span>
-              </div>
-              <h2 style={{fontFamily:'var(--fh)',fontSize:'26px',fontWeight:800,letterSpacing:'-0.5px',marginBottom:'8px',color:'var(--navy)'}}>Queres ver o essencial primeiro?</h2>
-              <p style={{fontSize:'14px',color:'var(--muted2)',lineHeight:1.6}}>Deixa os teus dados e mostramos o fluxo simples: registar venda, acumular pontos e acompanhar o histórico sem complicação.</p>
-            </div>
-            <form onSubmit={submit} noValidate>
-              <div className="modal-field">
-                <label className="modal-label">Nome completo</label>
-                <input className={`modal-input${errors.name?' err':''}`} type="text" placeholder="Ex: Paulo Macuácua" value={form.name} onChange={e=>set('name',e.target.value)}/>
-                {errors.name&&<div className="modal-err"><i className="fa-solid fa-circle-exclamation" style={{marginRight:'4px'}}></i>{errors.name}</div>}
-              </div>
-              <div className="modal-field">
-                <label className="modal-label">Nome do negócio</label>
-                <input className={`modal-input${errors.business?' err':''}`} type="text" placeholder="Ex: Barbearia Elite" value={form.business} onChange={e=>set('business',e.target.value)}/>
-                {errors.business&&<div className="modal-err"><i className="fa-solid fa-circle-exclamation" style={{marginRight:'4px'}}></i>{errors.business}</div>}
-              </div>
-              <div className="modal-grid">
-                <div className="modal-field">
-                  <label className="modal-label">Telemóvel (WhatsApp)</label>
-                  <input className={`modal-input${errors.phone?' err':''}`} type="tel" placeholder="+258 82…" value={form.phone} onChange={e=>set('phone',e.target.value)}/>
-                  {errors.phone&&<div className="modal-err"><i className="fa-solid fa-circle-exclamation" style={{marginRight:'4px'}}></i>{errors.phone}</div>}
-                </div>
-                <div className="modal-field">
-                  <label className="modal-label">Cidade</label>
-                  <input className={`modal-input${errors.city?' err':''}`} type="text" placeholder="Ex: Maputo" value={form.city} onChange={e=>set('city',e.target.value)}/>
-                  {errors.city&&<div className="modal-err"><i className="fa-solid fa-circle-exclamation" style={{marginRight:'4px'}}></i>{errors.city}</div>}
-                </div>
-              </div>
-              <button type="submit" className="modal-submit" disabled={loading}>
-                {loading?<><i className="fa-solid fa-circle-notch fa-spin"></i> A preparar...</>:<><i className="fa-solid fa-paper-plane"></i> Pedir contacto</>}
-              </button>
-              <p className="modal-note"><i className="fa-solid fa-lock" style={{marginRight:'4px'}}></i>Dados usados apenas para contacto comercial.</p>
-            </form>
-          </>
-        ):(
-          <div style={{textAlign:'center',padding:'20px 0'}}>
-            <div className="success-icon"><i className="fa-solid fa-check"></i></div>
-            <h2 style={{fontFamily:'var(--fh)',fontSize:'26px',fontWeight:800,letterSpacing:'-0.5px',marginBottom:'12px',color:'var(--navy)'}}>Vamos falar contigo</h2>
-            <p style={{fontSize:'15px',color:'var(--g500)',lineHeight:1.7,marginBottom:'28px'}}>
-              Obrigado <strong style={{color:'var(--navy)'}}>{form.name.split(' ')[0]}</strong>. Se quiseres acelerar, podes abrir já a conversa no WhatsApp com a tua barbearia em <strong style={{color:'var(--navy)'}}>{form.city}</strong>.
-            </p>
-            <div style={{background:'var(--goldLt)',border:'1px solid rgba(251,191,36,.3)',borderRadius:'14px',padding:'18px',marginBottom:'24px',textAlign:'left'}}>
-              <div style={{fontSize:'12px',color:'var(--g500)',marginBottom:'4px'}}>Negócio para contacto</div>
-              <div style={{fontFamily:'var(--fh)',fontSize:'18px',fontWeight:700,color:'var(--navy)'}}>{form.business}</div>
-              <div style={{fontSize:'13px',color:'var(--goldDk)',marginTop:'4px'}}><i className="fa-solid fa-location-dot" style={{marginRight:'4px'}}></i>{form.city}</div>
-            </div>
-            <a href={`https://wa.me/258823262347?text=Ol%C3%A1!%20Quero%20ver%20como%20o%20MaisUm%20funciona.%20Neg%C3%B3cio:%20${encodeURIComponent(form.business)}%20em%20${encodeURIComponent(form.city)}.`}
-              target="_blank" rel="noopener"
-              style={{display:'inline-flex',alignItems:'center',gap:'8px',background:'#25D366',color:'#000',borderRadius:'12px',padding:'14px 24px',fontWeight:700,fontSize:'15px',fontFamily:'var(--fh)',textDecoration:'none'}}>
-              <i className="fab fa-whatsapp" style={{fontSize:'18px'}}></i> Abrir WhatsApp agora
-            </a>
-            <button onClick={()=>setOpen(false)} style={{display:'block',margin:'14px auto 0',background:'none',border:'none',color:'var(--g500)',cursor:'pointer',fontSize:'13px',fontFamily:'var(--fb)'}}>Fechar</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-ReactDOM.createRoot(document.getElementById('modalRoot')).render(<Modal/>);
+  document.querySelectorAll('.reveal').forEach((element)=>observer.observe(element));
+})();
 </script>
 </body>
 </html>
