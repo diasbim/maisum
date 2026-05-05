@@ -14,7 +14,11 @@
       "Bash(wmic logicaldisk *)",
       "Bash(powershell -Command \"Get-PSDrive C | Select-Object Used,Free | Format-List\")",
       "Bash(python3 -c ' *)",
-      "PowerShell(Get-Process dart -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Process dart -ErrorAction SilentlyContinue)",
+      "Bash(Get-Content \"C:\\\\Users\\\\X200078\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Dev-flutter-loyaltyapp\\\\ba27158d-8e92-42c6-98f0-b6f22a0afc9f\\\\tasks\\\\bh3lgmoet.output\" -Wait)",
+      "Bash(Select-String -Pattern \"error:|Error|FAILED|warning:|Running|Compiling|Installing|flutter run|Syncing|Built|Reloaded|Reload|crashed|exited|Observatory\" --SimpleMatch)",
+      "Bash(Remove-Item \"c:\\\\Dev\\\\flutter\\\\loyaltyapp\\\\lib\\\\features\\\\auth\\\\presentation\\\\login_screen.dart\")",
+      "Bash(dir \"C:\\\\Users\\\\X200078\\\\.gradle\\\\caches\\\\modules-2\\\\files-2.1\\\\org.jetbrains.kotlin\\\\kotlin-gradle-plugin\\\\1.7.22\")"
     ],
     "additionalDirectories": [
       "C:\\Dev\\flutter\\loyaltyapp\\assets",

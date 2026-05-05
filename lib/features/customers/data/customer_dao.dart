@@ -77,6 +77,21 @@ class CustomerDao {
     );
   }
 
+  Future<void> update(String id, {required String name, required String phone}) async {
+    final db = await _db.database;
+    await db.update(
+      'customers',
+      {
+        'name': name,
+        'phone': phone,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'synced': 0,
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   Future<void> markSynced(String id) async {
     final db = await _db.database;
     await db.update(

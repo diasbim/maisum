@@ -10,9 +10,12 @@ import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/sync/sync_controller.dart';
 import '../constants/app_constants.dart';
 import '../constants/app_strings.dart';
+import '../services/pin_verification_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/app_logger.dart';
+import 'brand_mark.dart';
 import 'pin_pad.dart';
+import 'pin_verification_feedback.dart';
 
 // ── Timings ───────────────────────────────────────────────────────────────────
 
@@ -82,8 +85,7 @@ class _AppLockWrapperState extends ConsumerState<AppLockWrapper>
         state == AppLifecycleState.detached) {
       _inactivityTimer?.cancel();
       if (_bgTimer == null) {
-        Log.d(_lockTag,
-            'App paused — bg lock in ${_bgLockDelay.inSeconds}s');
+        Log.d(_lockTag, 'App paused — bg lock in ${_bgLockDelay.inSeconds}s');
         _bgTimer = Timer(_bgLockDelay, _lock);
       }
     } else if (state == AppLifecycleState.resumed) {
@@ -151,8 +153,7 @@ class _AppLockWrapperState extends ConsumerState<AppLockWrapper>
           ),
 
         // ── PIN lock overlay ──────────────────────
-        if (showLock)
-          _PinLockOverlay(onUnlock: _unlock),
+        if (showLock) _PinLockOverlay(onUnlock: _unlock),
       ],
     );
   }
@@ -185,8 +186,7 @@ class _SyncBadge extends ConsumerWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeOut,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: bgColor,
               borderRadius: BorderRadius.circular(24),
@@ -201,6 +201,19 @@ class _SyncBadge extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const BrandMark(
+                    size: 12,
+                    padding: EdgeInsets.all(4),
+                  ),
+                ),
+                const SizedBox(width: 6),
                 if (isSyncing)
                   const SizedBox(
                     width: 12,
@@ -246,40 +259,29 @@ class _PinLockOverlay extends ConsumerStatefulWidget {
 }
 
 class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, PinVerificationShakeMixin {
   String _input = '';
   bool _isError = false;
   bool _isLoading = false;
   int _attempts = 0;
 
-  late final AnimationController _shakeCtrl;
-  late final Animation<double> _shakeAnim;
-
   @override
   void initState() {
     super.initState();
-    _shakeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _shakeAnim = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: -8.0), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -8.0, end: 8.0), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: 8.0, end: -8.0), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: -8.0, end: 0.0), weight: 1),
-    ]).animate(CurvedAnimation(parent: _shakeCtrl, curve: Curves.easeInOut));
+    initPinShakeAnimation();
     _loadAttempts();
   }
 
   @override
   void dispose() {
-    _shakeCtrl.dispose();
+    disposePinShakeAnimation();
     super.dispose();
   }
 
   Future<void> _loadAttempts() async {
-    final n =
-        await ref.read(secureStorageServiceProvider).getPinAttempts();
+    final n = await PinVerificationService.loadPersistedAttempts(
+      ref.read(secureStorageServiceProvider),
+    );
     if (mounted) setState(() => _attempts = n);
   }
 
@@ -304,24 +306,29 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
   Future<void> _verify() async {
     setState(() => _isLoading = true);
     final storage = ref.read(secureStorageServiceProvider);
-    final storedPin = await storage.getPin();
+    final result = await PinVerificationService.verifyPersistedPin(
+      storage: storage,
+      input: _input,
+    );
 
-    if (storedPin == _input) {
+    if (result.isSuccess) {
       Log.i(_lockTag, 'Overlay PIN verified');
-      await storage.clearPinAttempts();
       widget.onUnlock();
       return;
     }
 
-    final attempts = await storage.getPinAttempts() + 1;
-    await storage.savePinAttempts(attempts);
-    Log.w(_lockTag,
-        'Wrong overlay PIN — attempt $attempts/${AppConstants.maxPinAttempts}');
+    if (result.status == PinVerificationStatus.unavailable) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
-    if (attempts >= AppConstants.maxPinAttempts) {
+    Log.w(
+      _lockTag,
+      'Wrong overlay PIN — attempt ${result.attempts}/${AppConstants.maxPinAttempts}',
+    );
+
+    if (result.isBlocked) {
       Log.w(_lockTag, 'Max overlay attempts — logging out');
-      await storage.clearPin();
-      await storage.clearPinAttempts();
       await ref.read(authControllerProvider.notifier).logout();
       if (mounted) {
         ref.read(appLockedProvider.notifier).state = false;
@@ -333,9 +340,9 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
     setState(() {
       _isError = true;
       _isLoading = false;
-      _attempts = attempts;
+      _attempts = result.attempts;
     });
-    _shakeCtrl.forward(from: 0);
+    triggerPinShake();
     await Future.delayed(const Duration(milliseconds: 700));
     if (mounted) {
       setState(() {
@@ -368,9 +375,6 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
     if (confirmed != true) return;
 
     Log.i(_lockTag, 'User reset PIN from overlay — logging out');
-    final storage = ref.read(secureStorageServiceProvider);
-    await storage.clearPin();
-    await storage.clearPinAttempts();
     await ref.read(authControllerProvider.notifier).logout();
     if (mounted) {
       ref.read(appLockedProvider.notifier).state = false;
@@ -380,9 +384,6 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final remaining = AppConstants.maxPinAttempts - _attempts;
-    final showAttemptsWarning = _attempts > 0;
-
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -421,8 +422,13 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
                                 ),
                               ],
                             ),
-                            child: const Icon(Icons.lock_rounded,
-                                color: AppColors.primary, size: 38),
+                            child: const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: BrandMark(
+                                size: 48,
+                                padding: EdgeInsets.all(0),
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 28),
                           Text(
@@ -444,54 +450,14 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 52),
-
-                          // ── Dots with shake animation ──
-                          AnimatedBuilder(
-                            animation: _shakeAnim,
-                            builder: (_, child) => Transform.translate(
-                              offset: Offset(_shakeAnim.value, 0),
-                              child: child,
-                            ),
-                            child: PinDots(
-                              length: AppConstants.pinLength,
-                              filled: _input.length,
-                              isError: _isError,
-                              darkMode: true,
-                            ),
+                          PinVerificationFeedback(
+                            shakeAnimation: pinShakeAnimation,
+                            inputLength: _input.length,
+                            attempts: _attempts,
+                            isError: _isError,
+                            isLoading: _isLoading,
+                            darkMode: true,
                           ),
-
-                          const SizedBox(height: 16),
-                          AnimatedOpacity(
-                            opacity:
-                                (_isError || showAttemptsWarning) ? 1 : 0,
-                            duration: const Duration(milliseconds: 200),
-                            child: Text(
-                              _isError
-                                  ? AppStrings.pinIncorrect
-                                  : '$remaining tentativa${remaining == 1 ? "" : "s"} restante${remaining == 1 ? "" : "s"}',
-                              style: TextStyle(
-                                color: remaining <= 1
-                                    ? AppColors.error
-                                    : AppColors.secondary
-                                        .withValues(alpha: 0.85),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-
-                          if (_isLoading) ...[
-                            const SizedBox(height: 12),
-                            const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
                         ],
                       ),
 
@@ -511,8 +477,7 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
                               child: Text(
                                 AppStrings.pinForgot,
                                 style: GoogleFonts.outfit(
-                                  color:
-                                      Colors.white.withValues(alpha: 0.45),
+                                  color: Colors.white.withValues(alpha: 0.45),
                                   fontSize: 13,
                                 ),
                               ),

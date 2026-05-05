@@ -1,7 +1,11 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/empty_state.dart';
@@ -13,12 +17,19 @@ class SalesHistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final salesAsync = ref.watch(allSalesWithCustomerProvider);
+    final sales = salesAsync.valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
         title: const Text('Histórico de Vendas'),
         actions: [
+          if (sales != null && sales.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.share_rounded),
+              tooltip: 'Exportar relatório',
+              onPressed: () => _exportCSV(sales),
+            ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () => ref.invalidate(allSalesWithCustomerProvider),
@@ -26,9 +37,8 @@ class SalesHistoryScreen extends ConsumerWidget {
         ],
       ),
       body: salesAsync.when(
-        data: (sales) => sales.isEmpty
+        data: (list) => list.isEmpty
             ? const EmptyState(
-                icon: Icons.receipt_long_outlined,
                 title: 'Nenhuma venda ainda',
               )
             : RefreshIndicator(
@@ -38,9 +48,9 @@ class SalesHistoryScreen extends ConsumerWidget {
                 child: ListView.separated(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  itemCount: sales.length,
+                  itemCount: list.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _SaleHistoryTile(data: sales[i]),
+                  itemBuilder: (_, i) => _SaleHistoryTile(data: list[i]),
                 ),
               ),
         loading: () => const Center(
@@ -53,6 +63,30 @@ class SalesHistoryScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  void _exportCSV(List<Map<String, dynamic>> sales) {
+    final fmt = DateFormat('dd/MM/yyyy HH:mm', 'pt');
+    final buf = StringBuffer();
+    buf.writeln('Data,Cliente,Valor (MZN),Pontos,Sincronizado');
+    for (final s in sales) {
+      final date = fmt
+          .format(DateTime.fromMillisecondsSinceEpoch(s['created_at'] as int));
+      final name =
+          (s['customer_name'] as String? ?? 'Cliente').replaceAll(',', ' ');
+      final amount = (s['amount'] as num).toStringAsFixed(0);
+      final points = s['points'] as int;
+      final synced = (s['synced'] as int? ?? 0) == 1 ? 'Sim' : 'Nao';
+      buf.writeln('$date,$name,$amount,$points,$synced');
+    }
+
+    final bytes = Uint8List.fromList(utf8.encode(buf.toString()));
+    final fileName =
+        'relatorio_vendas_${DateFormat('yyyyMMdd').format(DateTime.now())}.csv';
+    Share.shareXFiles(
+      [XFile.fromData(bytes, name: fileName, mimeType: 'text/csv')],
+      subject: 'Relatório de Vendas – MaisUm',
     );
   }
 }

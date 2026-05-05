@@ -80,20 +80,20 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
 
     final messenger = ScaffoldMessenger.of(context);
     ref.read(authControllerProvider.notifier).requestOtp(
-      phone: widget.phoneNumber,
-      onCodeSent: (newVerificationId) {
-        _verificationId = newVerificationId;
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Código de verificação reenviado!'),
-            backgroundColor: AppColors.secondary,
-          ),
+          phone: widget.phoneNumber,
+          onCodeSent: (newVerificationId) {
+            _verificationId = newVerificationId;
+            messenger.showSnackBar(
+              const SnackBar(
+                content: Text('Código de verificação reenviado!'),
+                backgroundColor: AppColors.secondary,
+              ),
+            );
+          },
+          onError: (error) {
+            messenger.showSnackBar(SnackBar(content: Text(error)));
+          },
         );
-      },
-      onError: (error) {
-        messenger.showSnackBar(SnackBar(content: Text(error)));
-      },
-    );
   }
 
   void _verifyOTP([String? pin]) async {
@@ -118,7 +118,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
           );
       if (!mounted) return;
       final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
-      if (mounted) context.go(hasPin ? '/dashboard' : '/pin-setup');
+      if (mounted) context.go(hasPin ? '/pin-entry' : '/pin-setup');
     } catch (e) {
       _submitInFlight = false;
       setState(() => _isVerifying = false);
@@ -168,8 +168,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       decoration: BoxDecoration(
         color: AppColors.secondary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: AppColors.secondary.withValues(alpha: 0.5)),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.5)),
       ),
     );
 
@@ -207,7 +206,6 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                   children: [
                     const AuthStepProgress(currentStep: 1),
                     const SizedBox(height: 36),
-
                     Container(
                       width: 56,
                       height: 56,
@@ -222,20 +220,20 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.mark_email_read_rounded,
-                        color: Colors.white,
-                        size: 26,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          fit: BoxFit.contain,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
-
                     Text(
                       'Introduza o código\nde verificação',
                       style: theme.textTheme.displaySmall,
                     ),
                     const SizedBox(height: 12),
-
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -282,7 +280,6 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                       ],
                     ),
                     const SizedBox(height: 36),
-
                     Center(
                       child: Pinput(
                         key: const Key('otp_input'),
@@ -302,12 +299,9 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                       ),
                     ),
                     const SizedBox(height: 32),
-
                     Center(child: _buildResendRow(theme)),
-
                     const Spacer(),
                     const SizedBox(height: 16),
-
                     Center(
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -325,7 +319,6 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     AuthGradientButton(
                       key: const Key('verify_button'),
                       onPressed: _isVerifying ? null : _verifyOTP,

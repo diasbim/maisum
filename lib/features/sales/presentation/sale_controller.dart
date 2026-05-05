@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
+import '../../../core/constants/app_strings.dart';
 import '../domain/sale.dart';
 import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customers_controller.dart';
@@ -18,6 +19,7 @@ class SaleController extends AsyncNotifier<SaleResult?> {
     required String customerId,
     required double amount,
   }) async {
+    if (amount < 1) throw ArgumentError(AppStrings.amountInvalid);
     state = const AsyncLoading();
 
     final sale = await ref.read(saleRepositoryProvider).createSale(

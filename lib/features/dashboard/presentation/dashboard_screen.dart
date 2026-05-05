@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/offline_banner.dart';
 import '../../../core/widgets/sync_indicator.dart';
 import '../../sync/sync_controller.dart';
@@ -50,13 +51,24 @@ class DashboardScreen extends ConsumerWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              AppStrings.appName,
-                              style: GoogleFonts.bricolageGrotesque(
-                                color: Colors.white,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                              ),
+                            Row(
+                              children: [
+                                Image.asset(
+                                  'assets/images/logo.png',
+                                  width: 34,
+                                  height: 34,
+                                  fit: BoxFit.contain,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  AppStrings.appName,
+                                  style: GoogleFonts.bricolageGrotesque(
+                                    color: Colors.white,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
                             ),
                             Row(
                               children: [
@@ -118,7 +130,6 @@ class DashboardScreen extends ConsumerWidget {
                             child: _StatCard(
                               label: AppStrings.vendasHoje,
                               value: '${s.todaySaleCount}',
-                              icon: Icons.receipt_long_rounded,
                               accent: AppColors.primary,
                             ),
                           ),
@@ -127,7 +138,6 @@ class DashboardScreen extends ConsumerWidget {
                             child: _StatCard(
                               label: AppStrings.pontosHoje,
                               value: '${s.todayPoints}',
-                              icon: Icons.stars_rounded,
                               accent: AppColors.secondary,
                               dark: true,
                             ),
@@ -141,7 +151,6 @@ class DashboardScreen extends ConsumerWidget {
                             child: _StatCard(
                               label: AppStrings.totalClientes,
                               value: '${s.totalCustomers}',
-                              icon: Icons.people_alt_rounded,
                               accent: AppColors.primary,
                             ),
                           ),
@@ -151,9 +160,8 @@ class DashboardScreen extends ConsumerWidget {
                               onTap: () => context.push('/pending-sync'),
                               child: _StatCard(
                                 label: AppStrings.pendentes,
-                                value: '${s.pendingSyncCount}',
-                                icon: Icons.sync_rounded,
-                                accent: s.pendingSyncCount > 0
+                                value: '${syncStatus.pendingCount}',
+                                accent: syncStatus.pendingCount > 0
                                     ? AppColors.amber
                                     : AppColors.green,
                               ),
@@ -169,7 +177,6 @@ class DashboardScreen extends ConsumerWidget {
                       _ActionTile(
                         label: AppStrings.novaVenda,
                         subtitle: 'Registe uma venda e atribua pontos',
-                        icon: Icons.add_shopping_cart_rounded,
                         gold: true,
                         onTap: () async {
                           await context.push('/new-sale');
@@ -182,21 +189,18 @@ class DashboardScreen extends ConsumerWidget {
                       _ActionTile(
                         label: AppStrings.clientes,
                         subtitle: 'Gerir e pesquisar clientes',
-                        icon: Icons.people_alt_rounded,
                         onTap: () => context.push('/customers'),
                       ),
                       const SizedBox(height: 10),
                       _ActionTile(
                         label: AppStrings.recompensas,
                         subtitle: 'Configurar premios e resgates',
-                        icon: Icons.card_giftcard_rounded,
                         onTap: () => context.push('/rewards'),
                       ),
                       const SizedBox(height: 10),
                       _ActionTile(
                         label: AppStrings.historicoVendas,
                         subtitle: 'Ver todas as vendas registadas',
-                        icon: Icons.receipt_long_rounded,
                         onTap: () => context.push('/sales'),
                       ),
                     ],
@@ -253,14 +257,12 @@ class _StatCard extends StatelessWidget {
   const _StatCard({
     required this.label,
     required this.value,
-    required this.icon,
     required this.accent,
     this.dark = false,
   });
 
   final String label;
   final String value;
-  final IconData icon;
   final Color accent;
   final bool dark;
 
@@ -293,8 +295,10 @@ class _StatCard extends StatelessWidget {
                   : accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child:
-                Icon(icon, color: dark ? AppColors.primary : accent, size: 18),
+            child: const BrandMark(
+              size: 18,
+              padding: EdgeInsets.all(8),
+            ),
           ),
           const SizedBox(height: 10),
           Text(
@@ -321,14 +325,12 @@ class _ActionTile extends StatelessWidget {
   const _ActionTile({
     required this.label,
     required this.subtitle,
-    required this.icon,
     required this.onTap,
     this.gold = false,
   });
 
   final String label;
   final String subtitle;
-  final IconData icon;
   final VoidCallback onTap;
   final bool gold;
 
@@ -359,9 +361,10 @@ class _ActionTile extends StatelessWidget {
                       : AppColors.primary.withValues(alpha: 0.07),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon,
-                    color: gold ? AppColors.primary : AppColors.primary,
-                    size: 22),
+                child: const BrandMark(
+                  size: 22,
+                  padding: EdgeInsets.all(10),
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(

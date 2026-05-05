@@ -36,6 +36,25 @@ class CustomerRepository {
     return customer;
   }
 
+  Future<void> updateCustomer(
+    String id, {
+    required String name,
+    required String phone,
+  }) async {
+    await _dao.update(id, name: name, phone: phone);
+    final customer = await _dao.getById(id);
+    if (customer != null) {
+      await _syncDao.enqueue(SyncItem(
+        id: _uuid.v4(),
+        operation: 'update',
+        entityType: 'customer',
+        entityId: id,
+        payload: jsonEncode(customer.toDbMap()),
+        createdAt: DateTime.now(),
+      ));
+    }
+  }
+
   Future<void> addPoints(String customerId, int points) async {
     final customer = await _dao.getById(customerId);
     if (customer == null) return;

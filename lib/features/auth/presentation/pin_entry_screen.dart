@@ -5,9 +5,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/services/pin_verification_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_logger.dart';
+import '../../../core/widgets/pin_verification_feedback.dart';
 import '../../../core/widgets/pin_pad.dart';
 import 'auth_controller.dart';
 
@@ -21,39 +23,29 @@ class PinEntryScreen extends ConsumerStatefulWidget {
 }
 
 class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, PinVerificationShakeMixin {
   String _input = '';
   bool _isError = false;
   bool _isLoading = false;
   int _attempts = 0;
 
-  late final AnimationController _shakeCtrl;
-  late final Animation<double> _shakeAnim;
-
   @override
   void initState() {
     super.initState();
-    _shakeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 400),
-    );
-    _shakeAnim = TweenSequence([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: -8.0), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -8.0, end: 8.0), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: 8.0, end: -8.0), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: -8.0, end: 0.0), weight: 1),
-    ]).animate(CurvedAnimation(parent: _shakeCtrl, curve: Curves.easeInOut));
+    initPinShakeAnimation();
     _loadAttempts();
   }
 
   @override
   void dispose() {
-    _shakeCtrl.dispose();
+    disposePinShakeAnimation();
     super.dispose();
   }
 
   Future<void> _loadAttempts() async {
-    final n = await ref.read(secureStorageServiceProvider).getPinAttempts();
+    final n = await PinVerificationService.loadPersistedAttempts(
+      ref.read(secureStorageServiceProvider),
+    );
     if (mounted) setState(() => _attempts = n);
   }
 
@@ -78,23 +70,30 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
   Future<void> _verify() async {
     setState(() => _isLoading = true);
     final storage = ref.read(secureStorageServiceProvider);
-    final storedPin = await storage.getPin();
+    final result = await PinVerificationService.verifyPersistedPin(
+      storage: storage,
+      input: _input,
+    );
 
-    if (storedPin == _input) {
+    if (result.isSuccess) {
       Log.i(_tag, 'PIN verified successfully');
-      await storage.clearPinAttempts();
+      ref.read(appLockedProvider.notifier).state = false;
       if (mounted) context.go('/dashboard');
       return;
     }
 
-    final attempts = await storage.getPinAttempts() + 1;
-    await storage.savePinAttempts(attempts);
-    Log.w(_tag, 'Wrong PIN — attempt $attempts/${AppConstants.maxPinAttempts}');
+    if (result.status == PinVerificationStatus.unavailable) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
-    if (attempts >= AppConstants.maxPinAttempts) {
+    Log.w(
+      _tag,
+      'Wrong PIN — attempt ${result.attempts}/${AppConstants.maxPinAttempts}',
+    );
+
+    if (result.isBlocked) {
       Log.w(_tag, 'Max attempts reached — logging out');
-      await storage.clearPin();
-      await storage.clearPinAttempts();
       await ref.read(authControllerProvider.notifier).logout();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -108,11 +107,16 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
     setState(() {
       _isError = true;
       _isLoading = false;
-      _attempts = attempts;
+      _attempts = result.attempts;
     });
-    _shakeCtrl.forward(from: 0);
+    triggerPinShake();
     await Future.delayed(const Duration(milliseconds: 700));
-    if (mounted) setState(() { _isError = false; _input = ''; });
+    if (mounted) {
+      setState(() {
+        _isError = false;
+        _input = '';
+      });
+    }
   }
 
   Future<void> _forgotPin() async {
@@ -138,9 +142,6 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
     if (confirmed != true) return;
 
     Log.i(_tag, 'User chose to reset PIN — logging out');
-    final storage = ref.read(secureStorageServiceProvider);
-    await storage.clearPin();
-    await storage.clearPinAttempts();
     await ref.read(authControllerProvider.notifier).logout();
     if (mounted) context.go('/login');
   }
@@ -148,9 +149,6 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final remaining = AppConstants.maxPinAttempts - _attempts;
-    final showAttemptsWarning = _attempts > 0;
-
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       body: SafeArea(
@@ -174,10 +172,12 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
                             borderRadius: BorderRadius.circular(22),
                             boxShadow: AppTheme.shadowMd,
                           ),
-                          child: const Icon(
-                            Icons.loyalty_rounded,
-                            color: AppColors.secondary,
-                            size: 40,
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                              fit: BoxFit.contain,
+                            ),
                           ),
                         ),
                         const SizedBox(height: 28),
@@ -194,53 +194,15 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 52),
-
-                        // Dots with shake
-                        AnimatedBuilder(
-                          animation: _shakeAnim,
-                          builder: (_, child) => Transform.translate(
-                            offset: Offset(_shakeAnim.value, 0),
-                            child: child,
-                          ),
-                          child: PinDots(
-                            length: AppConstants.pinLength,
-                            filled: _input.length,
-                            isError: _isError,
-                          ),
+                        PinVerificationFeedback(
+                          shakeAnimation: pinShakeAnimation,
+                          inputLength: _input.length,
+                          attempts: _attempts,
+                          isError: _isError,
+                          isLoading: _isLoading,
                         ),
-
-                        const SizedBox(height: 16),
-                        AnimatedOpacity(
-                          opacity: (_isError || showAttemptsWarning) ? 1 : 0,
-                          duration: const Duration(milliseconds: 200),
-                          child: Text(
-                            _isError
-                                ? AppStrings.pinIncorrect
-                                : '$remaining tentativa${remaining == 1 ? "" : "s"} restante${remaining == 1 ? "" : "s"}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: remaining <= 1
-                                  ? AppColors.error
-                                  : AppColors.amber,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-
-                        if (_isLoading) ...[
-                          const SizedBox(height: 12),
-                          const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
-
                     Padding(
                       padding: const EdgeInsets.only(bottom: 20),
                       child: Column(

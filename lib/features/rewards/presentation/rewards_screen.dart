@@ -17,12 +17,22 @@ class RewardsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(title: const Text(AppStrings.recompensasTitle)),
+      appBar: AppBar(
+        title: const Text(AppStrings.recompensasTitle),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.group_rounded),
+            tooltip: AppStrings.clientesElegiveis,
+            onPressed: () => context.push('/rewards/eligible'),
+          ),
+        ],
+      ),
       body: rewards.when(
         data: (list) => list.isEmpty
             ? EmptyState(
-                icon: Icons.card_giftcard_outlined,
                 title: AppStrings.semRecompensas,
+                assetPath: 'assets/images/empty_state.png',
+                assetHeight: 220,
                 actionLabel: AppStrings.criarRecompensa,
                 onAction: () => context.push('/rewards/new'),
               )

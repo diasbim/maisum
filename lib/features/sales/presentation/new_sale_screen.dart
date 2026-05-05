@@ -8,6 +8,7 @@ import '../../../app/providers.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/widgets/quick_amount_button.dart';
 import '../../customers/domain/customer.dart';
@@ -108,9 +109,9 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       );
       return;
     }
-    if (_amount <= 0) {
+    if (_amount < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.amountRequired)),
+        const SnackBar(content: Text(AppStrings.amountInvalid)),
       );
       return;
     }
@@ -227,17 +228,19 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
               const _StepLabel(number: '2', label: AppStrings.valor),
               const SizedBox(height: 12),
               Row(
-                children: [100, 200, 500].map((amt) => Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: QuickAmountButton(
-                    amount: amt,
-                    selected: _quickAmount == amt,
-                    onTap: () => setState(() {
-                      _quickAmount = _quickAmount == amt ? null : amt;
-                      if (_quickAmount != null) _amountCtrl.clear();
-                    }),
-                  ),
-                )).toList(),
+                children: [100, 200, 500]
+                    .map((amt) => Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: QuickAmountButton(
+                            amount: amt,
+                            selected: _quickAmount == amt,
+                            onTap: () => setState(() {
+                              _quickAmount = _quickAmount == amt ? null : amt;
+                              if (_quickAmount != null) _amountCtrl.clear();
+                            }),
+                          ),
+                        ))
+                    .toList(),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -256,8 +259,8 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
               const SizedBox(height: 12),
               if (_amount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
                     color: AppColors.secondaryLight,
                     borderRadius: BorderRadius.circular(14),
@@ -274,8 +277,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                           color: AppColors.secondary,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.stars_rounded,
-                            color: AppColors.primary, size: 18),
+                        child: const BrandMark(size: 18),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -413,8 +415,8 @@ class _SelectedCustomerTile extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(Icons.close_rounded, size: 18,
-                color: AppColors.onSurfaceVariant),
+            icon: const Icon(Icons.close_rounded,
+                size: 18, color: AppColors.onSurfaceVariant),
             onPressed: onClear,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -526,8 +528,8 @@ class _SuccessView extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 12),
                   ),
-                  onPressed: () => _openWhatsApp(
-                      result.customer.phone, result.sale.points),
+                  onPressed: () =>
+                      _openWhatsApp(result.customer.phone, result.sale.points),
                 ),
                 const SizedBox(height: 12),
                 TextButton(

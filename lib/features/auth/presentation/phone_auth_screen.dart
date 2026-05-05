@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:flutter/gestures.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -26,6 +27,8 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
   bool _isLoading = false;
   bool _hasInput = false;
 
+  late final TapGestureRecognizer _termsRecognizer;
+  late final TapGestureRecognizer _privacyRecognizer;
   late final AnimationController _entryController;
   late final Animation<double> _fadeAnim;
   late final Animation<Offset> _slideAnim;
@@ -33,6 +36,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
   @override
   void initState() {
     super.initState();
+    _termsRecognizer = TapGestureRecognizer()
+      ..onTap = () => context.push('/terms');
+    _privacyRecognizer = TapGestureRecognizer()
+      ..onTap = () => context.push('/privacy');
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 480),
@@ -55,6 +62,8 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
     _phoneController.dispose();
     _phoneFocusNode.dispose();
     _entryController.dispose();
+    _termsRecognizer.dispose();
+    _privacyRecognizer.dispose();
     super.dispose();
   }
 
@@ -106,7 +115,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
               if (!mounted) return;
               final hasPin =
                   await ref.read(secureStorageServiceProvider).hasPin();
-              if (mounted) context.go(hasPin ? '/dashboard' : '/pin-setup');
+              if (mounted) context.go(hasPin ? '/pin-entry' : '/pin-setup');
             } catch (_) {
               if (mounted) context.go('/pin-setup');
             }
@@ -161,8 +170,13 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.phone_rounded,
-                            color: Colors.white, size: 26),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 24),
                       Text('Qual e o seu\nnumero de telefone?',
@@ -264,6 +278,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                 text: 'Ao continuar, concorda com os nossos '),
                             TextSpan(
                               text: 'Termos de Servico',
+                              recognizer: _termsRecognizer,
                               style: theme.textTheme.bodySmall?.copyWith(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.w600,
@@ -273,6 +288,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                             const TextSpan(text: ' e '),
                             TextSpan(
                               text: 'Politica de Privacidade',
+                              recognizer: _privacyRecognizer,
                               style: theme.textTheme.bodySmall?.copyWith(
                                   color: AppColors.primary,
                                   fontWeight: FontWeight.w600,

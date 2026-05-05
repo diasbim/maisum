@@ -24,13 +24,15 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   void initState() {
     super.initState();
-    _ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _logoScale = Tween<double>(begin: 0.7, end: 1.0).animate(
-      CurvedAnimation(parent: _ac, curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack)));
-    _logoFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _ac, curve: const Interval(0.0, 0.5, curve: Curves.easeOut)));
-    _textFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _ac, curve: const Interval(0.4, 1.0, curve: Curves.easeOut)));
+    _ac = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 900));
+    _logoScale = Tween<double>(begin: 0.7, end: 1.0).animate(CurvedAnimation(
+        parent: _ac,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack)));
+    _logoFade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
+        parent: _ac, curve: const Interval(0.0, 0.5, curve: Curves.easeOut)));
+    _textFade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
+        parent: _ac, curve: const Interval(0.4, 1.0, curve: Curves.easeOut)));
     _ac.forward();
     _navigate();
   }
@@ -82,20 +84,21 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     ),
                   ),
                   child: Container(
-                    width: 88,
-                    height: 88,
+                    width: 104,
+                    height: 104,
                     decoration: BoxDecoration(
-                      color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
                           color: AppColors.secondary.withValues(alpha: 0.4),
-                          blurRadius: 32,
+                          blurRadius: 36,
                           offset: const Offset(0, 12),
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.loyalty_rounded, color: AppColors.primary, size: 44),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -134,7 +137,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        AppColors.secondary.withValues(alpha: 0.7)),
+                          AppColors.secondary.withValues(alpha: 0.7)),
                     ),
                   ),
                 ),

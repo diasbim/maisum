@@ -48,9 +48,37 @@ class AuthRepository {
     if (firebaseUser != null) {
       final phone =
           await _storage.getUserPhone() ?? firebaseUser.phoneNumber ?? '';
-      final expiry = await _storage.getTokenExpiry() ??
-          DateTime.now().add(const Duration(days: 30));
-      final token = await _storage.getToken() ?? '';
+
+      String token;
+      DateTime expiry;
+      try {
+        final result = await firebaseUser.getIdTokenResult(true);
+        token = result.token ?? '';
+        expiry = result.expirationTime ??
+            DateTime.now().add(const Duration(hours: 1));
+        // Persist the refreshed token immediately so offline boots use it.
+        await _persistSession(AuthSession(
+          userId: firebaseUser.uid,
+          firebaseUid: firebaseUser.uid,
+          phone: phone,
+          token: token,
+          expiresAt: expiry,
+        ));
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-disabled' || e.code == 'user-not-found') {
+          await logout();
+          return null;
+        }
+        // Transient network failure — fall back to stored token.
+        token = await _storage.getToken() ?? '';
+        expiry = await _storage.getTokenExpiry() ??
+            DateTime.now().add(const Duration(hours: 1));
+      } catch (_) {
+        token = await _storage.getToken() ?? '';
+        expiry = await _storage.getTokenExpiry() ??
+            DateTime.now().add(const Duration(hours: 1));
+      }
+
       return AuthSession(
         userId: firebaseUser.uid,
         firebaseUid: firebaseUser.uid,

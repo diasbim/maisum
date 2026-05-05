@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
@@ -19,6 +21,8 @@ class RedeemRewardSheet extends ConsumerStatefulWidget {
 class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
   Reward? _selected;
   bool _loading = false;
+  bool _confirmed = false;
+  String _redemptionCode = '';
 
   Future<void> _confirm() async {
     if (_selected == null) return;
@@ -29,21 +33,131 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
             rewardId: _selected!.id,
             pointsRequired: _selected!.pointsRequired,
           );
-      if (mounted) Navigator.of(context).pop(true);
+      final code = const Uuid()
+          .v4()
+          .replaceAll('-', '')
+          .substring(0, 8)
+          .toUpperCase();
+      if (mounted) {
+        setState(() {
+          _confirmed = true;
+          _redemptionCode = code;
+          _loading = false;
+        });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(e.toString())));
+        setState(() => _loading = false);
       }
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  void _openWhatsApp() {
+    final clean = widget.customer.phone.replaceAll(RegExp(r'\D'), '');
+    final number = clean.startsWith('258') ? clean : '258$clean';
+    final msg = Uri.encodeComponent(
+      'Olá ${widget.customer.name}! O seu resgate de "${_selected!.name}" foi confirmado. '
+      'Código: $_redemptionCode. Obrigado por fazer parte do programa MaisUm!',
+    );
+    launchUrl(
+      Uri.parse('https://wa.me/$number?text=$msg'),
+      mode: LaunchMode.externalApplication,
+    );
+  }
+
+  Widget _buildConfirmation(BuildContext context, ThemeData theme) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+                color: AppColors.g300,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            width: 64, height: 64,
+            decoration: const BoxDecoration(
+                color: AppColors.secondaryLight, shape: BoxShape.circle),
+            child: const Icon(Icons.check_rounded,
+                color: AppColors.secondary, size: 32),
+          ),
+          const SizedBox(height: 16),
+          Text(AppStrings.resgateConfirmado,
+              style: theme.textTheme.headlineSmall),
+          const SizedBox(height: 4),
+          Text(
+            '${widget.customer.name} · ${_selected!.name}',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: AppColors.onSurfaceVariant),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          Text(
+            AppStrings.codigoResgate,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: AppColors.onSurfaceVariant,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              color: AppColors.secondaryLight,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: AppColors.secondary.withValues(alpha: 0.4)),
+            ),
+            child: Text(
+              _redemptionCode,
+              style: theme.textTheme.headlineMedium?.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 6,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(height: 20),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.send_rounded, size: 16),
+            label: const Text(AppStrings.notificarWhatsApp),
+            onPressed: _openWhatsApp,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.primary,
+              side: const BorderSide(color: AppColors.primary),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+          ),
+          const SizedBox(height: 12),
+          PrimaryButton(
+            label: AppStrings.concluir,
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final rewardsAsync = ref.watch(rewardsControllerProvider);
     final theme = Theme.of(context);
+
+    if (_confirmed) return _buildConfirmation(context, theme);
+
+    final rewardsAsync = ref.watch(rewardsControllerProvider);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(

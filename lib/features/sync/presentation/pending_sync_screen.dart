@@ -7,12 +7,34 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../app/providers.dart';
 import '../domain/sync_item.dart';
 import '../sync_controller.dart';
+import '../sync_service.dart';
 
-class PendingSyncScreen extends ConsumerWidget {
+class PendingSyncScreen extends ConsumerStatefulWidget {
   const PendingSyncScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PendingSyncScreen> createState() => _PendingSyncScreenState();
+}
+
+class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
+  @override
+  void initState() {
+    super.initState();
+    ref.listenManual<SyncStatus>(
+      syncControllerProvider,
+      (previous, next) {
+        final syncFinished = (previous?.isSyncing ?? false) && !next.isSyncing;
+        final pendingChanged = previous?.pendingCount != next.pendingCount;
+
+        if (syncFinished || pendingChanged) {
+          ref.invalidate(pendingSyncItemsProvider);
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final syncStatus = ref.watch(syncControllerProvider);
     final itemsAsync = ref.watch(pendingSyncItemsProvider);
 
@@ -47,13 +69,11 @@ class PendingSyncScreen extends ConsumerWidget {
       body: itemsAsync.when(
         data: (items) => items.isEmpty
             ? const EmptyState(
-                icon: Icons.cloud_done_rounded,
                 title: 'Tudo sincronizado!',
               )
             : RefreshIndicator(
                 color: AppColors.secondary,
-                onRefresh: () async =>
-                    ref.invalidate(pendingSyncItemsProvider),
+                onRefresh: () async => ref.invalidate(pendingSyncItemsProvider),
                 child: ListView.separated(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -123,8 +143,8 @@ class _SyncItemTile extends StatelessWidget {
           Container(
             width: 40,
             height: 40,
-            decoration:
-                BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(11)),
+            decoration: BoxDecoration(
+                color: iconBg, borderRadius: BorderRadius.circular(11)),
             child: Icon(icon, color: iconColor, size: 20),
           ),
           const SizedBox(width: 14),
@@ -150,8 +170,7 @@ class _SyncItemTile extends StatelessWidget {
             ),
           ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
               color: isFailed
                   ? AppColors.errorContainer
@@ -161,7 +180,11 @@ class _SyncItemTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              isFailed ? 'Falhou' : isPending ? 'Pendente' : item.status,
+              isFailed
+                  ? 'Falhou'
+                  : isPending
+                      ? 'Pendente'
+                      : item.status,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: isFailed ? AppColors.error : AppColors.secondaryDark,
                 fontWeight: FontWeight.w700,

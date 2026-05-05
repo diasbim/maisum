@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
+import '../../../core/constants/app_strings.dart';
 import '../domain/customer.dart';
 import '../../sales/domain/sale.dart';
 
@@ -26,11 +27,26 @@ class CustomersController extends AsyncNotifier<List<Customer>> {
     required String name,
     required String phone,
   }) async {
+    if (name.trim().isEmpty) throw ArgumentError(AppStrings.nameRequired);
     final customer = await ref
         .read(customerRepositoryProvider)
         .createCustomer(name: name, phone: phone);
     state = await AsyncValue.guard(_load);
     return customer;
+  }
+
+  Future<void> updateCustomer(
+    String id, {
+    required String name,
+    required String phone,
+  }) async {
+    if (name.trim().isEmpty) throw ArgumentError(AppStrings.nameRequired);
+    await ref
+        .read(customerRepositoryProvider)
+        .updateCustomer(id, name: name, phone: phone);
+    ref.invalidate(customerDetailProvider(id));
+    state = await AsyncValue.guard(_load);
+    ref.read(syncServiceProvider).processQueue();
   }
 
   Future<void> refresh() async {

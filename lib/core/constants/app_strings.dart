@@ -101,6 +101,19 @@ class AppStrings {
   static const String pinForgot = 'Esqueci o PIN';
   static const String pinBlocked = 'Demasiadas tentativas. Faça login novamente.';
 
+  // Eligible customers
+  static const String clientesElegiveis = 'Clientes elegíveis';
+  static const String nenhumClienteElegivel = 'Sem clientes elegíveis';
+  static const String resgatarBtn = 'Resgatar';
+
+  // Customer edit
+  static const String editarCliente = 'Editar cliente';
+
+  // Redemption confirmation
+  static const String resgateConfirmado = 'Resgate confirmado!';
+  static const String codigoResgate = 'Código de resgate';
+  static const String concluir = 'Concluir';
+
   // Errors
   static const String erroGenerico = 'Algo correu mal. Tente novamente.';
   static const String erroRede = 'Sem ligação à internet.';

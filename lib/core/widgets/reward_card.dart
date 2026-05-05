@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import 'brand_mark.dart';
 
 class RewardCard extends StatelessWidget {
   const RewardCard({
@@ -44,10 +45,9 @@ class RewardCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.card_giftcard_rounded,
-                  color: AppColors.primary,
+                child: const BrandMark(
                   size: 24,
+                  padding: EdgeInsets.all(12),
                 ),
               ),
               const SizedBox(width: 14),
@@ -57,10 +57,7 @@ class RewardCard extends StatelessWidget {
                   children: [
                     Text(
                       name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.w600,
                             color: AppColors.onSurface,
                           ),

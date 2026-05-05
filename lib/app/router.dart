@@ -2,6 +2,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'providers.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/otp_verification_screen.dart';
 import '../features/auth/presentation/phone_auth_screen.dart';
@@ -12,9 +13,12 @@ import '../features/customers/presentation/customer_detail_screen.dart';
 import '../features/customers/presentation/customer_list_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/rewards/presentation/create_reward_screen.dart';
+import '../features/rewards/presentation/eligible_customers_screen.dart';
 import '../features/rewards/presentation/rewards_screen.dart';
 import '../features/sales/presentation/new_sale_screen.dart';
 import '../features/sales/presentation/sales_history_screen.dart';
+import '../features/legal/presentation/privacy_screen.dart';
+import '../features/legal/presentation/terms_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/sync/presentation/pending_sync_screen.dart';
 
@@ -24,6 +28,8 @@ const _publicRoutes = {
   '/otp',
   '/pin-setup',
   '/pin-entry',
+  '/terms',
+  '/privacy',
 };
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -36,7 +42,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
     refreshListenable: authNotifier,
-    redirect: (context, state) {
+    redirect: (context, state) async {
       final isPublic = _publicRoutes.contains(state.matchedLocation) ||
           state.matchedLocation.startsWith('/otp');
       final isAuthenticated =
@@ -44,7 +50,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       if (!isAuthenticated && !isPublic) return '/login';
       if (isAuthenticated && state.matchedLocation == '/login') {
-        return '/dashboard';
+        final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
+        return hasPin ? '/pin-entry' : '/pin-setup';
       }
       return null;
     },
@@ -81,8 +88,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/new-sale',
-        builder: (_, state) =>
-            NewSaleScreen(args: state.extra as NewSaleArgs?),
+        builder: (_, state) => NewSaleScreen(args: state.extra as NewSaleArgs?),
       ),
       GoRoute(
         path: '/customers',
@@ -103,6 +109,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: 'new',
             builder: (_, __) => const CreateRewardScreen(),
           ),
+          GoRoute(
+            path: 'eligible',
+            builder: (_, __) => const EligibleCustomersScreen(),
+          ),
         ],
       ),
       GoRoute(
@@ -117,10 +127,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         builder: (_, __) => const SettingsScreen(),
       ),
+      GoRoute(
+        path: '/terms',
+        builder: (_, __) => const TermsScreen(),
+      ),
+      GoRoute(
+        path: '/privacy',
+        builder: (_, __) => const PrivacyScreen(),
+      ),
     ],
     errorBuilder: (_, state) => Scaffold(
-      body:
-          Center(child: Text('Página não encontrada: ${state.error}')),
+      body: Center(child: Text('Página não encontrada: ${state.error}')),
     ),
   );
 });
