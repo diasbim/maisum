@@ -8,18 +8,20 @@ class ConnectivityService {
 
   final _connectivity = Connectivity();
   final _controller = StreamController<bool>.broadcast();
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
 
   bool _isOnline = true;
+  bool _disposed = false;
   bool get isOnline => _isOnline;
 
   Stream<bool> get onConnectivityChanged => _controller.stream;
 
   void _init() {
-    _connectivity.onConnectivityChanged.listen((results) {
+    _connectivitySub = _connectivity.onConnectivityChanged.listen((results) {
       final online = results.any((r) => r != ConnectivityResult.none);
       if (online != _isOnline) {
         _isOnline = online;
-        _controller.add(_isOnline);
+        _emit(_isOnline);
       }
     });
 
@@ -29,7 +31,7 @@ class ConnectivityService {
   Future<void> _checkInitial() async {
     final results = await _connectivity.checkConnectivity();
     _isOnline = results.any((r) => r != ConnectivityResult.none);
-    _controller.add(_isOnline);
+    _emit(_isOnline);
   }
 
   Future<bool> check() async {
@@ -38,5 +40,14 @@ class ConnectivityService {
     return _isOnline;
   }
 
-  void dispose() => _controller.close();
+  void _emit(bool isOnline) {
+    if (_disposed || _controller.isClosed) return;
+    _controller.add(isOnline);
+  }
+
+  void dispose() {
+    _disposed = true;
+    _connectivitySub?.cancel();
+    _controller.close();
+  }
 }

@@ -2,6 +2,10 @@
 
 Offline-first loyalty app for barbershops in Maputo, Mozambique. Barbers register sales in under 5 seconds, on low-end Android devices, with or without internet.
 
+## Product Governance
+
+Future features are evaluated through a strict decision framework before they enter the roadmap. See `docs/feature_decision_framework.md`.
+
 ## Quick Start
 
 ```bash

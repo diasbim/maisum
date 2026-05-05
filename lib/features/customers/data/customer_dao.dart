@@ -20,6 +20,27 @@ class CustomerDao {
     return rows.map(customerFromMap).toList();
   }
 
+  Future<List<Customer>> searchForSale(String query) async {
+    final db = await _db.database;
+    final trimmed = query.trim();
+    if (trimmed.length < 2) {
+      return const <Customer>[];
+    }
+
+    final digitsOnly = trimmed.replaceAll(RegExp(r'\D'), '');
+    final isPhoneSearch =
+        digitsOnly.isNotEmpty && digitsOnly.length == trimmed.length;
+
+    final rows = await db.query(
+      'customers',
+      where: isPhoneSearch ? 'phone LIKE ?' : 'name LIKE ? COLLATE NOCASE',
+      whereArgs: ['${isPhoneSearch ? digitsOnly : trimmed}%'],
+      orderBy: 'name COLLATE NOCASE ASC',
+      limit: 20,
+    );
+    return rows.map(customerFromMap).toList();
+  }
+
   Future<Customer?> findByPhone(String phone) async {
     final db = await _db.database;
     final rows = await db.query(
@@ -50,6 +71,16 @@ class CustomerDao {
     return rows.map(customerFromMap).toList();
   }
 
+  Future<List<Customer>> getRecent({int limit = 6}) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'customers',
+      orderBy: 'updated_at DESC, created_at DESC',
+      limit: limit,
+    );
+    return rows.map(customerFromMap).toList();
+  }
+
   Future<Customer> create({required String name, required String phone}) async {
     final db = await _db.database;
     final now = DateTime.now();
@@ -71,13 +102,18 @@ class CustomerDao {
       {
         'total_points': newTotalPoints,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'synced': 0,
       },
       where: 'id = ?',
       whereArgs: [id],
     );
   }
 
-  Future<void> update(String id, {required String name, required String phone}) async {
+  Future<void> update(
+    String id, {
+    required String name,
+    required String phone,
+  }) async {
     final db = await _db.database;
     await db.update(
       'customers',
@@ -110,8 +146,11 @@ class CustomerDao {
 
   Future<List<Customer>> getUnsynced() async {
     final db = await _db.database;
-    final rows =
-        await db.query('customers', where: 'synced = 0', orderBy: 'created_at ASC');
+    final rows = await db.query(
+      'customers',
+      where: 'synced = 0',
+      orderBy: 'created_at ASC',
+    );
     return rows.map(customerFromMap).toList();
   }
 }

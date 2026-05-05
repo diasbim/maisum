@@ -36,7 +36,8 @@ void main() {
       expect(doc.data()!['phone'], '840000001');
     });
 
-    test('update operation merges data without overwriting other fields', () async {
+    test('update operation merges data without overwriting other fields',
+        () async {
       await fakeFirestore
           .collection('businesses')
           .doc(businessUid)
@@ -131,7 +132,8 @@ void main() {
         operation: 'create',
         entityType: 'reward',
         entityId: 'reward-1',
-        payload: '{"id":"reward-1","name":"Corte grátis","points_required":500}',
+        payload:
+            '{"id":"reward-1","name":"Corte grátis","points_required":500}',
         createdAt: DateTime.now(),
       );
       await service.processSyncItem(item);
@@ -144,6 +146,42 @@ void main() {
           .get();
       expect(doc.exists, true);
       expect(doc.data()!['name'], 'Corte grátis');
+    });
+
+    test('fetchCollectionSince returns only documents after the saved cursor',
+        () async {
+      final rewards = fakeFirestore
+          .collection('businesses')
+          .doc(businessUid)
+          .collection('rewards');
+
+      await rewards.doc('reward-1').set({
+        'id': 'reward-1',
+        'name': 'Primeiro',
+        'points_required': 100,
+        'updated_at': 1000,
+      });
+      await rewards.doc('reward-2').set({
+        'id': 'reward-2',
+        'name': 'Segundo',
+        'points_required': 200,
+        'updated_at': 2000,
+      });
+      await rewards.doc('reward-3').set({
+        'id': 'reward-3',
+        'name': 'Terceiro',
+        'points_required': 300,
+        'updated_at': 2000,
+      });
+
+      final docs = await service.fetchCollectionSince(
+        entityType: 'reward',
+        orderField: 'updated_at',
+        lastValue: 2000,
+        lastDocId: 'reward-2',
+      );
+
+      expect(docs.map((doc) => doc['id']), ['reward-3']);
     });
 
     test('different businessUid uses separate path', () async {

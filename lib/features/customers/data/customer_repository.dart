@@ -14,11 +14,17 @@ class CustomerRepository {
 
   Future<List<Customer>> search(String query) => _dao.search(query);
 
+  Future<List<Customer>> searchForSale(String query) =>
+      _dao.searchForSale(query);
+
   Future<Customer?> findByPhone(String phone) => _dao.findByPhone(phone);
 
   Future<Customer?> getById(String id) => _dao.getById(id);
 
   Future<List<Customer>> getAll() => _dao.getAll();
+
+  Future<List<Customer>> getRecent({int limit = 6}) =>
+      _dao.getRecent(limit: limit);
 
   Future<Customer> createCustomer({
     required String name,

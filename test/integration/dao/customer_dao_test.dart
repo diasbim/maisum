@@ -85,6 +85,31 @@ void main() {
     });
   });
 
+  group('searchForSale', () {
+    setUp(() async {
+      await dao.create(name: 'Ana Costa', phone: '841000001');
+      await dao.create(name: 'Bruno Lopes', phone: '842000002');
+      await dao.create(name: 'Carlos Matos', phone: '843000003');
+    });
+
+    test('finds by phone prefix', () async {
+      final results = await dao.searchForSale('842');
+      expect(results.length, 1);
+      expect(results.first.name, 'Bruno Lopes');
+    });
+
+    test('finds by name prefix', () async {
+      final results = await dao.searchForSale('Ana');
+      expect(results.length, 1);
+      expect(results.first.name, 'Ana Costa');
+    });
+
+    test('does not use substring matching for sale lookup', () async {
+      final results = await dao.searchForSale('Costa');
+      expect(results, isEmpty);
+    });
+  });
+
   group('getAll', () {
     test('returns customers ordered by name ASC', () async {
       await dao.create(name: 'Zara', phone: '841111001');

@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/constants/app_constants.dart';
@@ -31,11 +32,10 @@ class NewSaleScreen extends ConsumerStatefulWidget {
 class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   final _phoneCtrl = TextEditingController();
   final _amountCtrl = TextEditingController();
+  Timer? _searchDebounce;
   Customer? _selectedCustomer;
   int? _quickAmount;
   List<Customer> _searchResults = [];
-  bool _searching = false;
-  bool _showSuccess = false;
 
   @override
   void initState() {
@@ -58,6 +58,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _phoneCtrl.dispose();
     _amountCtrl.dispose();
     super.dispose();
@@ -71,18 +72,24 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   int get _points => (_amount / AppConstants.pointsPerMzn).floor();
 
   Future<void> _onPhoneChanged(String query) async {
-    if (query.trim().length < 2) {
+    final trimmed = query.trim();
+    _searchDebounce?.cancel();
+
+    if (trimmed.length < 2) {
       setState(() => _searchResults = []);
       return;
     }
-    setState(() => _searching = true);
-    final results = await ref.read(customerRepositoryProvider).search(query);
-    if (mounted) {
+
+    _searchDebounce = Timer(const Duration(milliseconds: 250), () async {
+      final results =
+          await ref.read(customerRepositoryProvider).searchForSale(trimmed);
+      if (!mounted || _phoneCtrl.text.trim() != trimmed) {
+        return;
+      }
       setState(() {
         _searchResults = results;
-        _searching = false;
       });
-    }
+    });
   }
 
   void _selectCustomer(Customer c) {
@@ -110,9 +117,9 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       return;
     }
     if (_amount < 1) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.amountInvalid)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.amountInvalid)));
       return;
     }
 
@@ -122,31 +129,31 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       amount: _amount,
     );
 
-    if (mounted) setState(() => _showSuccess = true);
+    saleCtrl.reset();
+    if (mounted) context.pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final saleState = ref.watch(saleControllerProvider);
-
-    if (_showSuccess &&
-        saleState is AsyncData<SaleResult?> &&
-        saleState.value != null) {
-      return _SuccessView(
-        result: saleState.value!,
-        onDone: () {
-          ref.read(saleControllerProvider.notifier).reset();
-          context.pop();
-        },
-      );
-    }
+    final recentCustomers = ref.watch(recentCustomersProvider);
+    final showRecentCustomers =
+        _selectedCustomer == null && _phoneCtrl.text.trim().isEmpty;
 
     return Scaffold(
       appBar: AppBar(title: const Text(AppStrings.novaVendaTitle)),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+        child: PrimaryButton(
+          label: AppStrings.confirmarVenda,
+          onPressed: _confirmSale,
+          loading: saleState is AsyncLoading,
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -162,9 +169,53 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                   }),
                 )
               else ...[
+                if (showRecentCustomers) ...[
+                  Text(
+                    'Recentes',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  recentCustomers.when(
+                    data: (customers) {
+                      if (customers.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return SizedBox(
+                        height: 92,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: customers.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 10),
+                          itemBuilder: (context, index) {
+                            final customer = customers[index];
+                            return _RecentCustomerButton(
+                              customer: customer,
+                              onTap: () => _selectCustomer(customer),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                    loading: () => const SizedBox.shrink(),
+                    error: (_, __) => const SizedBox.shrink(),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Ou pesquise',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 TextField(
                   controller: _phoneCtrl,
                   keyboardType: TextInputType.text,
+                  autofocus: widget.args?.preselectedCustomerId == null,
                   textCapitalization: TextCapitalization.words,
                   decoration: const InputDecoration(
                     labelText: 'Nome ou telefone',
@@ -172,11 +223,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                   ),
                   onChanged: _onPhoneChanged,
                 ),
-                if (_searching)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: LinearProgressIndicator(),
-                  ),
+                if (_searchResults.isNotEmpty) const SizedBox(height: 8),
                 ..._searchResults.map(
                   (c) => ListTile(
                     contentPadding: EdgeInsets.zero,
@@ -185,15 +232,18 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                       child: Text(
                         c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',
                         style: const TextStyle(
-                            color: AppColors.secondary,
-                            fontWeight: FontWeight.w700),
+                          color: AppColors.secondary,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                     title: Text(c.name),
                     subtitle: Text(c.phone),
                     trailing: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.secondaryLight,
                         borderRadius: BorderRadius.circular(12),
@@ -222,36 +272,54 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                   ),
               ],
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 20),
 
               // ── Step 2: Amount ────────────────────────────────────────────
               const _StepLabel(number: '2', label: AppStrings.valor),
               const SizedBox(height: 12),
-              Row(
+              Text(
+                'Atalhos',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 10,
                 children: [100, 200, 500]
-                    .map((amt) => Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: QuickAmountButton(
-                            amount: amt,
-                            selected: _quickAmount == amt,
-                            onTap: () => setState(() {
-                              _quickAmount = _quickAmount == amt ? null : amt;
-                              if (_quickAmount != null) _amountCtrl.clear();
-                            }),
-                          ),
-                        ))
+                    .map(
+                      (amt) => QuickAmountButton(
+                        amount: amt,
+                        selected: _quickAmount == amt,
+                        onTap: () => setState(() {
+                          _quickAmount = _quickAmount == amt ? null : amt;
+                          if (_quickAmount != null) _amountCtrl.clear();
+                        }),
+                      ),
+                    )
                     .toList(),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
+              Text(
+                'Outro valor',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
               TextField(
                 controller: _amountCtrl,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[\d,.]')),
                 ],
                 decoration: const InputDecoration(
-                  labelText: AppStrings.valorHint,
+                  hintText: AppStrings.valorHint,
                   suffixText: 'MZN',
                 ),
                 onChanged: (_) => setState(() => _quickAmount = null),
@@ -259,8 +327,10 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
               const SizedBox(height: 12),
               if (_amount > 0)
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.secondaryLight,
                     borderRadius: BorderRadius.circular(14),
@@ -291,14 +361,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                   ),
                 ),
 
-              const SizedBox(height: 36),
-
-              // ── Step 3: Confirm ───────────────────────────────────────────
-              PrimaryButton(
-                label: AppStrings.confirmarVenda,
-                onPressed: _confirmSale,
-                loading: saleState is AsyncLoading,
-              ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -373,8 +436,11 @@ class _SelectedCustomerTile extends StatelessWidget {
               color: AppColors.secondary,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.check_rounded,
-                color: AppColors.primary, size: 22),
+            child: const Icon(
+              Icons.check_rounded,
+              color: AppColors.primary,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -415,8 +481,11 @@ class _SelectedCustomerTile extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           IconButton(
-            icon: const Icon(Icons.close_rounded,
-                size: 18, color: AppColors.onSurfaceVariant),
+            icon: const Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: AppColors.onSurfaceVariant,
+            ),
             onPressed: onClear,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -427,121 +496,76 @@ class _SelectedCustomerTile extends StatelessWidget {
   }
 }
 
-class _SuccessView extends StatelessWidget {
-  const _SuccessView({required this.result, required this.onDone});
-  final SaleResult result;
-  final VoidCallback onDone;
+class _RecentCustomerButton extends StatelessWidget {
+  const _RecentCustomerButton({required this.customer, required this.onTap});
 
-  void _openWhatsApp(String phone, int points) {
-    final clean = phone.replaceAll(RegExp(r'\D'), '');
-    final number = clean.startsWith('258') ? clean : '258$clean';
-    final msg = Uri.encodeComponent(
-      'Obrigado pela sua visita! Ganhou $points pontos no programa MaisUm. Continue a colecionar para resgatar prémios!',
-    );
-    launchUrl(
-      Uri.parse('https://wa.me/$number?text=$msg'),
-      mode: LaunchMode.externalApplication,
-    );
-  }
+  final Customer customer;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.primary, AppColors.primaryDarker],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+    return SizedBox(
+      width: 188,
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          alignment: Alignment.centerLeft,
+          side: const BorderSide(color: AppColors.g100),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
+          backgroundColor: Colors.white,
         ),
-        child: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    color: AppColors.secondary,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.secondary.withValues(alpha: 0.4),
-                        blurRadius: 32,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    size: 52,
-                    color: AppColors.primary,
-                  ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.primary,
+              child: Text(
+                customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?',
+                style: const TextStyle(
+                  color: AppColors.secondary,
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(height: 28),
-                Text(
-                  AppStrings.vendaRegistada,
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.secondary.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: AppColors.secondary.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Text(
-                    '+ ${result.sale.points} ${AppStrings.pontosAtribuidos}',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: AppColors.secondary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  result.customer.name,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 36),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.send_rounded, size: 18),
-                  label: const Text(AppStrings.notificarWhatsApp),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white54),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 12),
-                  ),
-                  onPressed: () =>
-                      _openWhatsApp(result.customer.phone, result.sale.points),
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: onDone,
-                  child: const Text(
-                    AppStrings.continuar2,
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    customer.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: AppColors.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    customer.phone,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${customer.totalPoints} pts',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

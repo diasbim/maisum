@@ -38,11 +38,23 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: TextField(
               controller: _searchCtrl,
-              keyboardType: TextInputType.phone,
+              keyboardType: TextInputType.text,
               decoration: InputDecoration(
                 hintText: AppStrings.buscarCliente,
                 prefixIcon: const Icon(Icons.search_rounded,
                     color: AppColors.g500, size: 20),
+                suffixIcon: _searchCtrl.text.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() {});
+                          ref
+                              .read(customersControllerProvider.notifier)
+                              .search('');
+                        },
+                      ),
                 filled: true,
                 fillColor: Colors.white,
                 contentPadding:
@@ -61,8 +73,10 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                       const BorderSide(color: AppColors.secondary, width: 2),
                 ),
               ),
-              onChanged: (q) =>
-                  ref.read(customersControllerProvider.notifier).search(q),
+              onChanged: (q) {
+                setState(() {});
+                ref.read(customersControllerProvider.notifier).search(q);
+              },
             ),
           ),
         ),

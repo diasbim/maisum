@@ -36,15 +36,15 @@ class _SlowDashboardController extends DashboardController {
 // overrideWith requires () => Controller; capture stats via closure.
 extension on DashboardStats {
   Widget buildDashboard({bool isOnline = true}) => ProviderScope(
-    overrides: [
-      dashboardControllerProvider.overrideWith(
-        () => _FakeDashboardController(this),
-      ),
-      syncControllerProvider.overrideWith(_FakeSyncController.new),
-      isOnlineProvider.overrideWith((ref) => Stream.value(isOnline)),
-    ],
-    child: const MaterialApp(home: DashboardScreen()),
-  );
+        overrides: [
+          dashboardControllerProvider.overrideWith(
+            () => _FakeDashboardController(this),
+          ),
+          syncControllerProvider.overrideWith(_FakeSyncController.new),
+          isOnlineProvider.overrideWith((ref) => Stream.value(isOnline)),
+        ],
+        child: const MaterialApp(home: DashboardScreen()),
+      );
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ void main() {
 
       expect(find.text('7'), findsOneWidget);
       expect(find.text('14'), findsOneWidget);
-      expect(find.text('0 por sincronizar'), findsOneWidget);
+      expect(find.text('0 clientes registados'), findsOneWidget);
     });
 
     testWidgets('shows zeros for empty stats', (tester) async {
@@ -95,9 +95,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.novaVenda), findsOneWidget);
-      expect(find.text('Começar agora'), findsOneWidget);
+      expect(find.text('Registar venda'), findsOneWidget);
       expect(
-        find.text('Registe uma venda em segundos e atribua pontos no momento.'),
+        find.text('Registe em segundos com uma única ação.'),
         findsOneWidget,
       );
     });
@@ -113,17 +113,17 @@ void main() {
       expect(find.text(AppStrings.clientes), findsOneWidget);
       expect(find.text(AppStrings.recompensas), findsOneWidget);
       expect(find.text(AppStrings.historicoVendas), findsOneWidget);
-      expect(find.text(AppStrings.pendentes), findsOneWidget);
+      expect(find.textContaining(AppStrings.pendentes), findsOneWidget);
     });
   });
 
   group('DashboardScreen — section headers', () {
-    testWidgets('shows Atalhos and Hoje headers', (tester) async {
+    testWidgets('shows Rápido and Hoje headers', (tester) async {
       await tester.pumpWidget(const DashboardStats().buildDashboard());
       await tester.pumpAndSettle();
 
-      expect(find.text('Hoje'), findsOneWidget);
-      expect(find.text('Atalhos'), findsOneWidget);
+      expect(find.text('HOJE'), findsOneWidget);
+      expect(find.text('RÁPIDO'), findsOneWidget);
     });
   });
 

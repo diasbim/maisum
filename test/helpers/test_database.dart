@@ -17,8 +17,13 @@ Future<Database> setUpTestDatabase() async {
   final db = await databaseFactoryFfi.openDatabase(
     inMemoryDatabasePath,
     options: OpenDatabaseOptions(
-      version: 2,
-      onCreate: (db, _) => _createV2Schema(db),
+      version: 5,
+      onCreate: (db, _) async {
+        await _createV2Schema(db);
+        await _createV3Schema(db);
+        await _createV4Schema(db);
+        await _createV5Schema(db);
+      },
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
     ),
   );
@@ -95,4 +100,45 @@ Future<void> _createV2Schema(Database db) async {
     )
   ''');
   await db.execute('CREATE INDEX idx_sync_status ON sync_queue(status)');
+}
+
+Future<void> _createV3Schema(Database db) async {
+  await db.execute('''
+    CREATE TABLE redemptions (
+      id TEXT PRIMARY KEY,
+      customer_id TEXT NOT NULL,
+      reward_id TEXT NOT NULL,
+      points_spent INTEGER NOT NULL,
+      redeemed_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (customer_id) REFERENCES customers(id),
+      FOREIGN KEY (reward_id) REFERENCES rewards(id)
+    )
+  ''');
+  await db.execute(
+      'CREATE INDEX idx_redemptions_customer_id ON redemptions(customer_id)');
+  await db
+      .execute('CREATE INDEX idx_redemptions_synced ON redemptions(synced)');
+}
+
+Future<void> _createV4Schema(Database db) async {
+  await db.execute(
+    'CREATE INDEX idx_customers_name_nocase ON customers(name COLLATE NOCASE)',
+  );
+}
+
+Future<void> _createV5Schema(Database db) async {
+  await db.execute(
+    'ALTER TABLE rewards ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0',
+  );
+  await db.execute(
+    'UPDATE rewards SET updated_at = created_at WHERE updated_at = 0 OR updated_at IS NULL',
+  );
+  await db.execute('''
+    CREATE TABLE sync_state (
+      entity_type TEXT PRIMARY KEY,
+      last_value INTEGER,
+      last_doc_id TEXT
+    )
+  ''');
 }

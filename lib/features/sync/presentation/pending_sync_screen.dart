@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../app/providers.dart';
 import '../domain/sync_item.dart';
@@ -97,7 +97,6 @@ class _SyncItemTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fmt = DateFormat('dd MMM, HH:mm', 'pt');
     final isPending = item.status == 'pending';
     final isFailed = item.status == 'failed';
 
@@ -158,7 +157,7 @@ class _SyncItemTile extends StatelessWidget {
                       fontWeight: FontWeight.w600, color: AppColors.onSurface),
                 ),
                 const SizedBox(height: 2),
-                Text(fmt.format(item.createdAt),
+                Text(PtDateFormat.dayMonthTime(item.createdAt),
                     style: theme.textTheme.bodySmall),
                 if (item.retryCount > 0)
                   Text(

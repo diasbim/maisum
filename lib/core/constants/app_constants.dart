@@ -9,7 +9,8 @@ class AppConstants {
   static const int maxSyncRetries = 3;
   static const Duration syncRetryDelay = Duration(milliseconds: 500);
   static const String dbName = 'loyaltyos.db';
-  static const int dbVersion = 3;
+  static const int dbVersion = 5;
+  static const int syncPullPageSize = 200;
   static const String tokenKey = 'auth_token';
   static const String userIdKey = 'user_id';
   static const String userPhoneKey = 'user_phone';

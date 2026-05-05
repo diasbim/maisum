@@ -26,8 +26,10 @@ class _FakeCustomersController extends CustomersController {
   Future<void> refresh() async {}
 
   @override
-  Future<Customer> createCustomer({required String name, required String phone}) async =>
-      Customer(id: 'new-id', name: name, phone: phone, createdAt: DateTime.now());
+  Future<Customer> createCustomer(
+          {required String name, required String phone}) async =>
+      Customer(
+          id: 'new-id', name: name, phone: phone, createdAt: DateTime.now());
 }
 
 class _SlowCustomersController extends CustomersController {
@@ -41,7 +43,8 @@ class _SlowCustomersController extends CustomersController {
   Future<void> refresh() async {}
 
   @override
-  Future<Customer> createCustomer({required String name, required String phone}) async =>
+  Future<Customer> createCustomer(
+          {required String name, required String phone}) async =>
       throw UnimplementedError();
 }
 
@@ -49,7 +52,8 @@ class _SlowCustomersController extends CustomersController {
 
 Widget _buildCustomerList(List<Customer> customers) => ProviderScope(
       overrides: [
-        customersControllerProvider.overrideWith(() => _FakeCustomersController(customers)),
+        customersControllerProvider
+            .overrideWith(() => _FakeCustomersController(customers)),
       ],
       child: const MaterialApp(home: CustomerListScreen()),
     );
@@ -80,7 +84,8 @@ void main() {
       expect(find.text(AppStrings.semClientes), findsOneWidget);
     });
 
-    testWidgets('shows Adicionar cliente action in empty state', (tester) async {
+    testWidgets('shows Adicionar cliente action in empty state',
+        (tester) async {
       await tester.pumpWidget(_buildCustomerList([]));
       await tester.pumpAndSettle();
 
@@ -110,7 +115,8 @@ void main() {
       expect(find.text('842000002'), findsOneWidget);
     });
 
-    testWidgets('does not show EmptyState when customers exist', (tester) async {
+    testWidgets('does not show EmptyState when customers exist',
+        (tester) async {
       await tester.pumpWidget(_buildCustomerList(customers));
       await tester.pumpAndSettle();
 
@@ -139,13 +145,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(FloatingActionButton), findsOneWidget);
-      expect(find.byIcon(Icons.person_add), findsOneWidget);
+      expect(find.byIcon(Icons.person_add_rounded), findsOneWidget);
     });
 
-    testWidgets('shows CircularProgressIndicator while loading', (tester) async {
+    testWidgets('shows CircularProgressIndicator while loading',
+        (tester) async {
       await tester.pumpWidget(ProviderScope(
         overrides: [
-          customersControllerProvider.overrideWith(_SlowCustomersController.new),
+          customersControllerProvider
+              .overrideWith(_SlowCustomersController.new),
         ],
         child: const MaterialApp(home: CustomerListScreen()),
       ));

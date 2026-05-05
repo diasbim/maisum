@@ -27,6 +27,8 @@ class AppDatabase {
   Future<void> _onCreate(Database db, int version) async {
     await _createV2Schema(db);
     await _createV3Schema(db);
+    await _createV4Schema(db);
+    await _createV5Schema(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -38,6 +40,12 @@ class AppDatabase {
     }
     if (oldVersion < 3) {
       await _createV3Schema(db);
+    }
+    if (oldVersion < 4) {
+      await _createV4Schema(db);
+    }
+    if (oldVersion < 5) {
+      await _createV5Schema(db);
     }
   }
 
@@ -66,7 +74,8 @@ class AppDatabase {
         FOREIGN KEY (customer_id) REFERENCES customers(id)
       )
     ''');
-    await db.execute('CREATE INDEX idx_sales_customer_id ON sales(customer_id)');
+    await db
+        .execute('CREATE INDEX idx_sales_customer_id ON sales(customer_id)');
     await db.execute('CREATE INDEX idx_sales_synced ON sales(synced)');
     await db.execute('CREATE INDEX idx_sales_created_at ON sales(created_at)');
 
@@ -112,8 +121,30 @@ class AppDatabase {
     ''');
     await db.execute(
         'CREATE INDEX idx_redemptions_customer_id ON redemptions(customer_id)');
+    await db
+        .execute('CREATE INDEX idx_redemptions_synced ON redemptions(synced)');
+  }
+
+  Future<void> _createV4Schema(Database db) async {
     await db.execute(
-        'CREATE INDEX idx_redemptions_synced ON redemptions(synced)');
+      'CREATE INDEX IF NOT EXISTS idx_customers_name_nocase ON customers(name COLLATE NOCASE)',
+    );
+  }
+
+  Future<void> _createV5Schema(Database db) async {
+    await db.execute(
+      'ALTER TABLE rewards ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'UPDATE rewards SET updated_at = created_at WHERE updated_at = 0 OR updated_at IS NULL',
+    );
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_state (
+        entity_type TEXT PRIMARY KEY,
+        last_value INTEGER,
+        last_doc_id TEXT
+      )
+    ''');
   }
 
   // Injects a pre-opened database; used only in tests to avoid platform channels.

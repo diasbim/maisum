@@ -32,9 +32,15 @@ Widget _buildScreen({required String storedPin, int initialAttempts = 0}) {
     initialLocation: '/pin-entry',
     routes: [
       GoRoute(path: '/pin-entry', builder: (_, __) => const PinEntryScreen()),
-      GoRoute(path: '/login', builder: (_, __) => const Scaffold(body: Text('login'))),
-      GoRoute(path: '/dashboard', builder: (_, __) => const Scaffold(body: Text('dashboard'))),
-      GoRoute(path: '/pin-setup', builder: (_, __) => const Scaffold(body: Text('pin-setup'))),
+      GoRoute(
+          path: '/login',
+          builder: (_, __) => const Scaffold(body: Text('login'))),
+      GoRoute(
+          path: '/dashboard',
+          builder: (_, __) => const Scaffold(body: Text('dashboard'))),
+      GoRoute(
+          path: '/pin-setup',
+          builder: (_, __) => const Scaffold(body: Text('pin-setup'))),
     ],
   );
 
@@ -49,7 +55,8 @@ Widget _buildScreen({required String storedPin, int initialAttempts = 0}) {
 
 Future<void> _tapDigits(WidgetTester tester, String digits) async {
   for (final d in digits.split('')) {
-    await tester.tap(find.text(d).first);
+    await tester.ensureVisible(find.text(d).first);
+    await tester.tap(find.text(d).first, warnIfMissed: false);
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
@@ -68,7 +75,16 @@ void main() {
       await tester.pumpWidget(_buildScreen(storedPin: '1234'));
       await tester.pump();
 
-      expect(find.byIcon(Icons.loyalty), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Image &&
+              widget.image is AssetImage &&
+              (widget.image as AssetImage).assetName ==
+                  'assets/images/logo.png',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('shows number pad', (tester) async {
@@ -105,14 +121,16 @@ void main() {
       await tester.pump();
 
       await _tapDigits(tester, '12');
-      await tester.tap(find.byIcon(Icons.backspace_outlined));
+      await tester.ensureVisible(find.byIcon(Icons.backspace_outlined));
+      await tester.tap(find.byIcon(Icons.backspace_outlined),
+          warnIfMissed: false);
       await tester.pump();
 
       // Still on entry screen — not yet 4 digits
       expect(find.text(AppStrings.pinEntryTitle), findsOneWidget);
     });
 
-    testWidgets('3 wrong attempts shows blocked snackbar', (tester) async {
+    testWidgets('3 wrong attempts sends user to login', (tester) async {
       await tester.pumpWidget(
         _buildScreen(storedPin: '1234', initialAttempts: 2),
       );
@@ -121,12 +139,9 @@ void main() {
       // This is the 3rd wrong attempt — triggers lockout
       await _tapDigits(tester, '0000');
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.pump(); // for ScaffoldMessenger
+      await tester.pumpAndSettle();
 
-      expect(find.text(AppStrings.pinBlocked), findsOneWidget);
-
-      // drain snackbar animation so no pending timers remain
-      await tester.pump(const Duration(seconds: 5));
+      expect(find.text('login'), findsOneWidget);
     });
 
     testWidgets('forgot PIN button is tappable', (tester) async {

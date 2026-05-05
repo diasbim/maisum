@@ -29,7 +29,7 @@ class DashboardScreen extends ConsumerWidget {
           // ── Navy SliverAppBar ─────────────────────────────────────────────
           SliverAppBar(
             backgroundColor: AppColors.primary,
-            expandedHeight: 160,
+            expandedHeight: 112,
             pinned: true,
             elevation: 0,
             scrolledUnderElevation: 0,
@@ -90,14 +90,6 @@ class DashboardScreen extends ConsumerWidget {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Bom dia! Aqui esta o resumo.',
-                          style: GoogleFonts.outfit(
-                            color: Colors.white.withValues(alpha: 0.55),
-                            fontSize: 14,
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -111,7 +103,7 @@ class DashboardScreen extends ConsumerWidget {
 
           // ── Body ─────────────────────────────────────────────────────────
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 96),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 96),
             sliver: SliverToBoxAdapter(
               child: RefreshIndicator(
                 color: AppColors.secondary,
@@ -124,62 +116,12 @@ class DashboardScreen extends ConsumerWidget {
                       _PrimarySaleCard(
                         onTap: () async {
                           await context.push('/new-sale');
-                          ref.read(dashboardControllerProvider.notifier).refresh();
+                          ref
+                              .read(dashboardControllerProvider.notifier)
+                              .refresh();
                         },
                       ),
-                      const SizedBox(height: 28),
-                      const _SectionLabel('Atalhos'),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _MiniActionTile(
-                              label: AppStrings.clientes,
-                              subtitle: 'Pesquisar e editar',
-                              icon: Icons.people_alt_rounded,
-                              onTap: () => context.push('/customers'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _MiniActionTile(
-                              label: AppStrings.recompensas,
-                              subtitle: 'Definir resgates',
-                              icon: Icons.card_giftcard_rounded,
-                              onTap: () => context.push('/rewards'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _MiniActionTile(
-                              label: AppStrings.historicoVendas,
-                              subtitle: 'Conferência rápida',
-                              icon: Icons.receipt_long_rounded,
-                              onTap: () => context.push('/sales'),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _MiniActionTile(
-                              label: AppStrings.pendentes,
-                              subtitle: '${syncStatus.pendingCount} por sincronizar',
-                              icon: syncStatus.pendingCount > 0
-                                  ? Icons.cloud_upload_rounded
-                                  : Icons.cloud_done_rounded,
-                              accent: syncStatus.pendingCount > 0
-                                  ? AppColors.amber
-                                  : AppColors.green,
-                              onTap: () => context.push('/pending-sync'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 28),
-
+                      const SizedBox(height: 20),
                       const _SectionLabel('Hoje'),
                       const SizedBox(height: 12),
                       Row(
@@ -206,9 +148,64 @@ class DashboardScreen extends ConsumerWidget {
                       Text(
                         '${s.totalCustomers} clientes registados',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                        ),
+                              color: AppColors.onSurfaceVariant,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      const SizedBox(height: 24),
+                      const _SectionLabel('Rápido'),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MiniActionTile(
+                              label: AppStrings.clientes,
+                              subtitle: 'Abrir lista',
+                              icon: Icons.people_alt_rounded,
+                              onTap: () => context.push('/customers'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _MiniActionTile(
+                              label: AppStrings.historicoVendas,
+                              subtitle: 'Últimas vendas',
+                              icon: Icons.receipt_long_rounded,
+                              onTap: () => context.push('/sales'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton.icon(
+                              onPressed: () => context.push('/pending-sync'),
+                              icon: Icon(
+                                syncStatus.pendingCount > 0
+                                    ? Icons.cloud_upload_rounded
+                                    : Icons.cloud_done_rounded,
+                                color: syncStatus.pendingCount > 0
+                                    ? AppColors.amber
+                                    : AppColors.green,
+                              ),
+                              label: Text(
+                                '${AppStrings.pendentes}: ${syncStatus.pendingCount}',
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: TextButton.icon(
+                              onPressed: () => context.push('/rewards'),
+                              icon: const Icon(
+                                Icons.card_giftcard_rounded,
+                                color: AppColors.primary,
+                              ),
+                              label: const Text(AppStrings.recompensas),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -312,7 +309,7 @@ class _PrimarySaleCard extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Registe uma venda em segundos e atribua pontos no momento.',
+                'Registe em segundos com uma única ação.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: Colors.white.withValues(alpha: 0.72),
                   height: 1.5,
@@ -331,7 +328,7 @@ class _PrimarySaleCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      'Começar agora',
+                      'Registar venda',
                       style: theme.textTheme.labelLarge?.copyWith(
                         color: AppColors.primary,
                         fontWeight: FontWeight.w800,
@@ -368,122 +365,126 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final bg = dark ? AppColors.secondary : AppColors.white;
-    final fgStrong = dark ? AppColors.primary : AppColors.onSurface;
-    final fgMuted = dark
-        ? AppColors.primary.withValues(alpha: 0.55)
+    final valueColor = dark ? AppColors.primary : AppColors.onSurface;
+    final labelColor = dark
+        ? AppColors.primary.withValues(alpha: 0.62)
         : AppColors.onSurfaceVariant;
 
     return Container(
-  class _MiniActionTile extends StatelessWidget {
-    const _MiniActionTile({
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(18),
-      required this.icon,
         border: Border.all(
-      this.accent = AppColors.primary,
+          color: dark
+              ? AppColors.secondary.withValues(alpha: 0.2)
+              : AppColors.g100,
+        ),
         boxShadow: dark ? AppTheme.shadowMd : AppTheme.shadowSm,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-    final IconData icon;
         children: [
-    final Color accent;
+          Container(
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: dark
-                  ? AppColors.primary.withValues(alpha: 0.12)
-        color: AppColors.white,
+              color: accent.withValues(alpha: dark ? 0.16 : 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const BrandMark(
               size: 18,
               padding: EdgeInsets.all(8),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            ),
           ),
-          const SizedBox(height: 10),
-              border: Border.all(color: AppColors.g100, width: 1.5),
-              boxShadow: AppTheme.shadowSm,
+          const SizedBox(height: 12),
+          Text(
+            value,
             style: GoogleFonts.bricolageGrotesque(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              color: valueColor,
+              fontSize: 28,
+              fontWeight: FontWeight.w800,
+            ),
           ),
-          const SizedBox(height: 2),
-                  width: 40,
-                  height: 40,
-            style: Theme.of(context)
-                    color: accent.withValues(alpha: 0.1),
-            maxLines: 2,
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: labelColor,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-                  child: Icon(
-                    icon,
-                    color: accent,
-                    size: 20,
+        ],
+      ),
+    );
   }
 }
-                const SizedBox(height: 14),
-                Text(
-                  label,
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: AppColors.onSurface,
-                    fontWeight: FontWeight.w700,
+
+class _MiniActionTile extends StatelessWidget {
+  const _MiniActionTile({
+    required this.label,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: AppColors.onSurfaceVariant,
-                    fontSize: 12,
-                    height: 1.4,
-                  ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.g100, width: 1.5),
+            boxShadow: AppTheme.shadowSm,
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 44,
-                height: 44,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: gold
-                      ? AppColors.secondary
-                      : AppColors.primary.withValues(alpha: 0.07),
+                  color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const BrandMark(
-                  size: 22,
-                  padding: EdgeInsets.all(10),
+                child: Icon(
+                  icon,
+                  color: AppColors.primary,
+                  size: 20,
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: gold ? Colors.white : AppColors.onSurface,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: gold
-                            ? Colors.white.withValues(alpha: 0.55)
-                            : AppColors.onSurfaceVariant,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: 14),
+              Text(
+                label,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: AppColors.onSurface,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color:
-                    gold ? Colors.white.withValues(alpha: 0.6) : AppColors.g300,
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                  fontSize: 12,
+                  height: 1.3,
+                ),
+                maxLines: 2,
               ),
             ],
           ),

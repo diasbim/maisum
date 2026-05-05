@@ -36,14 +36,18 @@ class RewardDao {
     String? description,
   }) async {
     final db = await _db.database;
+    final now = DateTime.now();
     final reward = Reward(
       id: _uuid.v4(),
       name: name,
       pointsRequired: pointsRequired,
       description: description,
-      createdAt: DateTime.now(),
+      createdAt: now,
     );
-    await db.insert('rewards', reward.toDbMap());
+    await db.insert('rewards', {
+      ...reward.toDbMap(),
+      'updated_at': now.millisecondsSinceEpoch,
+    });
     return reward;
   }
 
@@ -51,7 +55,10 @@ class RewardDao {
     final db = await _db.database;
     await db.update(
       'rewards',
-      reward.toDbMap(),
+      {
+        ...reward.toDbMap(),
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
       where: 'id = ?',
       whereArgs: [reward.id],
     );
@@ -61,7 +68,11 @@ class RewardDao {
     final db = await _db.database;
     await db.update(
       'rewards',
-      {'active': 0},
+      {
+        'active': 0,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'synced': 0,
+      },
       where: 'id = ?',
       whereArgs: [id],
     );

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../app/providers.dart';
 
@@ -13,7 +13,6 @@ class SalesHistoryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final salesAsync = ref.watch(allSalesWithCustomerProvider);
-    final sales = salesAsync.valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
@@ -127,7 +126,6 @@ class _SaleHistoryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final fmt = DateFormat('dd MMM yyyy, HH:mm', 'pt');
     final createdAt = DateTime.fromMillisecondsSinceEpoch(
       data['created_at'] as int,
     );
@@ -174,7 +172,7 @@ class _SaleHistoryTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${amount.toStringAsFixed(0)} MZN · ${fmt.format(createdAt)}',
+                  '${amount.toStringAsFixed(0)} MZN · ${PtDateFormat.dayMonthYearTime(createdAt)}',
                   style: theme.textTheme.bodySmall,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

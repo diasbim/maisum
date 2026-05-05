@@ -2,16 +2,19 @@
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../domain/customer.dart';
+import '../domain/customer_whatsapp_message.dart';
 import '../../rewards/presentation/redeem_reward_screen.dart';
+import '../../rewards/presentation/rewards_controller.dart';
+import '../../rewards/domain/reward.dart';
 import '../../sales/domain/sale.dart';
 import '../../sales/presentation/new_sale_screen.dart';
 import 'customers_controller.dart';
@@ -134,7 +137,9 @@ class CustomerDetailScreen extends ConsumerWidget {
                               ),
                               icon: const Icon(Icons.send_rounded,
                                   color: Colors.white, size: 20),
-                              onPressed: () => _openWhatsApp(customer.phone),
+                              tooltip: AppStrings.enviarWhatsApp,
+                              onPressed: () =>
+                                  _openWhatsApp(context, ref, customer),
                             ),
                           ],
                         ),
@@ -291,11 +296,40 @@ class CustomerDetailScreen extends ConsumerWidget {
     });
   }
 
-  void _openWhatsApp(String phone) {
-    final clean = phone.replaceAll(RegExp(r'\D'), '');
+  Future<void> _openWhatsApp(
+    BuildContext context,
+    WidgetRef ref,
+    Customer customer,
+  ) async {
+    List<Sale> sales;
+    List<Reward> rewards;
+    try {
+      sales = await ref.read(customerSalesProvider(id).future);
+    } catch (_) {
+      sales = const <Sale>[];
+    }
+    try {
+      rewards = await ref.read(rewardsControllerProvider.future);
+    } catch (_) {
+      rewards = const <Reward>[];
+    }
+
+    final draft = buildCustomerWhatsAppDraft(
+      customer: customer,
+      sales: sales,
+      rewards: rewards,
+    );
+    final clean = customer.phone.replaceAll(RegExp(r'\D'), '');
     final number = clean.startsWith('258') ? clean : '258$clean';
-    launchUrl(Uri.parse('https://wa.me/$number'),
-        mode: LaunchMode.externalApplication);
+    final url = Uri.parse(
+      'https://wa.me/$number?text=${Uri.encodeComponent(draft.message)}',
+    );
+    final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.erroGenerico)),
+      );
+    }
   }
 }
 
@@ -305,7 +339,6 @@ class _SaleTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fmt = DateFormat('dd MMM yyyy, HH:mm', 'pt');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -337,7 +370,7 @@ class _SaleTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  fmt.format(sale.createdAt),
+                  PtDateFormat.dayMonthYearTime(sale.createdAt),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ],

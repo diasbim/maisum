@@ -57,6 +57,6 @@ void main() {
     ));
     await tester.pump();
 
-    expect(find.text('LoyaltyOS'), findsOneWidget);
+    expect(find.text(AppStrings.appName), findsOneWidget);
   });
 }

@@ -19,7 +19,6 @@ class CustomersController extends AsyncNotifier<List<Customer>> {
 
   Future<void> search(String query) async {
     _query = query;
-    state = const AsyncLoading();
     state = await AsyncValue.guard(_load);
   }
 
@@ -58,14 +57,23 @@ class CustomersController extends AsyncNotifier<List<Customer>> {
 
 final customersControllerProvider =
     AsyncNotifierProvider<CustomersController, List<Customer>>(
-        CustomersController.new);
+      CustomersController.new,
+    );
 
-final customerDetailProvider =
-    FutureProvider.family<Customer?, String>((ref, id) {
+final customerDetailProvider = FutureProvider.family<Customer?, String>((
+  ref,
+  id,
+) {
   return ref.read(customerRepositoryProvider).getById(id);
 });
 
-final customerSalesProvider =
-    FutureProvider.family<List<Sale>, String>((ref, customerId) {
+final customerSalesProvider = FutureProvider.family<List<Sale>, String>((
+  ref,
+  customerId,
+) {
   return ref.read(saleDaoProvider).getByCustomer(customerId);
+});
+
+final recentCustomersProvider = FutureProvider<List<Customer>>((ref) {
+  return ref.read(customerRepositoryProvider).getRecent(limit: 6);
 });

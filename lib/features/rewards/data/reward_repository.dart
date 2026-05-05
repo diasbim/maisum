@@ -39,12 +39,18 @@ class RewardRepository {
 
   Future<void> deactivate(String id) async {
     await _dao.deactivate(id);
+    final reward = await _dao.getById(id);
+    if (reward == null) return;
+    final updatedAt = DateTime.now().millisecondsSinceEpoch;
     await _syncDao.enqueue(SyncItem(
       id: _uuid.v4(),
-      operation: 'delete',
+      operation: 'update',
       entityType: 'reward',
       entityId: id,
-      payload: '{"id":"$id"}',
+      payload: jsonEncode({
+        ...reward.toDbMap(),
+        'updated_at': updatedAt,
+      }),
       createdAt: DateTime.now(),
     ));
   }

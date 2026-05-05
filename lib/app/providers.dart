@@ -4,7 +4,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../core/database/app_database.dart';
-import '../core/network/api_client.dart';
 import '../core/services/connectivity_service.dart';
 import '../core/services/firebase_auth_service.dart';
 import '../core/services/firestore_sync_service.dart';
@@ -59,11 +58,6 @@ final secureStorageServiceProvider = Provider<SecureStorageService>(
   (_) => const SecureStorageService(FlutterSecureStorage()),
 );
 
-// Kept for any legacy usage; not used by auth or sync anymore.
-final apiClientProvider = Provider<ApiClient>(
-  (ref) => ApiClient(ref.read(secureStorageServiceProvider)),
-);
-
 final connectivityServiceProvider = Provider<ConnectivityService>((ref) {
   final svc = ConnectivityService();
   ref.onDispose(svc.dispose);
@@ -103,9 +97,8 @@ final customerRepositoryProvider = Provider<CustomerRepository>(
 
 final saleRepositoryProvider = Provider<SaleRepository>(
   (ref) => SaleRepository(
+    ref.read(appDatabaseProvider),
     ref.read(saleDaoProvider),
-    ref.read(customerDaoProvider),
-    ref.read(syncDaoProvider),
   ),
 );
 
@@ -139,6 +132,7 @@ final authRepositoryProvider = Provider<AuthRepository>(
 
 final syncServiceProvider = Provider<SyncService>((ref) {
   final svc = SyncService(
+    ref.read(appDatabaseProvider),
     ref.read(syncDaoProvider),
     ref.watch(firestoreSyncServiceProvider),
     ref.read(connectivityServiceProvider),

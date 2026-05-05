@@ -44,6 +44,27 @@ class AuthRepository {
   }
 
   Future<AuthSession?> getStoredSession() async {
+    final storedToken = await _storage.getToken();
+    final storedUserId = await _storage.getUserId();
+    final storedPhone = await _storage.getUserPhone();
+    final storedExpiry = await _storage.getTokenExpiry();
+    final storedFirebaseUid = await _storage.getFirebaseUid();
+
+    if (storedToken != null &&
+        storedToken.isNotEmpty &&
+        storedUserId != null &&
+        storedPhone != null &&
+        storedExpiry != null &&
+        storedExpiry.isAfter(DateTime.now())) {
+      return AuthSession(
+        userId: storedUserId,
+        firebaseUid: storedFirebaseUid,
+        phone: storedPhone,
+        token: storedToken,
+        expiresAt: storedExpiry,
+      );
+    }
+
     final firebaseUser = _firebaseAuth.currentUser;
     if (firebaseUser != null) {
       final phone =
@@ -52,7 +73,7 @@ class AuthRepository {
       String token;
       DateTime expiry;
       try {
-        final result = await firebaseUser.getIdTokenResult(true);
+        final result = await firebaseUser.getIdTokenResult();
         token = result.token ?? '';
         expiry = result.expirationTime ??
             DateTime.now().add(const Duration(hours: 1));
@@ -88,23 +109,7 @@ class AuthRepository {
       );
     }
 
-    // Fallback: SecureStorage (offline / cold boot before Firebase refreshes)
-    final token = await _storage.getToken();
-    if (token == null || token.isEmpty) return null;
-    final userId = await _storage.getUserId();
-    final phone = await _storage.getUserPhone();
-    final expiry = await _storage.getTokenExpiry();
-    if (userId == null || phone == null || expiry == null) return null;
-    if (!expiry.isAfter(DateTime.now())) return null;
-
-    final uid = await _storage.getFirebaseUid();
-    return AuthSession(
-      userId: userId,
-      firebaseUid: uid,
-      phone: phone,
-      token: token,
-      expiresAt: expiry,
-    );
+    return null;
   }
 
   Future<void> logout() async {

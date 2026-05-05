@@ -1,0 +1,194 @@
+name: Feature request
+description: Propose a new feature using the LoyaltyOS scoring framework.
+title: "[Feature]: "
+labels:
+  - feature
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for all new features.
+
+        Before submitting, read `docs/feature_decision_framework.md`.
+
+        If the proposal does not improve sales registrations, reduce friction, improve retention, improve WhatsApp engagement, or improve offline reliability, it will usually be rejected, delayed, or simplified.
+  - type: input
+    id: feature-name
+    attributes:
+      label: Feature name
+      placeholder: Short feature name
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are we solving?
+      placeholder: Describe the user problem in concrete terms.
+    validations:
+      required: true
+  - type: textarea
+    id: target-moment
+    attributes:
+      label: Target user moment
+      description: When, exactly, does this happen in the barber workflow?
+      placeholder: Example: During a busy sale registration when the barber is searching for a returning customer.
+    validations:
+      required: true
+  - type: dropdown
+    id: sales-impact
+    attributes:
+      label: Does this increase daily sales registrations?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+  - type: dropdown
+    id: friction-impact
+    attributes:
+      label: Does this reduce friction?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+  - type: dropdown
+    id: retention-impact
+    attributes:
+      label: Does this improve retention?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+  - type: dropdown
+    id: whatsapp-impact
+    attributes:
+      label: Does this improve WhatsApp engagement?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+  - type: dropdown
+    id: offline-impact
+    attributes:
+      label: Does this improve offline reliability?
+      options:
+        - "Yes"
+        - "No"
+    validations:
+      required: true
+  - type: dropdown
+    id: score-sales
+    attributes:
+      label: Sales registrations score (0-5)
+      options:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+    validations:
+      required: true
+  - type: dropdown
+    id: score-friction
+    attributes:
+      label: Friction reduction score (0-5)
+      options:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+    validations:
+      required: true
+  - type: dropdown
+    id: score-retention
+    attributes:
+      label: Retention score (0-5)
+      options:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+    validations:
+      required: true
+  - type: dropdown
+    id: score-whatsapp
+    attributes:
+      label: WhatsApp engagement score (0-5)
+      options:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+    validations:
+      required: true
+  - type: dropdown
+    id: score-offline
+    attributes:
+      label: Offline reliability score (0-5)
+      options:
+        - "0"
+        - "1"
+        - "2"
+        - "3"
+        - "4"
+        - "5"
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence-level
+    attributes:
+      label: Evidence level
+      options:
+        - A - measured usage data or experiment result
+        - B - direct observed user pain
+        - C - strong product logic tied to the core loop
+        - D - opinion only
+    validations:
+      required: true
+  - type: dropdown
+    id: risk-level
+    attributes:
+      label: Delivery risk
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+  - type: dropdown
+    id: enabler-override
+    attributes:
+      label: Enabler override needed?
+      description: Select Yes only for technical work that directly protects primary sale speed, offline trust, sync reliability, or low-end Android performance.
+      options:
+        - "No"
+        - "Yes"
+    validations:
+      required: true
+  - type: textarea
+    id: simplified-mvp
+    attributes:
+      label: Simplified MVP version
+      description: If this feature is too heavy, what is the smallest version worth shipping?
+      placeholder: Describe the reduced-scope version.
+    validations:
+      required: true
+  - type: textarea
+    id: final-decision
+    attributes:
+      label: Proposed decision
+      description: Based on the framework, what should happen?
+      placeholder: Build now / Simplify / Delay / Reject, with a short reason.
+    validations:
+      required: true

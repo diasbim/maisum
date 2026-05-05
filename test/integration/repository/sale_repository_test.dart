@@ -18,9 +18,10 @@ void main() {
     final db = AppDatabase.instance;
     customerDao = CustomerDao(db);
     syncDao = SyncDao(db);
-    repo = SaleRepository(SaleDao(db), customerDao, syncDao);
+    repo = SaleRepository(db, SaleDao(db));
 
-    final c = await customerDao.create(name: 'Test Customer', phone: '840000301');
+    final c =
+        await customerDao.create(name: 'Test Customer', phone: '840000301');
     customerId = c.id;
   });
 
@@ -35,11 +36,14 @@ void main() {
     });
 
     test('150 MZN → 1 pt (floor)', () async {
-      expect((await repo.createSale(customerId: customerId, amount: 150)).points, 1);
+      expect(
+          (await repo.createSale(customerId: customerId, amount: 150)).points,
+          1);
     });
 
     test('99 MZN → 0 pts', () async {
-      expect((await repo.createSale(customerId: customerId, amount: 99)).points, 0);
+      expect((await repo.createSale(customerId: customerId, amount: 99)).points,
+          0);
     });
 
     test('updates customer totalPoints immediately', () async {
@@ -58,21 +62,23 @@ void main() {
     test('enqueues sync item with operation=create, entityType=sale', () async {
       final sale = await repo.createSale(customerId: customerId, amount: 200);
       final items = await syncDao.getPending();
-      expect(items.length, 1);
-      expect(items.first.operation, 'create');
-      expect(items.first.entityType, 'sale');
-      expect(items.first.entityId, sale.id);
+      expect(items.length, 2);
+      final saleItem = items.firstWhere((item) => item.entityType == 'sale');
+      expect(saleItem.operation, 'create');
+      expect(saleItem.entityId, sale.id);
     });
 
     test('each sale creates exactly one sync item', () async {
       await repo.createSale(customerId: customerId, amount: 100);
       await repo.createSale(customerId: customerId, amount: 200);
-      expect(await syncDao.getPendingCount(), 2);
+      expect(await syncDao.getPendingCount(), 4);
     });
 
     test('sale payload contains sale id', () async {
       final sale = await repo.createSale(customerId: customerId, amount: 200);
-      final payload = (await syncDao.getPending()).first.payload;
+      final payload = (await syncDao.getPending())
+          .firstWhere((item) => item.entityType == 'sale')
+          .payload;
       expect(payload, contains(sale.id));
     });
   });

@@ -15,8 +15,12 @@ Widget _buildScreen({FakeSecureStorageService? storage}) {
     initialLocation: '/pin-setup',
     routes: [
       GoRoute(path: '/pin-setup', builder: (_, __) => const PinSetupScreen()),
-      GoRoute(path: '/dashboard', builder: (_, __) => const Scaffold(body: Text('dashboard'))),
-      GoRoute(path: '/login', builder: (_, __) => const Scaffold(body: Text('login'))),
+      GoRoute(
+          path: '/dashboard',
+          builder: (_, __) => const Scaffold(body: Text('dashboard'))),
+      GoRoute(
+          path: '/login',
+          builder: (_, __) => const Scaffold(body: Text('login'))),
     ],
   );
 
@@ -30,7 +34,8 @@ Widget _buildScreen({FakeSecureStorageService? storage}) {
 
 Future<void> _tapDigits(WidgetTester tester, String digits) async {
   for (final d in digits.split('')) {
-    await tester.tap(find.text(d).first);
+    await tester.ensureVisible(find.text(d).first);
+    await tester.tap(find.text(d).first, warnIfMissed: false);
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
@@ -49,7 +54,16 @@ void main() {
       await tester.pumpWidget(_buildScreen());
       await tester.pump();
 
-      expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Image &&
+              widget.image is AssetImage &&
+              (widget.image as AssetImage).assetName ==
+                  'assets/images/logo.png',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('renders number pad digits 0-9', (tester) async {
@@ -73,7 +87,8 @@ void main() {
       expect(find.text(AppStrings.pinConfirmSubtitle), findsOneWidget);
     });
 
-    testWidgets('shows mismatch error when confirm PIN differs', (tester) async {
+    testWidgets('shows mismatch error when confirm PIN differs',
+        (tester) async {
       await tester.pumpWidget(_buildScreen());
       await tester.pump();
 
@@ -113,7 +128,9 @@ void main() {
       await tester.pump();
 
       await _tapDigits(tester, '123');
-      await tester.tap(find.byIcon(Icons.backspace_outlined));
+      await tester.ensureVisible(find.byIcon(Icons.backspace_outlined));
+      await tester.tap(find.byIcon(Icons.backspace_outlined),
+          warnIfMissed: false);
       await tester.pump();
 
       // Back to 2 filled dots — confirm screen should not appear
