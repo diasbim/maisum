@@ -1,9 +1,11 @@
 import 'dart:convert';
+
+import 'package:uuid/uuid.dart';
+
 import '../domain/customer.dart';
 import 'customer_dao.dart';
 import '../../sync/data/sync_dao.dart';
 import '../../sync/domain/sync_item.dart';
-import 'package:uuid/uuid.dart';
 
 class CustomerRepository {
   CustomerRepository(this._dao, this._syncDao);
@@ -31,14 +33,16 @@ class CustomerRepository {
     required String phone,
   }) async {
     final customer = await _dao.create(name: name, phone: phone);
-    await _syncDao.enqueue(SyncItem(
-      id: _uuid.v4(),
-      operation: 'create',
-      entityType: 'customer',
-      entityId: customer.id,
-      payload: jsonEncode(customer.toDbMap()),
-      createdAt: DateTime.now(),
-    ));
+    await _syncDao.enqueue(
+      SyncItem(
+        id: _uuid.v4(),
+        operation: 'create',
+        entityType: 'customer',
+        entityId: customer.id,
+        payload: jsonEncode(_customerPayload(customer)),
+        createdAt: DateTime.now(),
+      ),
+    );
     return customer;
   }
 
@@ -50,14 +54,16 @@ class CustomerRepository {
     await _dao.update(id, name: name, phone: phone);
     final customer = await _dao.getById(id);
     if (customer != null) {
-      await _syncDao.enqueue(SyncItem(
-        id: _uuid.v4(),
-        operation: 'update',
-        entityType: 'customer',
-        entityId: id,
-        payload: jsonEncode(customer.toDbMap()),
-        createdAt: DateTime.now(),
-      ));
+      await _syncDao.enqueue(
+        SyncItem(
+          id: _uuid.v4(),
+          operation: 'update',
+          entityType: 'customer',
+          entityId: id,
+          payload: jsonEncode(_customerPayload(customer)),
+          createdAt: DateTime.now(),
+        ),
+      );
     }
   }
 
@@ -67,4 +73,9 @@ class CustomerRepository {
     final newTotal = customer.totalPoints + points;
     await _dao.updatePoints(customerId, newTotal);
   }
+
+  Map<String, dynamic> _customerPayload(Customer customer) => {
+    ...customer.toDbMap(),
+    'merchant_id': _dao.merchantId,
+  };
 }

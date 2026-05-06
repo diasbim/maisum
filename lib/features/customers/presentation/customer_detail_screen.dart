@@ -1,6 +1,5 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -95,7 +94,7 @@ class CustomerDetailScreen extends ConsumerWidget {
                               child: Center(
                                 child: Text(
                                   initials,
-                                  style: GoogleFonts.bricolageGrotesque(
+                                  style: const TextStyle(
                                       fontSize: 26,
                                       fontWeight: FontWeight.w800,
                                       color: AppColors.primary),
@@ -111,7 +110,7 @@ class CustomerDetailScreen extends ConsumerWidget {
                                 children: [
                                   Text(
                                     customer.name,
-                                    style: GoogleFonts.bricolageGrotesque(
+                                    style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 20,
                                         fontWeight: FontWeight.w800),
@@ -119,7 +118,7 @@ class CustomerDetailScreen extends ConsumerWidget {
                                   const SizedBox(height: 2),
                                   Text(
                                     customer.phone,
-                                    style: GoogleFonts.outfit(
+                                    style: TextStyle(
                                         color:
                                             Colors.white.withValues(alpha: 0.6),
                                         fontSize: 14),
@@ -184,7 +183,7 @@ class CustomerDetailScreen extends ConsumerWidget {
                                     const SizedBox(width: 6),
                                     Text(
                                       '${customer.totalPoints} pts',
-                                      style: GoogleFonts.bricolageGrotesque(
+                                      style: const TextStyle(
                                           color: AppColors.primary,
                                           fontWeight: FontWeight.w800,
                                           fontSize: 15),
@@ -384,7 +383,7 @@ class _SaleTile extends StatelessWidget {
             ),
             child: Text(
               '+${sale.points} pts',
-              style: GoogleFonts.outfit(
+              style: const TextStyle(
                   color: AppColors.secondaryDark,
                   fontWeight: FontWeight.w700,
                   fontSize: 12),

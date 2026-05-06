@@ -12,7 +12,8 @@ part of 'auth_session.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
+  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
+);
 
 AuthSession _$AuthSessionFromJson(Map<String, dynamic> json) {
   return _AuthSession.fromJson(json);
@@ -24,6 +25,12 @@ mixin _$AuthSession {
   String get phone => throw _privateConstructorUsedError;
   DateTime get expiresAt => throw _privateConstructorUsedError;
   String get token => throw _privateConstructorUsedError;
+  String? get appUserId => throw _privateConstructorUsedError;
+  String? get merchantId => throw _privateConstructorUsedError;
+  String get merchantName => throw _privateConstructorUsedError;
+  String get subscriptionStatus => throw _privateConstructorUsedError;
+  String? get refreshToken => throw _privateConstructorUsedError;
+  String? get deviceId => throw _privateConstructorUsedError;
   String? get firebaseUid => throw _privateConstructorUsedError;
 
   /// Serializes this AuthSession to a JSON map.
@@ -39,15 +46,23 @@ mixin _$AuthSession {
 /// @nodoc
 abstract class $AuthSessionCopyWith<$Res> {
   factory $AuthSessionCopyWith(
-          AuthSession value, $Res Function(AuthSession) then) =
-      _$AuthSessionCopyWithImpl<$Res, AuthSession>;
+    AuthSession value,
+    $Res Function(AuthSession) then,
+  ) = _$AuthSessionCopyWithImpl<$Res, AuthSession>;
   @useResult
-  $Res call(
-      {String userId,
-      String phone,
-      DateTime expiresAt,
-      String token,
-      String? firebaseUid});
+  $Res call({
+    String userId,
+    String phone,
+    DateTime expiresAt,
+    String token,
+    String? appUserId,
+    String? merchantId,
+    String merchantName,
+    String subscriptionStatus,
+    String? refreshToken,
+    String? deviceId,
+    String? firebaseUid,
+  });
 }
 
 /// @nodoc
@@ -69,30 +84,63 @@ class _$AuthSessionCopyWithImpl<$Res, $Val extends AuthSession>
     Object? phone = null,
     Object? expiresAt = null,
     Object? token = null,
+    Object? appUserId = freezed,
+    Object? merchantId = freezed,
+    Object? merchantName = null,
+    Object? subscriptionStatus = null,
+    Object? refreshToken = freezed,
+    Object? deviceId = freezed,
     Object? firebaseUid = freezed,
   }) {
-    return _then(_value.copyWith(
-      userId: null == userId
-          ? _value.userId
-          : userId // ignore: cast_nullable_to_non_nullable
-              as String,
-      phone: null == phone
-          ? _value.phone
-          : phone // ignore: cast_nullable_to_non_nullable
-              as String,
-      expiresAt: null == expiresAt
-          ? _value.expiresAt
-          : expiresAt // ignore: cast_nullable_to_non_nullable
-              as DateTime,
-      token: null == token
-          ? _value.token
-          : token // ignore: cast_nullable_to_non_nullable
-              as String,
-      firebaseUid: freezed == firebaseUid
-          ? _value.firebaseUid
-          : firebaseUid // ignore: cast_nullable_to_non_nullable
-              as String?,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            userId: null == userId
+                ? _value.userId
+                : userId // ignore: cast_nullable_to_non_nullable
+                      as String,
+            phone: null == phone
+                ? _value.phone
+                : phone // ignore: cast_nullable_to_non_nullable
+                      as String,
+            expiresAt: null == expiresAt
+                ? _value.expiresAt
+                : expiresAt // ignore: cast_nullable_to_non_nullable
+                      as DateTime,
+            token: null == token
+                ? _value.token
+                : token // ignore: cast_nullable_to_non_nullable
+                      as String,
+            appUserId: freezed == appUserId
+                ? _value.appUserId
+                : appUserId // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            merchantId: freezed == merchantId
+                ? _value.merchantId
+                : merchantId // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            merchantName: null == merchantName
+                ? _value.merchantName
+                : merchantName // ignore: cast_nullable_to_non_nullable
+                      as String,
+            subscriptionStatus: null == subscriptionStatus
+                ? _value.subscriptionStatus
+                : subscriptionStatus // ignore: cast_nullable_to_non_nullable
+                      as String,
+            refreshToken: freezed == refreshToken
+                ? _value.refreshToken
+                : refreshToken // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            deviceId: freezed == deviceId
+                ? _value.deviceId
+                : deviceId // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            firebaseUid: freezed == firebaseUid
+                ? _value.firebaseUid
+                : firebaseUid // ignore: cast_nullable_to_non_nullable
+                      as String?,
+          )
+          as $Val,
+    );
   }
 }
 
@@ -100,16 +148,24 @@ class _$AuthSessionCopyWithImpl<$Res, $Val extends AuthSession>
 abstract class _$$AuthSessionImplCopyWith<$Res>
     implements $AuthSessionCopyWith<$Res> {
   factory _$$AuthSessionImplCopyWith(
-          _$AuthSessionImpl value, $Res Function(_$AuthSessionImpl) then) =
-      __$$AuthSessionImplCopyWithImpl<$Res>;
+    _$AuthSessionImpl value,
+    $Res Function(_$AuthSessionImpl) then,
+  ) = __$$AuthSessionImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String userId,
-      String phone,
-      DateTime expiresAt,
-      String token,
-      String? firebaseUid});
+  $Res call({
+    String userId,
+    String phone,
+    DateTime expiresAt,
+    String token,
+    String? appUserId,
+    String? merchantId,
+    String merchantName,
+    String subscriptionStatus,
+    String? refreshToken,
+    String? deviceId,
+    String? firebaseUid,
+  });
 }
 
 /// @nodoc
@@ -117,8 +173,9 @@ class __$$AuthSessionImplCopyWithImpl<$Res>
     extends _$AuthSessionCopyWithImpl<$Res, _$AuthSessionImpl>
     implements _$$AuthSessionImplCopyWith<$Res> {
   __$$AuthSessionImplCopyWithImpl(
-      _$AuthSessionImpl _value, $Res Function(_$AuthSessionImpl) _then)
-      : super(_value, _then);
+    _$AuthSessionImpl _value,
+    $Res Function(_$AuthSessionImpl) _then,
+  ) : super(_value, _then);
 
   /// Create a copy of AuthSession
   /// with the given fields replaced by the non-null parameter values.
@@ -129,43 +186,81 @@ class __$$AuthSessionImplCopyWithImpl<$Res>
     Object? phone = null,
     Object? expiresAt = null,
     Object? token = null,
+    Object? appUserId = freezed,
+    Object? merchantId = freezed,
+    Object? merchantName = null,
+    Object? subscriptionStatus = null,
+    Object? refreshToken = freezed,
+    Object? deviceId = freezed,
     Object? firebaseUid = freezed,
   }) {
-    return _then(_$AuthSessionImpl(
-      userId: null == userId
-          ? _value.userId
-          : userId // ignore: cast_nullable_to_non_nullable
-              as String,
-      phone: null == phone
-          ? _value.phone
-          : phone // ignore: cast_nullable_to_non_nullable
-              as String,
-      expiresAt: null == expiresAt
-          ? _value.expiresAt
-          : expiresAt // ignore: cast_nullable_to_non_nullable
-              as DateTime,
-      token: null == token
-          ? _value.token
-          : token // ignore: cast_nullable_to_non_nullable
-              as String,
-      firebaseUid: freezed == firebaseUid
-          ? _value.firebaseUid
-          : firebaseUid // ignore: cast_nullable_to_non_nullable
-              as String?,
-    ));
+    return _then(
+      _$AuthSessionImpl(
+        userId: null == userId
+            ? _value.userId
+            : userId // ignore: cast_nullable_to_non_nullable
+                  as String,
+        phone: null == phone
+            ? _value.phone
+            : phone // ignore: cast_nullable_to_non_nullable
+                  as String,
+        expiresAt: null == expiresAt
+            ? _value.expiresAt
+            : expiresAt // ignore: cast_nullable_to_non_nullable
+                  as DateTime,
+        token: null == token
+            ? _value.token
+            : token // ignore: cast_nullable_to_non_nullable
+                  as String,
+        appUserId: freezed == appUserId
+            ? _value.appUserId
+            : appUserId // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        merchantId: freezed == merchantId
+            ? _value.merchantId
+            : merchantId // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        merchantName: null == merchantName
+            ? _value.merchantName
+            : merchantName // ignore: cast_nullable_to_non_nullable
+                  as String,
+        subscriptionStatus: null == subscriptionStatus
+            ? _value.subscriptionStatus
+            : subscriptionStatus // ignore: cast_nullable_to_non_nullable
+                  as String,
+        refreshToken: freezed == refreshToken
+            ? _value.refreshToken
+            : refreshToken // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        deviceId: freezed == deviceId
+            ? _value.deviceId
+            : deviceId // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        firebaseUid: freezed == firebaseUid
+            ? _value.firebaseUid
+            : firebaseUid // ignore: cast_nullable_to_non_nullable
+                  as String?,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$AuthSessionImpl extends _AuthSession {
-  const _$AuthSessionImpl(
-      {required this.userId,
-      required this.phone,
-      required this.expiresAt,
-      this.token = '',
-      this.firebaseUid})
-      : super._();
+  const _$AuthSessionImpl({
+    required this.userId,
+    required this.phone,
+    required this.expiresAt,
+    this.token = '',
+    this.appUserId,
+    this.merchantId,
+    this.merchantName = 'Minha Loja',
+    this.subscriptionStatus = 'TRIAL',
+    this.refreshToken,
+    this.deviceId,
+    this.firebaseUid,
+  }) : super._();
 
   factory _$AuthSessionImpl.fromJson(Map<String, dynamic> json) =>
       _$$AuthSessionImplFromJson(json);
@@ -180,11 +275,25 @@ class _$AuthSessionImpl extends _AuthSession {
   @JsonKey()
   final String token;
   @override
+  final String? appUserId;
+  @override
+  final String? merchantId;
+  @override
+  @JsonKey()
+  final String merchantName;
+  @override
+  @JsonKey()
+  final String subscriptionStatus;
+  @override
+  final String? refreshToken;
+  @override
+  final String? deviceId;
+  @override
   final String? firebaseUid;
 
   @override
   String toString() {
-    return 'AuthSession(userId: $userId, phone: $phone, expiresAt: $expiresAt, token: $token, firebaseUid: $firebaseUid)';
+    return 'AuthSession(userId: $userId, phone: $phone, expiresAt: $expiresAt, token: $token, appUserId: $appUserId, merchantId: $merchantId, merchantName: $merchantName, subscriptionStatus: $subscriptionStatus, refreshToken: $refreshToken, deviceId: $deviceId, firebaseUid: $firebaseUid)';
   }
 
   @override
@@ -197,14 +306,38 @@ class _$AuthSessionImpl extends _AuthSession {
             (identical(other.expiresAt, expiresAt) ||
                 other.expiresAt == expiresAt) &&
             (identical(other.token, token) || other.token == token) &&
+            (identical(other.appUserId, appUserId) ||
+                other.appUserId == appUserId) &&
+            (identical(other.merchantId, merchantId) ||
+                other.merchantId == merchantId) &&
+            (identical(other.merchantName, merchantName) ||
+                other.merchantName == merchantName) &&
+            (identical(other.subscriptionStatus, subscriptionStatus) ||
+                other.subscriptionStatus == subscriptionStatus) &&
+            (identical(other.refreshToken, refreshToken) ||
+                other.refreshToken == refreshToken) &&
+            (identical(other.deviceId, deviceId) ||
+                other.deviceId == deviceId) &&
             (identical(other.firebaseUid, firebaseUid) ||
                 other.firebaseUid == firebaseUid));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode =>
-      Object.hash(runtimeType, userId, phone, expiresAt, token, firebaseUid);
+  int get hashCode => Object.hash(
+    runtimeType,
+    userId,
+    phone,
+    expiresAt,
+    token,
+    appUserId,
+    merchantId,
+    merchantName,
+    subscriptionStatus,
+    refreshToken,
+    deviceId,
+    firebaseUid,
+  );
 
   /// Create a copy of AuthSession
   /// with the given fields replaced by the non-null parameter values.
@@ -216,19 +349,24 @@ class _$AuthSessionImpl extends _AuthSession {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$AuthSessionImplToJson(
-      this,
-    );
+    return _$$AuthSessionImplToJson(this);
   }
 }
 
 abstract class _AuthSession extends AuthSession {
-  const factory _AuthSession(
-      {required final String userId,
-      required final String phone,
-      required final DateTime expiresAt,
-      final String token,
-      final String? firebaseUid}) = _$AuthSessionImpl;
+  const factory _AuthSession({
+    required final String userId,
+    required final String phone,
+    required final DateTime expiresAt,
+    final String token,
+    final String? appUserId,
+    final String? merchantId,
+    final String merchantName,
+    final String subscriptionStatus,
+    final String? refreshToken,
+    final String? deviceId,
+    final String? firebaseUid,
+  }) = _$AuthSessionImpl;
   const _AuthSession._() : super._();
 
   factory _AuthSession.fromJson(Map<String, dynamic> json) =
@@ -242,6 +380,18 @@ abstract class _AuthSession extends AuthSession {
   DateTime get expiresAt;
   @override
   String get token;
+  @override
+  String? get appUserId;
+  @override
+  String? get merchantId;
+  @override
+  String get merchantName;
+  @override
+  String get subscriptionStatus;
+  @override
+  String? get refreshToken;
+  @override
+  String? get deviceId;
   @override
   String? get firebaseUid;
 

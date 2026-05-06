@@ -30,10 +30,55 @@ class SettingsScreen extends ConsumerWidget {
           if (session != null) ...[
             const _Section('Conta'),
             _SettingsTile(
+              icon: Icons.storefront_rounded,
+              iconColor: AppColors.secondary,
+              title: AppStrings.nomeNegocio,
+              subtitle: session.merchantName,
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.g300,
+                size: 20,
+              ),
+              onTap: () =>
+                  _editMerchantName(context, ref, session.merchantName),
+            ),
+            _SettingsTile(
               icon: Icons.phone_rounded,
               iconColor: AppColors.primary,
               title: AppStrings.phoneNumber,
               subtitle: session.phone,
+            ),
+            _SettingsTile(
+              icon: Icons.verified_user_rounded,
+              iconColor: AppColors.green,
+              title: AppStrings.subscricao,
+              subtitle: _formatSubscriptionStatus(session.subscriptionStatus),
+            ),
+            const _Section(AppStrings.identificadores),
+            _SettingsTile(
+              icon: Icons.badge_outlined,
+              iconColor: AppColors.primary,
+              title: AppStrings.merchantId,
+              subtitle: session.resolvedMerchantId,
+            ),
+            _SettingsTile(
+              icon: Icons.person_outline_rounded,
+              iconColor: AppColors.secondary,
+              title: AppStrings.appUserId,
+              subtitle: session.resolvedAppUserId,
+            ),
+            if (session.deviceId != null && session.deviceId!.isNotEmpty)
+              _SettingsTile(
+                icon: Icons.phone_android_rounded,
+                iconColor: AppColors.primaryDark,
+                title: AppStrings.deviceId,
+                subtitle: session.deviceId,
+              ),
+            _SettingsTile(
+              icon: Icons.schedule_rounded,
+              iconColor: AppColors.g800,
+              title: AppStrings.sessaoValidaAte,
+              subtitle: _formatExpiry(session.expiresAt),
             ),
           ],
 
@@ -114,6 +159,100 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _editMerchantName(
+    BuildContext context,
+    WidgetRef ref,
+    String currentName,
+  ) async {
+    final controller = TextEditingController(text: currentName);
+    final messenger = ScaffoldMessenger.of(context);
+    final updatedName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text(AppStrings.editarNomeNegocio),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(
+            labelText: AppStrings.nomeNegocio,
+            hintText: AppStrings.nomeNegocioHint,
+          ),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text(AppStrings.cancelar),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text(AppStrings.guardar),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (!context.mounted || updatedName == null) {
+      return;
+    }
+
+    final normalizedName = updatedName.trim();
+    if (normalizedName.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text(AppStrings.merchantNameRequired)),
+      );
+      return;
+    }
+    if (normalizedName == currentName.trim()) {
+      return;
+    }
+
+    try {
+      await ref
+          .read(authControllerProvider.notifier)
+          .updateMerchantName(normalizedName);
+      if (!context.mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text(AppStrings.nomeNegocioAtualizado)),
+      );
+    } catch (_) {
+      if (!context.mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text(AppStrings.erroGenerico)),
+      );
+    }
+  }
+
+  String _formatSubscriptionStatus(String status) {
+    if (status.trim().isEmpty) {
+      return 'Sem estado';
+    }
+    return status
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map(
+          (part) =>
+              '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
+        )
+        .join(' ');
+  }
+
+  String _formatExpiry(DateTime expiry) {
+    final localExpiry = expiry.toLocal();
+    final day = localExpiry.day.toString().padLeft(2, '0');
+    final month = localExpiry.month.toString().padLeft(2, '0');
+    final year = localExpiry.year.toString();
+    final hour = localExpiry.hour.toString().padLeft(2, '0');
+    final minute = localExpiry.minute.toString().padLeft(2, '0');
+    return '$day/$month/$year $hour:$minute';
   }
 
   Future<void> _showPinVerifySheet(BuildContext context, WidgetRef ref) async {

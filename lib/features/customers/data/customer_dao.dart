@@ -1,19 +1,21 @@
 import 'package:uuid/uuid.dart';
+
 import '../../../core/database/app_database.dart';
 import '../domain/customer.dart';
 
 class CustomerDao {
-  CustomerDao(this._db);
+  CustomerDao(this._db, {this.merchantId});
 
   final AppDatabase _db;
+  final String? merchantId;
   static const _uuid = Uuid();
 
   Future<List<Customer>> search(String query) async {
     final db = await _db.database;
     final rows = await db.query(
       'customers',
-      where: 'phone LIKE ? OR name LIKE ?',
-      whereArgs: ['%$query%', '%$query%'],
+      where: _withMerchantScope('phone LIKE ? OR name LIKE ?'),
+      whereArgs: _withMerchantArgs(['%$query%', '%$query%']),
       orderBy: 'name ASC',
       limit: 20,
     );
@@ -33,8 +35,12 @@ class CustomerDao {
 
     final rows = await db.query(
       'customers',
-      where: isPhoneSearch ? 'phone LIKE ?' : 'name LIKE ? COLLATE NOCASE',
-      whereArgs: ['${isPhoneSearch ? digitsOnly : trimmed}%'],
+      where: _withMerchantScope(
+        isPhoneSearch ? 'phone LIKE ?' : 'name LIKE ? COLLATE NOCASE',
+      ),
+      whereArgs: _withMerchantArgs([
+        '${isPhoneSearch ? digitsOnly : trimmed}%',
+      ]),
       orderBy: 'name COLLATE NOCASE ASC',
       limit: 20,
     );
@@ -45,8 +51,8 @@ class CustomerDao {
     final db = await _db.database;
     final rows = await db.query(
       'customers',
-      where: 'phone = ?',
-      whereArgs: [phone],
+      where: _withMerchantScope('phone = ?'),
+      whereArgs: _withMerchantArgs([phone]),
       limit: 1,
     );
     if (rows.isEmpty) return null;
@@ -57,8 +63,8 @@ class CustomerDao {
     final db = await _db.database;
     final rows = await db.query(
       'customers',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _withMerchantScope('id = ?'),
+      whereArgs: _withMerchantArgs([id]),
       limit: 1,
     );
     if (rows.isEmpty) return null;
@@ -67,7 +73,12 @@ class CustomerDao {
 
   Future<List<Customer>> getAll() async {
     final db = await _db.database;
-    final rows = await db.query('customers', orderBy: 'name ASC');
+    final rows = await db.query(
+      'customers',
+      where: merchantId == null ? null : 'merchant_id = ?',
+      whereArgs: merchantId == null ? null : [merchantId],
+      orderBy: 'name ASC',
+    );
     return rows.map(customerFromMap).toList();
   }
 
@@ -75,6 +86,8 @@ class CustomerDao {
     final db = await _db.database;
     final rows = await db.query(
       'customers',
+      where: merchantId == null ? null : 'merchant_id = ?',
+      whereArgs: merchantId == null ? null : [merchantId],
       orderBy: 'updated_at DESC, created_at DESC',
       limit: limit,
     );
@@ -91,7 +104,10 @@ class CustomerDao {
       createdAt: now,
       updatedAt: now,
     );
-    await db.insert('customers', customer.toDbMap());
+    await db.insert('customers', {
+      ...customer.toDbMap(),
+      'merchant_id': merchantId,
+    });
     return customer;
   }
 
@@ -104,8 +120,8 @@ class CustomerDao {
         'updated_at': DateTime.now().millisecondsSinceEpoch,
         'synced': 0,
       },
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _withMerchantScope('id = ?'),
+      whereArgs: _withMerchantArgs([id]),
     );
   }
 
@@ -123,8 +139,8 @@ class CustomerDao {
         'updated_at': DateTime.now().millisecondsSinceEpoch,
         'synced': 0,
       },
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _withMerchantScope('id = ?'),
+      whereArgs: _withMerchantArgs([id]),
     );
   }
 
@@ -133,14 +149,19 @@ class CustomerDao {
     await db.update(
       'customers',
       {'synced': 1},
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _withMerchantScope('id = ?'),
+      whereArgs: _withMerchantArgs([id]),
     );
   }
 
   Future<int> getCount() async {
     final db = await _db.database;
-    final result = await db.rawQuery('SELECT COUNT(*) as count FROM customers');
+    final result = await db.rawQuery(
+      merchantId == null
+          ? 'SELECT COUNT(*) as count FROM customers'
+          : 'SELECT COUNT(*) as count FROM customers WHERE merchant_id = ?',
+      merchantId == null ? const [] : [merchantId],
+    );
     return result.first['count'] as int? ?? 0;
   }
 
@@ -148,9 +169,24 @@ class CustomerDao {
     final db = await _db.database;
     final rows = await db.query(
       'customers',
-      where: 'synced = 0',
+      where: _withMerchantScope('synced = 0'),
+      whereArgs: merchantId == null ? null : [merchantId],
       orderBy: 'created_at ASC',
     );
     return rows.map(customerFromMap).toList();
+  }
+
+  String _withMerchantScope(String clause) {
+    if (merchantId == null) {
+      return clause;
+    }
+    return 'merchant_id = ? AND ($clause)';
+  }
+
+  List<Object?> _withMerchantArgs(List<Object?> args) {
+    if (merchantId == null) {
+      return args;
+    }
+    return [merchantId, ...args];
   }
 }

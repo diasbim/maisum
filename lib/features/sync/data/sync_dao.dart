@@ -3,21 +3,31 @@ import '../../../core/database/app_database.dart';
 import '../domain/sync_item.dart';
 
 class SyncDao {
-  SyncDao(this._db);
+  SyncDao(this._db, {this.merchantId, this.deviceId});
 
   final AppDatabase _db;
+  final String? merchantId;
+  final String? deviceId;
 
   Future<void> enqueue(SyncItem item) async {
     final db = await _db.database;
-    await db.insert('sync_queue', item.toDbMap());
+    await db.insert('sync_queue', {
+      ...item.toDbMap(),
+      'merchant_id': merchantId,
+      'device_id': deviceId,
+    });
   }
 
   Future<List<SyncItem>> getPending() async {
     final db = await _db.database;
     final rows = await db.query(
       'sync_queue',
-      where: 'status = ? AND retry_count < ?',
-      whereArgs: ['pending', AppConstants.maxSyncRetries],
+      where: merchantId == null
+          ? 'status = ? AND retry_count < ?'
+          : 'merchant_id = ? AND status = ? AND retry_count < ?',
+      whereArgs: merchantId == null
+          ? ['pending', AppConstants.maxSyncRetries]
+          : [merchantId, 'pending', AppConstants.maxSyncRetries],
       orderBy: 'created_at ASC',
     );
     return rows.map(syncItemFromMap).toList();
@@ -28,8 +38,8 @@ class SyncDao {
     await db.update(
       'sync_queue',
       {'status': 'synced'},
-      where: 'id = ?',
-      whereArgs: [id],
+      where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
+      whereArgs: merchantId == null ? [id] : [merchantId, id],
     );
   }
 
@@ -38,24 +48,30 @@ class SyncDao {
     await db.update(
       'sync_queue',
       {'status': 'failed'},
-      where: 'id = ?',
-      whereArgs: [id],
+      where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
+      whereArgs: merchantId == null ? [id] : [merchantId, id],
     );
   }
 
   Future<void> incrementRetry(String id) async {
     final db = await _db.database;
     await db.rawUpdate(
-      'UPDATE sync_queue SET retry_count = retry_count + 1 WHERE id = ?',
-      [id],
+      merchantId == null
+          ? 'UPDATE sync_queue SET retry_count = retry_count + 1 WHERE id = ?'
+          : 'UPDATE sync_queue SET retry_count = retry_count + 1 WHERE merchant_id = ? AND id = ?',
+      merchantId == null ? [id] : [merchantId, id],
     );
   }
 
   Future<int> getPendingCount() async {
     final db = await _db.database;
     final result = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM sync_queue WHERE status = ? AND retry_count < ?',
-      ['pending', AppConstants.maxSyncRetries],
+      merchantId == null
+          ? 'SELECT COUNT(*) as count FROM sync_queue WHERE status = ? AND retry_count < ?'
+          : 'SELECT COUNT(*) as count FROM sync_queue WHERE merchant_id = ? AND status = ? AND retry_count < ?',
+      merchantId == null
+          ? ['pending', AppConstants.maxSyncRetries]
+          : [merchantId, 'pending', AppConstants.maxSyncRetries],
     );
     return result.first['count'] as int? ?? 0;
   }
@@ -64,8 +80,10 @@ class SyncDao {
     final db = await _db.database;
     final rows = await db.query(
       'sync_queue',
-      where: 'status != ?',
-      whereArgs: ['synced'],
+      where: merchantId == null
+          ? 'status != ?'
+          : 'merchant_id = ? AND status != ?',
+      whereArgs: merchantId == null ? ['synced'] : [merchantId, 'synced'],
       orderBy: 'created_at DESC',
     );
     return rows.map(syncItemFromMap).toList();
@@ -73,6 +91,12 @@ class SyncDao {
 
   Future<void> clearSynced() async {
     final db = await _db.database;
-    await db.delete('sync_queue', where: 'status = ?', whereArgs: ['synced']);
+    await db.delete(
+      'sync_queue',
+      where: merchantId == null
+          ? 'status = ?'
+          : 'merchant_id = ? AND status = ?',
+      whereArgs: merchantId == null ? ['synced'] : [merchantId, 'synced'],
+    );
   }
 }

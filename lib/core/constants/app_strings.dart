@@ -79,6 +79,15 @@ class AppStrings {
   // Settings
   static const String definicoes = 'Definições';
   static const String nomeNegocio = 'Nome do negócio';
+  static const String editarNomeNegocio = 'Editar nome do negócio';
+  static const String nomeNegocioHint = 'Introduza o nome do negócio';
+  static const String nomeNegocioAtualizado = 'Nome do negócio atualizado';
+  static const String subscricao = 'Subscrição';
+  static const String identificadores = 'Identificadores';
+  static const String merchantId = 'Merchant ID';
+  static const String appUserId = 'App User ID';
+  static const String deviceId = 'Device ID';
+  static const String sessaoValidaAte = 'Sessão válida até';
   static const String taxaPontos = 'Taxa de pontos';
   static const String taxaDesc = '1 ponto por cada 100 MZN';
   static const String versao = 'Versão';
@@ -126,4 +135,5 @@ class AppStrings {
   static const String nameRequired = 'Introduza o nome do cliente';
   static const String rewardNameRequired = 'Introduza o nome da recompensa';
   static const String pointsRequired = 'Introduza os pontos necessários';
+  static const String merchantNameRequired = 'Introduza o nome do negócio';
 }

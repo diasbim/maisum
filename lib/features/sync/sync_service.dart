@@ -5,9 +5,9 @@ import 'package:sqflite/sqflite.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/database/app_database.dart';
 import '../../core/services/connectivity_service.dart';
-import '../../core/services/firestore_sync_service.dart';
 import '../../core/utils/app_logger.dart';
 import 'data/sync_dao.dart';
+import 'data/sync_transport.dart';
 import 'domain/sync_item.dart';
 
 const _tag = 'Sync';
@@ -65,12 +65,16 @@ const _keep = Object();
 
 class SyncService {
   SyncService(
-      this._database, this._syncDao, this._firestoreSync, this._connectivity);
+    this._database,
+    this._syncDao,
+    this._transport,
+    this._connectivity,
+  );
 
   final AppDatabase _database;
 
   final SyncDao _syncDao;
-  final FirestoreSyncService? _firestoreSync;
+  final SyncTransport? _transport;
   final ConnectivityService _connectivity;
 
   final _statusController = StreamController<SyncStatus>.broadcast();
@@ -131,21 +135,25 @@ class SyncService {
       final pending = await _syncDao.getPendingCount();
       _emit(SyncStatus(pendingCount: pending, lastError: lastError));
       Log.i(
-          _tag,
-          'Sync done — $pending pending item(s)'
-          '${lastError != null ? ", error: $lastError" : ""}');
+        _tag,
+        'Sync done — $pending pending item(s)'
+        '${lastError != null ? ", error: $lastError" : ""}',
+      );
     }
   }
 
   Future<void> _processItem(SyncItem item) async {
-    if (_firestoreSync == null) {
-      Log.w(_tag, 'No Firestore service — skipping ${item.id}');
+    final transport = _transport;
+    if (transport == null) {
+      Log.w(_tag, 'No sync transport — skipping ${item.id}');
       return;
     }
     try {
-      Log.d(_tag,
-          'Syncing ${item.entityType}/${item.entityId} [${item.operation}]');
-      await _firestoreSync!.processSyncItem(item);
+      Log.d(
+        _tag,
+        'Syncing ${item.entityType}/${item.entityId} [${item.operation}]',
+      );
+      await transport.processSyncItem(item);
       await _syncDao.markSynced(item.id);
       await _markEntitySynced(item.entityType, item.entityId);
       Log.i(_tag, '✓ ${item.entityType}/${item.entityId}');
@@ -155,17 +163,21 @@ class SyncService {
       final nextAttempt = item.retryCount + 1;
       if (nextAttempt >= AppConstants.maxSyncRetries) {
         await _syncDao.markFailed(item.id);
-        Log.w(_tag,
-            'Item ${item.id} marked failed after $nextAttempt attempt(s)');
+        Log.w(
+          _tag,
+          'Item ${item.id} marked failed after $nextAttempt attempt(s)',
+        );
       } else {
-        Log.d(_tag,
-            'Item ${item.id} will retry (attempt $nextAttempt/${AppConstants.maxSyncRetries})');
+        Log.d(
+          _tag,
+          'Item ${item.id} will retry (attempt $nextAttempt/${AppConstants.maxSyncRetries})',
+        );
       }
     }
   }
 
   Future<void> _pullRemoteChanges() async {
-    if (_firestoreSync == null) {
+    if (_transport == null) {
       return;
     }
 
@@ -179,15 +191,15 @@ class SyncService {
     var cursor = await _readSyncCursor(db, entity.entityType);
 
     if (cursor.lastValue == null || cursor.lastDocId == null) {
-      final bootstrapDocs =
-          await _firestoreSync!.fetchCollection(entity.entityType);
+      final bootstrapDocs = await _transport!.fetchCollection(
+        entity.entityType,
+      );
       if (bootstrapDocs.isEmpty) {
         return;
       }
 
-      final sortedDocs = [...bootstrapDocs]..sort(
-          (left, right) => _compareRemoteDocs(entity, left, right),
-        );
+      final sortedDocs = [...bootstrapDocs]
+        ..sort((left, right) => _compareRemoteDocs(entity, left, right));
 
       await db.transaction((txn) async {
         for (final remote in sortedDocs) {
@@ -202,7 +214,7 @@ class SyncService {
     }
 
     while (true) {
-      final docs = await _firestoreSync!.fetchCollectionSince(
+      final docs = await _transport!.fetchCollectionSince(
         entityType: entity.entityType,
         orderField: entity.cursorField,
         lastValue: cursor.lastValue,
@@ -315,14 +327,13 @@ class SyncService {
     _SyncCursor cursor,
   ) async {
     await txn.insert(
-      'sync_state',
-      {
-        'entity_type': entityType,
-        'last_value': cursor.lastValue,
-        'last_doc_id': cursor.lastDocId,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+        'sync_state',
+        {
+          'entity_type': entityType,
+          'last_value': cursor.lastValue,
+          'last_doc_id': cursor.lastDocId,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> _applyCustomer(dynamic txn, Map<String, dynamic> remote) async {
@@ -331,11 +342,11 @@ class SyncService {
 
     final row = await txn.query(
       'customers',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = Map<String, dynamic>.from(remote)..['synced'] = 1;
+    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('customers', incoming);
@@ -356,8 +367,8 @@ class SyncService {
     await txn.update(
       'customers',
       incoming,
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
     );
   }
 
@@ -367,11 +378,12 @@ class SyncService {
 
     final row = await txn.query(
       'sales',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = Map<String, dynamic>.from(remote)..['synced'] = 1;
+    final incoming = _normalizedIncoming(remote, includeDevice: true)
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('sales', incoming);
@@ -390,8 +402,8 @@ class SyncService {
     await txn.update(
       'sales',
       incoming,
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
     );
   }
 
@@ -401,11 +413,11 @@ class SyncService {
 
     final row = await txn.query(
       'rewards',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = Map<String, dynamic>.from(remote)..['synced'] = 1;
+    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('rewards', incoming);
@@ -425,23 +437,25 @@ class SyncService {
     await txn.update(
       'rewards',
       incoming,
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
     );
   }
 
   Future<void> _applyRedemption(
-      dynamic txn, Map<String, dynamic> remote) async {
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
     final id = remote['id'] as String?;
     if (id == null) return;
 
     final row = await txn.query(
       'redemptions',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = Map<String, dynamic>.from(remote)..['synced'] = 1;
+    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('redemptions', incoming);
@@ -460,8 +474,8 @@ class SyncService {
     await txn.update(
       'redemptions',
       incoming,
-      where: 'id = ?',
-      whereArgs: [id],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
     );
   }
 
@@ -472,31 +486,61 @@ class SyncService {
         await db.update(
           'customers',
           {'synced': 1},
-          where: 'id = ?',
-          whereArgs: [entityId],
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
         );
       case 'sale':
         await db.update(
           'sales',
           {'synced': 1},
-          where: 'id = ?',
-          whereArgs: [entityId],
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
         );
       case 'reward':
         await db.update(
           'rewards',
           {'synced': 1},
-          where: 'id = ?',
-          whereArgs: [entityId],
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
         );
       case 'redemption':
         await db.update(
           'redemptions',
           {'synced': 1},
-          where: 'id = ?',
-          whereArgs: [entityId],
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
         );
     }
+  }
+
+  Map<String, dynamic> _normalizedIncoming(
+    Map<String, dynamic> remote, {
+    bool includeDevice = false,
+  }) {
+    final incoming = Map<String, dynamic>.from(remote);
+    if (incoming['merchant_id'] == null && _syncDao.merchantId != null) {
+      incoming['merchant_id'] = _syncDao.merchantId;
+    }
+    if (includeDevice &&
+        incoming['device_id'] == null &&
+        _syncDao.deviceId != null) {
+      incoming['device_id'] = _syncDao.deviceId;
+    }
+    return incoming;
+  }
+
+  String _entityWhereClause(String clause) {
+    if (_syncDao.merchantId == null) {
+      return clause;
+    }
+    return 'merchant_id = ? AND ($clause)';
+  }
+
+  List<Object?> _entityWhereArgs(List<Object?> args) {
+    if (_syncDao.merchantId == null) {
+      return args;
+    }
+    return [_syncDao.merchantId, ...args];
   }
 
   Future<void> _refreshPendingCount() async {

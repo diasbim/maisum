@@ -119,6 +119,26 @@ flutter build apk --release --dart-define=API_BASE_URL=https://api.example.com
 - `targetSdk`: 34
 - ProGuard enabled in release; keep rules in `android/app/proguard-rules.pro`
 
+### Release Signing Setup
+
+1. Generate an upload keystore once:
+
+```bash
+keytool -genkeypair -v -keystore keystore/upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+```
+
+2. Copy `android/key.properties.example` to `android/key.properties`.
+
+3. Fill in `android/key.properties` with your passwords, alias, and keystore path. The provided example assumes the keystore is stored at `keystore/upload-keystore.jks` from the project root.
+
+4. Build the release APK:
+
+```bash
+flutter build apk --release --dart-define=API_BASE_URL=https://api.example.com
+```
+
+The signed APK will be generated at `build/app/outputs/flutter-apk/app-release.apk`.
+
 ## iOS Build
 
 ```bash

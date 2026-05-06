@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+
 import '../constants/app_constants.dart';
 
 class AppDatabase {
@@ -29,6 +30,7 @@ class AppDatabase {
     await _createV3Schema(db);
     await _createV4Schema(db);
     await _createV5Schema(db);
+    await _createV6Schema(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -46,6 +48,9 @@ class AppDatabase {
     }
     if (oldVersion < 5) {
       await _createV5Schema(db);
+    }
+    if (oldVersion < 6) {
+      await _createV6Schema(db);
     }
   }
 
@@ -74,8 +79,9 @@ class AppDatabase {
         FOREIGN KEY (customer_id) REFERENCES customers(id)
       )
     ''');
-    await db
-        .execute('CREATE INDEX idx_sales_customer_id ON sales(customer_id)');
+    await db.execute(
+      'CREATE INDEX idx_sales_customer_id ON sales(customer_id)',
+    );
     await db.execute('CREATE INDEX idx_sales_synced ON sales(synced)');
     await db.execute('CREATE INDEX idx_sales_created_at ON sales(created_at)');
 
@@ -120,9 +126,11 @@ class AppDatabase {
       )
     ''');
     await db.execute(
-        'CREATE INDEX idx_redemptions_customer_id ON redemptions(customer_id)');
-    await db
-        .execute('CREATE INDEX idx_redemptions_synced ON redemptions(synced)');
+      'CREATE INDEX idx_redemptions_customer_id ON redemptions(customer_id)',
+    );
+    await db.execute(
+      'CREATE INDEX idx_redemptions_synced ON redemptions(synced)',
+    );
   }
 
   Future<void> _createV4Schema(Database db) async {
@@ -145,6 +153,75 @@ class AppDatabase {
         last_doc_id TEXT
       )
     ''');
+  }
+
+  Future<void> _createV6Schema(Database db) async {
+    await db.execute('''
+        CREATE TABLE IF NOT EXISTS merchants (
+          id TEXT PRIMARY KEY,
+          phone TEXT NOT NULL UNIQUE,
+          merchant_name TEXT NOT NULL DEFAULT 'Minha Loja',
+          slug TEXT NOT NULL UNIQUE,
+          subscription_status TEXT NOT NULL DEFAULT 'TRIAL',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        )
+      ''');
+    await db.execute('''
+        CREATE TABLE IF NOT EXISTS app_users (
+          id TEXT PRIMARY KEY,
+          merchant_id TEXT NOT NULL,
+          phone TEXT NOT NULL,
+          role TEXT NOT NULL DEFAULT 'OWNER',
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL,
+          last_login_at INTEGER,
+          FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+        )
+      ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_app_users_merchant_id ON app_users(merchant_id)',
+    );
+    await db.execute(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_merchant_phone ON app_users(merchant_id, phone)',
+    );
+
+    await _addColumnIfMissing(db, 'customers', 'merchant_id TEXT');
+    await _addColumnIfMissing(db, 'sales', 'merchant_id TEXT');
+    await _addColumnIfMissing(db, 'sales', 'device_id TEXT');
+    await _addColumnIfMissing(db, 'rewards', 'merchant_id TEXT');
+    await _addColumnIfMissing(db, 'redemptions', 'merchant_id TEXT');
+    await _addColumnIfMissing(db, 'sync_queue', 'merchant_id TEXT');
+    await _addColumnIfMissing(db, 'sync_queue', 'device_id TEXT');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_merchant_id ON customers(merchant_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sales_merchant_id ON sales(merchant_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_rewards_merchant_id ON rewards(merchant_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_redemptions_merchant_id ON redemptions(merchant_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_sync_queue_merchant_status ON sync_queue(merchant_id, status)',
+    );
+  }
+
+  Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String columnDefinition,
+  ) async {
+    final columnName = columnDefinition.split(' ').first;
+    final columns = await db.rawQuery('PRAGMA table_info($table)');
+    final hasColumn = columns.any((column) => column['name'] == columnName);
+    if (!hasColumn) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $columnDefinition');
+    }
   }
 
   // Injects a pre-opened database; used only in tests to avoid platform channels.

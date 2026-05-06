@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../constants/app_constants.dart';
 
 class SecureStorageService {
@@ -6,34 +7,108 @@ class SecureStorageService {
 
   final FlutterSecureStorage _storage;
 
-  static const _androidOptions = AndroidOptions(encryptedSharedPreferences: true);
+  static const _androidOptions = AndroidOptions(
+    encryptedSharedPreferences: true,
+  );
 
-  Future<void> saveToken(String token) =>
-      _storage.write(key: AppConstants.tokenKey, value: token, aOptions: _androidOptions);
+  Future<void> saveToken(String token) => _storage.write(
+    key: AppConstants.tokenKey,
+    value: token,
+    aOptions: _androidOptions,
+  );
 
   Future<String?> getToken() =>
       _storage.read(key: AppConstants.tokenKey, aOptions: _androidOptions);
 
-  Future<void> saveUserId(String userId) =>
-      _storage.write(key: AppConstants.userIdKey, value: userId, aOptions: _androidOptions);
+  Future<void> saveUserId(String userId) => _storage.write(
+    key: AppConstants.userIdKey,
+    value: userId,
+    aOptions: _androidOptions,
+  );
 
   Future<String?> getUserId() =>
       _storage.read(key: AppConstants.userIdKey, aOptions: _androidOptions);
 
-  Future<void> saveUserPhone(String phone) =>
-      _storage.write(key: AppConstants.userPhoneKey, value: phone, aOptions: _androidOptions);
+  Future<void> saveAppUserId(String userId) => _storage.write(
+    key: AppConstants.appUserIdKey,
+    value: userId,
+    aOptions: _androidOptions,
+  );
+
+  Future<String?> getAppUserId() =>
+      _storage.read(key: AppConstants.appUserIdKey, aOptions: _androidOptions);
+
+  Future<void> saveUserPhone(String phone) => _storage.write(
+    key: AppConstants.userPhoneKey,
+    value: phone,
+    aOptions: _androidOptions,
+  );
 
   Future<String?> getUserPhone() =>
       _storage.read(key: AppConstants.userPhoneKey, aOptions: _androidOptions);
 
+  Future<void> saveMerchantId(String merchantId) => _storage.write(
+    key: AppConstants.merchantIdKey,
+    value: merchantId,
+    aOptions: _androidOptions,
+  );
+
+  Future<String?> getMerchantId() =>
+      _storage.read(key: AppConstants.merchantIdKey, aOptions: _androidOptions);
+
+  Future<void> saveMerchantName(String merchantName) => _storage.write(
+    key: AppConstants.merchantNameKey,
+    value: merchantName,
+    aOptions: _androidOptions,
+  );
+
+  Future<String?> getMerchantName() => _storage.read(
+    key: AppConstants.merchantNameKey,
+    aOptions: _androidOptions,
+  );
+
+  Future<void> saveSubscriptionStatus(String status) => _storage.write(
+    key: AppConstants.subscriptionStatusKey,
+    value: status,
+    aOptions: _androidOptions,
+  );
+
+  Future<String?> getSubscriptionStatus() => _storage.read(
+    key: AppConstants.subscriptionStatusKey,
+    aOptions: _androidOptions,
+  );
+
+  Future<void> saveRefreshToken(String refreshToken) => _storage.write(
+    key: AppConstants.refreshTokenKey,
+    value: refreshToken,
+    aOptions: _androidOptions,
+  );
+
+  Future<String?> getRefreshToken() => _storage.read(
+    key: AppConstants.refreshTokenKey,
+    aOptions: _androidOptions,
+  );
+
+  Future<void> saveDeviceId(String deviceId) => _storage.write(
+    key: AppConstants.deviceIdKey,
+    value: deviceId,
+    aOptions: _androidOptions,
+  );
+
+  Future<String?> getDeviceId() =>
+      _storage.read(key: AppConstants.deviceIdKey, aOptions: _androidOptions);
+
   Future<void> saveTokenExpiry(DateTime expiry) => _storage.write(
-        key: AppConstants.tokenExpiryKey,
-        value: expiry.millisecondsSinceEpoch.toString(),
-        aOptions: _androidOptions,
-      );
+    key: AppConstants.tokenExpiryKey,
+    value: expiry.millisecondsSinceEpoch.toString(),
+    aOptions: _androidOptions,
+  );
 
   Future<DateTime?> getTokenExpiry() async {
-    final raw = await _storage.read(key: AppConstants.tokenExpiryKey, aOptions: _androidOptions);
+    final raw = await _storage.read(
+      key: AppConstants.tokenExpiryKey,
+      aOptions: _androidOptions,
+    );
     if (raw == null) return null;
     return DateTime.fromMillisecondsSinceEpoch(int.parse(raw));
   }
@@ -49,8 +124,11 @@ class SecureStorageService {
   Future<void> clearAll() => _storage.deleteAll(aOptions: _androidOptions);
 
   // PIN management
-  Future<void> savePin(String pin) =>
-      _storage.write(key: AppConstants.pinKey, value: pin, aOptions: _androidOptions);
+  Future<void> savePin(String pin) => _storage.write(
+    key: AppConstants.pinKey,
+    value: pin,
+    aOptions: _androidOptions,
+  );
 
   Future<String?> getPin() =>
       _storage.read(key: AppConstants.pinKey, aOptions: _androidOptions);
@@ -65,23 +143,34 @@ class SecureStorageService {
 
   // PIN attempt tracking
   Future<void> savePinAttempts(int count) => _storage.write(
-        key: AppConstants.pinAttemptsKey,
-        value: count.toString(),
-        aOptions: _androidOptions,
-      );
+    key: AppConstants.pinAttemptsKey,
+    value: count.toString(),
+    aOptions: _androidOptions,
+  );
 
   Future<int> getPinAttempts() async {
-    final raw = await _storage.read(key: AppConstants.pinAttemptsKey, aOptions: _androidOptions);
+    final raw = await _storage.read(
+      key: AppConstants.pinAttemptsKey,
+      aOptions: _androidOptions,
+    );
     return int.tryParse(raw ?? '0') ?? 0;
   }
 
-  Future<void> clearPinAttempts() =>
-      _storage.write(key: AppConstants.pinAttemptsKey, value: '0', aOptions: _androidOptions);
+  Future<void> clearPinAttempts() => _storage.write(
+    key: AppConstants.pinAttemptsKey,
+    value: '0',
+    aOptions: _androidOptions,
+  );
 
   // Firebase UID
-  Future<void> saveFirebaseUid(String uid) =>
-      _storage.write(key: AppConstants.firebaseUidKey, value: uid, aOptions: _androidOptions);
+  Future<void> saveFirebaseUid(String uid) => _storage.write(
+    key: AppConstants.firebaseUidKey,
+    value: uid,
+    aOptions: _androidOptions,
+  );
 
-  Future<String?> getFirebaseUid() =>
-      _storage.read(key: AppConstants.firebaseUidKey, aOptions: _androidOptions);
+  Future<String?> getFirebaseUid() => _storage.read(
+    key: AppConstants.firebaseUidKey,
+    aOptions: _androidOptions,
+  );
 }

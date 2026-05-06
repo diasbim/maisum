@@ -17,12 +17,13 @@ Future<Database> setUpTestDatabase() async {
   final db = await databaseFactoryFfi.openDatabase(
     inMemoryDatabasePath,
     options: OpenDatabaseOptions(
-      version: 5,
+      version: 6,
       onCreate: (db, _) async {
         await _createV2Schema(db);
         await _createV3Schema(db);
         await _createV4Schema(db);
         await _createV5Schema(db);
+        await _createV6Schema(db);
       },
       onConfigure: (db) async => db.execute('PRAGMA foreign_keys = ON'),
     ),
@@ -38,7 +39,8 @@ Future<void> tearDownTestDatabase() => AppDatabase.instance.close();
 // Override SQLITE3_LIBRARY env var to use a different path.
 void _overrideSqliteOnWindows() {
   if (!Platform.isWindows) return;
-  final path = Platform.environment['SQLITE3_LIBRARY'] ??
+  final path =
+      Platform.environment['SQLITE3_LIBRARY'] ??
       r'C:\Users\X200078\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\DLLs\sqlite3.dll';
   sqlite_open.open.overrideFor(
     sqlite_open.OperatingSystem.windows,
@@ -116,9 +118,11 @@ Future<void> _createV3Schema(Database db) async {
     )
   ''');
   await db.execute(
-      'CREATE INDEX idx_redemptions_customer_id ON redemptions(customer_id)');
-  await db
-      .execute('CREATE INDEX idx_redemptions_synced ON redemptions(synced)');
+    'CREATE INDEX idx_redemptions_customer_id ON redemptions(customer_id)',
+  );
+  await db.execute(
+    'CREATE INDEX idx_redemptions_synced ON redemptions(synced)',
+  );
 }
 
 Future<void> _createV4Schema(Database db) async {
@@ -141,4 +145,58 @@ Future<void> _createV5Schema(Database db) async {
       last_doc_id TEXT
     )
   ''');
+}
+
+Future<void> _createV6Schema(Database db) async {
+  await db.execute('''
+    CREATE TABLE merchants (
+      id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL UNIQUE,
+      merchant_name TEXT NOT NULL DEFAULT 'Minha Loja',
+      slug TEXT NOT NULL UNIQUE,
+      subscription_status TEXT NOT NULL DEFAULT 'TRIAL',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )
+  ''');
+  await db.execute('''
+    CREATE TABLE app_users (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'OWNER',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      last_login_at INTEGER,
+      FOREIGN KEY (merchant_id) REFERENCES merchants(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX idx_app_users_merchant_id ON app_users(merchant_id)',
+  );
+  await db.execute(
+    'CREATE UNIQUE INDEX idx_app_users_merchant_phone ON app_users(merchant_id, phone)',
+  );
+
+  await db.execute('ALTER TABLE customers ADD COLUMN merchant_id TEXT');
+  await db.execute('ALTER TABLE sales ADD COLUMN merchant_id TEXT');
+  await db.execute('ALTER TABLE sales ADD COLUMN device_id TEXT');
+  await db.execute('ALTER TABLE rewards ADD COLUMN merchant_id TEXT');
+  await db.execute('ALTER TABLE redemptions ADD COLUMN merchant_id TEXT');
+  await db.execute('ALTER TABLE sync_queue ADD COLUMN merchant_id TEXT');
+  await db.execute('ALTER TABLE sync_queue ADD COLUMN device_id TEXT');
+
+  await db.execute(
+    'CREATE INDEX idx_customers_merchant_id ON customers(merchant_id)',
+  );
+  await db.execute('CREATE INDEX idx_sales_merchant_id ON sales(merchant_id)');
+  await db.execute(
+    'CREATE INDEX idx_rewards_merchant_id ON rewards(merchant_id)',
+  );
+  await db.execute(
+    'CREATE INDEX idx_redemptions_merchant_id ON redemptions(merchant_id)',
+  );
+  await db.execute(
+    'CREATE INDEX idx_sync_queue_merchant_status ON sync_queue(merchant_id, status)',
+  );
 }

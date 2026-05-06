@@ -6,7 +6,8 @@ import 'package:loyalty_app/features/sync/domain/sync_item.dart';
 
 import '../../helpers/test_database.dart';
 
-SyncItem _item(String id, {int retryCount = 0, String status = 'pending'}) => SyncItem(
+SyncItem _item(String id, {int retryCount = 0, String status = 'pending'}) =>
+    SyncItem(
       id: id,
       operation: 'create',
       entityType: 'customer',
@@ -19,10 +20,20 @@ SyncItem _item(String id, {int retryCount = 0, String status = 'pending'}) => Sy
 
 void main() {
   late SyncDao dao;
+  late SyncDao otherDao;
 
   setUp(() async {
     await setUpTestDatabase();
-    dao = SyncDao(AppDatabase.instance);
+    dao = SyncDao(
+      AppDatabase.instance,
+      merchantId: 'merchant-1',
+      deviceId: 'device-1',
+    );
+    otherDao = SyncDao(
+      AppDatabase.instance,
+      merchantId: 'merchant-2',
+      deviceId: 'device-2',
+    );
   });
 
   tearDown(tearDownTestDatabase);
@@ -43,6 +54,20 @@ void main() {
       expect(item.operation, 'create');
       expect(item.entityType, 'customer');
       expect(item.entityId, 'eid-e2');
+    });
+
+    test('stamps merchant and device metadata on queue rows', () async {
+      await dao.enqueue(_item('tenant-meta'));
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        'sync_queue',
+        where: 'id = ?',
+        whereArgs: ['tenant-meta'],
+        limit: 1,
+      );
+
+      expect(rows.single['merchant_id'], 'merchant-1');
+      expect(rows.single['device_id'], 'device-1');
     });
   });
 
@@ -77,6 +102,17 @@ void main() {
       await dao.enqueue(_item('retry2', retryCount: 2));
       expect(await dao.getPending(), hasLength(1));
     });
+
+    test('returns only items for the active merchant', () async {
+      await dao.enqueue(_item('m1'));
+      await otherDao.enqueue(_item('m2'));
+
+      expect((await dao.getPending()).map((item) => item.id), contains('m1'));
+      expect(
+        (await dao.getPending()).map((item) => item.id),
+        isNot(contains('m2')),
+      );
+    });
   });
 
   group('markSynced / markFailed', () {
@@ -107,12 +143,15 @@ void main() {
       expect((await dao.getPending()).first.retryCount, 1);
     });
 
-    test('at retry_count=2 item is still pending; after increment it disappears', () async {
-      await dao.enqueue(_item('ir2', retryCount: 2));
-      expect(await dao.getPending(), hasLength(1));
-      await dao.incrementRetry('ir2');
-      expect(await dao.getPending(), isEmpty);
-    });
+    test(
+      'at retry_count=2 item is still pending; after increment it disappears',
+      () async {
+        await dao.enqueue(_item('ir2', retryCount: 2));
+        expect(await dao.getPending(), hasLength(1));
+        await dao.incrementRetry('ir2');
+        expect(await dao.getPending(), isEmpty);
+      },
+    );
   });
 
   group('getPendingCount', () {

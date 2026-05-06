@@ -23,10 +23,13 @@ class RedemptionRepository {
     required int pointsRequired,
   }) async {
     final customer = await _customerDao.getById(customerId);
-    if (customer == null) throw const UnknownException('Cliente não encontrado');
+    if (customer == null) {
+      throw const UnknownException('Cliente não encontrado');
+    }
     if (customer.totalPoints < pointsRequired) {
       throw const UnknownException(
-          'Pontos insuficientes para resgatar esta recompensa');
+        'Pontos insuficientes para resgatar esta recompensa',
+      );
     }
 
     final redemption = await _redemptionDao.create(
@@ -38,27 +41,37 @@ class RedemptionRepository {
     final newTotal = customer.totalPoints - pointsRequired;
     await _customerDao.updatePoints(customerId, newTotal);
 
-    await _syncDao.enqueue(SyncItem(
-      id: _uuid.v4(),
-      operation: 'create',
-      entityType: 'redemption',
-      entityId: redemption.id,
-      payload: jsonEncode(redemption.toDbMap()),
-      createdAt: DateTime.now(),
-    ));
+    await _syncDao.enqueue(
+      SyncItem(
+        id: _uuid.v4(),
+        operation: 'create',
+        entityType: 'redemption',
+        entityId: redemption.id,
+        payload: jsonEncode({
+          ...redemption.toDbMap(),
+          'merchant_id': _redemptionDao.merchantId,
+        }),
+        createdAt: DateTime.now(),
+      ),
+    );
 
     final updatedCustomer = customer.copyWith(
       totalPoints: newTotal,
       updatedAt: DateTime.now(),
     );
-    await _syncDao.enqueue(SyncItem(
-      id: _uuid.v4(),
-      operation: 'update',
-      entityType: 'customer',
-      entityId: customerId,
-      payload: jsonEncode(updatedCustomer.toDbMap()),
-      createdAt: DateTime.now(),
-    ));
+    await _syncDao.enqueue(
+      SyncItem(
+        id: _uuid.v4(),
+        operation: 'update',
+        entityType: 'customer',
+        entityId: customerId,
+        payload: jsonEncode({
+          ...updatedCustomer.toDbMap(),
+          'merchant_id': _customerDao.merchantId,
+        }),
+        createdAt: DateTime.now(),
+      ),
+    );
 
     return redemption;
   }

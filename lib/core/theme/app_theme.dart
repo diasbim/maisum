@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 class AppTheme {
@@ -43,68 +42,96 @@ class AppTheme {
 
   // ── Text theme ────────────────────────────────────────────────────────────
   static TextTheme get _textTheme {
-    return TextTheme(
+    return const TextTheme(
       // Bricolage Grotesque — display & headline
-      displayLarge: GoogleFonts.bricolageGrotesque(
-        fontSize: 40, fontWeight: FontWeight.w800,
-        color: AppColors.onSurface, letterSpacing: -0.5, height: 1.1,
+      displayLarge: TextStyle(
+        fontSize: 40,
+        fontWeight: FontWeight.w800,
+        color: AppColors.onSurface,
+        letterSpacing: -0.5,
+        height: 1.1,
       ),
-      displayMedium: GoogleFonts.bricolageGrotesque(
-        fontSize: 32, fontWeight: FontWeight.w800,
-        color: AppColors.onSurface, letterSpacing: -0.3, height: 1.1,
+      displayMedium: TextStyle(
+        fontSize: 32,
+        fontWeight: FontWeight.w800,
+        color: AppColors.onSurface,
+        letterSpacing: -0.3,
+        height: 1.1,
       ),
-      displaySmall: GoogleFonts.bricolageGrotesque(
-        fontSize: 26, fontWeight: FontWeight.w800,
-        color: AppColors.onSurface, height: 1.2,
+      displaySmall: TextStyle(
+        fontSize: 26,
+        fontWeight: FontWeight.w800,
+        color: AppColors.onSurface,
+        height: 1.2,
       ),
-      headlineLarge: GoogleFonts.bricolageGrotesque(
-        fontSize: 24, fontWeight: FontWeight.w700,
-        color: AppColors.onSurface, height: 1.2,
+      headlineLarge: TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.w700,
+        color: AppColors.onSurface,
+        height: 1.2,
       ),
-      headlineMedium: GoogleFonts.bricolageGrotesque(
-        fontSize: 20, fontWeight: FontWeight.w700,
-        color: AppColors.onSurface, height: 1.3,
+      headlineMedium: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        color: AppColors.onSurface,
+        height: 1.3,
       ),
-      headlineSmall: GoogleFonts.bricolageGrotesque(
-        fontSize: 18, fontWeight: FontWeight.w700,
-        color: AppColors.onSurface, height: 1.3,
+      headlineSmall: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: AppColors.onSurface,
+        height: 1.3,
       ),
       // Outfit — titles, body, labels
-      titleLarge: GoogleFonts.outfit(
-        fontSize: 18, fontWeight: FontWeight.w600,
+      titleLarge: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
         color: AppColors.onSurface,
       ),
-      titleMedium: GoogleFonts.outfit(
-        fontSize: 16, fontWeight: FontWeight.w600,
+      titleMedium: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
         color: AppColors.onSurface,
       ),
-      titleSmall: GoogleFonts.outfit(
-        fontSize: 14, fontWeight: FontWeight.w500,
+      titleSmall: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
         color: AppColors.onSurfaceVariant,
       ),
-      bodyLarge: GoogleFonts.outfit(
-        fontSize: 16, fontWeight: FontWeight.w400,
-        color: AppColors.onSurface, height: 1.6,
+      bodyLarge: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w400,
+        color: AppColors.onSurface,
+        height: 1.6,
       ),
-      bodyMedium: GoogleFonts.outfit(
-        fontSize: 15, fontWeight: FontWeight.w400,
-        color: AppColors.onSurface, height: 1.6,
+      bodyMedium: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w400,
+        color: AppColors.onSurface,
+        height: 1.6,
       ),
-      bodySmall: GoogleFonts.outfit(
-        fontSize: 13, fontWeight: FontWeight.w400,
-        color: AppColors.onSurfaceVariant, height: 1.5,
+      bodySmall: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w400,
+        color: AppColors.onSurfaceVariant,
+        height: 1.5,
       ),
-      labelLarge: GoogleFonts.outfit(
-        fontSize: 15, fontWeight: FontWeight.w600,
-        color: AppColors.onSurface, letterSpacing: 0.1,
+      labelLarge: TextStyle(
+        fontSize: 15,
+        fontWeight: FontWeight.w600,
+        color: AppColors.onSurface,
+        letterSpacing: 0.1,
       ),
-      labelMedium: GoogleFonts.outfit(
-        fontSize: 13, fontWeight: FontWeight.w500,
+      labelMedium: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
         color: AppColors.onSurfaceVariant,
       ),
-      labelSmall: GoogleFonts.outfit(
-        fontSize: 11, fontWeight: FontWeight.w500,
-        color: AppColors.onSurfaceVariant, letterSpacing: 0.4,
+      labelSmall: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w500,
+        color: AppColors.onSurfaceVariant,
+        letterSpacing: 0.4,
       ),
     );
   }
@@ -137,18 +164,18 @@ class AppTheme {
         textTheme: _textTheme,
 
         // ── AppBar ──────────────────────────────────────────────────────────
-        appBarTheme: AppBarTheme(
+        appBarTheme: const AppBarTheme(
           backgroundColor: AppColors.primary,
           foregroundColor: AppColors.onPrimary,
           elevation: 0,
           scrolledUnderElevation: 0,
           centerTitle: false,
-          titleTextStyle: GoogleFonts.bricolageGrotesque(
+          titleTextStyle: TextStyle(
             color: AppColors.onPrimary,
             fontSize: 18,
             fontWeight: FontWeight.w700,
           ),
-          iconTheme: const IconThemeData(color: AppColors.onPrimary),
+          iconTheme: IconThemeData(color: AppColors.onPrimary),
         ),
 
         // ── Elevated Button ─────────────────────────────────────────────────
@@ -160,8 +187,10 @@ class AppTheme {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
             ),
-            textStyle: GoogleFonts.outfit(
-              fontSize: 15, fontWeight: FontWeight.w600, letterSpacing: 0.2,
+            textStyle: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
             ),
             elevation: 0,
             shadowColor: Colors.transparent,
@@ -177,8 +206,9 @@ class AppTheme {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
             ),
-            textStyle: GoogleFonts.outfit(
-              fontSize: 15, fontWeight: FontWeight.w600,
+            textStyle: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -187,8 +217,9 @@ class AppTheme {
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
             foregroundColor: AppColors.primary,
-            textStyle: GoogleFonts.outfit(
-              fontSize: 14, fontWeight: FontWeight.w600,
+            textStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -197,7 +228,8 @@ class AppTheme {
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: AppColors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: const BorderSide(color: AppColors.g300),
@@ -218,14 +250,18 @@ class AppTheme {
             borderRadius: BorderRadius.circular(14),
             borderSide: const BorderSide(color: AppColors.error, width: 2),
           ),
-          hintStyle: GoogleFonts.outfit(
-            color: AppColors.g300, fontSize: 15, fontWeight: FontWeight.w400,
+          hintStyle: const TextStyle(
+            color: AppColors.g300,
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
           ),
-          labelStyle: GoogleFonts.outfit(
-            color: AppColors.g500, fontSize: 11,
-            fontWeight: FontWeight.w700, letterSpacing: 0.8,
+          labelStyle: const TextStyle(
+            color: AppColors.g500,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
           ),
-          errorStyle: GoogleFonts.outfit(color: AppColors.error, fontSize: 12),
+          errorStyle: const TextStyle(color: AppColors.error, fontSize: 12),
         ),
 
         // ── Card ────────────────────────────────────────────────────────────
@@ -256,8 +292,10 @@ class AppTheme {
         chipTheme: ChipThemeData(
           backgroundColor: AppColors.g100,
           selectedColor: AppColors.secondaryLight,
-          labelStyle: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.w600),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          labelStyle:
+              const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
           side: BorderSide.none,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         ),
@@ -266,8 +304,9 @@ class AppTheme {
         snackBarTheme: SnackBarThemeData(
           behavior: SnackBarBehavior.floating,
           backgroundColor: AppColors.g800,
-          contentTextStyle: GoogleFonts.outfit(color: Colors.white, fontSize: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
 
         // ── FAB ─────────────────────────────────────────────────────────────
@@ -296,10 +335,13 @@ class AppTheme {
         // ── Dialog ──────────────────────────────────────────────────────────
         dialogTheme: DialogThemeData(
           backgroundColor: AppColors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           elevation: 0,
-          titleTextStyle: GoogleFonts.bricolageGrotesque(
-            fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface,
+          titleTextStyle: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
           ),
         ),
       );

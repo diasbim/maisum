@@ -33,6 +33,7 @@ const _publicRoutes = {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ValueNotifier<bool>(false);
+  ref.onDispose(authNotifier.dispose);
 
   ref.listen(authControllerProvider, (_, next) {
     authNotifier.value = next.valueOrNull != null;
@@ -42,8 +43,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: authNotifier,
     redirect: (context, state) async {
-      final isPublic =
-          _publicRoutes.contains(state.matchedLocation) ||
+      final isPublic = _publicRoutes.contains(state.matchedLocation) ||
           state.matchedLocation.startsWith('/otp');
       final isAuthenticated =
           ref.read(authControllerProvider).valueOrNull != null;

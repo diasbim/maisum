@@ -11,17 +11,26 @@ void main() {
   late SaleRepository repo;
   late CustomerDao customerDao;
   late SyncDao syncDao;
+  const merchantId = 'merchant-1';
+  const deviceId = 'device-1';
   late String customerId;
 
   setUp(() async {
     await setUpTestDatabase();
     final db = AppDatabase.instance;
-    customerDao = CustomerDao(db);
-    syncDao = SyncDao(db);
-    repo = SaleRepository(db, SaleDao(db));
+    customerDao = CustomerDao(db, merchantId: merchantId);
+    syncDao = SyncDao(db, merchantId: merchantId, deviceId: deviceId);
+    repo = SaleRepository(
+      db,
+      SaleDao(db, merchantId: merchantId),
+      merchantId: merchantId,
+      deviceId: deviceId,
+    );
 
-    final c =
-        await customerDao.create(name: 'Test Customer', phone: '840000301');
+    final c = await customerDao.create(
+      name: 'Test Customer',
+      phone: '840000301',
+    );
     customerId = c.id;
   });
 
@@ -37,13 +46,16 @@ void main() {
 
     test('150 MZN → 1 pt (floor)', () async {
       expect(
-          (await repo.createSale(customerId: customerId, amount: 150)).points,
-          1);
+        (await repo.createSale(customerId: customerId, amount: 150)).points,
+        1,
+      );
     });
 
     test('99 MZN → 0 pts', () async {
-      expect((await repo.createSale(customerId: customerId, amount: 99)).points,
-          0);
+      expect(
+        (await repo.createSale(customerId: customerId, amount: 99)).points,
+        0,
+      );
     });
 
     test('updates customer totalPoints immediately', () async {
@@ -81,6 +93,40 @@ void main() {
           .payload;
       expect(payload, contains(sale.id));
     });
+
+    test(
+      'stamps merchant_id and device_id on sale row and queue payload',
+      () async {
+        final sale = await repo.createSale(customerId: customerId, amount: 200);
+        final db = await AppDatabase.instance.database;
+
+        final saleRows = await db.query(
+          'sales',
+          where: 'id = ?',
+          whereArgs: [sale.id],
+          limit: 1,
+        );
+        expect(saleRows.single['merchant_id'], merchantId);
+        expect(saleRows.single['device_id'], deviceId);
+
+        final queueRows = await db.query(
+          'sync_queue',
+          where: 'entity_id = ?',
+          whereArgs: [sale.id],
+          limit: 1,
+        );
+        expect(queueRows.single['merchant_id'], merchantId);
+        expect(queueRows.single['device_id'], deviceId);
+        expect(
+          queueRows.single['payload'],
+          contains('"merchant_id":"$merchantId"'),
+        );
+        expect(
+          queueRows.single['payload'],
+          contains('"device_id":"$deviceId"'),
+        );
+      },
+    );
   });
 
   group('getTodayStats', () {

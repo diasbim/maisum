@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/sync_status_bar.dart';
 import '../../../app/providers.dart';
 import '../domain/sync_item.dart';
 import '../sync_controller.dart';
@@ -18,25 +20,18 @@ class PendingSyncScreen extends ConsumerStatefulWidget {
 
 class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
   @override
-  void initState() {
-    super.initState();
-    ref.listenManual<SyncStatus>(
-      syncControllerProvider,
-      (previous, next) {
-        final syncFinished = (previous?.isSyncing ?? false) && !next.isSyncing;
-        final pendingChanged = previous?.pendingCount != next.pendingCount;
-
-        if (syncFinished || pendingChanged) {
-          ref.invalidate(pendingSyncItemsProvider);
-        }
-      },
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final syncStatus = ref.watch(syncControllerProvider);
+    ref.listen<SyncStatus>(syncStatusProvider, (previous, next) {
+      final syncFinished = (previous?.isSyncing ?? false) && !next.isSyncing;
+      final pendingChanged = previous?.pendingCount != next.pendingCount;
+      if (syncFinished || pendingChanged) {
+        ref.invalidate(pendingSyncItemsProvider);
+      }
+    });
+
+    final syncStatus = ref.watch(syncStatusProvider);
     final itemsAsync = ref.watch(pendingSyncItemsProvider);
+    final isOnline = ref.watch(isOnlineProvider).valueOrNull ?? true;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
@@ -66,17 +61,27 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
             ),
         ],
       ),
+      bottomNavigationBar: SyncStatusBar(
+        status: syncStatus,
+        isOnline: isOnline,
+      ),
       body: itemsAsync.when(
         data: (items) => items.isEmpty
             ? const EmptyState(
-                title: 'Tudo sincronizado!',
+                title: 'Fila limpa e pronta.',
+                subtitle:
+                    'Quando estiver sem internet, as alterações aparecem aqui e seguem automaticamente depois.',
               )
             : RefreshIndicator(
                 color: AppColors.secondary,
                 onRefresh: () async => ref.invalidate(pendingSyncItemsProvider),
                 child: ListView.separated(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    AppSpacing.xxxl,
+                  ),
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (_, i) => _SyncItemTile(item: items[i]),

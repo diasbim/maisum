@@ -52,12 +52,14 @@ extension on DashboardStats {
 void main() {
   group('DashboardScreen — stat cards', () {
     testWidgets('displays the today stat labels', (tester) async {
-      await tester.pumpWidget(const DashboardStats().buildDashboard());
+      await tester.pumpWidget(
+        const DashboardStats(totalCustomers: 1).buildDashboard(),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.vendasHoje), findsOneWidget);
       expect(find.text(AppStrings.pontosHoje), findsOneWidget);
-      expect(find.text('0 clientes registados'), findsOneWidget);
+      expect(find.text('1 clientes registados'), findsOneWidget);
     });
 
     testWidgets('shows correct numeric values from stats', (tester) async {
@@ -66,16 +68,18 @@ void main() {
           todaySaleCount: 7,
           todayPoints: 14,
           pendingSyncCount: 3,
+          totalCustomers: 1,
         ).buildDashboard(),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('7'), findsOneWidget);
       expect(find.text('14'), findsOneWidget);
-      expect(find.text('0 clientes registados'), findsOneWidget);
+      expect(find.text('1 clientes registados'), findsOneWidget);
     });
 
-    testWidgets('shows zeros for empty stats', (tester) async {
+    testWidgets('shows the empty-state onboarding for empty stats',
+        (tester) async {
       await tester.pumpWidget(
         const DashboardStats(
           todaySaleCount: 0,
@@ -85,13 +89,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('0'), findsNWidgets(2));
+      expect(find.text('Tudo pronto para a primeira venda.'), findsOneWidget);
+      expect(find.text(AppStrings.adicionarCliente), findsOneWidget);
     });
   });
 
   group('DashboardScreen — primary action', () {
     testWidgets('renders a dominant Nova Venda card', (tester) async {
-      await tester.pumpWidget(const DashboardStats().buildDashboard());
+      await tester.pumpWidget(
+        const DashboardStats(totalCustomers: 1).buildDashboard(),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.novaVenda), findsOneWidget);
@@ -107,7 +114,9 @@ void main() {
     testWidgets('renders support shortcuts below the primary action', (
       tester,
     ) async {
-      await tester.pumpWidget(const DashboardStats().buildDashboard());
+      await tester.pumpWidget(
+        const DashboardStats(totalCustomers: 1).buildDashboard(),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.clientes), findsOneWidget);
@@ -119,7 +128,9 @@ void main() {
 
   group('DashboardScreen — section headers', () {
     testWidgets('shows Rápido and Hoje headers', (tester) async {
-      await tester.pumpWidget(const DashboardStats().buildDashboard());
+      await tester.pumpWidget(
+        const DashboardStats(totalCustomers: 1).buildDashboard(),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('HOJE'), findsOneWidget);
@@ -129,14 +140,18 @@ void main() {
 
   group('DashboardScreen — app bar', () {
     testWidgets('app bar title shows LoyaltyOS', (tester) async {
-      await tester.pumpWidget(const DashboardStats().buildDashboard());
+      await tester.pumpWidget(
+        const DashboardStats(totalCustomers: 1).buildDashboard(),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.appName), findsOneWidget);
     });
 
     testWidgets('settings icon is present', (tester) async {
-      await tester.pumpWidget(const DashboardStats().buildDashboard());
+      await tester.pumpWidget(
+        const DashboardStats(totalCustomers: 1).buildDashboard(),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.settings_outlined), findsOneWidget);

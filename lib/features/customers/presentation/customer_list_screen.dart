@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/customer_card.dart';
 import '../../../core/widgets/empty_state.dart';
 import 'customers_controller.dart';
@@ -85,6 +86,8 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
         data: (list) => list.isEmpty
             ? EmptyState(
                 title: AppStrings.semClientes,
+                subtitle:
+                    'Crie o primeiro cliente para começar a registar cortes e pontos sem complicação.',
                 actionLabel: AppStrings.adicionarCliente,
                 onAction: () => _showAddCustomerSheet(context),
               )
@@ -116,9 +119,13 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddCustomerSheet(context),
-        child: const Icon(Icons.person_add_rounded),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: FloatingActionButton(
+          onPressed: () => _showAddCustomerSheet(context),
+          child: const Icon(Icons.person_add_rounded),
+        ),
       ),
     );
   }
@@ -128,80 +135,125 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
     final phoneCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
     final theme = Theme.of(context);
+    var isSaving = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(
-            24, 24, 24, MediaQuery.of(ctx).viewInsets.bottom + 32),
-        child: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(
-                      color: AppColors.g300,
-                      borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              Text(AppStrings.adicionarCliente,
-                  style: theme.textTheme.headlineSmall),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: nameCtrl,
-                textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(
-                    labelText: AppStrings.nome, hintText: AppStrings.nomeHint),
-                validator: (v) => v == null || v.trim().isEmpty
-                    ? AppStrings.nameRequired
-                    : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: phoneCtrl,
-                keyboardType: TextInputType.phone,
-                decoration:
-                    const InputDecoration(labelText: AppStrings.phoneNumber),
-                validator: (v) => v == null || v.trim().isEmpty
-                    ? AppStrings.phoneRequired
-                    : null,
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Padding(
+            padding: EdgeInsets.fromLTRB(
+              24,
+              24,
+              24,
+              MediaQuery.of(ctx).viewInsets.bottom + 32,
+            ),
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: AppColors.g300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
-                  onPressed: () async {
-                    if (!formKey.currentState!.validate()) return;
-                    Navigator.pop(ctx);
-                    await ref
-                        .read(customersControllerProvider.notifier)
-                        .createCustomer(
-                          name: nameCtrl.text.trim(),
-                          phone: phoneCtrl.text.trim(),
-                        );
-                  },
-                  child: const Text(AppStrings.criarCliente),
-                ),
+                  Text(
+                    AppStrings.adicionarCliente,
+                    style: theme.textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 20),
+                  TextFormField(
+                    controller: nameCtrl,
+                    enabled: !isSaving,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      labelText: AppStrings.nome,
+                      hintText: AppStrings.nomeHint,
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? AppStrings.nameRequired
+                        : null,
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: phoneCtrl,
+                    enabled: !isSaving,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: AppStrings.phoneNumber,
+                    ),
+                    validator: (v) => v == null || v.trim().isEmpty
+                        ? AppStrings.phoneRequired
+                        : null,
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 0,
+                      ),
+                      onPressed: isSaving
+                          ? null
+                          : () async {
+                              if (!formKey.currentState!.validate()) return;
+                              setModalState(() => isSaving = true);
+                              try {
+                                await ref
+                                    .read(customersControllerProvider.notifier)
+                                    .createCustomer(
+                                      name: nameCtrl.text.trim(),
+                                      phone: phoneCtrl.text.trim(),
+                                    );
+                                if (ctx.mounted) {
+                                  Navigator.pop(ctx);
+                                }
+                              } catch (_) {
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(AppStrings.erroGenerico),
+                                    ),
+                                  );
+                                }
+                              } finally {
+                                if (ctx.mounted) {
+                                  setModalState(() => isSaving = false);
+                                }
+                              }
+                            },
+                      child: isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(AppStrings.criarCliente),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

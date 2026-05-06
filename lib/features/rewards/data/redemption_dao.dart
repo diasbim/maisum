@@ -4,9 +4,10 @@ import '../../../core/database/app_database.dart';
 import '../domain/redemption.dart';
 
 class RedemptionDao {
-  RedemptionDao(this._db);
+  RedemptionDao(this._db, {this.merchantId});
 
   final AppDatabase _db;
+  final String? merchantId;
   static const _uuid = Uuid();
 
   Future<Redemption> create({
@@ -23,7 +24,10 @@ class RedemptionDao {
       pointsSpent: pointsSpent,
       redeemedAt: now,
     );
-    await db.insert('redemptions', redemption.toDbMap());
+    await db.insert('redemptions', {
+      ...redemption.toDbMap(),
+      'merchant_id': merchantId,
+    });
     return redemption;
   }
 
@@ -31,8 +35,10 @@ class RedemptionDao {
     final db = await _db.database;
     final rows = await db.query(
       'redemptions',
-      where: 'customer_id = ?',
-      whereArgs: [customerId],
+      where: merchantId == null
+          ? 'customer_id = ?'
+          : 'merchant_id = ? AND customer_id = ?',
+      whereArgs: merchantId == null ? [customerId] : [merchantId, customerId],
       orderBy: 'redeemed_at DESC',
     );
     return rows.map(redemptionFromMap).toList();
@@ -42,7 +48,10 @@ class RedemptionDao {
     final db = await _db.database;
     final rows = await db.query(
       'redemptions',
-      where: 'synced = 0',
+      where: merchantId == null
+          ? 'synced = 0'
+          : 'merchant_id = ? AND synced = 0',
+      whereArgs: merchantId == null ? null : [merchantId],
       orderBy: 'redeemed_at ASC',
     );
     return rows.map(redemptionFromMap).toList();
@@ -53,8 +62,8 @@ class RedemptionDao {
     await db.update(
       'redemptions',
       {'synced': 1},
-      where: 'id = ?',
-      whereArgs: [id],
+      where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
+      whereArgs: merchantId == null ? [id] : [merchantId, id],
     );
   }
 }

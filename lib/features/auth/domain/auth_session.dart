@@ -12,6 +12,12 @@ class AuthSession with _$AuthSession {
     required String phone,
     required DateTime expiresAt,
     @Default('') String token,
+    String? appUserId,
+    String? merchantId,
+    @Default('Minha Loja') String merchantName,
+    @Default('TRIAL') String subscriptionStatus,
+    String? refreshToken,
+    String? deviceId,
     String? firebaseUid,
   }) = _AuthSession;
 
@@ -20,4 +26,6 @@ class AuthSession with _$AuthSession {
 
   bool get isValid => expiresAt.isAfter(DateTime.now());
   bool get isFirebaseSession => firebaseUid != null && firebaseUid!.isNotEmpty;
+  String get resolvedAppUserId => appUserId ?? userId;
+  String get resolvedMerchantId => merchantId ?? firebaseUid ?? userId;
 }

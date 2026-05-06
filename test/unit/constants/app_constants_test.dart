@@ -5,11 +5,26 @@ void main() {
   group('AppConstants values', () {
     test('pointsPerMzn is 100', () => expect(AppConstants.pointsPerMzn, 100));
     test('maxSyncRetries is 3', () => expect(AppConstants.maxSyncRetries, 3));
-    test('dbVersion is 5', () => expect(AppConstants.dbVersion, 5));
-    test('connectTimeout is 10 s',
-        () => expect(AppConstants.connectTimeout, const Duration(seconds: 10)));
-    test('receiveTimeout is 15 s',
-        () => expect(AppConstants.receiveTimeout, const Duration(seconds: 15)));
+    test('dbVersion is 6', () => expect(AppConstants.dbVersion, 6));
+    test(
+      'backend auth is disabled by default',
+      () => expect(AppConstants.enableBackendAuth, false),
+    );
+    test(
+      'sync transport defaults to firestore',
+      () => expect(
+        AppConstants.syncTransport,
+        AppConstants.syncTransportFirestore,
+      ),
+    );
+    test(
+      'connectTimeout is 10 s',
+      () => expect(AppConstants.connectTimeout, const Duration(seconds: 10)),
+    );
+    test(
+      'receiveTimeout is 15 s',
+      () => expect(AppConstants.receiveTimeout, const Duration(seconds: 15)),
+    );
   });
 
   group('Points calculation formula (amount / pointsPerMzn).floor()', () {

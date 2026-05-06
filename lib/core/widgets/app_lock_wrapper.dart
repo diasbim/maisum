@@ -1,13 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../app/router.dart';
 import '../../features/auth/presentation/auth_controller.dart';
-import '../../features/sync/sync_controller.dart';
 import '../constants/app_constants.dart';
 import '../constants/app_strings.dart';
 import '../services/pin_verification_service.dart';
@@ -143,107 +141,9 @@ class _AppLockWrapperState extends ConsumerState<AppLockWrapper>
           child: widget.child,
         ),
 
-        // ── Floating sync badge ───────────────────
-        if (!showLock)
-          const Positioned(
-            bottom: 96,
-            left: 0,
-            right: 0,
-            child: _SyncBadge(),
-          ),
-
         // ── PIN lock overlay ──────────────────────
         if (showLock) _PinLockOverlay(onUnlock: _unlock),
       ],
-    );
-  }
-}
-
-// ── Sync badge ────────────────────────────────────────────────────────────────
-
-class _SyncBadge extends ConsumerWidget {
-  const _SyncBadge();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final syncStatus = ref.watch(syncControllerProvider);
-
-    if (!syncStatus.isSyncing && syncStatus.pendingCount == 0) {
-      return const SizedBox.shrink();
-    }
-
-    final isSyncing = syncStatus.isSyncing;
-    final label = isSyncing
-        ? 'Sincronizando...'
-        : '${syncStatus.pendingCount} pendente(s)';
-    final bgColor = isSyncing ? AppColors.primary : AppColors.amber;
-
-    return SafeArea(
-      top: false,
-      child: Center(
-        child: GestureDetector(
-          onTap: () => ref.read(routerProvider).push('/pending-sync'),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: bgColor.withValues(alpha: 0.35),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 20,
-                  height: 20,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const BrandMark(
-                    size: 12,
-                    padding: EdgeInsets.all(4),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                if (isSyncing)
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                else
-                  const Icon(Icons.cloud_upload_rounded,
-                      size: 13, color: Colors.white),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.1,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                const Icon(Icons.chevron_right_rounded,
-                    size: 14, color: Colors.white),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -431,9 +331,9 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
                             ),
                           ),
                           const SizedBox(height: 28),
-                          Text(
+                          const Text(
                             AppStrings.pinEntryTitle,
-                            style: GoogleFonts.bricolageGrotesque(
+                            style: TextStyle(
                               color: Colors.white,
                               fontSize: 26,
                               fontWeight: FontWeight.w800,
@@ -443,7 +343,7 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
                           const SizedBox(height: 8),
                           Text(
                             AppStrings.pinEntrySubtitle,
-                            style: GoogleFonts.outfit(
+                            style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.55),
                               fontSize: 15,
                             ),
@@ -476,7 +376,7 @@ class _PinLockOverlayState extends ConsumerState<_PinLockOverlay>
                               onPressed: _isLoading ? null : _forgotPin,
                               child: Text(
                                 AppStrings.pinForgot,
-                                style: GoogleFonts.outfit(
+                                style: TextStyle(
                                   color: Colors.white.withValues(alpha: 0.45),
                                   fontSize: 13,
                                 ),

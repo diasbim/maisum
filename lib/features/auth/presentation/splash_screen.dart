@@ -1,6 +1,5 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../app/providers.dart';
@@ -106,9 +105,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   opacity: _textFade,
                   child: Column(
                     children: [
-                      Text(
+                      const Text(
                         'MaisUm',
-                        style: GoogleFonts.bricolageGrotesque(
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 32,
                           fontWeight: FontWeight.w800,
@@ -118,7 +117,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       const SizedBox(height: 6),
                       Text(
                         'Fidelizacao simples',
-                        style: GoogleFonts.outfit(
+                        style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.55),
                           fontSize: 15,
                           fontWeight: FontWeight.w400,

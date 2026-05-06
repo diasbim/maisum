@@ -1,9 +1,11 @@
 import 'dart:convert';
+
+import 'package:uuid/uuid.dart';
+
 import '../domain/reward.dart';
 import 'reward_dao.dart';
 import '../../sync/data/sync_dao.dart';
 import '../../sync/domain/sync_item.dart';
-import 'package:uuid/uuid.dart';
 
 class RewardRepository {
   RewardRepository(this._dao, this._syncDao);
@@ -26,14 +28,19 @@ class RewardRepository {
       pointsRequired: pointsRequired,
       description: description,
     );
-    await _syncDao.enqueue(SyncItem(
-      id: _uuid.v4(),
-      operation: 'create',
-      entityType: 'reward',
-      entityId: reward.id,
-      payload: jsonEncode(reward.toDbMap()),
-      createdAt: DateTime.now(),
-    ));
+    await _syncDao.enqueue(
+      SyncItem(
+        id: _uuid.v4(),
+        operation: 'create',
+        entityType: 'reward',
+        entityId: reward.id,
+        payload: jsonEncode({
+          ...reward.toDbMap(),
+          'merchant_id': _dao.merchantId,
+        }),
+        createdAt: DateTime.now(),
+      ),
+    );
     return reward;
   }
 
@@ -42,16 +49,19 @@ class RewardRepository {
     final reward = await _dao.getById(id);
     if (reward == null) return;
     final updatedAt = DateTime.now().millisecondsSinceEpoch;
-    await _syncDao.enqueue(SyncItem(
-      id: _uuid.v4(),
-      operation: 'update',
-      entityType: 'reward',
-      entityId: id,
-      payload: jsonEncode({
-        ...reward.toDbMap(),
-        'updated_at': updatedAt,
-      }),
-      createdAt: DateTime.now(),
-    ));
+    await _syncDao.enqueue(
+      SyncItem(
+        id: _uuid.v4(),
+        operation: 'update',
+        entityType: 'reward',
+        entityId: id,
+        payload: jsonEncode({
+          ...reward.toDbMap(),
+          'merchant_id': _dao.merchantId,
+          'updated_at': updatedAt,
+        }),
+        createdAt: DateTime.now(),
+      ),
+    );
   }
 }

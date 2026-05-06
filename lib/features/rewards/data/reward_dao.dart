@@ -1,18 +1,23 @@
 import 'package:uuid/uuid.dart';
+
 import '../../../core/database/app_database.dart';
 import '../domain/reward.dart';
 
 class RewardDao {
-  RewardDao(this._db);
+  RewardDao(this._db, {this.merchantId});
 
   final AppDatabase _db;
+  final String? merchantId;
   static const _uuid = Uuid();
 
   Future<List<Reward>> getAll() async {
     final db = await _db.database;
     final rows = await db.query(
       'rewards',
-      where: 'active = 1',
+      where: merchantId == null
+          ? 'active = 1'
+          : 'merchant_id = ? AND active = 1',
+      whereArgs: merchantId == null ? null : [merchantId],
       orderBy: 'points_required ASC',
     );
     return rows.map(rewardFromMap).toList();
@@ -22,8 +27,8 @@ class RewardDao {
     final db = await _db.database;
     final rows = await db.query(
       'rewards',
-      where: 'id = ?',
-      whereArgs: [id],
+      where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
+      whereArgs: merchantId == null ? [id] : [merchantId, id],
       limit: 1,
     );
     if (rows.isEmpty) return null;
@@ -46,6 +51,7 @@ class RewardDao {
     );
     await db.insert('rewards', {
       ...reward.toDbMap(),
+      'merchant_id': merchantId,
       'updated_at': now.millisecondsSinceEpoch,
     });
     return reward;
@@ -57,10 +63,11 @@ class RewardDao {
       'rewards',
       {
         ...reward.toDbMap(),
+        'merchant_id': merchantId,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       },
-      where: 'id = ?',
-      whereArgs: [reward.id],
+      where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
+      whereArgs: merchantId == null ? [reward.id] : [merchantId, reward.id],
     );
   }
 
@@ -73,8 +80,8 @@ class RewardDao {
         'updated_at': DateTime.now().millisecondsSinceEpoch,
         'synced': 0,
       },
-      where: 'id = ?',
-      whereArgs: [id],
+      where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
+      whereArgs: merchantId == null ? [id] : [merchantId, id],
     );
   }
 
@@ -83,14 +90,20 @@ class RewardDao {
     await db.update(
       'rewards',
       {'synced': 1},
-      where: 'id = ?',
-      whereArgs: [id],
+      where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
+      whereArgs: merchantId == null ? [id] : [merchantId, id],
     );
   }
 
   Future<List<Reward>> getUnsynced() async {
     final db = await _db.database;
-    final rows = await db.query('rewards', where: 'synced = 0');
+    final rows = await db.query(
+      'rewards',
+      where: merchantId == null
+          ? 'synced = 0'
+          : 'merchant_id = ? AND synced = 0',
+      whereArgs: merchantId == null ? null : [merchantId],
+    );
     return rows.map(rewardFromMap).toList();
   }
 }

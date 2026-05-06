@@ -1,18 +1,27 @@
 import 'dart:convert';
+
+import 'package:uuid/uuid.dart';
+
 import '../../../core/constants/app_constants.dart';
 import '../../../core/database/app_database.dart';
 import '../../customers/domain/customer.dart';
 import '../domain/sale.dart';
 import 'sale_dao.dart';
 import '../../sync/domain/sync_item.dart';
-import 'package:uuid/uuid.dart';
 
 class SaleRepository {
-  SaleRepository(this._database, this._saleDao);
+  SaleRepository(
+    this._database,
+    this._saleDao, {
+    this.merchantId,
+    this.deviceId,
+  });
 
   final AppDatabase _database;
 
   final SaleDao _saleDao;
+  final String? merchantId;
+  final String? deviceId;
   static const _uuid = Uuid();
 
   Future<Sale> createSale({
@@ -31,12 +40,12 @@ class SaleRepository {
         createdAt: now,
       );
 
-      await txn.insert('sales', sale.toDbMap());
+      await txn.insert('sales', _saleRow(sale));
 
       final customerRows = await txn.query(
         'customers',
-        where: 'id = ?',
-        whereArgs: [customerId],
+        where: merchantId == null ? 'id = ?' : 'id = ? AND merchant_id = ?',
+        whereArgs: merchantId == null ? [customerId] : [customerId, merchantId],
         limit: 1,
       );
 
@@ -51,34 +60,43 @@ class SaleRepository {
 
         await txn.update(
           'customers',
-          updatedCustomer.toDbMap(),
-          where: 'id = ?',
-          whereArgs: [customerId],
+          {...updatedCustomer.toDbMap(), 'merchant_id': merchantId},
+          where: merchantId == null ? 'id = ?' : 'id = ? AND merchant_id = ?',
+          whereArgs: merchantId == null
+              ? [customerId]
+              : [customerId, merchantId],
         );
 
         await txn.insert(
           'sync_queue',
-          SyncItem(
-            id: _uuid.v4(),
-            operation: 'update',
-            entityType: 'customer',
-            entityId: customerId,
-            payload: jsonEncode(updatedCustomer.toDbMap()),
-            createdAt: now,
-          ).toDbMap(),
+          _syncQueueRow(
+            SyncItem(
+              id: _uuid.v4(),
+              operation: 'update',
+              entityType: 'customer',
+              entityId: customerId,
+              payload: jsonEncode({
+                ...updatedCustomer.toDbMap(),
+                'merchant_id': merchantId,
+              }),
+              createdAt: now,
+            ),
+          ),
         );
       }
 
       await txn.insert(
         'sync_queue',
-        SyncItem(
-          id: _uuid.v4(),
-          operation: 'create',
-          entityType: 'sale',
-          entityId: sale.id,
-          payload: jsonEncode(sale.toDbMap()),
-          createdAt: now,
-        ).toDbMap(),
+        _syncQueueRow(
+          SyncItem(
+            id: _uuid.v4(),
+            operation: 'create',
+            entityType: 'sale',
+            entityId: sale.id,
+            payload: jsonEncode(_saleRow(sale)),
+            createdAt: now,
+          ),
+        ),
       );
 
       return sale;
@@ -89,4 +107,16 @@ class SaleRepository {
       _saleDao.getByCustomer(customerId);
 
   Future<Map<String, dynamic>> getTodayStats() => _saleDao.getTodayStats();
+
+  Map<String, dynamic> _saleRow(Sale sale) => {
+    ...sale.toDbMap(),
+    'merchant_id': merchantId,
+    'device_id': deviceId,
+  };
+
+  Map<String, dynamic> _syncQueueRow(SyncItem item) => {
+    ...item.toDbMap(),
+    'merchant_id': merchantId,
+    'device_id': deviceId,
+  };
 }

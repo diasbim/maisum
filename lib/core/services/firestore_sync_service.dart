@@ -4,9 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../constants/app_constants.dart';
 
+import '../../features/sync/data/sync_transport.dart';
 import '../../features/sync/domain/sync_item.dart';
 
-class FirestoreSyncService {
+class FirestoreSyncService implements SyncTransport {
   FirestoreSyncService(this._firestore, this._businessUid);
 
   final FirebaseFirestore _firestore;
@@ -19,6 +20,10 @@ class FirestoreSyncService {
     'redemption': 'redemptions',
   };
 
+  @override
+  String get transportName => AppConstants.syncTransportFirestore;
+
+  @override
   Future<List<Map<String, dynamic>>> fetchCollection(String entityType) async {
     final collection = _collectionMap[entityType] ?? entityType;
     final snapshot = await _firestore
@@ -34,6 +39,7 @@ class FirestoreSyncService {
     }).toList();
   }
 
+  @override
   Future<List<Map<String, dynamic>>> fetchCollectionSince({
     required String entityType,
     required String orderField,
@@ -62,6 +68,7 @@ class FirestoreSyncService {
     }).toList();
   }
 
+  @override
   Future<void> processSyncItem(SyncItem item) async {
     final collection = _collectionMap[item.entityType] ?? item.entityType;
     final docRef = _firestore

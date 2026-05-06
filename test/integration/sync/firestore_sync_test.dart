@@ -1,6 +1,7 @@
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:loyalty_app/core/services/firestore_sync_service.dart';
+import 'package:loyalty_app/features/sync/data/sync_transport.dart';
 import 'package:loyalty_app/features/sync/domain/sync_item.dart';
 
 void main() {
@@ -14,6 +15,11 @@ void main() {
   });
 
   group('FirestoreSyncService', () {
+    test('implements SyncTransport with firestore transport name', () {
+      expect(service, isA<SyncTransport>());
+      expect(service.transportName, 'firestore');
+    });
+
     test('create operation writes document to correct collection', () async {
       final item = SyncItem(
         id: 'sync-1',
@@ -36,35 +42,41 @@ void main() {
       expect(doc.data()!['phone'], '840000001');
     });
 
-    test('update operation merges data without overwriting other fields',
-        () async {
-      await fakeFirestore
-          .collection('businesses')
-          .doc(businessUid)
-          .collection('customers')
-          .doc('cust-2')
-          .set({'name': 'Old Name', 'phone': '840000002', 'total_points': 50});
+    test(
+      'update operation merges data without overwriting other fields',
+      () async {
+        await fakeFirestore
+            .collection('businesses')
+            .doc(businessUid)
+            .collection('customers')
+            .doc('cust-2')
+            .set({
+              'name': 'Old Name',
+              'phone': '840000002',
+              'total_points': 50,
+            });
 
-      final item = SyncItem(
-        id: 'sync-2',
-        operation: 'update',
-        entityType: 'customer',
-        entityId: 'cust-2',
-        payload: '{"id":"cust-2","name":"New Name"}',
-        createdAt: DateTime.now(),
-      );
-      await service.processSyncItem(item);
+        final item = SyncItem(
+          id: 'sync-2',
+          operation: 'update',
+          entityType: 'customer',
+          entityId: 'cust-2',
+          payload: '{"id":"cust-2","name":"New Name"}',
+          createdAt: DateTime.now(),
+        );
+        await service.processSyncItem(item);
 
-      final doc = await fakeFirestore
-          .collection('businesses')
-          .doc(businessUid)
-          .collection('customers')
-          .doc('cust-2')
-          .get();
-      expect(doc.data()!['name'], 'New Name');
-      expect(doc.data()!['phone'], '840000002');
-      expect(doc.data()!['total_points'], 50);
-    });
+        final doc = await fakeFirestore
+            .collection('businesses')
+            .doc(businessUid)
+            .collection('customers')
+            .doc('cust-2')
+            .get();
+        expect(doc.data()!['name'], 'New Name');
+        expect(doc.data()!['phone'], '840000002');
+        expect(doc.data()!['total_points'], 50);
+      },
+    );
 
     test('delete operation removes document', () async {
       await fakeFirestore
@@ -148,41 +160,43 @@ void main() {
       expect(doc.data()!['name'], 'Corte grátis');
     });
 
-    test('fetchCollectionSince returns only documents after the saved cursor',
-        () async {
-      final rewards = fakeFirestore
-          .collection('businesses')
-          .doc(businessUid)
-          .collection('rewards');
+    test(
+      'fetchCollectionSince returns only documents after the saved cursor',
+      () async {
+        final rewards = fakeFirestore
+            .collection('businesses')
+            .doc(businessUid)
+            .collection('rewards');
 
-      await rewards.doc('reward-1').set({
-        'id': 'reward-1',
-        'name': 'Primeiro',
-        'points_required': 100,
-        'updated_at': 1000,
-      });
-      await rewards.doc('reward-2').set({
-        'id': 'reward-2',
-        'name': 'Segundo',
-        'points_required': 200,
-        'updated_at': 2000,
-      });
-      await rewards.doc('reward-3').set({
-        'id': 'reward-3',
-        'name': 'Terceiro',
-        'points_required': 300,
-        'updated_at': 2000,
-      });
+        await rewards.doc('reward-1').set({
+          'id': 'reward-1',
+          'name': 'Primeiro',
+          'points_required': 100,
+          'updated_at': 1000,
+        });
+        await rewards.doc('reward-2').set({
+          'id': 'reward-2',
+          'name': 'Segundo',
+          'points_required': 200,
+          'updated_at': 2000,
+        });
+        await rewards.doc('reward-3').set({
+          'id': 'reward-3',
+          'name': 'Terceiro',
+          'points_required': 300,
+          'updated_at': 2000,
+        });
 
-      final docs = await service.fetchCollectionSince(
-        entityType: 'reward',
-        orderField: 'updated_at',
-        lastValue: 2000,
-        lastDocId: 'reward-2',
-      );
+        final docs = await service.fetchCollectionSince(
+          entityType: 'reward',
+          orderField: 'updated_at',
+          lastValue: 2000,
+          lastDocId: 'reward-2',
+        );
 
-      expect(docs.map((doc) => doc['id']), ['reward-3']);
-    });
+        expect(docs.map((doc) => doc['id']), ['reward-3']);
+      },
+    );
 
     test('different businessUid uses separate path', () async {
       final otherService = FirestoreSyncService(fakeFirestore, 'other-biz');

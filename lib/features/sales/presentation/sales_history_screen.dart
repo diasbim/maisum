@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
@@ -195,7 +194,7 @@ class _SaleHistoryTile extends StatelessWidget {
                 ),
                 child: Text(
                   '+$points pts',
-                  style: GoogleFonts.outfit(
+                  style: const TextStyle(
                     color: AppColors.secondaryDark,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
