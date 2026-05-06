@@ -28,7 +28,7 @@
 <link rel="apple-touch-icon" href="assets/images/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -65,23 +65,25 @@
 </script>
 <style>
 :root{
-  --bg:#f5efe3;
-  --ink:#111717;
-  --ink-soft:#455154;
-  --panel:#fffaf1;
-  --panel-strong:#fffdf8;
-  --panel-dark:#12212a;
-  --line:rgba(17,23,23,.12);
-  --brand:#f66b2d;
-  --brand-deep:#c94b14;
-  --gold:#ebb84f;
-  --cream:#fff4dd;
+  --bg:#f6f5f1;
+  --ink:#0f1f3a;
+  --ink-soft:#5c6676;
+  --panel:#ffffff;
+  --panel-strong:#ffffff;
+  --panel-dark:#0c1e38;
+  --line:rgba(15,31,58,.12);
+  --brand:#f5c24d;
+  --brand-deep:#d79b1d;
+  --gold:#f5c24d;
+  --cream:#fff4d8;
+  --navy:#0f1f3a;
+  --navy-deep:#0b172c;
   --wa-dark:#075E54;
   --wa-header:#128C7E;
   --wa-green:#25D366;
   --wa-bg:#ECE5DD;
-  --shadow:0 24px 60px rgba(78,48,20,.12);
-  --shadow-soft:0 14px 36px rgba(78,48,20,.08);
+  --shadow:0 24px 60px rgba(15,31,58,.14);
+  --shadow-soft:0 14px 36px rgba(15,31,58,.1);
   --r-xl:24px;
   --r-lg:20px;
   --r-md:16px;
@@ -90,7 +92,7 @@
 *,:before,:after{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body,h1,h2,h3,h4,p,ul{margin:0}
-body{font-family:"Manrope",sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{font-family:"Outfit",sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{text-decoration:none;color:inherit}
 img{display:block;max-width:100%}
 ul{list-style:none;padding:0}
@@ -112,7 +114,7 @@ button,input{font:inherit}
 .eyebrow::before{content:"";width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--gold))}
 .eyebrow--white{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.16);color:rgba(255,255,255,.82)}
 .eyebrow--white::before{background:var(--wa-green)}
-h1,h2{font-family:"Space Grotesk",sans-serif;line-height:1}
+h1,h2{font-family:"Bricolage Grotesque",sans-serif;line-height:1}
 h1{font-size:clamp(2.7rem,9vw,5.4rem);letter-spacing:-.08em;margin:18px 0 20px}
 h2{font-size:clamp(1.9rem,5vw,3.2rem);letter-spacing:-.06em;margin:16px 0 12px}
 h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
@@ -126,9 +128,9 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
 }
 .btn:hover{transform:translateY(-2px)}
 .btn:focus-visible{outline:3px solid rgba(246,107,45,.4);outline-offset:3px}
-.btn-primary{background:linear-gradient(135deg,var(--brand),#ff8d49);color:#fff;box-shadow:0 16px 38px rgba(246,107,45,.28)}
-.btn-primary:hover{box-shadow:0 20px 48px rgba(246,107,45,.4)}
-.btn-dark{background:var(--panel-dark);color:#fff;box-shadow:0 14px 32px rgba(18,33,42,.2)}
+.btn-primary{background:linear-gradient(135deg,var(--navy),var(--navy-deep));color:#fff;box-shadow:0 16px 38px rgba(15,31,58,.28)}
+.btn-primary:hover{box-shadow:0 20px 48px rgba(15,31,58,.4)}
+.btn-dark{background:var(--brand);color:var(--navy);box-shadow:0 14px 32px rgba(15,31,58,.2)}
 .btn-ghost{background:transparent;border-color:var(--line);color:var(--ink-soft)}
 .btn-ghost:hover{border-color:rgba(17,23,23,.28);color:var(--ink)}
 .btn-wa{background:linear-gradient(135deg,var(--wa-green),#1db954);color:#fff;box-shadow:0 16px 38px rgba(37,211,102,.26)}
@@ -138,7 +140,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
 /* Context-specific button overrides */
 .hero-actions .btn-ghost,
 .cta-actions .btn-ghost{min-height:0;padding:0;border:none;background:none;box-shadow:none;font-weight:700;text-decoration:underline;text-underline-offset:4px}
-.hero-actions .btn-ghost{color:var(--brand-deep)}
+.hero-actions .btn-ghost{color:var(--navy)}
 .hero-actions .btn-ghost:hover{color:var(--ink);transform:none}
 .cta-actions .btn-ghost{color:rgba(244,251,251,.72)}
 .cta-actions .btn-ghost:hover{color:#fff;transform:none}
@@ -152,7 +154,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
 .site-header .wrap{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0}
 .brand{display:flex;align-items:center;gap:10px}
 .brand img{width:40px;height:40px;object-fit:contain}
-.brand-copy strong{display:block;font-family:"Space Grotesk",sans-serif;font-size:.98rem;letter-spacing:-.04em;line-height:1.1}
+.brand-copy strong{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:.98rem;letter-spacing:-.04em;line-height:1.1}
 .brand-copy span{font-size:.73rem;color:var(--ink-soft)}
 .nav{display:none;align-items:center;gap:22px}
 .nav a{font-size:.92rem;color:var(--ink-soft);font-weight:700;transition:color .15s}
@@ -196,6 +198,10 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   background:rgba(255,255,255,.9);border:1px solid rgba(17,23,23,.06)
 }
 .flow-card h3{margin-bottom:6px}
+.icon-chip{display:inline-flex;align-items:center;gap:10px;color:var(--navy)}
+.icon-chip svg{width:22px;height:22px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.icon-chip--gold{color:var(--brand-deep)}
+.icon-chip--green{color:#0d6b38}
 .flow-card p{font-size:.92rem;color:var(--ink-soft)}
 .flow-arrow{display:none;font-size:1.5rem;color:var(--brand);align-items:center;justify-content:center;font-weight:700}
 .flow-badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
@@ -205,6 +211,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   background:rgba(37,211,102,.1);color:#0d6b38;border:1px solid rgba(37,211,102,.18);
   font-size:.8rem;font-weight:800
 }
+.flow-badge svg{width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .flow-cta{margin-top:18px}
 
 /* Phone mockup */
@@ -212,7 +219,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
 .app-shot-frame{
   position:relative;max-width:260px;width:100%;
   padding:10px;border-radius:32px;
-  background:linear-gradient(180deg,#12212a,#253744);
+  background:linear-gradient(180deg,var(--navy),#1a2d4f);
   box-shadow:0 24px 56px rgba(18,33,42,.28)
 }
 .app-shot-frame::before{
@@ -240,7 +247,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   animation:floatBob 3.4s ease-in-out infinite .6s;
   min-width:130px
 }
-.float-points strong{display:block;font-family:"Space Grotesk",sans-serif;font-size:1rem;line-height:1.2}
+.float-points strong{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:1rem;line-height:1.2}
 .float-points span{font-size:.73rem;opacity:.76;display:block;margin-top:2px}
 .float-points-bar{width:100%;height:5px;background:rgba(255,255,255,.2);border-radius:999px;margin-top:7px;overflow:hidden}
 .float-points-fill{height:100%;background:var(--wa-green);border-radius:999px}
@@ -251,38 +258,39 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
 .stats-bar{padding:22px 0;border-top:1px solid rgba(17,23,23,.07);border-bottom:1px solid rgba(17,23,23,.07);background:rgba(255,255,255,.48)}
 .stats-grid{display:flex;align-items:center;justify-content:center;flex-wrap:wrap}
 .stat-item{display:flex;flex-direction:column;align-items:center;padding:8px 24px;text-align:center}
-.stat-item strong{font-family:"Space Grotesk",sans-serif;font-size:1.55rem;letter-spacing:-.05em}
+.stat-item strong{font-family:"Bricolage Grotesque",sans-serif;font-size:1.55rem;letter-spacing:-.05em}
 .stat-item span{font-size:.82rem;color:var(--ink-soft);font-weight:600;margin-top:2px}
 .stat-divider{width:1px;height:36px;background:var(--line)}
 
 /* Core loop */
-.section-header{max-width:620px;margin-bottom:36px}
-.section-header>p{font-size:1.02rem;color:var(--ink-soft);max-width:52ch;margin-top:8px}
-.steps-flow{display:grid;gap:12px}
+.section-header{max-width:640px;margin-bottom:34px}
+.section-header>p{font-size:1.02rem;color:var(--ink-soft);max-width:54ch;margin-top:10px}
+.steps-flow{display:grid;gap:14px}
 .step-card{
   padding:22px;border-radius:var(--r-xl);
-  background:var(--panel-strong);border:1px solid rgba(17,23,23,.06);
-  box-shadow:var(--shadow-soft);position:relative;overflow:hidden
+  background:linear-gradient(135deg,#ffffff,#fbf7ec);border:1px solid rgba(15,31,58,.08);
+  box-shadow:0 12px 30px rgba(15,31,58,.08);position:relative;overflow:hidden
 }
-.step-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand),#ffa56a)}
-.step-card--gold::before{background:linear-gradient(90deg,var(--gold),#f5a623)}
+.step-card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--brand),#ffd88a)}
+.step-card--gold::before{background:linear-gradient(90deg,var(--gold),#f6d67d)}
 .step-card--wa::before{background:linear-gradient(90deg,var(--wa-green),#1db954)}
 .step-num{
   display:inline-flex;align-items:center;justify-content:center;
   width:36px;height:36px;border-radius:12px;
-  background:linear-gradient(135deg,var(--brand),#ffa56a);
-  color:#fff;font-family:"Space Grotesk",sans-serif;font-size:1rem;font-weight:700;margin-bottom:12px
+  background:linear-gradient(135deg,var(--brand),#ffd88a);
+  color:var(--navy);font-family:"Bricolage Grotesque",sans-serif;font-size:1rem;font-weight:800;margin-bottom:12px
 }
-.step-card--gold .step-num{background:linear-gradient(135deg,var(--gold),#f5a623);color:#5c3800}
+.step-card--gold .step-num{background:linear-gradient(135deg,var(--gold),#f6d67d);color:#5c3800}
 .step-card--wa .step-num{background:linear-gradient(135deg,var(--wa-green),#1db954)}
-.step-emoji{font-size:1.7rem;display:block;margin-bottom:10px}
-.step-card p{font-size:.93rem;color:var(--ink-soft)}
+.step-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;margin-bottom:10px;color:var(--navy)}
+.step-icon svg{width:24px;height:24px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.step-card p{font-size:.95rem;color:var(--ink-soft)}
 .step-badge{
   display:inline-flex;align-items:center;margin-top:12px;
   padding:6px 11px;border-radius:999px;
-  background:rgba(246,107,45,.1);color:var(--brand-deep);font-size:.77rem;font-weight:800;letter-spacing:.04em
+  background:rgba(245,194,77,.22);color:var(--navy);font-size:.75rem;font-weight:800;letter-spacing:.04em
 }
-.step-badge--gold{background:rgba(235,184,79,.14);color:#7a4d00}
+.step-badge--gold{background:rgba(245,194,77,.2);color:#5c3800}
 .step-badge--wa{background:rgba(37,211,102,.12);color:#0d6b38}
 .step-arrow{display:none;font-size:1.5rem;color:var(--brand);align-items:center;justify-content:center;font-weight:700}
 
@@ -297,7 +305,8 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   padding:13px 15px;border-radius:var(--r-md);
   background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.09)
 }
-.wa-feature-icon{font-size:1.35rem;flex-shrink:0;line-height:1.2}
+.wa-feature-icon{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
+.wa-feature-icon svg{width:20px;height:20px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .wa-feature strong{display:block;font-size:.94rem;color:#fff;margin-bottom:2px}
 .wa-feature span{font-size:.84rem;color:rgba(232,248,243,.65)}
 .wa-cta{margin-top:28px}
@@ -350,8 +359,9 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
 }
 .offline-icon{
   width:44px;height:44px;border-radius:14px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;font-size:1.35rem
+  display:flex;align-items:center;justify-content:center
 }
+.offline-icon svg{width:22px;height:22px;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 .offline-icon--red{background:rgba(239,68,68,.1)}
 .offline-icon--gold{background:rgba(235,184,79,.14)}
 .offline-icon--green{background:rgba(37,211,102,.12)}
@@ -632,29 +642,29 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
         </div>
         <div class="flow-grid">
           <article class="flow-card">
-            <h3>✂️ Cliente faz corte</h3>
+            <h3><span class="icon-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="4" cy="5" r="2"/><circle cx="4" cy="19" r="2"/><path d="M20 4L8 12l12 8"/><path d="M20 20L8 12"/></svg>Cliente faz corte</span></h3>
             <p>Pagamento rápido. 500 MT confirmados no M-Pesa.</p>
           </article>
           <div class="flow-arrow" aria-hidden="true">→</div>
           <article class="flow-card">
-            <h3>⭐ Ganha pontos</h3>
+            <h3><span class="icon-chip icon-chip--gold"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.2 1 5.8L12 16l-5.2 2.9 1-5.8-4.3-4.2 5.9-.9L12 3z"/></svg>Ganha pontos</span></h3>
             <p>O sistema atribui pontos automaticamente sem contas manuais.</p>
           </article>
           <div class="flow-arrow" aria-hidden="true">→</div>
           <article class="flow-card">
-            <h3>💬 Recebe WhatsApp</h3>
+            <h3><span class="icon-chip icon-chip--green"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>Recebe WhatsApp</span></h3>
             <p>Mensagem com progresso e recompensa próxima.</p>
           </article>
           <div class="flow-arrow" aria-hidden="true">→</div>
           <article class="flow-card">
-            <h3>🔁 Volta à barbearia</h3>
+            <h3><span class="icon-chip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>Volta à barbearia</span></h3>
             <p>O cliente regressa mais cedo para ganhar o corte grátis.</p>
           </article>
         </div>
         <div class="flow-badges">
-          <span class="flow-badge">⚡ Menos de 5 segundos</span>
-          <span class="flow-badge">💬 WhatsApp imediato</span>
-          <span class="flow-badge">📶 Funciona offline</span>
+          <span class="flow-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>Menos de 5 segundos</span>
+          <span class="flow-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>WhatsApp imediato</span>
+          <span class="flow-badge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 1l22 22"/><path d="M5 8a10 10 0 0 1 14 0"/><path d="M8.5 11.5a6 6 0 0 1 7 0"/><path d="M12 16h.01"/></svg>Funciona offline</span>
         </div>
         <div class="flow-cta">
           <a class="btn btn-wa" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20ver%20o%20fluxo%20completo%20do%20MaisUm." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_flow">Ver fluxo completo no WhatsApp</a>
@@ -669,12 +679,12 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
       <div class="section-header reveal">
         <span class="eyebrow">Como funciona</span>
         <h2>3 passos. Menos de 5 segundos.</h2>
-        <p>Não é software complicado. É uma rotina simples que traz clientes de volta automaticamente.</p>
+        <p>Rotina simples no balcão: regista, pontua<br>e o cliente recebe o motivo para regressar.</p>
       </div>
       <div class="steps-flow reveal">
         <article class="step-card">
           <div class="step-num">1</div>
-          <span class="step-emoji" aria-hidden="true">🛒</span>
+          <span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 7h12l-1 13H7L6 7z"/><path d="M9 7V5a3 3 0 0 1 6 0v2"/></svg></span>
           <h3>Registar Venda</h3>
           <p>Seleciona o cliente, insere o valor (ex.: 500 MT) e confirma. Sem demora.</p>
           <span class="step-badge">⚡ Menos de 5 segundos</span>
@@ -682,7 +692,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
         <div class="step-arrow" aria-hidden="true">→</div>
         <article class="step-card step-card--gold">
           <div class="step-num">2</div>
-          <span class="step-emoji" aria-hidden="true">⭐</span>
+          <span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.2 1 5.8L12 16l-5.2 2.9 1-5.8-4.3-4.2 5.9-.9L12 3z"/></svg></span>
           <h3>Cliente Ganha Pontos</h3>
           <p>Pontos atribuídos automaticamente. Sem contas manuais, sem papel.</p>
           <span class="step-badge step-badge--gold">✨ Automático</span>
@@ -690,7 +700,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
         <div class="step-arrow" aria-hidden="true">→</div>
         <article class="step-card step-card--wa">
           <div class="step-num">3</div>
-          <span class="step-emoji" aria-hidden="true">💬</span>
+          <span class="step-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg></span>
           <h3>WhatsApp Traz de Volta</h3>
           <p>O cliente recebe mensagem com o progresso e um motivo claro para voltar.</p>
           <span class="step-badge step-badge--wa">💚 Sem esforço</span>
@@ -709,21 +719,21 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
           <p>O cliente não instala nada. Recebe tudo no WhatsApp que já usa todos os dias — com um motivo claro para voltar.</p>
           <div class="wa-features">
             <div class="wa-feature">
-              <span class="wa-feature-icon" aria-hidden="true">🔔</span>
+              <span class="wa-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></span>
               <div>
                 <strong>Lembrete automático</strong>
                 <span>Enviado logo após a venda, sem tocar em nada</span>
               </div>
             </div>
             <div class="wa-feature">
-              <span class="wa-feature-icon" aria-hidden="true">📊</span>
+              <span class="wa-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 16v-5"/><path d="M12 16V7"/><path d="M17 16v-8"/></svg></span>
               <div>
                 <strong>Progresso de pontos visível</strong>
                 <span>O cliente vê exatamente quanto falta para a recompensa</span>
               </div>
             </div>
             <div class="wa-feature">
-              <span class="wa-feature-icon" aria-hidden="true">↩️</span>
+              <span class="wa-feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
               <div>
                 <strong>Motivo real para regressar</strong>
                 <span>Recompensa próxima = cliente que regressa</span>
@@ -792,7 +802,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
         </div>
         <div class="offline-steps">
           <div class="offline-step">
-            <div class="offline-icon offline-icon--red" aria-hidden="true">📵</div>
+            <div class="offline-icon offline-icon--red" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M1 1l22 22"/><path d="M5 8a10 10 0 0 1 14 0"/><path d="M8.5 11.5a6 6 0 0 1 7 0"/><path d="M12 16h.01"/></svg></div>
             <div class="offline-step-copy">
               <strong>Internet cai</strong>
               <span>O atendimento não para. Continuas a registar normalmente.</span>
@@ -800,7 +810,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
           </div>
           <div class="offline-arrow-h" aria-hidden="true">→</div>
           <div class="offline-step">
-            <div class="offline-icon offline-icon--gold" aria-hidden="true">💾</div>
+            <div class="offline-icon offline-icon--gold" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3v10"/><path d="M8 9l4 4 4-4"/><path d="M5 21h14"/></svg></div>
             <div class="offline-step-copy">
               <strong>Venda guardada localmente</strong>
               <span>Fica no telemóvel. Segura. Sem perder dados.</span>
@@ -808,7 +818,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
           </div>
           <div class="offline-arrow-h" aria-hidden="true">→</div>
           <div class="offline-step">
-            <div class="offline-icon offline-icon--green" aria-hidden="true">🔄</div>
+            <div class="offline-icon offline-icon--green" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-9-9"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 9 9"/><path d="M16 7h5V2"/><path d="M8 17H3v5"/></svg></div>
             <div class="offline-step-copy">
               <strong>Sincroniza automaticamente</strong>
               <span>Quando a rede volta, tudo fica atualizado sem esforço.</span>
