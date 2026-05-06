@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MaisUm | Transforme clientes em habituais — Fidelização para barbearias em Maputo</title>
-<meta name="description" content="MaisUm transforma clientes ocasionais em habituais. Registe vendas em segundos, atribua pontos e traga clientes de volta pelo WhatsApp. Feito para barbearias em Maputo.">
+<title>MaisUm | Faça clientes voltarem automaticamente — Fidelização para barbearias em Maputo</title>
+<meta name="description" content="MaisUm faz clientes voltarem automaticamente. Registe vendas em segundos, atribua pontos e traga clientes de volta pelo WhatsApp. Feito para barbearias em Maputo.">
 <meta name="keywords" content="app fidelização Maputo, barbearia fidelização WhatsApp, pontos fidelidade barbearia Maputo, MaisUm Moçambique">
 <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
 <meta name="application-name" content="MaisUm">
@@ -13,7 +13,7 @@
 <meta name="geo.position" content="-25.9692;32.5732">
 <meta name="ICBM" content="-25.9692, 32.5732">
 <meta name="plausible-domain" content="">
-<meta property="og:title" content="MaisUm | Transforme clientes em habituais">
+<meta property="og:title" content="MaisUm | Faça clientes voltarem automaticamente">
 <meta property="og:description" content="Registe vendas em segundos, atribua pontos e traga clientes de volta pelo WhatsApp.">
 <meta property="og:type" content="website">
 <meta property="og:locale" content="pt_MZ">
@@ -21,7 +21,7 @@
 <meta property="og:image" content="assets/images/landing/barbershop-hero.webp">
 <meta property="og:image:alt" content="MaisUm — app de fidelização para barbearias em Maputo">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="MaisUm | Transforme clientes em habituais">
+<meta name="twitter:title" content="MaisUm | Faça clientes voltarem automaticamente">
 <meta name="twitter:description" content="Registe vendas em segundos, atribua pontos e traga clientes de volta pelo WhatsApp.">
 <meta name="twitter:image" content="assets/images/landing/barbershop-hero.webp">
 <link rel="icon" type="image/png" href="assets/images/logo.png">
@@ -174,6 +174,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
 .hero-grid{position:relative;display:grid;gap:28px;padding:28px}
 .hero-tags{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px}
 .hero-copy>p{font-size:1.05rem;color:#394447;max-width:44ch;line-height:1.56}
+.hero-meta{font-size:.9rem;color:var(--ink-soft);margin-top:10px;font-weight:700}
 .hero-actions{display:flex;flex-direction:column;gap:12px;margin-top:26px}
 .hero-trust{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
 .trust-pill{
@@ -182,6 +183,29 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   background:rgba(255,255,255,.7);border:1px solid rgba(17,23,23,.08);
   font-size:.82rem;font-weight:700;color:var(--ink-soft)
 }
+
+/* Flow */
+.flow-shell{
+  padding:28px;border-radius:var(--r-xl);
+  background:linear-gradient(160deg,rgba(255,255,255,.92),rgba(250,241,226,.95));
+  border:1px solid rgba(17,23,23,.06);box-shadow:var(--shadow-soft)
+}
+.flow-grid{display:grid;gap:12px}
+.flow-card{
+  padding:18px;border-radius:var(--r-lg);
+  background:rgba(255,255,255,.9);border:1px solid rgba(17,23,23,.06)
+}
+.flow-card h3{margin-bottom:6px}
+.flow-card p{font-size:.92rem;color:var(--ink-soft)}
+.flow-arrow{display:none;font-size:1.5rem;color:var(--brand);align-items:center;justify-content:center;font-weight:700}
+.flow-badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.flow-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 12px;border-radius:999px;
+  background:rgba(37,211,102,.1);color:#0d6b38;border:1px solid rgba(37,211,102,.18);
+  font-size:.8rem;font-weight:800
+}
+.flow-cta{margin-top:18px}
 
 /* Phone mockup */
 .phone-wrapper{position:relative;display:flex;justify-content:center;align-items:flex-start}
@@ -342,6 +366,23 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   font-size:.81rem;font-weight:700;color:var(--ink-soft)
 }
 .offline-badge::before{content:"✓";color:var(--wa-green);font-weight:800}
+.offline-status{
+  display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:18px
+}
+.signal-pill{
+  display:inline-flex;align-items:center;gap:10px;padding:9px 13px;border-radius:999px;
+  background:rgba(255,255,255,.9);border:1px solid rgba(17,23,23,.08);font-size:.82rem;font-weight:800;color:var(--ink-soft)
+}
+.signal-bars{display:flex;align-items:flex-end;gap:3px}
+.signal-bars span{display:block;width:4px;background:rgba(17,23,23,.2);border-radius:2px}
+.signal-bars span:nth-child(1){height:6px}
+.signal-bars span:nth-child(2){height:9px}
+.signal-bars span:nth-child(3){height:12px}
+.signal-bars span:nth-child(4){height:15px;background:var(--wa-green)}
+.sync-pill{
+  display:inline-flex;align-items:center;gap:8px;padding:9px 13px;border-radius:999px;
+  background:rgba(37,211,102,.12);border:1px solid rgba(37,211,102,.2);font-size:.82rem;font-weight:800;color:#0d6b38
+}
 
 /* Reasons */
 .reasons-grid{display:grid;gap:13px;margin-top:32px}
@@ -444,6 +485,8 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   .stat-item strong{font-size:1.3rem}
   .stat-divider{height:30px}
   .step-arrow{display:none}
+  .flow-shell{padding:20px 18px}
+  .flow-arrow{display:none}
   .wa-section{padding:48px 0}
   .offline-shell{padding:22px 18px}
   .offline-arrow-h{display:none}
@@ -458,6 +501,8 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   .hero-actions{flex-direction:row;align-items:center;flex-wrap:wrap}
   .steps-flow{grid-template-columns:1fr auto 1fr auto 1fr}
   .step-arrow{display:flex}
+  .flow-grid{grid-template-columns:1fr auto 1fr auto 1fr auto 1fr}
+  .flow-arrow{display:flex}
   .wa-grid{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:52px;align-items:center}
   .offline-steps{grid-template-columns:1fr auto 1fr auto 1fr}
   .offline-arrow-h{display:flex}
@@ -493,6 +538,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
     </a>
     <nav class="nav" aria-label="Navegação principal">
       <a href="#como-funciona">Como funciona</a>
+      <a href="#retorno">Clientes voltam</a>
       <a href="#whatsapp">WhatsApp</a>
       <a href="#offline">Offline</a>
       <a href="#faq">FAQ</a>
@@ -512,19 +558,21 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
         <div class="hero-grid">
           <div class="hero-copy">
             <div class="hero-tags">
-              <span class="eyebrow">Usado em Maputo</span>
-              <span class="eyebrow">Android · WhatsApp</span>
+              <span class="eyebrow">Feito para Maputo</span>
+              <span class="eyebrow">Android · +258 · WhatsApp</span>
             </div>
-            <h1>Transforme clientes ocasionais em clientes habituais.</h1>
+            <h1>Faça clientes voltarem automaticamente.</h1>
             <p>Registe vendas em segundos. Atribua pontos automaticamente. Traga clientes de volta pelo WhatsApp.</p>
             <div class="hero-actions">
               <a class="btn btn-primary btn-lg" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20come%C3%A7ar%20a%20usar%20o%20MaisUm%20na%20minha%20barbearia." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_hero_primary">Começar Grátis</a>
               <a class="btn btn-ghost" href="#como-funciona" data-plausible-event="cta_demo_hero">Ver Demonstração ↓</a>
             </div>
+            <p class="hero-meta">Funciona em Maputo. M-Pesa e números +258 prontos.</p>
             <div class="hero-trust">
-              <span class="trust-pill">✓ Sem app para o cliente</span>
-              <span class="trust-pill">✓ Funciona offline</span>
-              <span class="trust-pill">✓ WhatsApp integrado</span>
+              <span class="trust-pill">⚡ Menos de 5 segundos</span>
+              <span class="trust-pill">📶 Funciona offline</span>
+              <span class="trust-pill">💬 WhatsApp automático</span>
+              <span class="trust-pill">⭐ Fidelização automática</span>
             </div>
           </div>
 
@@ -535,15 +583,15 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
             <div class="float-notif" aria-hidden="true">
               <div class="float-notif-bar"></div>
               <div class="float-notif-text">
-                <strong>MaisUm Barbearia</strong>
-                <span>João ganhou 5 pontos ⭐</span>
+                <strong>Barbearia Xiquelene</strong>
+                <span>Pagamento M-Pesa: 500 MT</span>
               </div>
               <span class="float-notif-time">agora</span>
             </div>
             <div class="float-points" aria-hidden="true">
               <strong>8 / 10 pontos</strong>
               <span>Falta 1 corte grátis ✂️</span>
-              <div class="float-points-bar"><div class="float-points-fill" class="fill-80"></div></div>
+              <div class="float-points-bar"><div class="float-points-fill fill-80"></div></div>
             </div>
           </div>
         </div>
@@ -556,29 +604,71 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
     <div class="wrap">
       <div class="stats-grid">
         <div class="stat-item">
-          <strong>+1.200</strong>
-          <span>vendas registadas</span>
+          <strong>Centenas</strong>
+          <span>de vendas registadas</span>
         </div>
         <div class="stat-divider" aria-hidden="true"></div>
         <div class="stat-item">
-          <strong>+300</strong>
-          <span>clientes fidelizados</span>
+          <strong>Dezenas</strong>
+          <span>de clientes a voltar</span>
         </div>
         <div class="stat-divider" aria-hidden="true"></div>
         <div class="stat-item">
           <strong>Maputo</strong>
-          <span>feito para ti</span>
+          <span>testes reais no bairro</span>
         </div>
       </div>
     </div>
   </div>
+
+  <!-- CUSTOMER RETURNS FLOW -->
+  <section class="section" id="retorno">
+    <div class="wrap">
+      <div class="flow-shell reveal">
+        <div class="section-header">
+          <span class="eyebrow">Clientes voltam</span>
+          <h2>O ciclo que traz o cliente de volta.</h2>
+          <p>Um fluxo simples que cabe no balcão e cria um motivo real para regressar.</p>
+        </div>
+        <div class="flow-grid">
+          <article class="flow-card">
+            <h3>✂️ Cliente faz corte</h3>
+            <p>Pagamento rápido. 500 MT confirmados pelo M-Pesa.</p>
+          </article>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <article class="flow-card">
+            <h3>⭐ Ganha pontos</h3>
+            <p>O sistema atribui pontos automaticamente sem contas manuais.</p>
+          </article>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <article class="flow-card">
+            <h3>💬 Recebe WhatsApp</h3>
+            <p>Mensagem com progresso e recompensa próxima.</p>
+          </article>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <article class="flow-card">
+            <h3>🔁 Volta à barbearia</h3>
+            <p>O cliente regressa mais cedo para ganhar o corte grátis.</p>
+          </article>
+        </div>
+        <div class="flow-badges">
+          <span class="flow-badge">⚡ Menos de 5 segundos</span>
+          <span class="flow-badge">💬 WhatsApp imediato</span>
+          <span class="flow-badge">📶 Funciona offline</span>
+        </div>
+        <div class="flow-cta">
+          <a class="btn btn-wa" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20ver%20o%20fluxo%20completo%20do%20MaisUm." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_flow">Ver fluxo completo no WhatsApp</a>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- CORE LOOP -->
   <section class="section" id="como-funciona">
     <div class="wrap">
       <div class="section-header reveal">
         <span class="eyebrow">Como funciona</span>
-        <h2>3 passos. Menos de 10 segundos.</h2>
+        <h2>3 passos. Menos de 5 segundos.</h2>
         <p>Não é software complicado. É uma rotina simples que traz clientes de volta automaticamente.</p>
       </div>
       <div class="steps-flow reveal">
@@ -586,7 +676,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
           <div class="step-num">1</div>
           <span class="step-emoji" aria-hidden="true">🛒</span>
           <h3>Registar Venda</h3>
-          <p>Seleciona o cliente, insere o valor e confirma. Sem demora.</p>
+          <p>Seleciona o cliente, insere o valor (ex.: 500 MT) e confirma. Sem demora.</p>
           <span class="step-badge">⚡ Menos de 5 segundos</span>
         </article>
         <div class="step-arrow" aria-hidden="true">→</div>
@@ -615,7 +705,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
       <div class="wa-grid reveal">
         <div class="wa-copy">
           <span class="eyebrow eyebrow--white">WhatsApp no centro</span>
-          <h2>A mensagem certa, no canal certo, na hora certa.</h2>
+          <h2>O WhatsApp é o motor do retorno.</h2>
           <p>O cliente não instala nada. Recebe tudo no WhatsApp que já usa todos os dias — com um motivo claro para voltar.</p>
           <div class="wa-features">
             <div class="wa-feature">
@@ -650,29 +740,34 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
             <div class="wa-phone-header">
               <div class="wa-avatar" aria-hidden="true">M</div>
               <div>
-                <strong>Barbearia MaisUm</strong>
+                <strong>Barbearia Xiquelene</strong>
                 <span>online</span>
               </div>
             </div>
             <div class="wa-phone-body">
               <div class="wa-bubble wa-bubble--in">
-                <strong>Barbearia MaisUm</strong>
+                <strong>Barbearia Xiquelene</strong>
                 Obrigado pela visita hoje! 🙌<br>
                 <strong>João ganhou 5 pontos ⭐</strong><br>
                 Faltam 5 para um corte grátis ✂️
                 <span class="wa-time">14:32 ✓✓</span>
               </div>
               <div class="wa-bubble wa-bubble--in">
+                Pagamento M-Pesa confirmado: 500 MT ✅
                 Guarda esta mensagem para acompanhar o teu progresso. 📱
                 <span class="wa-time">14:32 ✓✓</span>
               </div>
               <div class="wa-progress-block">
                 <span class="wa-progress-label">Progresso de João</span>
-                <div class="wa-progress-bar"><div class="wa-progress-fill" class="fill-80"></div></div>
+                <div class="wa-progress-bar"><div class="wa-progress-fill fill-80"></div></div>
                 <div class="wa-progress-meta"><span>8 pontos</span><span>10 = corte grátis ✂️</span></div>
               </div>
+              <div class="wa-bubble wa-bubble--in">
+                Quando faltarem 2 pontos, avisamos aqui. ✅
+                <span class="wa-time">14:33 ✓✓</span>
+              </div>
               <div class="wa-bubble wa-bubble--out">
-                Que bom! Vou voltar na sexta. 💈
+                Boa! Vou voltar na sexta. 💈
                 <span class="wa-time">14:35 ✓✓</span>
               </div>
             </div>
@@ -690,6 +785,10 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
           <span class="eyebrow">Construído para Moçambique</span>
           <h2>Funciona mesmo sem internet.</h2>
           <p>Sabemos que a rede falha. O MaisUm não para — guarda a venda e sincroniza quando a rede voltar.</p>
+        </div>
+        <div class="offline-status" aria-label="Estado offline">
+          <span class="signal-pill"><span class="signal-bars" aria-hidden="true"><span></span><span></span><span></span><span></span></span> Sinal fraco? Sem stress</span>
+          <span class="sync-pill">🔄 Sincroniza quando voltar</span>
         </div>
         <div class="offline-steps">
           <div class="offline-step">
@@ -717,7 +816,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
           </div>
         </div>
         <div class="offline-badges">
-          <span class="offline-badge">M-Pesa integrado</span>
+          <span class="offline-badge">M-Pesa e MT</span>
           <span class="offline-badge">Funciona em 3G</span>
           <span class="offline-badge">Android-first</span>
           <span class="offline-badge">+258 pronto</span>
@@ -830,6 +929,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
     <div><strong>MaisUm</strong> — fidelização para barbearias e salões em Maputo. Clientes ocasionais tornam-se habituais.</div>
     <div class="footer-links">
       <a href="#como-funciona">Como funciona</a>
+      <a href="#retorno">Clientes voltam</a>
       <a href="#whatsapp">WhatsApp</a>
       <a href="#offline">Offline</a>
       <a href="#faq">FAQ</a>
@@ -867,7 +967,7 @@ window.plausible=window.plausible||function(){(window.plausible.q=window.plausib
     if(window.innerWidth>=760){mobileCta.classList.remove('is-visible');return}
     const heroBottom=hero.getBoundingClientRect().bottom;
     const finalTop=finalCta.getBoundingClientRect().top;
-    mobileCta.classList.toggle('is-visible',heroBottom<window.innerHeight*.5&&finalTop>window.innerHeight*.9);
+    mobileCta.classList.toggle('is-visible',heroBottom<window.innerHeight*.7&&finalTop>window.innerHeight*.85);
   }
   syncMobileCta();
   window.addEventListener('scroll',syncMobileCta,{passive:true});
