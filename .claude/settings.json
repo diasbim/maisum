@@ -8,7 +8,8 @@
       "Bash(dir /s /b \"C:\\\\Users\\\\X200078\\\\AppData\\\\Local\\\\Pub\\\\Cache\\\\downloads\\\\sqlite3*\")",
       "Bash(dir /s /b \"C:\\\\Users\\\\X200078\\\\.pub-cache\\\\hosted\\\\pub.dev\\\\sqlite3*\")",
       "Bash(HTTPS_PROXY=\"\" HTTP_PROXY=\"\" flutter pub get)",
-      "Bash(NO_PROXY=\"localhost,127.0.0.1\" no_proxy=\"localhost,127.0.0.1\" flutter test --no-pub test/widget/pin_entry_screen_test.dart test/widget/pin_setup_screen_test.dart)"
+      "Bash(NO_PROXY=\"localhost,127.0.0.1\" no_proxy=\"localhost,127.0.0.1\" flutter test --no-pub test/widget/pin_entry_screen_test.dart test/widget/pin_setup_screen_test.dart)",
+      "Bash(gh run *)"
     ]
   }
 }
