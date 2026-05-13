@@ -1,6 +1,8 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/errors/app_error_reporter.dart';
+import '../../subscription/domain/usage_metrics.dart';
 import '../domain/sale.dart';
 import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customers_controller.dart';
@@ -27,7 +29,38 @@ class SaleController extends AsyncNotifier<SaleResult?> {
           amount: amount,
         );
 
-    final customer = await ref.read(customerRepositoryProvider).getById(customerId);
+    try {
+      await ref.read(usageTrackerProvider).record(
+        metricKey: UsageMetrics.salesCount,
+        quantity: 1,
+        source: 'sale',
+        metadata: {'amount': amount},
+      );
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'sale_usage_metric');
+    }
+
+    try {
+      await ref.read(analyticsServiceProvider).record(
+        eventType: 'sale_registered',
+        source: 'sale',
+        properties: {'amount': amount, 'points': sale.points},
+      );
+      final streak = await ref.read(streakServiceProvider).getCurrentStreak();
+      await ref.read(analyticsServiceProvider).record(
+        eventType: 'streak_updated',
+        source: 'sale',
+        properties: {
+          'days': streak.days,
+          'at_risk': streak.isAtRisk,
+        },
+      );
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'sale_analytics');
+    }
+
+    final customer =
+        await ref.read(customerRepositoryProvider).getById(customerId);
 
     // Refresh customer detail and sales list so UI reflects new points instantly
     ref.invalidate(customerDetailProvider(customerId));

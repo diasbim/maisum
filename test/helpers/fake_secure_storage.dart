@@ -1,5 +1,5 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:loyalty_app/core/storage/secure_storage.dart';
+﻿import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:maisum/core/storage/secure_storage.dart';
 
 /// In-memory SecureStorageService for widget tests — avoids the
 /// FlutterSecureStorage platform channel (EncryptedSharedPreferences on Android).
@@ -55,3 +55,4 @@ class FakeSecureStorageService extends SecureStorageService {
   @override
   Future<void> clearAll() async => _store.clear();
 }
+

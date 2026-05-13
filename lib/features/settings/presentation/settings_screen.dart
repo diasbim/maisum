@@ -39,8 +39,7 @@ class SettingsScreen extends ConsumerWidget {
                 color: AppColors.g300,
                 size: 20,
               ),
-              onTap: () =>
-                  _editMerchantName(context, ref, session.merchantName),
+              onTap: () => context.push('/merchant-config'),
             ),
             _SettingsTile(
               icon: Icons.phone_rounded,
@@ -53,6 +52,18 @@ class SettingsScreen extends ConsumerWidget {
               iconColor: AppColors.green,
               title: AppStrings.subscricao,
               subtitle: _formatSubscriptionStatus(session.subscriptionStatus),
+            ),
+            _SettingsTile(
+              icon: Icons.admin_panel_settings_rounded,
+              iconColor: AppColors.primaryDark,
+              title: AppStrings.subscricaoAdmin,
+              subtitle: AppStrings.subscricaoAdminDesc,
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.g300,
+                size: 20,
+              ),
+              onTap: () => context.push('/subscription-admin'),
             ),
             const _Section(AppStrings.identificadores),
             _SettingsTile(
@@ -161,76 +172,6 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _editMerchantName(
-    BuildContext context,
-    WidgetRef ref,
-    String currentName,
-  ) async {
-    final controller = TextEditingController(text: currentName);
-    final messenger = ScaffoldMessenger.of(context);
-    final updatedName = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text(AppStrings.editarNomeNegocio),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            labelText: AppStrings.nomeNegocio,
-            hintText: AppStrings.nomeNegocioHint,
-          ),
-          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text(AppStrings.cancelar),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text(AppStrings.guardar),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-
-    if (!context.mounted || updatedName == null) {
-      return;
-    }
-
-    final normalizedName = updatedName.trim();
-    if (normalizedName.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text(AppStrings.merchantNameRequired)),
-      );
-      return;
-    }
-    if (normalizedName == currentName.trim()) {
-      return;
-    }
-
-    try {
-      await ref
-          .read(authControllerProvider.notifier)
-          .updateMerchantName(normalizedName);
-      if (!context.mounted) {
-        return;
-      }
-      messenger.showSnackBar(
-        const SnackBar(content: Text(AppStrings.nomeNegocioAtualizado)),
-      );
-    } catch (_) {
-      if (!context.mounted) {
-        return;
-      }
-      messenger.showSnackBar(
-        const SnackBar(content: Text(AppStrings.erroGenerico)),
-      );
-    }
-  }
-
   String _formatSubscriptionStatus(String status) {
     if (status.trim().isEmpty) {
       return 'Sem estado';
@@ -309,16 +250,16 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
-    child: Text(
-      title.toUpperCase(),
-      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-        color: AppColors.onSurfaceVariant,
-        letterSpacing: 0.9,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.fromLTRB(4, 20, 4, 8),
+        child: Text(
+          title.toUpperCase(),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: AppColors.onSurfaceVariant,
+                letterSpacing: 0.9,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+      );
 }
 
 // ── PIN Verify Sheet ──────────────────────────────────────────────────────────
@@ -513,13 +454,20 @@ class _SettingsTile extends StatelessWidget {
             children: [
               Text(
                 title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
-                Text(subtitle!, style: theme.textTheme.bodySmall),
+                Text(
+                  subtitle!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall,
+                ),
               ],
             ],
           ),

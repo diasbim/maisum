@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import 'app_shadows.dart';
+import 'app_typography.dart';
 
 class AppTheme {
   // ── Gradients ─────────────────────────────────────────────────────────────
@@ -16,125 +18,12 @@ class AppTheme {
       );
 
   // ── Shadows ───────────────────────────────────────────────────────────────
-  static List<BoxShadow> get shadowSm => [
-        BoxShadow(
-          color: AppColors.primary.withValues(alpha: 0.10),
-          blurRadius: 10,
-          offset: const Offset(0, 2),
-        ),
-      ];
-
-  static List<BoxShadow> get shadowMd => [
-        BoxShadow(
-          color: AppColors.primary.withValues(alpha: 0.16),
-          blurRadius: 24,
-          offset: const Offset(0, 6),
-        ),
-      ];
-
-  static List<BoxShadow> get shadowLg => [
-        BoxShadow(
-          color: AppColors.primary.withValues(alpha: 0.24),
-          blurRadius: 56,
-          offset: const Offset(0, 16),
-        ),
-      ];
+  static List<BoxShadow> get shadowSm => AppShadows.sm;
+  static List<BoxShadow> get shadowMd => AppShadows.md;
+  static List<BoxShadow> get shadowLg => AppShadows.lg;
 
   // ── Text theme ────────────────────────────────────────────────────────────
-  static TextTheme get _textTheme {
-    return const TextTheme(
-      // Bricolage Grotesque — display & headline
-      displayLarge: TextStyle(
-        fontSize: 40,
-        fontWeight: FontWeight.w800,
-        color: AppColors.onSurface,
-        letterSpacing: -0.5,
-        height: 1.1,
-      ),
-      displayMedium: TextStyle(
-        fontSize: 32,
-        fontWeight: FontWeight.w800,
-        color: AppColors.onSurface,
-        letterSpacing: -0.3,
-        height: 1.1,
-      ),
-      displaySmall: TextStyle(
-        fontSize: 26,
-        fontWeight: FontWeight.w800,
-        color: AppColors.onSurface,
-        height: 1.2,
-      ),
-      headlineLarge: TextStyle(
-        fontSize: 24,
-        fontWeight: FontWeight.w700,
-        color: AppColors.onSurface,
-        height: 1.2,
-      ),
-      headlineMedium: TextStyle(
-        fontSize: 20,
-        fontWeight: FontWeight.w700,
-        color: AppColors.onSurface,
-        height: 1.3,
-      ),
-      headlineSmall: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w700,
-        color: AppColors.onSurface,
-        height: 1.3,
-      ),
-      // Outfit — titles, body, labels
-      titleLarge: TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        color: AppColors.onSurface,
-      ),
-      titleMedium: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-        color: AppColors.onSurface,
-      ),
-      titleSmall: TextStyle(
-        fontSize: 14,
-        fontWeight: FontWeight.w500,
-        color: AppColors.onSurfaceVariant,
-      ),
-      bodyLarge: TextStyle(
-        fontSize: 16,
-        fontWeight: FontWeight.w400,
-        color: AppColors.onSurface,
-        height: 1.6,
-      ),
-      bodyMedium: TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w400,
-        color: AppColors.onSurface,
-        height: 1.6,
-      ),
-      bodySmall: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w400,
-        color: AppColors.onSurfaceVariant,
-        height: 1.5,
-      ),
-      labelLarge: TextStyle(
-        fontSize: 15,
-        fontWeight: FontWeight.w600,
-        color: AppColors.onSurface,
-        letterSpacing: 0.1,
-      ),
-      labelMedium: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-        color: AppColors.onSurfaceVariant,
-      ),
-      labelSmall: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w500,
-        color: AppColors.onSurfaceVariant,
-        letterSpacing: 0.4,
-      ),
-    );
-  }
+  static TextTheme get _textTheme => AppTypography.textTheme;
 
   // ── Light Theme ───────────────────────────────────────────────────────────
   static ThemeData get light => ThemeData(
@@ -343,6 +232,33 @@ class AppTheme {
             fontWeight: FontWeight.w700,
             color: AppColors.onSurface,
           ),
+        ),
+      );
+
+  static ThemeData get dark => ThemeData(
+        useMaterial3: true,
+        colorScheme: const ColorScheme.dark(
+          primary: AppColors.secondary,
+          onPrimary: AppColors.primary,
+          secondary: AppColors.secondary,
+          onSecondary: AppColors.primary,
+          error: AppColors.error,
+          onError: AppColors.onError,
+          surface: AppColors.primaryDarker,
+          onSurface: Colors.white,
+          onSurfaceVariant: AppColors.g300,
+          outline: AppColors.g500,
+        ),
+        scaffoldBackgroundColor: AppColors.primaryDarker,
+        textTheme: _textTheme.apply(
+          bodyColor: Colors.white,
+          displayColor: Colors.white,
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: AppColors.primaryDarker,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
         ),
       );
 }

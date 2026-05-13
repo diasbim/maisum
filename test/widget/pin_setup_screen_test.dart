@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:loyalty_app/app/providers.dart';
-import 'package:loyalty_app/core/constants/app_strings.dart';
-import 'package:loyalty_app/features/auth/presentation/pin_setup_screen.dart';
+import 'package:maisum/app/providers.dart';
+import 'package:maisum/core/constants/app_strings.dart';
+import 'package:maisum/features/auth/presentation/pin_setup_screen.dart';
 
 import '../helpers/fake_secure_storage.dart';
 
@@ -154,3 +154,4 @@ void main() {
     });
   });
 }
+

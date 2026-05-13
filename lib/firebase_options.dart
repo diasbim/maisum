@@ -19,8 +19,8 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDUuadd7-Osnf8BGsOQ1H52EaFwXj42s1I',
-    appId: '1:517299605672:android:69efc1c492e71637c7329d',
+    apiKey: 'AIzaSyDiD3ozFKrqrfP7nyeb3bYX8kYLB2wpAUs',
+    appId: '1:517299605672:android:392da87b191d830cc7329d',
     messagingSenderId: '517299605672',
     projectId: 'loyaltyos-fc4dd',
     storageBucket: 'loyaltyos-fc4dd.firebasestorage.app',

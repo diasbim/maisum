@@ -7,15 +7,15 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:517299605672:android:69efc1c492e71637c7329d",
+        "mobilesdk_app_id": "1:517299605672:android:392da87b191d830cc7329d",
         "android_client_info": {
-          "package_name": "com.loyaltyos.loyaltyos"
+          "package_name": "com.tsintsivadigital.maisum"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDUuadd7-Osnf8BGsOQ1H52EaFwXj42s1I"
+          "current_key": "AIzaSyDiD3ozFKrqrfP7nyeb3bYX8kYLB2wpAUs"
         }
       ],
       "services": {

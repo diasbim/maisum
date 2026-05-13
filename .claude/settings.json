@@ -9,7 +9,10 @@
       "Bash(dir /s /b \"C:\\\\Users\\\\X200078\\\\.pub-cache\\\\hosted\\\\pub.dev\\\\sqlite3*\")",
       "Bash(HTTPS_PROXY=\"\" HTTP_PROXY=\"\" flutter pub get)",
       "Bash(NO_PROXY=\"localhost,127.0.0.1\" no_proxy=\"localhost,127.0.0.1\" flutter test --no-pub test/widget/pin_entry_screen_test.dart test/widget/pin_setup_screen_test.dart)",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Dev\\\\flutter\\\\loyaltyapp\\\\android\\\\app\\\\src\\\\main\\\\kotlin\\\\com\\\\tsintsivadigital\\\\maisum\")",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"created\")"
     ]
   }
 }

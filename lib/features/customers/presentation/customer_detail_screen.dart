@@ -1,67 +1,115 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../app/providers.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/pt_date_format.dart';
-import '../../../core/widgets/brand_mark.dart';
+import '../../../core/utils/moz_phone_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/primary_button.dart';
+import '../../../core/errors/app_error_reporter.dart';
 import '../domain/customer.dart';
 import '../domain/customer_whatsapp_message.dart';
 import '../../rewards/presentation/redeem_reward_screen.dart';
 import '../../rewards/presentation/rewards_controller.dart';
 import '../../rewards/domain/reward.dart';
+import '../../rewards/domain/reward_progress.dart';
+import '../../rewards/presentation/reward_progress_provider.dart';
 import '../../sales/domain/sale.dart';
 import '../../sales/presentation/new_sale_screen.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/domain/usage_metrics.dart';
 import 'customers_controller.dart';
 
-class CustomerDetailScreen extends ConsumerWidget {
+class CustomerDetailScreen extends ConsumerStatefulWidget {
   const CustomerDetailScreen({super.key, required this.id});
   final String id;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final customerAsync = ref.watch(customerDetailProvider(id));
-    final salesAsync = ref.watch(customerSalesProvider(id));
+  ConsumerState<CustomerDetailScreen> createState() =>
+      _CustomerDetailScreenState();
+}
+
+class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _historyKey = GlobalKey();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToHistory() {
+    final context = _historyKey.currentContext;
+    if (context == null) return;
+    Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final customerAsync = ref.watch(customerDetailProvider(widget.id));
+    final salesAsync = ref.watch(customerSalesProvider(widget.id));
+    final rewardProgressAsync = ref.watch(rewardProgressProvider(widget.id));
 
     final customer = customerAsync.valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      floatingActionButton: customer != null
-          ? FloatingActionButton.extended(
-              heroTag: 'quick_sale_fab',
-              backgroundColor: AppColors.secondary,
-              foregroundColor: AppColors.primary,
-              icon: const Icon(Icons.add_shopping_cart_rounded),
-              label: const Text(AppStrings.novaVenda),
-              onPressed: () => context.push(
-                '/new-sale',
-                extra: NewSaleArgs(preselectedCustomerId: customer.id),
+      bottomNavigationBar: customer == null
+          ? null
+          : SafeArea(
+              minimum: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: _BottomCtaButton(
+                label: AppStrings.novaVenda,
+                onPressed: () => context.push(
+                  '/new-sale',
+                  extra: NewSaleArgs(preselectedCustomerId: customer.id),
+                ),
               ),
-            )
-          : null,
+            ),
       body: customerAsync.when(
         data: (customer) {
           if (customer == null) {
             return const Scaffold(
-                body: EmptyState(title: 'Cliente nao encontrado'));
+              body: EmptyState(title: AppStrings.clienteNaoEncontrado),
+            );
           }
+
+          final sales = salesAsync.valueOrNull ?? const <Sale>[];
           final initials =
               customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?';
+          final isActive = _isActiveCustomer(customer, sales);
+          final statusLabel =
+              isActive ? AppStrings.clienteAtivo : AppStrings.clienteInativo;
+          final statusColor = isActive ? AppColors.green : AppColors.amber;
+          final phoneLabel = customer.phone.isEmpty
+              ? AppStrings.phoneRequired
+              : MozPhoneUtils.maskForDisplay(customer.phone);
+          final approxValue = _formatApproxMzn(customer.totalPoints);
 
           return CustomScrollView(
+            controller: _scrollController,
             slivers: [
-              // ── Navy header ──────────────────────────────────────────────
               SliverAppBar(
-                expandedHeight: 220,
+                expandedHeight: 240,
                 pinned: true,
                 backgroundColor: AppColors.primary,
                 elevation: 0,
                 scrolledUnderElevation: 0,
+                leading: IconButton(
+                  icon:
+                      const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  onPressed: () => context.pop(),
+                ),
                 actions: [
                   IconButton(
                     icon: const Icon(Icons.edit_rounded, color: Colors.white),
@@ -74,157 +122,199 @@ class CustomerDetailScreen extends ConsumerWidget {
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [AppColors.primary, AppColors.primaryDark],
+                        colors: [AppColors.primaryDarker, AppColors.primary],
                       ),
                     ),
                     child: SafeArea(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            // Avatar
-                            Container(
-                              width: 64,
-                              height: 64,
-                              decoration: BoxDecoration(
-                                color: AppColors.secondary,
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  initials,
-                                  style: const TextStyle(
-                                      fontSize: 26,
+                        padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isNarrow = constraints.maxWidth < 360;
+                            final infoRow = Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 72,
+                                  height: 72,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.secondary,
+                                    borderRadius: BorderRadius.circular(22),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.secondary
+                                            .withValues(alpha: 0.4),
+                                        blurRadius: 18,
+                                        offset: const Offset(0, 10),
+                                      ),
+                                    ],
+                                  ),
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    initials,
+                                    style: const TextStyle(
+                                      fontSize: 28,
                                       fontWeight: FontWeight.w800,
-                                      color: AppColors.primary),
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            // Name + phone
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.end,
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        customer.name,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        phoneLabel,
+                                        style: TextStyle(
+                                          color: Colors.white
+                                              .withValues(alpha: 0.65),
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      _StatusChip(
+                                        label: statusLabel,
+                                        color: statusColor,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+
+                            if (isNarrow) {
+                              return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    customer.name,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    customer.phone,
-                                    style: TextStyle(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.6),
-                                        fontSize: 14),
+                                  infoRow,
+                                  const SizedBox(height: 12),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: _PointsSummaryCard(
+                                      points: customer.totalPoints,
+                                      approxValue: approxValue,
+                                    ),
                                   ),
                                 ],
-                              ),
-                            ),
-                            // WhatsApp button
-                            IconButton(
-                              style: IconButton.styleFrom(
-                                backgroundColor:
-                                    Colors.white.withValues(alpha: 0.12),
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12)),
-                              ),
-                              icon: const Icon(Icons.send_rounded,
-                                  color: Colors.white, size: 20),
-                              tooltip: AppStrings.enviarWhatsApp,
-                              onPressed: () =>
-                                  _openWhatsApp(context, ref, customer),
-                            ),
-                          ],
+                              );
+                            }
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(child: infoRow),
+                                const SizedBox(width: 12),
+                                _PointsSummaryCard(
+                                  points: customer.totalPoints,
+                                  approxValue: approxValue,
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-
-              // ── Points badge ─────────────────────────────────────────────
               SliverToBoxAdapter(
                 child: Container(
                   color: AppColors.primary,
                   child: Container(
                     decoration: const BoxDecoration(
                       color: AppColors.offWhite,
-                      borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(24),
-                          topRight: Radius.circular(24)),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 10),
-                                decoration: BoxDecoration(
-                                  color: AppColors.secondaryLight,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: AppColors.secondary
-                                          .withValues(alpha: 0.3)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const BrandMark(size: 18),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      '${customer.totalPoints} pts',
-                                      style: const TextStyle(
-                                          color: AppColors.primary,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 15),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Spacer(),
-                              Text(
-                                AppStrings.historicoVendas,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleSmall
-                                    ?.copyWith(
-                                        color: AppColors.onSurfaceVariant),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          TextButton.icon(
-                            icon: const BrandMark(size: 16),
-                            label: const Text(AppStrings.resgatarRecompensa),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.primary,
-                              backgroundColor: AppColors.secondaryLight,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10)),
-                            ),
-                            onPressed: () =>
-                                _showRedeemSheet(context, ref, customer),
-                          ),
-                        ],
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(28),
                       ),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            _ActionShortcut(
+                              icon: Icons.add_rounded,
+                              label: AppStrings.adicionarPontos,
+                              onTap: () => context.push(
+                                '/new-sale',
+                                extra: NewSaleArgs(
+                                  preselectedCustomerId: customer.id,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            _ActionShortcut(
+                              icon: Icons.chat_rounded,
+                              label: AppStrings.enviarWhatsApp,
+                              iconColor: const Color(0xFF27C26A),
+                              onTap: () =>
+                                  _openWhatsApp(context, ref, customer),
+                            ),
+                            const SizedBox(width: 12),
+                            _ActionShortcut(
+                              icon: Icons.receipt_long_rounded,
+                              label: AppStrings.verHistorico,
+                              onTap: _scrollToHistory,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        rewardProgressAsync.when(
+                          data: (progress) => _RewardProgressPanel(
+                            progress: progress,
+                            onRedeem: progress.unlockedRewardName != null
+                                ? () => _showRedeemSheet(
+                                      context,
+                                      ref,
+                                      customer,
+                                    )
+                                : null,
+                          ),
+                          loading: () => const SizedBox(height: 16),
+                          error: (_, __) => const SizedBox.shrink(),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
-
-              // ── Sales list ───────────────────────────────────────────────
+              SliverToBoxAdapter(
+                key: _historyKey,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        AppStrings.historicoCompras,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              color: AppColors.onSurface,
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: _scrollToHistory,
+                        child: const Text(AppStrings.verTudo),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               salesAsync.when(
                 data: (sales) => sales.isEmpty
                     ? const SliverFillRemaining(
@@ -233,12 +323,15 @@ class CustomerDetailScreen extends ConsumerWidget {
                         ),
                       )
                     : SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 140),
                         sliver: SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (_, i) => Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _SaleTile(sale: sales[i]),
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _SaleTimelineItem(
+                                sale: sales[i],
+                                isLast: i == sales.length - 1,
+                              ),
                             ),
                             childCount: sales.length,
                           ),
@@ -246,20 +339,26 @@ class CustomerDetailScreen extends ConsumerWidget {
                       ),
                 loading: () => const SliverToBoxAdapter(
                   child: Center(
-                      heightFactor: 3,
-                      child: CircularProgressIndicator(
-                          color: AppColors.secondary)),
+                    heightFactor: 3,
+                    child:
+                        CircularProgressIndicator(color: AppColors.secondary),
+                  ),
                 ),
-                error: (_, __) =>
-                    const SliverToBoxAdapter(child: SizedBox.shrink()),
+                error: (_, __) => const SliverToBoxAdapter(
+                  child: SizedBox.shrink(),
+                ),
               ),
             ],
           );
         },
         loading: () => const Scaffold(
-            body: Center(
-                child: CircularProgressIndicator(color: AppColors.secondary))),
-        error: (e, _) => Scaffold(body: Center(child: Text(e.toString()))),
+          body: Center(
+            child: CircularProgressIndicator(color: AppColors.secondary),
+          ),
+        ),
+        error: (_, __) => const Scaffold(
+          body: Center(child: Text(AppStrings.erroGenerico)),
+        ),
       ),
     );
   }
@@ -272,7 +371,8 @@ class CustomerDetailScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _EditCustomerSheet(customer: customer, customerId: id),
+      builder: (_) =>
+          _EditCustomerSheet(customer: customer, customerId: widget.id),
     );
   }
 
@@ -287,7 +387,7 @@ class CustomerDetailScreen extends ConsumerWidget {
       builder: (_) => RedeemRewardSheet(customer: customer),
     ).then((redeemed) {
       if (redeemed == true && context.mounted) {
-        ref.invalidate(customerDetailProvider(id));
+        ref.invalidate(customerDetailProvider(widget.id));
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text(AppStrings.resgateRegistado)),
         );
@@ -300,16 +400,38 @@ class CustomerDetailScreen extends ConsumerWidget {
     WidgetRef ref,
     Customer customer,
   ) async {
+    final connectivity = ref.read(connectivityServiceProvider);
+    final gate = ref.read(featureGateProvider);
+    final decision = await gate.check(
+      featureKey: FeatureKeys.whatsappAutomation,
+      metricKey: UsageMetrics.whatsappMessages,
+    );
+    if (!decision.allowed) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.funcaoIndisponivel)),
+        );
+      }
+      return;
+    }
+    if (decision.softLimited && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.limiteSoftAviso)),
+      );
+    }
+
     List<Sale> sales;
     List<Reward> rewards;
     try {
-      sales = await ref.read(customerSalesProvider(id).future);
-    } catch (_) {
+      sales = await ref.read(customerSalesProvider(widget.id).future);
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'customer_detail_sales');
       sales = const <Sale>[];
     }
     try {
       rewards = await ref.read(rewardsControllerProvider.future);
-    } catch (_) {
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'customer_detail_rewards');
       rewards = const <Reward>[];
     }
 
@@ -323,17 +445,484 @@ class CustomerDetailScreen extends ConsumerWidget {
     final url = Uri.parse(
       'https://wa.me/$number?text=${Uri.encodeComponent(draft.message)}',
     );
+    if (!connectivity.isOnline) {
+      await ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
+            phone: number,
+            message: draft.message,
+            source: 'customer_detail',
+          );
+      try {
+        await ref.read(analyticsServiceProvider).record(
+          eventType: 'whatsapp_sent',
+          source: 'whatsapp',
+          properties: {
+            'queued': true,
+            'source': 'customer_detail',
+            'message_type': draft.type.name,
+          },
+        );
+      } catch (e, st) {
+        AppErrorReporter.report(e, st, hint: 'whatsapp_queued_analytics');
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.whatsappQueued)),
+        );
+      }
+      return;
+    }
     final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text(AppStrings.erroGenerico)),
       );
+      return;
     }
+    if (launched) {
+      try {
+        await ref.read(usageTrackerProvider).record(
+          metricKey: UsageMetrics.whatsappMessages,
+          source: 'whatsapp',
+          metadata: {'message_type': draft.type.name},
+        );
+        await ref.read(analyticsServiceProvider).record(
+          eventType: 'whatsapp_sent',
+          source: 'whatsapp',
+          properties: {
+            'queued': false,
+            'source': 'customer_detail',
+            'message_type': draft.type.name,
+          },
+        );
+      } catch (e, st) {
+        AppErrorReporter.report(e, st, hint: 'whatsapp_sent_analytics');
+      }
+    }
+  }
+
+  DateTime _lastActivity(Customer customer, List<Sale>? sales) {
+    if (sales != null && sales.isNotEmpty) {
+      return sales
+          .map((sale) => sale.createdAt)
+          .reduce((a, b) => a.isAfter(b) ? a : b);
+    }
+    return customer.updatedAt ?? customer.createdAt;
+  }
+
+  bool _isActiveCustomer(Customer customer, List<Sale>? sales) {
+    final lastActivity = _lastActivity(customer, sales);
+    final days = DateTime.now().difference(lastActivity).inDays;
+    return days <= 30;
+  }
+
+  String _formatApproxMzn(int points) {
+    final approxValue = points * AppConstants.pointsPerMzn;
+    return '${AppStrings.aproxPrefix} $approxValue ${AppStrings.moedaMzn} '
+        '${AppStrings.comprasSuffix}';
   }
 }
 
-class _SaleTile extends StatelessWidget {
-  const _SaleTile({required this.sale});
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, size: 8, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PointsSummaryCard extends StatelessWidget {
+  const _PointsSummaryCard({
+    required this.points,
+    required this.approxValue,
+  });
+
+  final int points;
+  final String approxValue;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: AppColors.primaryDark.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppStrings.saldoPontos,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Text(
+                '$points ${AppStrings.pontosAbrev}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: AppColors.secondary,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  color: AppColors.secondary,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.star_rounded,
+                    size: 16, color: AppColors.primary),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            approxValue,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionShortcut extends StatelessWidget {
+  const _ActionShortcut({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon,
+                    color: iconColor ?? AppColors.secondary, size: 20),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomCtaButton extends StatelessWidget {
+  const _BottomCtaButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(20),
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [AppColors.secondary, AppColors.secondaryDark],
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.secondary.withValues(alpha: 0.35),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.add_shopping_cart_rounded,
+                    color: AppColors.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              const Icon(Icons.arrow_forward_rounded, color: AppColors.primary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RewardProgressPanel extends StatelessWidget {
+  const _RewardProgressPanel({required this.progress, this.onRedeem});
+
+  final RewardProgress progress;
+  final VoidCallback? onRedeem;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (progress.targetPoints == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.g100),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.card_giftcard_rounded, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                AppStrings.semRecompensasAtivas,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final hasNext = progress.nextRewardName != null;
+    final rewardName = progress.nextRewardName ?? progress.unlockedRewardName;
+    final target = progress.targetPoints ?? 0;
+    final displayTarget = target > 0 ? target : progress.currentPoints;
+    final unclampedCurrent =
+        !hasNext && displayTarget > 0 ? displayTarget : progress.currentPoints;
+    final displayCurrent = displayTarget > 0
+        ? unclampedCurrent.clamp(0, displayTarget).toInt()
+        : unclampedCurrent;
+    final statusText = hasNext
+        ? '${AppStrings.faltam} ${progress.pointsRemaining} '
+            '${AppStrings.pontosAbrev} ${AppStrings.para} $rewardName'
+        : '${AppStrings.recompensaPronta} $rewardName';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.g100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: AppColors.secondaryLight,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(Icons.card_giftcard_rounded,
+                color: AppColors.secondaryDark, size: 26),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  AppStrings.progressoProximaRecompensa,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  statusText,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: AppColors.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: progress.progressFraction,
+                    minHeight: 8,
+                    backgroundColor: AppColors.g100,
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                        AppColors.secondary),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Text(
+                      '$displayCurrent / $displayTarget ${AppStrings.pontosAbrev}',
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (onRedeem != null)
+                      TextButton(
+                        onPressed: onRedeem,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                        ),
+                        child: const Text(AppStrings.resgatarRecompensa),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SaleTimelineItem extends StatelessWidget {
+  const _SaleTimelineItem({required this.sale, required this.isLast});
+
+  final Sale sale;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: AppColors.secondaryLight,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.secondary, width: 1.4),
+              ),
+              alignment: Alignment.center,
+              child:
+                  const Icon(Icons.add, size: 16, color: AppColors.secondary),
+            ),
+            if (!isLast)
+              Container(
+                width: 2,
+                height: 72,
+                margin: const EdgeInsets.only(top: 2),
+                color: AppColors.g100,
+              ),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: _SaleCard(sale: sale)),
+      ],
+    );
+  }
+}
+
+class _SaleCard extends StatelessWidget {
+  const _SaleCard({required this.sale});
   final Sale sale;
 
   @override
@@ -363,7 +952,7 @@ class _SaleTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${sale.amount.toStringAsFixed(0)} MZN',
+                  '${sale.amount.toStringAsFixed(0)} ${AppStrings.moedaMzn}',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700, color: AppColors.onSurface),
                 ),
@@ -382,11 +971,12 @@ class _SaleTile extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              '+${sale.points} pts',
+              '+${sale.points} ${AppStrings.pontosAbrev}',
               style: const TextStyle(
-                  color: AppColors.secondaryDark,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12),
+                color: AppColors.secondaryDark,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
             ),
           ),
         ],

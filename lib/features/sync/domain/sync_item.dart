@@ -15,6 +15,7 @@ class SyncItem with _$SyncItem {
     required String payload,
     @Default(0) int retryCount,
     @Default('pending') String status,
+    DateTime? nextAttemptAt,
     required DateTime createdAt,
   }) = _SyncItem;
 
@@ -29,6 +30,7 @@ class SyncItem with _$SyncItem {
         'payload': payload,
         'retry_count': retryCount,
         'status': status,
+        'next_attempt_at': nextAttemptAt?.millisecondsSinceEpoch ?? 0,
         'created_at': createdAt.millisecondsSinceEpoch,
       };
 }
@@ -41,5 +43,10 @@ SyncItem syncItemFromMap(Map<String, dynamic> map) => SyncItem(
       payload: map['payload'] as String,
       retryCount: map['retry_count'] as int? ?? 0,
       status: map['status'] as String? ?? 'pending',
+      nextAttemptAt: (map['next_attempt_at'] as int? ?? 0) > 0
+          ? DateTime.fromMillisecondsSinceEpoch(
+              map['next_attempt_at'] as int,
+            )
+          : null,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
     );

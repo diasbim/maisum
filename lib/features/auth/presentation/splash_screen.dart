@@ -58,92 +58,211 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.primary, AppColors.primaryDarker],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Logo mark
-                AnimatedBuilder(
-                  animation: _ac,
-                  builder: (context, child) => FadeTransition(
-                    opacity: _logoFade,
-                    child: ScaleTransition(
-                      scale: _logoScale,
-                      child: child,
-                    ),
-                  ),
-                  child: Container(
-                    width: 104,
-                    height: 104,
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.secondary.withValues(alpha: 0.4),
-                          blurRadius: 36,
-                          offset: const Offset(0, 12),
-                        ),
-                      ],
-                    ),
-                    child: Image.asset(
-                      'assets/images/logo.png',
-                      fit: BoxFit.contain,
-                    ),
-                  ),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final logoSize =
+              (constraints.maxWidth * 0.38).clamp(120.0, 180.0).toDouble();
+          final glowSize = logoSize * 2.0;
+          final textSize =
+              (constraints.maxWidth * 0.055).clamp(18.0, 22.0).toDouble();
+
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: Image.asset(
+                  'assets/images/imagesplash.png',
+                  fit: BoxFit.cover,
                 ),
-                const SizedBox(height: 28),
-                // Brand text
-                FadeTransition(
-                  opacity: _textFade,
-                  child: Column(
-                    children: [
-                      const Text(
-                        'MaisUm',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Fidelizacao simples',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.55),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      AppColors.primary.withValues(alpha: 0.75),
+                      AppColors.primaryDarker.withValues(alpha: 0.9),
                     ],
                   ),
                 ),
-                const SizedBox(height: 64),
-                FadeTransition(
-                  opacity: _textFade,
-                  child: SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.secondary.withValues(alpha: 0.7)),
-                    ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: CustomPaint(
+                    painter: _SplashWavePainter(),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
+              ),
+              SafeArea(
+                child: Stack(
+                  children: [
+                    Align(
+                      alignment: Alignment.center,
+                      child: AnimatedBuilder(
+                        animation: _ac,
+                        builder: (context, child) => FadeTransition(
+                          opacity: _logoFade,
+                          child: ScaleTransition(
+                            scale: _logoScale,
+                            child: child,
+                          ),
+                        ),
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Container(
+                              width: glowSize,
+                              height: glowSize,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    AppColors.secondary.withValues(alpha: 0.25),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Container(
+                              width: glowSize * 0.7,
+                              height: glowSize * 0.7,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: RadialGradient(
+                                  colors: [
+                                    AppColors.secondary.withValues(alpha: 0.14),
+                                    Colors.transparent,
+                                  ],
+                                ),
+                              ),
+                            ),
+                            Container(
+                              width: logoSize,
+                              height: logoSize,
+                              padding: EdgeInsets.all(logoSize * 0.18),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius:
+                                    BorderRadius.circular(logoSize * 0.25),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.secondary
+                                        .withValues(alpha: 0.45),
+                                    blurRadius: 40,
+                                    offset: const Offset(0, 16),
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.25),
+                                    blurRadius: 30,
+                                    offset: const Offset(0, 20),
+                                  ),
+                                ],
+                              ),
+                              child: Image.asset(
+                                'assets/images/logo.png',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: FadeTransition(
+                        opacity: _textFade,
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 36),
+                          child: Text.rich(
+                            TextSpan(
+                              text: 'Mais um ',
+                              style: TextStyle(
+                                color: AppColors.secondary,
+                                fontSize: textSize,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.2,
+                              ),
+                              children: [
+                                TextSpan(
+                                  text: 'cliente que volta.',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: textSize,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
+}
+
+class _SplashWavePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke1 = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..shader = const LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          AppColors.secondary,
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final stroke2 = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..shader = LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          AppColors.secondary.withValues(alpha: 0.55),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+
+    final baseY = size.height * 0.78;
+    final path1 = Path()
+      ..moveTo(-20, baseY)
+      ..cubicTo(
+        size.width * 0.35,
+        baseY - 40,
+        size.width * 0.65,
+        baseY + 40,
+        size.width + 20,
+        baseY - 12,
+      );
+
+    final path2 = Path()
+      ..moveTo(-20, baseY + 26)
+      ..cubicTo(
+        size.width * 0.35,
+        baseY - 12,
+        size.width * 0.7,
+        baseY + 64,
+        size.width + 20,
+        baseY + 10,
+      );
+
+    canvas.drawPath(path1, stroke1);
+    canvas.drawPath(path2, stroke2);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

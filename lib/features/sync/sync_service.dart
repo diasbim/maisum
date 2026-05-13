@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/constants/app_strings.dart';
+import '../../core/analytics/analytics_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/services/connectivity_service.dart';
+import '../../core/sync/sync_retry_policy.dart';
 import '../../core/utils/app_logger.dart';
 import 'data/sync_dao.dart';
 import 'data/sync_transport.dart';
@@ -35,30 +38,65 @@ const _syncEntities = [
   _SyncEntityConfig(entityType: 'sale', cursorField: 'created_at'),
   _SyncEntityConfig(entityType: 'reward', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'redemption', cursorField: 'redeemed_at'),
+  _SyncEntityConfig(
+      entityType: 'subscription_state', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'entitlement', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'feature_flag', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'remote_config', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'usage_balance', cursorField: 'updated_at'),
 ];
 
 class SyncStatus {
   const SyncStatus({
-    this.isSyncing = false,
+    required this.isOnline,
+    this.phase = SyncPhase.synced,
     this.pendingCount = 0,
+    this.failedCount = 0,
     this.lastError,
+    this.lastSyncAt,
+    this.nextRetryAt,
   });
 
-  final bool isSyncing;
+  final bool isOnline;
+  final SyncPhase phase;
   final int pendingCount;
+  final int failedCount;
   final String? lastError;
+  final DateTime? lastSyncAt;
+  final DateTime? nextRetryAt;
+
+  bool get isSyncing => phase == SyncPhase.syncing;
+  bool get hasPending => pendingCount > 0;
+  bool get hasFailures => failedCount > 0;
 
   SyncStatus copyWith({
-    bool? isSyncing,
+    bool? isOnline,
+    SyncPhase? phase,
     int? pendingCount,
+    int? failedCount,
     // Use a sentinel so null can be passed explicitly to clear lastError.
     Object? lastError = _keep,
+    DateTime? lastSyncAt,
+    DateTime? nextRetryAt,
   }) =>
       SyncStatus(
-        isSyncing: isSyncing ?? this.isSyncing,
+        isOnline: isOnline ?? this.isOnline,
+        phase: phase ?? this.phase,
         pendingCount: pendingCount ?? this.pendingCount,
+        failedCount: failedCount ?? this.failedCount,
         lastError: lastError == _keep ? this.lastError : lastError as String?,
+        lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+        nextRetryAt: nextRetryAt ?? this.nextRetryAt,
       );
+}
+
+enum SyncPhase {
+  synced,
+  syncing,
+  offline,
+  pendingChanges,
+  syncFailed,
+  retrying,
 }
 
 const _keep = Object();
@@ -68,37 +106,59 @@ class SyncService {
     this._database,
     this._syncDao,
     this._transport,
-    this._connectivity,
-  );
+    this._connectivity, {
+    AnalyticsService? analytics,
+    SyncRetryPolicy? retryPolicy,
+  })  : _retryPolicy = retryPolicy ?? const SyncRetryPolicy(),
+        _analytics = analytics;
 
   final AppDatabase _database;
 
   final SyncDao _syncDao;
   final SyncTransport? _transport;
   final ConnectivityService _connectivity;
+  final SyncRetryPolicy _retryPolicy;
+  final AnalyticsService? _analytics;
 
   final _statusController = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get statusStream => _statusController.stream;
 
-  SyncStatus _status = const SyncStatus();
+  late SyncStatus _status = SyncStatus(
+    isOnline: _connectivity.isOnline,
+    phase: _connectivity.isOnline ? SyncPhase.synced : SyncPhase.offline,
+  );
   SyncStatus get status => _status;
 
   StreamSubscription<bool>? _connectivitySub;
   Timer? _backgroundSyncTimer;
+  DateTime? _lastSyncAt;
+  SyncQueueStats _cachedStats = const SyncQueueStats(
+    pendingTotal: 0,
+    pendingReady: 0,
+    failed: 0,
+  );
 
   void init() {
     _connectivitySub = _connectivity.onConnectivityChanged.listen((isOnline) {
-      if (isOnline) {
-        Log.i(_tag, 'Back online — triggering queue');
-        unawaited(processQueue());
-      }
+      _emit(_status.copyWith(
+        isOnline: isOnline,
+        phase: _derivePhase(
+          isOnline: isOnline,
+          isSyncing: _status.isSyncing,
+          stats: _cachedStats,
+          lastError: _status.lastError,
+        ),
+      ));
+      if (!isOnline) return;
+      Log.i(_tag, 'Back online — triggering queue');
+      unawaited(processQueue());
     });
     _backgroundSyncTimer = Timer.periodic(_backgroundSyncInterval, (_) {
       if (_connectivity.isOnline) {
         unawaited(processQueue());
       }
     });
-    _refreshPendingCount();
+    unawaited(_refreshStatus());
     if (_connectivity.isOnline) {
       unawaited(processQueue());
     }
@@ -111,42 +171,52 @@ class SyncService {
     }
     if (!_connectivity.isOnline) {
       Log.d(_tag, 'Offline — skipping queue');
-      await _refreshPendingCount();
+      await _refreshStatus();
       return;
     }
 
     Log.i(_tag, 'Starting sync queue');
-    _emit(_status.copyWith(isSyncing: true, lastError: null));
+    _emit(_status.copyWith(phase: SyncPhase.syncing, lastError: null));
+    unawaited(_logSyncEvent('sync_started', {
+      'pending_ready': _cachedStats.pendingReady,
+      'pending_total': _cachedStats.pendingTotal,
+    }));
 
     String? lastError;
+    String? itemError;
     try {
       final items = await _syncDao.getPending();
       Log.i(_tag, '${items.length} item(s) pending');
       for (final item in items) {
-        await _processItem(item);
+        final error = await _processItem(item);
+        if (error != null) {
+          itemError = error;
+        }
       }
       await _pullRemoteChanges();
       await _syncDao.clearSynced();
+      _lastSyncAt = DateTime.now();
+      unawaited(_logSyncEvent('sync_success', {
+        'processed': items.length,
+      }));
       Log.i(_tag, 'Queue processed successfully');
     } catch (e, st) {
-      lastError = e.toString();
+      lastError = _formatSyncError(e);
       Log.e(_tag, 'processQueue failed', e, st);
+      unawaited(_logSyncEvent('sync_failed', {
+        'error': lastError ?? AppStrings.erroGenerico,
+      }));
     } finally {
-      final pending = await _syncDao.getPendingCount();
-      _emit(SyncStatus(pendingCount: pending, lastError: lastError));
-      Log.i(
-        _tag,
-        'Sync done — $pending pending item(s)'
-        '${lastError != null ? ", error: $lastError" : ""}',
-      );
+      final resolvedError = lastError ?? itemError;
+      await _refreshStatus(lastErrorOverride: resolvedError);
     }
   }
 
-  Future<void> _processItem(SyncItem item) async {
+  Future<String?> _processItem(SyncItem item) async {
     final transport = _transport;
     if (transport == null) {
       Log.w(_tag, 'No sync transport — skipping ${item.id}');
-      return;
+      return null;
     }
     try {
       Log.d(
@@ -157,22 +227,38 @@ class SyncService {
       await _syncDao.markSynced(item.id);
       await _markEntitySynced(item.entityType, item.entityId);
       Log.i(_tag, '✓ ${item.entityType}/${item.entityId}');
+      return null;
     } catch (e, st) {
       Log.e(_tag, '✗ ${item.entityType}/${item.entityId}', e, st);
+      final transportError = e is SyncTransportException ? e : null;
+      final isPermanent = transportError != null &&
+          (transportError.code == 'failed-precondition' ||
+              transportError.code == 'permission-denied' ||
+              transportError.code == 'unauthenticated');
+
+      if (isPermanent) {
+        await _syncDao.markFailed(item.id);
+        Log.w(_tag, 'Item ${item.id} marked failed (non-retryable)');
+        return _formatSyncError(e);
+      }
+
       await _syncDao.incrementRetry(item.id);
-      final nextAttempt = item.retryCount + 1;
-      if (nextAttempt >= AppConstants.maxSyncRetries) {
+      final retryCount = item.retryCount + 1;
+      if (retryCount >= AppConstants.maxSyncRetries) {
         await _syncDao.markFailed(item.id);
         Log.w(
           _tag,
-          'Item ${item.id} marked failed after $nextAttempt attempt(s)',
+          'Item ${item.id} marked failed after $retryCount attempt(s)',
         );
       } else {
+        final nextAttemptAt = _retryPolicy.nextAttempt(retryCount: retryCount);
+        await _syncDao.scheduleRetry(item.id, nextAttemptAt);
         Log.d(
           _tag,
-          'Item ${item.id} will retry (attempt $nextAttempt/${AppConstants.maxSyncRetries})',
+          'Item ${item.id} will retry (attempt $retryCount/${AppConstants.maxSyncRetries})',
         );
       }
+      return _formatSyncError(e);
     }
   }
 
@@ -256,6 +342,16 @@ class SyncService {
         return _applyReward(txn, remote);
       case 'redemption':
         return _applyRedemption(txn, remote);
+      case 'subscription_state':
+        return _applySubscriptionState(txn, remote);
+      case 'entitlement':
+        return _applyEntitlement(txn, remote);
+      case 'feature_flag':
+        return _applyFeatureFlag(txn, remote);
+      case 'remote_config':
+        return _applyRemoteConfig(txn, remote);
+      case 'usage_balance':
+        return _applyUsageBalance(txn, remote);
       default:
         return Future.value();
     }
@@ -479,6 +575,192 @@ class SyncService {
     );
   }
 
+  Future<void> _applySubscriptionState(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final incoming = _normalizedIncoming(remote);
+    _copyIfAbsent(incoming, 'merchant_id', 'merchantId');
+    _copyIfAbsent(incoming, 'plan_code', 'planCode');
+    _copyIfAbsent(incoming, 'plan_name', 'planName');
+    _copyIfAbsent(incoming, 'plan_version', 'planVersion');
+    _copyIfAbsent(incoming, 'pricing_version', 'pricingVersion');
+    _copyIfAbsent(incoming, 'status', 'subscription_status');
+    _copyIfAbsent(incoming, 'trial_ends_at', 'trialEndsAt');
+    _copyIfAbsent(incoming, 'grace_ends_at', 'graceEndsAt');
+    _copyIfAbsent(incoming, 'period_start', 'periodStart');
+    _copyIfAbsent(incoming, 'period_end', 'periodEnd');
+
+    final merchantId =
+        incoming['merchant_id'] as String? ?? _syncDao.merchantId;
+    if (merchantId == null) return;
+    incoming['merchant_id'] = merchantId;
+    incoming['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
+
+    final filtered = _filterKeys(incoming, {
+      'merchant_id',
+      'plan_code',
+      'plan_name',
+      'plan_version',
+      'pricing_version',
+      'status',
+      'trial_ends_at',
+      'grace_ends_at',
+      'period_start',
+      'period_end',
+      'updated_at',
+    });
+
+    await txn.insert(
+      'subscription_state',
+      filtered,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> _applyEntitlement(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final incoming = _normalizedIncoming(remote);
+    _copyIfAbsent(incoming, 'merchant_id', 'merchantId');
+    _copyIfAbsent(incoming, 'feature_key', 'featureKey');
+    _copyIfAbsent(incoming, 'is_enabled', 'isEnabled');
+    _copyIfAbsent(incoming, 'limit_value', 'limitValue');
+
+    final merchantId =
+        incoming['merchant_id'] as String? ?? _syncDao.merchantId;
+    final featureKey = incoming['feature_key'] as String?;
+    if (merchantId == null || featureKey == null) return;
+    incoming['merchant_id'] = merchantId;
+    incoming['id'] ??= '${merchantId}_$featureKey';
+    incoming['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
+    _normalizeBoolean(incoming, 'is_enabled');
+
+    final filtered = _filterKeys(incoming, {
+      'id',
+      'merchant_id',
+      'feature_key',
+      'is_enabled',
+      'limit_value',
+      'unit',
+      'updated_at',
+    });
+
+    await txn.insert(
+      'entitlements',
+      filtered,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> _applyFeatureFlag(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final incoming = _normalizedIncoming(remote);
+    _copyIfAbsent(incoming, 'merchant_id', 'merchantId');
+    _copyIfAbsent(incoming, 'flag_key', 'flagKey');
+    _copyIfAbsent(incoming, 'is_enabled', 'isEnabled');
+
+    final merchantId =
+        incoming['merchant_id'] as String? ?? _syncDao.merchantId;
+    final flagKey = incoming['flag_key'] as String?;
+    if (merchantId == null || flagKey == null) return;
+    incoming['merchant_id'] = merchantId;
+    incoming['id'] ??= '${merchantId}_$flagKey';
+    incoming['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
+    _normalizeBoolean(incoming, 'is_enabled');
+
+    final filtered = _filterKeys(incoming, {
+      'id',
+      'merchant_id',
+      'flag_key',
+      'is_enabled',
+      'payload',
+      'updated_at',
+    });
+
+    await txn.insert(
+      'feature_flags',
+      filtered,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> _applyRemoteConfig(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final incoming = _normalizedIncoming(remote);
+    _copyIfAbsent(incoming, 'merchant_id', 'merchantId');
+    _copyIfAbsent(incoming, 'config_key', 'configKey');
+
+    final merchantId =
+        incoming['merchant_id'] as String? ?? _syncDao.merchantId;
+    final configKey = incoming['config_key'] as String?;
+    if (merchantId == null || configKey == null) return;
+    incoming['merchant_id'] = merchantId;
+    incoming['id'] ??= '${merchantId}_$configKey';
+    incoming['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
+
+    final filtered = _filterKeys(incoming, {
+      'id',
+      'merchant_id',
+      'config_key',
+      'payload',
+      'updated_at',
+    });
+
+    await txn.insert(
+      'remote_config',
+      filtered,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> _applyUsageBalance(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final incoming = _normalizedIncoming(remote);
+    _copyIfAbsent(incoming, 'merchant_id', 'merchantId');
+    _copyIfAbsent(incoming, 'metric_key', 'metricKey');
+    _copyIfAbsent(incoming, 'window_start', 'windowStart');
+    _copyIfAbsent(incoming, 'window_end', 'windowEnd');
+    _copyIfAbsent(incoming, 'limit_value', 'limitValue');
+    _copyIfAbsent(incoming, 'soft_limit', 'softLimit');
+
+    final merchantId =
+        incoming['merchant_id'] as String? ?? _syncDao.merchantId;
+    final metricKey = incoming['metric_key'] as String?;
+    if (merchantId == null || metricKey == null) return;
+    incoming['merchant_id'] = merchantId;
+    incoming['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
+    _normalizeBoolean(incoming, 'soft_limit');
+
+    final windowStart = incoming['window_start'];
+    incoming['id'] ??= '${merchantId}_${metricKey}_${windowStart}';
+
+    final filtered = _filterKeys(incoming, {
+      'id',
+      'merchant_id',
+      'metric_key',
+      'window_start',
+      'window_end',
+      'used',
+      'limit_value',
+      'soft_limit',
+      'updated_at',
+    });
+
+    await txn.insert(
+      'usage_balances',
+      filtered,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<void> _markEntitySynced(String entityType, String entityId) async {
     final db = await _database.database;
     switch (entityType) {
@@ -489,6 +771,7 @@ class SyncService {
           where: _entityWhereClause('id = ?'),
           whereArgs: _entityWhereArgs([entityId]),
         );
+        break;
       case 'sale':
         await db.update(
           'sales',
@@ -496,6 +779,7 @@ class SyncService {
           where: _entityWhereClause('id = ?'),
           whereArgs: _entityWhereArgs([entityId]),
         );
+        break;
       case 'reward':
         await db.update(
           'rewards',
@@ -503,6 +787,7 @@ class SyncService {
           where: _entityWhereClause('id = ?'),
           whereArgs: _entityWhereArgs([entityId]),
         );
+        break;
       case 'redemption':
         await db.update(
           'redemptions',
@@ -510,6 +795,17 @@ class SyncService {
           where: _entityWhereClause('id = ?'),
           whereArgs: _entityWhereArgs([entityId]),
         );
+        break;
+      case 'usage_event':
+        await db.update(
+          'usage_events',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      default:
+        break;
     }
   }
 
@@ -529,6 +825,33 @@ class SyncService {
     return incoming;
   }
 
+  void _copyIfAbsent(
+    Map<String, dynamic> target,
+    String targetKey,
+    String sourceKey,
+  ) {
+    if (target[targetKey] == null && target[sourceKey] != null) {
+      target[targetKey] = target[sourceKey];
+    }
+  }
+
+  void _normalizeBoolean(Map<String, dynamic> target, String key) {
+    final value = target[key];
+    if (value is bool) {
+      target[key] = value ? 1 : 0;
+    }
+  }
+
+  Map<String, dynamic> _filterKeys(
+    Map<String, dynamic> source,
+    Set<String> allowed,
+  ) {
+    return {
+      for (final entry in source.entries)
+        if (allowed.contains(entry.key)) entry.key: entry.value,
+    };
+  }
+
   String _entityWhereClause(String clause) {
     if (_syncDao.merchantId == null) {
       return clause;
@@ -543,9 +866,82 @@ class SyncService {
     return [_syncDao.merchantId, ...args];
   }
 
-  Future<void> _refreshPendingCount() async {
-    final count = await _syncDao.getPendingCount();
-    _emit(_status.copyWith(pendingCount: count));
+  Future<void> _refreshStatus({String? lastErrorOverride}) async {
+    final stats = await _syncDao.getStats();
+    _cachedStats = stats;
+
+    final effectiveError = lastErrorOverride ??
+        (stats.failed > 0 ? AppStrings.syncFalhaPendentes : null);
+    final phase = _derivePhase(
+      isOnline: _connectivity.isOnline,
+      isSyncing: _status.isSyncing,
+      stats: stats,
+      lastError: effectiveError,
+    );
+
+    _emit(_status.copyWith(
+      isOnline: _connectivity.isOnline,
+      phase: phase,
+      pendingCount: stats.pendingTotal,
+      failedCount: stats.failed,
+      nextRetryAt: stats.nextRetryAt,
+      lastError: effectiveError,
+      lastSyncAt: _lastSyncAt,
+    ));
+  }
+
+  SyncPhase _derivePhase({
+    required bool isOnline,
+    required bool isSyncing,
+    required SyncQueueStats stats,
+    required String? lastError,
+  }) {
+    if (!isOnline) return SyncPhase.offline;
+    if (isSyncing) return SyncPhase.syncing;
+    if (lastError != null || stats.failed > 0) return SyncPhase.syncFailed;
+    if (stats.pendingTotal > 0) {
+      if (stats.pendingReady == 0 && stats.nextRetryAt != null) {
+        return SyncPhase.retrying;
+      }
+      return SyncPhase.pendingChanges;
+    }
+    return SyncPhase.synced;
+  }
+
+  Future<void> _logSyncEvent(
+    String eventType, [
+    Map<String, Object?>? properties,
+  ]) async {
+    final analytics = _analytics;
+    if (analytics == null) return;
+    await analytics.record(
+      eventType: eventType,
+      properties: properties == null
+          ? null
+          : {
+              for (final entry in properties.entries)
+                entry.key: entry.value ?? 'unknown',
+            },
+      source: 'sync',
+    );
+  }
+
+  String _formatSyncError(Object error) {
+    if (error is SyncTransportException) {
+      switch (error.code) {
+        case 'failed-precondition':
+          return AppStrings.syncIndiceFaltando;
+        case 'unauthenticated':
+          return AppStrings.erroAuth;
+        case 'resource-exhausted':
+        case 'deadline-exceeded':
+        case 'unavailable':
+          return AppStrings.erroRede;
+        default:
+          break;
+      }
+    }
+    return AppStrings.erroGenerico;
   }
 
   void _emit(SyncStatus s) {

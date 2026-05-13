@@ -1,14 +1,14 @@
-import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
+﻿import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/core/constants/app_runtime_config.dart';
-import 'package:loyalty_app/core/database/app_database.dart';
-import 'package:loyalty_app/core/network/json_api_client.dart';
-import 'package:loyalty_app/core/services/firebase_auth_service.dart';
-import 'package:loyalty_app/core/storage/secure_storage.dart';
-import 'package:loyalty_app/features/auth/data/auth_repository.dart';
-import 'package:loyalty_app/features/auth/data/backend_auth_api.dart';
-import 'package:loyalty_app/features/auth/domain/backend_bootstrap_session.dart';
+import 'package:maisum/core/constants/app_runtime_config.dart';
+import 'package:maisum/core/database/app_database.dart';
+import 'package:maisum/core/network/json_api_client.dart';
+import 'package:maisum/core/services/firebase_auth_service.dart';
+import 'package:maisum/core/storage/secure_storage.dart';
+import 'package:maisum/features/auth/data/auth_repository.dart';
+import 'package:maisum/features/auth/data/backend_auth_api.dart';
+import 'package:maisum/features/auth/domain/backend_bootstrap_session.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../helpers/test_database.dart';
@@ -333,3 +333,4 @@ class _InMemorySecureStorageService extends SecureStorageService {
   @override
   Future<void> clearAll() async => _store.clear();
 }
+

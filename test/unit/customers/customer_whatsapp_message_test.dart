@@ -1,8 +1,8 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/features/customers/domain/customer.dart';
-import 'package:loyalty_app/features/customers/domain/customer_whatsapp_message.dart';
-import 'package:loyalty_app/features/rewards/domain/reward.dart';
-import 'package:loyalty_app/features/sales/domain/sale.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/features/customers/domain/customer.dart';
+import 'package:maisum/features/customers/domain/customer_whatsapp_message.dart';
+import 'package:maisum/features/rewards/domain/reward.dart';
+import 'package:maisum/features/sales/domain/sale.dart';
 
 Customer _customer({int points = 0}) => Customer(
       id: 'c1',
@@ -82,3 +82,4 @@ void main() {
     });
   });
 }
+

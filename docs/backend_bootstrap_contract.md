@@ -94,6 +94,62 @@ All successful verify, exchange, refresh, and restore calls should return:
     "merchant_name": "Minha Loja",
     "phone": "+258840000000",
     "subscription_status": "TRIAL",
+    "subscription_state": {
+      "merchant_id": "merchant-1",
+      "plan_code": "free",
+      "plan_name": "Free",
+      "plan_version": 1,
+      "pricing_version": 1,
+      "status": "TRIAL",
+      "trial_ends_at": 1715342400000,
+      "grace_ends_at": 1715947200000,
+      "period_start": 1715120000000,
+      "period_end": 1717798399999,
+      "updated_at": 1715120000000
+    },
+    "entitlements": [
+      {
+        "id": "merchant-1_whatsapp_messages",
+        "merchant_id": "merchant-1",
+        "feature_key": "whatsapp_messages",
+        "is_enabled": true,
+        "limit_value": 200,
+        "unit": "messages_per_month",
+        "updated_at": 1715120000000
+      }
+    ],
+    "feature_flags": [
+      {
+        "id": "merchant-1_whatsapp_campaigns",
+        "merchant_id": "merchant-1",
+        "flag_key": "whatsapp_campaigns",
+        "is_enabled": true,
+        "payload": {"template": "promo_v1"},
+        "updated_at": 1715120000000
+      }
+    ],
+    "remote_config": [
+      {
+        "id": "merchant-1_billing_whatsapp_price",
+        "merchant_id": "merchant-1",
+        "config_key": "billing_whatsapp_price",
+        "payload": {"currency": "MZN", "amount": 2},
+        "updated_at": 1715120000000
+      }
+    ],
+    "usage_balances": [
+      {
+        "id": "merchant-1_whatsapp_messages_1715120000000",
+        "merchant_id": "merchant-1",
+        "metric_key": "whatsapp_messages",
+        "window_start": 1715120000000,
+        "window_end": 1717798399999,
+        "used": 12,
+        "limit_value": 200,
+        "soft_limit": true,
+        "updated_at": 1715120000000
+      }
+    ],
     "access_token": "backend-access-token",
     "refresh_token": "backend-refresh-token",
     "expires_at": "2026-05-06T10:00:00Z",
@@ -148,3 +204,41 @@ Request body:
 ```
 
 The backend must resolve tenant context from the authenticated token and reject cross-tenant payloads.
+
+### Sync entity types (v1)
+
+- `customer`, `sale`, `reward`, `redemption`
+- `subscription_state` (single document per merchant)
+- `entitlement`
+- `feature_flag`
+- `remote_config`
+- `usage_balance`
+- `usage_event` (write-only via queue; aggregated into usage balances by backend)
+
+## Usage Events
+
+Usage is tracked offline by enqueueing `usage_event` items to the existing sync queue. The backend must aggregate usage into `usage_balance` and return updated balances via sync pulls or the next bootstrap.
+
+Example payload for a queued usage event:
+
+```json
+{
+  "operation": "create",
+  "payload": {
+    "id": "usage-1",
+    "merchant_id": "merchant-1",
+    "metric_key": "whatsapp_messages",
+    "quantity": 1,
+    "occurred_at": 1715123456789,
+    "source": "campaign",
+    "metadata": {"template": "promo_v1"}
+  },
+  "queued_at": "2026-05-06T10:00:00Z"
+}
+```
+
+## Policy Versioning (grandfathered pricing)
+
+- `plan_version` describes the current plan definition.
+- `pricing_version` allows grandfathered pricing for existing merchants.
+- The backend must keep historical pricing versions and emit the correct version in `subscription_state`.

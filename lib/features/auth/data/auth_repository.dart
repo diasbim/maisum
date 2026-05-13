@@ -8,10 +8,14 @@ import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/app_runtime_config.dart';
 import '../../../core/database/app_database.dart';
+import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/services/firebase_auth_service.dart';
 import '../../../core/storage/secure_storage.dart';
 import 'backend_auth_api.dart';
 import '../domain/auth_session.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/domain/plan_catalog.dart';
+import '../../subscription/domain/usage_metrics.dart';
 
 class AuthRepository {
   AuthRepository(
@@ -129,7 +133,8 @@ class AuthRepository {
         token = await _storage.getToken() ?? '';
         expiry = await _storage.getTokenExpiry() ??
             DateTime.now().add(const Duration(hours: 1));
-      } catch (_) {
+      } catch (e, st) {
+        AppErrorReporter.report(e, st, hint: 'auth_token_refresh');
         token = await _storage.getToken() ?? '';
         expiry = await _storage.getTokenExpiry() ??
             DateTime.now().add(const Duration(hours: 1));
@@ -195,8 +200,9 @@ class AuthRepository {
         );
         await _persistSession(session);
         return session;
-      } catch (_) {
+      } catch (e, st) {
         // Keep the current Firebase-local path active until backend auth is enabled in production.
+        AppErrorReporter.report(e, st, hint: 'auth_backend_exchange');
       }
     }
 
@@ -284,7 +290,8 @@ class AuthRepository {
           fallbackDeviceId: storedSession.deviceId,
         );
       }
-    } catch (_) {
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'auth_backend_restore');
       return null;
     }
 
@@ -331,6 +338,8 @@ class AuthRepository {
         : session.merchantName.trim();
     final merchantPhone = session.phone.trim();
     final merchantSlug = _buildMerchantSlug(merchantPhone);
+    final planDefinition = PlanCatalog.fromCode('starter');
+    final window = _monthlyWindow(DateTime.now());
 
     await db.transaction((txn) async {
       await txn.insert(
@@ -384,12 +393,83 @@ class AuthRepository {
         whereArgs: [session.resolvedAppUserId],
       );
 
+      await txn.insert(
+          'subscription_state',
+          {
+            'merchant_id': merchantId,
+            'plan_code': planDefinition.plan.code,
+            'plan_name': planDefinition.displayName,
+            'plan_version': 1,
+            'pricing_version': 1,
+            'status': session.subscriptionStatus,
+            'updated_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+
+      for (final featureKey in FeatureKeys.all) {
+        await txn.insert(
+            'entitlements',
+            {
+              'id': '${merchantId}_$featureKey',
+              'merchant_id': merchantId,
+              'feature_key': featureKey,
+              'is_enabled': planDefinition.allowsFeature(featureKey) ? 1 : 0,
+              'updated_at': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+
+        await txn.insert(
+            'feature_flags',
+            {
+              'id': '${merchantId}_$featureKey',
+              'merchant_id': merchantId,
+              'flag_key': featureKey,
+              'is_enabled': 1,
+              'updated_at': now,
+            },
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+
+      await txn.insert(
+          'remote_config',
+          {
+            'id': '${merchantId}_billing_whatsapp_price',
+            'merchant_id': merchantId,
+            'config_key': 'billing_whatsapp_price',
+            'payload': jsonEncode({'currency': 'MZN', 'amount': 2}),
+            'updated_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+
+      await txn.insert(
+          'usage_balances',
+          {
+            'id':
+                '${merchantId}_${UsageMetrics.whatsappMessages}_${window.start.millisecondsSinceEpoch}',
+            'merchant_id': merchantId,
+            'metric_key': UsageMetrics.whatsappMessages,
+            'window_start': window.start.millisecondsSinceEpoch,
+            'window_end': window.end.millisecondsSinceEpoch,
+            'used': 0,
+            'limit_value': planDefinition.whatsappMonthlyLimit,
+            'soft_limit': 1,
+            'updated_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+
       await _backfillBusinessData(
         txn,
         merchantId: merchantId,
         deviceId: session.deviceId,
       );
     });
+  }
+
+  _UsageWindow _monthlyWindow(DateTime now) {
+    final start = DateTime(now.year, now.month, 1);
+    final nextMonth = DateTime(now.year, now.month + 1, 1);
+    final end = nextMonth.subtract(const Duration(milliseconds: 1));
+    return _UsageWindow(start, end);
   }
 
   Future<void> _syncMerchantDocument(AuthSession session) async {
@@ -415,6 +495,99 @@ class AuthRepository {
       'updated_at': now,
       'created_at': now,
     }, SetOptions(merge: true));
+
+    await _seedPolicyDocuments(
+      firestore,
+      merchantId: merchantId,
+      subscriptionStatus: session.subscriptionStatus,
+      now: now,
+    );
+  }
+
+  Future<void> _seedPolicyDocuments(
+    FirebaseFirestore firestore, {
+    required String merchantId,
+    required String subscriptionStatus,
+    required int now,
+  }) async {
+    final businessRef = firestore.collection('businesses').doc(merchantId);
+    final planDefinition = PlanCatalog.fromCode('starter');
+    final window = _monthlyWindow(DateTime.now());
+
+    final subscriptionRef =
+        businessRef.collection('subscription_state').doc(merchantId);
+    final subscriptionSnap = await subscriptionRef.get();
+    if (!subscriptionSnap.exists) {
+      await subscriptionRef.set({
+        'merchant_id': merchantId,
+        'plan_code': planDefinition.plan.code,
+        'plan_name': planDefinition.displayName,
+        'plan_version': 1,
+        'pricing_version': 1,
+        'status': subscriptionStatus,
+        'updated_at': now,
+      });
+    }
+
+    for (final featureKey in FeatureKeys.all) {
+      final entitlementId = '${merchantId}_$featureKey';
+      final entitlementRef =
+          businessRef.collection('entitlements').doc(entitlementId);
+      final entitlementSnap = await entitlementRef.get();
+      if (!entitlementSnap.exists) {
+        await entitlementRef.set({
+          'id': entitlementId,
+          'merchant_id': merchantId,
+          'feature_key': featureKey,
+          'is_enabled': planDefinition.allowsFeature(featureKey),
+          'updated_at': now,
+        });
+      }
+
+      final flagId = '${merchantId}_$featureKey';
+      final flagRef = businessRef.collection('feature_flags').doc(flagId);
+      final flagSnap = await flagRef.get();
+      if (!flagSnap.exists) {
+        await flagRef.set({
+          'id': flagId,
+          'merchant_id': merchantId,
+          'flag_key': featureKey,
+          'is_enabled': true,
+          'updated_at': now,
+        });
+      }
+    }
+
+    final configId = '${merchantId}_billing_whatsapp_price';
+    final configRef = businessRef.collection('remote_config').doc(configId);
+    final configSnap = await configRef.get();
+    if (!configSnap.exists) {
+      await configRef.set({
+        'id': configId,
+        'merchant_id': merchantId,
+        'config_key': 'billing_whatsapp_price',
+        'payload': {'currency': 'MZN', 'amount': 2},
+        'updated_at': now,
+      });
+    }
+
+    final quotaId =
+        '${merchantId}_${UsageMetrics.whatsappMessages}_${window.start.millisecondsSinceEpoch}';
+    final quotaRef = businessRef.collection('usage_balances').doc(quotaId);
+    final quotaSnap = await quotaRef.get();
+    if (!quotaSnap.exists) {
+      await quotaRef.set({
+        'id': quotaId,
+        'merchant_id': merchantId,
+        'metric_key': UsageMetrics.whatsappMessages,
+        'window_start': window.start.millisecondsSinceEpoch,
+        'window_end': window.end.millisecondsSinceEpoch,
+        'used': 0,
+        'limit_value': planDefinition.whatsappMonthlyLimit,
+        'soft_limit': true,
+        'updated_at': now,
+      });
+    }
   }
 
   Future<void> _backfillBusinessData(
@@ -496,4 +669,11 @@ class AuthRepository {
     }
     return 'merchant_$digits';
   }
+}
+
+class _UsageWindow {
+  const _UsageWindow(this.start, this.end);
+
+  final DateTime start;
+  final DateTime end;
 }

@@ -35,7 +35,7 @@ CustomerWhatsAppDraft buildCustomerWhatsAppDraft({
       .toList();
 
   if (eligibleRewards.isNotEmpty) {
-    final reward = eligibleRewards.first;
+    final reward = eligibleRewards.last;
     return CustomerWhatsAppDraft(
       type: CustomerWhatsAppMessageType.rewardUnlocked,
       message:

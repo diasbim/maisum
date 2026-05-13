@@ -1,6 +1,6 @@
-import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
+﻿import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/core/services/firebase_auth_service.dart';
+import 'package:maisum/core/services/firebase_auth_service.dart';
 
 void main() {
   group('FirebaseAuthService', () {
@@ -58,3 +58,4 @@ void main() {
     });
   });
 }
+

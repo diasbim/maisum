@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/features/auth/domain/auth_session.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/features/auth/domain/auth_session.dart';
 
 void main() {
   group('AuthSession tenant resolution', () {
@@ -25,3 +25,4 @@ void main() {
     });
   });
 }
+

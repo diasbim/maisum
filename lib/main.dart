@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'app/app.dart';
+import 'core/sync/background_sync.dart';
 import 'firebase_options.dart';
 
 const _firestoreCacheSizeBytes = 20 * 1024 * 1024;
@@ -20,6 +23,10 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  await _configureCrashlytics();
+
+  await registerBackgroundSync(debug: kDebugMode);
+
   await _configureFirebaseAuth();
 
   FirebaseFirestore.instance.settings = const Settings(
@@ -30,6 +37,17 @@ void main() async {
   runApp(const ProviderScope(child: LoyaltyApp()));
 
   unawaited(_warmUpApp());
+}
+
+Future<void> _configureCrashlytics() async {
+  if (kIsWeb) return;
+  await FirebaseCrashlytics.instance
+      .setCrashlyticsCollectionEnabled(!kDebugMode);
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
 }
 
 Future<void> _warmUpApp() async {

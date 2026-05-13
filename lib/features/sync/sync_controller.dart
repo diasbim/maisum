@@ -3,11 +3,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../app/providers.dart';
 import 'sync_service.dart';
 
-final syncStatusStreamProvider = StreamProvider<SyncStatus>((ref) {
-  final service = ref.watch(syncServiceProvider);
-  return service.statusStream;
-});
-
 class SyncController extends Notifier<SyncStatus> {
   @override
   SyncStatus build() {

@@ -7,11 +7,13 @@ class QuickAmountButton extends StatelessWidget {
     required this.amount,
     required this.onTap,
     this.selected = false,
+    this.label,
   });
 
   final int amount;
   final VoidCallback onTap;
   final bool selected;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +43,7 @@ class QuickAmountButton extends StatelessWidget {
               ),
             ),
             Text(
-              'MZN',
+              label ?? 'MZN',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,

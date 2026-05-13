@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 
-import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/points_calculator.dart';
 import '../../../core/database/app_database.dart';
 import '../../customers/domain/customer.dart';
 import '../domain/sale.dart';
@@ -23,6 +23,7 @@ class SaleRepository {
   final String? merchantId;
   final String? deviceId;
   static const _uuid = Uuid();
+  static const _points = PointsCalculator();
 
   Future<Sale> createSale({
     required String customerId,
@@ -31,7 +32,7 @@ class SaleRepository {
     final db = await _database.database;
     return db.transaction((txn) async {
       final now = DateTime.now();
-      final points = (amount / AppConstants.pointsPerMzn).floor();
+      final points = _points.calculate(amount);
       final sale = Sale(
         id: _uuid.v4(),
         customerId: customerId,
@@ -62,9 +63,8 @@ class SaleRepository {
           'customers',
           {...updatedCustomer.toDbMap(), 'merchant_id': merchantId},
           where: merchantId == null ? 'id = ?' : 'id = ? AND merchant_id = ?',
-          whereArgs: merchantId == null
-              ? [customerId]
-              : [customerId, merchantId],
+          whereArgs:
+              merchantId == null ? [customerId] : [customerId, merchantId],
         );
 
         await txn.insert(
@@ -109,14 +109,14 @@ class SaleRepository {
   Future<Map<String, dynamic>> getTodayStats() => _saleDao.getTodayStats();
 
   Map<String, dynamic> _saleRow(Sale sale) => {
-    ...sale.toDbMap(),
-    'merchant_id': merchantId,
-    'device_id': deviceId,
-  };
+        ...sale.toDbMap(),
+        'merchant_id': merchantId,
+        'device_id': deviceId,
+      };
 
   Map<String, dynamic> _syncQueueRow(SyncItem item) => {
-    ...item.toDbMap(),
-    'merchant_id': merchantId,
-    'device_id': deviceId,
-  };
+        ...item.toDbMap(),
+        'merchant_id': merchantId,
+        'device_id': deviceId,
+      };
 }

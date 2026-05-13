@@ -1,0 +1,74 @@
+enum ConfigType {
+  FLAG
+  CONFIG
+  EXPERIMENT
+}
+
+type ConfigItem @table(name: "config_items") @unique(fields: ["configKey"]) {
+  id: UUID! @default(expr: "uuidV4()")
+  configKey: String! @col(name: "config_key")
+  configType: ConfigType! @col(name: "config_type")
+  isEnabled: Boolean! @col(name: "is_enabled") @default(value: true)
+  defaultPayload: Any @col(name: "default_payload")
+  createdAt: Timestamp! @col(name: "created_at") @default(expr: "request.time")
+  updatedAt: Timestamp! @col(name: "updated_at") @default(expr: "request.time")
+}
+
+type ConfigSegment @table(name: "config_segments") {
+  id: UUID! @default(expr: "uuidV4()")
+  name: String!
+  isEnabled: Boolean! @col(name: "is_enabled") @default(value: true)
+  conditions: Any!
+  createdAt: Timestamp! @col(name: "created_at") @default(expr: "request.time")
+  updatedAt: Timestamp! @col(name: "updated_at") @default(expr: "request.time")
+}
+
+type ConfigRule @table(name: "config_rules") @index(fields: ["configKey", "priority"]) {
+  id: UUID! @default(expr: "uuidV4()")
+  configKey: String! @col(name: "config_key")
+  segmentId: UUID @col(name: "segment_id")
+  priority: Int! @default(value: 100)
+  rolloutPct: Int! @col(name: "rollout_pct") @default(value: 100)
+  isEnabled: Boolean! @col(name: "is_enabled") @default(value: true)
+  payloadOverride: Any @col(name: "payload_override")
+  startsAt: Timestamp @col(name: "starts_at")
+  endsAt: Timestamp @col(name: "ends_at")
+  createdAt: Timestamp! @col(name: "created_at") @default(expr: "request.time")
+  updatedAt: Timestamp! @col(name: "updated_at") @default(expr: "request.time")
+}
+
+type ExperimentAssignment @table(name: "experiment_assignments")
+  @index(fields: ["configKey", "merchantId"]) {
+  id: UUID! @default(expr: "uuidV4()")
+  configKey: String! @col(name: "config_key")
+  merchantId: String! @col(name: "merchant_id")
+  variant: String!
+  assignedAt: Timestamp! @col(name: "assigned_at") @default(expr: "request.time")
+}
+
+type AnalyticsEvent @table(name: "analytics_events")
+  @index(fields: ["eventType", "occurredAt"]) @index(fields: ["merchantId", "occurredAt"]) {
+  id: UUID! @default(expr: "uuidV4()")
+  merchantId: String! @col(name: "merchant_id")
+  eventType: String! @col(name: "event_type")
+  occurredAt: Timestamp! @col(name: "occurred_at")
+  receivedAt: Timestamp! @col(name: "received_at") @default(expr: "request.time")
+  source: String
+  deviceId: String @col(name: "device_id")
+  appVersion: String @col(name: "app_version")
+  properties: Any
+}
+
+type MerchantDailyKpi @table(name: "merchant_daily_kpis", key: ["merchantId", "day"]) {
+  merchantId: String! @col(name: "merchant_id")
+  day: Date!
+  salesCount: Int! @col(name: "sales_count") @default(value: 0)
+  repeatCustomers: Int! @col(name: "repeat_customers") @default(value: 0)
+  whatsappUsage: Int! @col(name: "whatsapp_usage") @default(value: 0)
+  featureAdoption: Any @col(name: "feature_adoption")
+  paidConversion: Boolean @col(name: "paid_conversion")
+  churnRiskScore: Float @col(name: "churn_risk_score")
+  retentionCohort: Int @col(name: "retention_cohort")
+  healthScore: Float @col(name: "health_score")
+  updatedAt: Timestamp! @col(name: "updated_at") @default(expr: "request.time")
+}

@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
+import '../../../core/errors/app_error_reporter.dart';
 import '../../customers/presentation/customers_controller.dart';
 import '../domain/reward.dart';
 
@@ -37,6 +38,18 @@ class RewardsController extends AsyncNotifier<List<Reward>> {
           rewardId: rewardId,
           pointsRequired: pointsRequired,
         );
+    try {
+      await ref.read(analyticsServiceProvider).record(
+        eventType: 'reward_redeemed',
+        source: 'reward',
+        properties: {
+          'reward_id': rewardId,
+          'points_spent': pointsRequired,
+        },
+      );
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'reward_redeemed_analytics');
+    }
     ref.invalidate(customerDetailProvider(customerId));
     ref.read(syncServiceProvider).processQueue();
   }

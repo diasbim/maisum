@@ -16,7 +16,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.loyaltyos.loyaltyos"
+    namespace = "com.tsintsivadigital.maisum"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -30,7 +30,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.loyaltyos.loyaltyos"
+        applicationId = "com.tsintsivadigital.maisum"
         minSdk = 26
         targetSdk = 36
         versionCode = flutter.versionCode

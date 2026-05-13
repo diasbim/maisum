@@ -28,6 +28,7 @@ class RewardRepository {
       pointsRequired: pointsRequired,
       description: description,
     );
+    final updatedAt = reward.createdAt.millisecondsSinceEpoch;
     await _syncDao.enqueue(
       SyncItem(
         id: _uuid.v4(),
@@ -37,6 +38,7 @@ class RewardRepository {
         payload: jsonEncode({
           ...reward.toDbMap(),
           'merchant_id': _dao.merchantId,
+          'updated_at': updatedAt,
         }),
         createdAt: DateTime.now(),
       ),

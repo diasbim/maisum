@@ -16,9 +16,13 @@ import '../features/rewards/presentation/create_reward_screen.dart';
 import '../features/rewards/presentation/rewards_screen.dart';
 import '../features/sales/presentation/new_sale_screen.dart';
 import '../features/sales/presentation/sales_history_screen.dart';
+import '../features/sales/presentation/sale_success_screen.dart';
 import '../features/legal/presentation/privacy_screen.dart';
 import '../features/legal/presentation/terms_screen.dart';
+import '../features/onboarding/presentation/sms_permission_screen.dart';
+import '../features/settings/presentation/merchant_config_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
+import '../features/subscription/presentation/subscription_admin_screen.dart';
 import '../features/sync/presentation/pending_sync_screen.dart';
 
 const _publicRoutes = {
@@ -30,6 +34,8 @@ const _publicRoutes = {
   '/terms',
   '/privacy',
 };
+
+const _smsPermissionRoute = '/sms-permission';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ValueNotifier<bool>(false);
@@ -53,10 +59,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
         return hasPin ? '/pin-entry' : '/pin-setup';
       }
+      if (isAuthenticated && state.matchedLocation != _smsPermissionRoute) {
+        final prompted = await ref
+            .read(secureStorageServiceProvider)
+            .hasSmsPermissionPrompted();
+        if (!prompted &&
+            state.matchedLocation != '/privacy' &&
+            state.matchedLocation != '/terms') {
+          return _smsPermissionRoute;
+        }
+      }
       return null;
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
+      GoRoute(
+        path: _smsPermissionRoute,
+        builder: (_, __) => const SmsPermissionScreen(),
+      ),
       GoRoute(path: '/login', builder: (_, __) => const PhoneAuthScreen()),
       GoRoute(
         path: '/otp',
@@ -74,6 +94,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/new-sale',
         builder: (_, state) => NewSaleScreen(args: state.extra as NewSaleArgs?),
+      ),
+      GoRoute(
+        path: '/sale-success',
+        builder: (_, state) {
+          final args = state.extra;
+          if (args is! SaleSuccessArgs) {
+            return const Scaffold(
+              body: Center(child: Text('Venda não encontrada.')),
+            );
+          }
+          return SaleSuccessScreen(args: args);
+        },
       ),
       GoRoute(
         path: '/customers',
@@ -99,6 +131,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const PendingSyncScreen(),
       ),
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+      GoRoute(
+        path: '/subscription-admin',
+        builder: (_, __) => const SubscriptionAdminScreen(),
+      ),
+      GoRoute(
+        path: '/merchant-config',
+        builder: (_, __) => const MerchantConfigScreen(),
+      ),
       GoRoute(path: '/terms', builder: (_, __) => const TermsScreen()),
       GoRoute(path: '/privacy', builder: (_, __) => const PrivacyScreen()),
     ],

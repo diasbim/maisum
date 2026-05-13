@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/features/sync/sync_service.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/features/sync/sync_service.dart';
 
 void main() {
   group('SyncStatus defaults', () {
@@ -38,3 +38,4 @@ void main() {
     });
   });
 }
+

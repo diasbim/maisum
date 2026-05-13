@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/features/auth/domain/backend_bootstrap_session.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/features/auth/domain/backend_bootstrap_session.dart';
 
 void main() {
   group('BackendBootstrapSession', () {
@@ -33,3 +33,4 @@ void main() {
     });
   });
 }
+

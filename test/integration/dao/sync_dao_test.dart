@@ -1,8 +1,8 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/core/constants/app_constants.dart';
-import 'package:loyalty_app/core/database/app_database.dart';
-import 'package:loyalty_app/features/sync/data/sync_dao.dart';
-import 'package:loyalty_app/features/sync/domain/sync_item.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/core/constants/app_constants.dart';
+import 'package:maisum/core/database/app_database.dart';
+import 'package:maisum/features/sync/data/sync_dao.dart';
+import 'package:maisum/features/sync/domain/sync_item.dart';
 
 import '../../helpers/test_database.dart';
 
@@ -152,6 +152,22 @@ void main() {
         expect(await dao.getPending(), isEmpty);
       },
     );
+  });
+
+  group('scheduleRetry', () {
+    test('excludes items scheduled in the future', () async {
+      await dao.enqueue(_item('future'));
+      final nextAttempt = DateTime.now().add(const Duration(hours: 1));
+      await dao.scheduleRetry('future', nextAttempt);
+      expect(await dao.getPending(), isEmpty);
+    });
+
+    test('includes items scheduled in the past', () async {
+      await dao.enqueue(_item('past'));
+      final nextAttempt = DateTime.now().subtract(const Duration(minutes: 5));
+      await dao.scheduleRetry('past', nextAttempt);
+      expect(await dao.getPending(), hasLength(1));
+    });
   });
 
   group('getPendingCount', () {

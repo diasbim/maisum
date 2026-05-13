@@ -27,6 +27,7 @@ mixin _$SyncItem {
   String get payload => throw _privateConstructorUsedError;
   int get retryCount => throw _privateConstructorUsedError;
   String get status => throw _privateConstructorUsedError;
+  DateTime? get nextAttemptAt => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
 
   /// Serializes this SyncItem to a JSON map.
@@ -52,6 +53,7 @@ abstract class $SyncItemCopyWith<$Res> {
       String payload,
       int retryCount,
       String status,
+      DateTime? nextAttemptAt,
       DateTime createdAt});
 }
 
@@ -77,6 +79,7 @@ class _$SyncItemCopyWithImpl<$Res, $Val extends SyncItem>
     Object? payload = null,
     Object? retryCount = null,
     Object? status = null,
+    Object? nextAttemptAt = freezed,
     Object? createdAt = null,
   }) {
     return _then(_value.copyWith(
@@ -108,6 +111,10 @@ class _$SyncItemCopyWithImpl<$Res, $Val extends SyncItem>
           ? _value.status
           : status // ignore: cast_nullable_to_non_nullable
               as String,
+      nextAttemptAt: freezed == nextAttemptAt
+          ? _value.nextAttemptAt
+          : nextAttemptAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       createdAt: null == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -132,6 +139,7 @@ abstract class _$$SyncItemImplCopyWith<$Res>
       String payload,
       int retryCount,
       String status,
+      DateTime? nextAttemptAt,
       DateTime createdAt});
 }
 
@@ -155,6 +163,7 @@ class __$$SyncItemImplCopyWithImpl<$Res>
     Object? payload = null,
     Object? retryCount = null,
     Object? status = null,
+    Object? nextAttemptAt = freezed,
     Object? createdAt = null,
   }) {
     return _then(_$SyncItemImpl(
@@ -186,6 +195,10 @@ class __$$SyncItemImplCopyWithImpl<$Res>
           ? _value.status
           : status // ignore: cast_nullable_to_non_nullable
               as String,
+      nextAttemptAt: freezed == nextAttemptAt
+          ? _value.nextAttemptAt
+          : nextAttemptAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
       createdAt: null == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -205,6 +218,7 @@ class _$SyncItemImpl extends _SyncItem {
       required this.payload,
       this.retryCount = 0,
       this.status = 'pending',
+      this.nextAttemptAt,
       required this.createdAt})
       : super._();
 
@@ -228,11 +242,13 @@ class _$SyncItemImpl extends _SyncItem {
   @JsonKey()
   final String status;
   @override
+  final DateTime? nextAttemptAt;
+  @override
   final DateTime createdAt;
 
   @override
   String toString() {
-    return 'SyncItem(id: $id, operation: $operation, entityType: $entityType, entityId: $entityId, payload: $payload, retryCount: $retryCount, status: $status, createdAt: $createdAt)';
+    return 'SyncItem(id: $id, operation: $operation, entityType: $entityType, entityId: $entityId, payload: $payload, retryCount: $retryCount, status: $status, nextAttemptAt: $nextAttemptAt, createdAt: $createdAt)';
   }
 
   @override
@@ -251,6 +267,8 @@ class _$SyncItemImpl extends _SyncItem {
             (identical(other.retryCount, retryCount) ||
                 other.retryCount == retryCount) &&
             (identical(other.status, status) || other.status == status) &&
+            (identical(other.nextAttemptAt, nextAttemptAt) ||
+                other.nextAttemptAt == nextAttemptAt) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt));
   }
@@ -258,7 +276,7 @@ class _$SyncItemImpl extends _SyncItem {
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(runtimeType, id, operation, entityType,
-      entityId, payload, retryCount, status, createdAt);
+      entityId, payload, retryCount, status, nextAttemptAt, createdAt);
 
   /// Create a copy of SyncItem
   /// with the given fields replaced by the non-null parameter values.
@@ -285,6 +303,7 @@ abstract class _SyncItem extends SyncItem {
       required final String payload,
       final int retryCount,
       final String status,
+      final DateTime? nextAttemptAt,
       required final DateTime createdAt}) = _$SyncItemImpl;
   const _SyncItem._() : super._();
 
@@ -305,6 +324,8 @@ abstract class _SyncItem extends SyncItem {
   int get retryCount;
   @override
   String get status;
+  @override
+  DateTime? get nextAttemptAt;
   @override
   DateTime get createdAt;
 

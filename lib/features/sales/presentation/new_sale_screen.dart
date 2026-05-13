@@ -15,10 +15,12 @@ import '../../../core/widgets/quick_amount_button.dart';
 import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customers_controller.dart';
 import 'sale_controller.dart';
+import 'sale_success_screen.dart';
 
 class NewSaleArgs {
-  const NewSaleArgs({this.preselectedCustomerId});
+  const NewSaleArgs({this.preselectedCustomerId, this.prefilledAmount});
   final String? preselectedCustomerId;
+  final double? prefilledAmount;
 }
 
 class NewSaleScreen extends ConsumerStatefulWidget {
@@ -35,6 +37,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   Timer? _searchDebounce;
   Customer? _selectedCustomer;
   int? _quickAmount;
+  int? _lastAmount;
   List<Customer> _searchResults = [];
 
   @override
@@ -44,6 +47,11 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     if (preselectedId != null) {
       _loadPreselectedCustomer(preselectedId);
     }
+    final prefilledAmount = widget.args?.prefilledAmount;
+    if (prefilledAmount != null && prefilledAmount > 0) {
+      _amountCtrl.text = prefilledAmount.toStringAsFixed(0);
+    }
+    _loadLastAmount();
   }
 
   Future<void> _loadPreselectedCustomer(String id) async {
@@ -54,6 +62,12 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         _phoneCtrl.text = customer.phone;
       });
     }
+  }
+
+  Future<void> _loadLastAmount() async {
+    final lastAmount = await ref.read(saleDaoProvider).getLastSaleAmount();
+    if (!mounted) return;
+    setState(() => _lastAmount = lastAmount);
   }
 
   @override
@@ -124,13 +138,14 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     }
 
     final saleCtrl = ref.read(saleControllerProvider.notifier);
-    await saleCtrl.createSale(
+    final result = await saleCtrl.createSale(
       customerId: _selectedCustomer!.id,
       amount: _amount,
     );
 
     saleCtrl.reset();
-    if (mounted) context.pop();
+    if (!mounted) return;
+    context.go('/sale-success', extra: SaleSuccessArgs(result: result));
   }
 
   @override
@@ -288,7 +303,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
               Wrap(
                 spacing: 12,
                 runSpacing: 10,
-                children: [100, 200, 500]
+                children: [100, 200, 300, 500]
                     .map(
                       (amt) => QuickAmountButton(
                         amount: amt,
@@ -299,7 +314,26 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                         }),
                       ),
                     )
-                    .toList(),
+                    .toList()
+                  ..addAll(
+                    _lastAmount == null
+                        ? const []
+                        : [
+                            QuickAmountButton(
+                              amount: _lastAmount!,
+                              label: 'Último',
+                              selected: _quickAmount == _lastAmount,
+                              onTap: () => setState(() {
+                                _quickAmount = _quickAmount == _lastAmount
+                                    ? null
+                                    : _lastAmount;
+                                if (_quickAmount != null) {
+                                  _amountCtrl.clear();
+                                }
+                              }),
+                            ),
+                          ],
+                  ),
               ),
               const SizedBox(height: 10),
               Text(

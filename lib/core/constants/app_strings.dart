@@ -32,6 +32,9 @@ class AppStrings {
   static const String pontosPreview = 'pontos';
   static const String confirmarVenda = 'Confirmar Venda';
   static const String vendaRegistada = 'Venda registada!';
+  static const String mensagemProntaEnvio = 'Mensagem pronta para enviar';
+  static const String enviarSms = 'Enviar SMS';
+  static const String voltarAoInicio = 'Voltar ao início';
   static const String pontosAtribuidos = 'pontos atribuídos';
   static const String continuar2 = 'Continuar';
   static const String nome = 'Nome';
@@ -52,6 +55,23 @@ class AppStrings {
   static const String adicionarPontos = 'Adicionar pontos';
   static const String ultimaVisita = 'Última visita';
   static const String pontos = 'pontos';
+  static const String pontosAbrev = 'pts';
+  static const String clienteNaoEncontrado = 'Cliente não encontrado';
+  static const String clienteAtivo = 'Cliente activo';
+  static const String clienteInativo = 'Cliente inativo';
+  static const String saldoPontos = 'Saldo de pontos';
+  static const String aproxPrefix = '~';
+  static const String moedaMzn = 'MZN';
+  static const String comprasSuffix = 'em compras';
+  static const String verHistorico = 'Ver histórico';
+  static const String historicoCompras = 'Histórico de compras';
+  static const String verTudo = 'Ver tudo';
+  static const String progressoProximaRecompensa =
+      'Progresso para próxima recompensa';
+  static const String semRecompensasAtivas = 'Sem recompensas activas';
+  static const String recompensaPronta = 'Recompensa pronta';
+  static const String faltam = 'Faltam';
+  static const String para = 'para';
 
   // Rewards / Redemption
   static const String resgatar = 'Resgatar Recompensa';
@@ -68,11 +88,27 @@ class AppStrings {
   static const String descricao = 'Descrição (opcional)';
   static const String guardar = 'Guardar';
   static const String pontosRequeridos = 'pontos requeridos';
+  static const String recompensasSection = 'As tuas recompensas';
+  static const String recompensasOrdenar = 'Ordenar';
+  static const String recompensasHeroTitle =
+      'Motiva os teus clientes a voltarem';
+  static const String recompensasHeroBody =
+      'Cria recompensas atrativas e aumenta as visitas.';
+  static const String recompensaAtiva = 'Ativa';
+  static const String recompensasInsightTitle =
+      'Recompensas simples motivam mais.';
+  static const String recompensasInsightBody =
+      'Mantém poucos prémios e fáceis de entender.';
 
   // Sync
   static const String sincronizado = 'Sincronizado';
   static const String sincronizando = 'Sincronizando...';
   static const String pendentesSync = 'pendentes';
+  static const String syncInterrompida = 'Sincronização interrompida';
+  static const String syncFalhaPendentes =
+      'Alguns itens não foram sincronizados.';
+  static const String syncIndiceFaltando = 'Índice do Firestore em falta.';
+  static const String syncPermissaoNegada = 'Sem permissão para sincronizar.';
   static const String offline = 'Sem ligação à internet';
   static const String semLigacao = 'A trabalhar offline';
 
@@ -83,6 +119,20 @@ class AppStrings {
   static const String nomeNegocioHint = 'Introduza o nome do negócio';
   static const String nomeNegocioAtualizado = 'Nome do negócio atualizado';
   static const String subscricao = 'Subscrição';
+  static const String subscricaoAdmin = 'Admin da subscrição';
+  static const String subscricaoAdminDesc = 'Ver plano e limites locais';
+  static const String planoAtual = 'Plano atual';
+  static const String estadoSubscricao = 'Estado';
+  static const String limites = 'Limites';
+  static const String quotaWhatsApp = 'Mensagens WhatsApp';
+  static const String quotaUsadas = 'Usadas';
+  static const String quotaRestante = 'Restante';
+  static const String quotaRenova = 'Renova em';
+  static const String funcionalidades = 'Funcionalidades';
+  static const String flagsRemotas = 'Flags remotas';
+  static const String periodo = 'Período';
+  static const String testeAte = 'Teste até';
+  static const String graciaAte = 'Graça até';
   static const String identificadores = 'Identificadores';
   static const String merchantId = 'Merchant ID';
   static const String appUserId = 'App User ID';
@@ -114,6 +164,15 @@ class AppStrings {
 
   static const String resgatarBtn = 'Resgatar';
 
+  // SMS permission
+  static const String smsPermissionTitle = 'Permitir SMS de pagamentos';
+  static const String smsPermissionBody =
+      'MaisUm usa SMS apenas para detectar pagamentos M-Pesa/eMola '
+      'e sugerir vendas rapidamente. Nenhuma mensagem pessoal é lida.';
+  static const String smsPermissionAllow = 'Permitir SMS';
+  static const String smsPermissionSkip = 'Continuar sem SMS';
+  static const String smsPermissionDone = 'Permissão registada.';
+
   // Customer edit
   static const String editarCliente = 'Editar cliente';
 
@@ -128,6 +187,12 @@ class AppStrings {
   static const String erroAuth = 'Sessão expirada. Faça login novamente.';
   static const String erroServidor = 'Erro no servidor. Tente mais tarde.';
   static const String tentar = 'Tentar novamente';
+  static const String funcaoIndisponivel =
+      'Funcionalidade indisponível no seu plano.';
+  static const String limiteSoftAviso =
+      'Limite mensal atingido. Vamos sincronizar depois.';
+  static const String whatsappQueued =
+      'Mensagem WhatsApp será enviada quando estiver online.';
   static const String phoneRequired = 'Introduza o número de telemóvel';
   static const String otpRequired = 'Introduza o código de 6 dígitos';
   static const String amountRequired = 'Introduza o valor da venda';

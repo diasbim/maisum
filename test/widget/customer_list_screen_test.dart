@@ -1,13 +1,13 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:loyalty_app/core/constants/app_strings.dart';
-import 'package:loyalty_app/core/widgets/empty_state.dart';
-import 'package:loyalty_app/features/customers/domain/customer.dart';
-import 'package:loyalty_app/features/customers/presentation/customer_list_screen.dart';
-import 'package:loyalty_app/features/customers/presentation/customers_controller.dart';
+import 'package:maisum/core/constants/app_strings.dart';
+import 'package:maisum/core/widgets/empty_state.dart';
+import 'package:maisum/features/customers/domain/customer.dart';
+import 'package:maisum/features/customers/presentation/customer_list_screen.dart';
+import 'package:maisum/features/customers/presentation/customers_controller.dart';
 
 // ── Fakes ────────────────────────────────────────────────────────────────────
 
@@ -163,3 +163,4 @@ void main() {
     });
   });
 }
+

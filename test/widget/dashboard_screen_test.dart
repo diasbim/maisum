@@ -1,14 +1,14 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:loyalty_app/app/providers.dart';
-import 'package:loyalty_app/core/constants/app_strings.dart';
-import 'package:loyalty_app/features/dashboard/presentation/dashboard_controller.dart';
-import 'package:loyalty_app/features/dashboard/presentation/dashboard_screen.dart';
-import 'package:loyalty_app/features/sync/sync_controller.dart';
-import 'package:loyalty_app/features/sync/sync_service.dart';
+import 'package:maisum/app/providers.dart';
+import 'package:maisum/core/constants/app_strings.dart';
+import 'package:maisum/features/dashboard/presentation/dashboard_controller.dart';
+import 'package:maisum/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:maisum/features/sync/sync_controller.dart';
+import 'package:maisum/features/sync/sync_service.dart';
 
 // ── Fakes ────────────────────────────────────────────────────────────────────
 
@@ -181,3 +181,4 @@ void main() {
     });
   });
 }
+

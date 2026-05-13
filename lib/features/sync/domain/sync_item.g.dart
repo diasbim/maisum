@@ -15,6 +15,9 @@ _$SyncItemImpl _$$SyncItemImplFromJson(Map<String, dynamic> json) =>
       payload: json['payload'] as String,
       retryCount: (json['retryCount'] as num?)?.toInt() ?? 0,
       status: json['status'] as String? ?? 'pending',
+      nextAttemptAt: json['nextAttemptAt'] == null
+          ? null
+          : DateTime.parse(json['nextAttemptAt'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String),
     );
 
@@ -27,5 +30,6 @@ Map<String, dynamic> _$$SyncItemImplToJson(_$SyncItemImpl instance) =>
       'payload': instance.payload,
       'retryCount': instance.retryCount,
       'status': instance.status,
+      'nextAttemptAt': instance.nextAttemptAt?.toIso8601String(),
       'createdAt': instance.createdAt.toIso8601String(),
     };

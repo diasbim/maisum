@@ -24,13 +24,34 @@ class MozPhoneUtils {
       return '+258$clean';
     }
 
-    throw const FormatException('Número de telefone inválido. Use: 8X XXX XXXX');
+    throw const FormatException(
+        'Número de telefone inválido. Use: 8X XXX XXXX');
   }
 
   static bool _isValidLocal(String local) {
     if (local.length != 9) return false;
     if (!RegExp(r'^\d{9}$').hasMatch(local)) return false;
     return _validPrefixes.any((p) => local.startsWith(p));
+  }
+
+  /// Masks a phone number for UI display, keeping only the last 4 digits.
+  static String maskForDisplay(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return trimmed;
+
+    final digits = trimmed.replaceAll(RegExp(r'\D'), '');
+    if (digits.length <= 4) return trimmed;
+
+    final last4 = digits.substring(digits.length - 4);
+    final maskedLocal = '*** *** $last4';
+
+    if (digits.startsWith('258') && digits.length >= 12) {
+      return '+258 $maskedLocal';
+    }
+    if (digits.length == 9) {
+      return maskedLocal;
+    }
+    return '*** *** $last4';
   }
 
   /// Returns an error string or null — suitable for [TextFormField.validator].

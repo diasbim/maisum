@@ -1,0 +1,13 @@
+specVersion: v1
+serviceId: maisum
+location: us-central1
+schema:
+  source: schema
+  datasource:
+    postgresql:
+      database: maisum
+      cloudSql:
+        instanceId: maisum-sql
+        # schemaValidation: COMPATIBLE
+connectorDirs:
+  - example

@@ -11,7 +11,8 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/sync_status_bar.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../sync/sync_controller.dart';
-import '../../../app/providers.dart';
+import '../../sync/sync_service.dart';
+import '../../../app/providers.dart' as app_providers;
 import 'dashboard_controller.dart';
 
 class DashboardScreen extends ConsumerWidget {
@@ -21,7 +22,8 @@ class DashboardScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final stats = ref.watch(dashboardControllerProvider);
     final syncStatus = ref.watch(syncStatusProvider);
-    final isOnline = ref.watch(isOnlineProvider).valueOrNull ?? true;
+    final isOnline =
+        ref.watch(app_providers.isOnlineProvider).valueOrNull ?? true;
     final session = ref.watch(authControllerProvider).valueOrNull;
 
     return Scaffold(
@@ -39,8 +41,24 @@ class DashboardScreen extends ConsumerWidget {
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverToBoxAdapter(
-              child: _DashboardHeader(session: session),
+              child: _DashboardHeader(
+                session: session,
+                syncStatus: syncStatus,
+                isOnline: isOnline,
+              ),
             ),
+            if (!isOnline)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    AppSpacing.xl,
+                    AppSpacing.lg,
+                    AppSpacing.xl,
+                    0,
+                  ),
+                  child: _OfflineStatusBanner(),
+                ),
+              ),
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xl,
@@ -85,9 +103,15 @@ class DashboardScreen extends ConsumerWidget {
 }
 
 class _DashboardHeader extends StatelessWidget {
-  const _DashboardHeader({required this.session});
+  const _DashboardHeader({
+    required this.session,
+    required this.syncStatus,
+    required this.isOnline,
+  });
 
   final dynamic session;
+  final SyncStatus syncStatus;
+  final bool isOnline;
 
   @override
   Widget build(BuildContext context) {
@@ -166,6 +190,10 @@ class _DashboardHeader extends StatelessWidget {
                           _formatSubscriptionStatus(session.subscriptionStatus),
                     ),
                     _HeaderMetaChip(label: session.phone),
+                    _SyncStatusChip(
+                      status: syncStatus,
+                      isOnline: isOnline,
+                    ),
                   ],
                 ),
               ],
@@ -185,7 +213,7 @@ class _DashboardBody extends StatelessWidget {
   });
 
   final DashboardStats stats;
-  final dynamic syncStatus;
+  final SyncStatus syncStatus;
   final VoidCallback onNewSale;
 
   @override
@@ -213,26 +241,32 @@ class _DashboardBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
-              final cardWidth = (constraints.maxWidth - AppSpacing.md) / 2;
+              final isNarrow = constraints.maxWidth < 360;
+              final cardWidth = isNarrow
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - AppSpacing.md) / 2;
               return Wrap(
                 spacing: AppSpacing.md,
                 runSpacing: AppSpacing.md,
                 children: [
                   SizedBox(
                     width: cardWidth,
-                    child: _StatCard(
-                      label: AppStrings.vendasHoje,
-                      value: '${stats.todaySaleCount}',
-                      accent: AppColors.primary,
+                    child: _DailySalesCard(
+                      saleCount: stats.todaySaleCount,
+                      points: stats.todayPoints,
                     ),
                   ),
                   SizedBox(
                     width: cardWidth,
-                    child: _StatCard(
-                      label: AppStrings.pontosHoje,
-                      value: '${stats.todayPoints}',
-                      accent: AppColors.secondary,
-                      dark: true,
+                    child: _MerchantStreakCard(
+                      streakDays: stats.streakDays,
+                      atRisk: stats.streakAtRisk,
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _ReturningCustomersCard(
+                      count: stats.returningCustomers,
                     ),
                   ),
                 ],
@@ -252,7 +286,10 @@ class _DashboardBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
-              final tileWidth = (constraints.maxWidth - AppSpacing.md) / 2;
+              final isNarrow = constraints.maxWidth < 360;
+              final tileWidth = isNarrow
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - AppSpacing.md) / 2;
               return Wrap(
                 spacing: AppSpacing.md,
                 runSpacing: AppSpacing.md,
@@ -288,12 +325,16 @@ class _DashboardBody extends StatelessWidget {
                     width: tileWidth,
                     child: _MiniActionTile(
                       label: AppStrings.pendentes,
-                      subtitle: syncStatus.pendingCount > 0
-                          ? '${syncStatus.pendingCount} por enviar'
-                          : 'Tudo sincronizado',
-                      icon: syncStatus.pendingCount > 0
-                          ? Icons.cloud_upload_rounded
-                          : Icons.cloud_done_rounded,
+                      subtitle: syncStatus.lastError != null
+                          ? AppStrings.syncInterrompida
+                          : syncStatus.pendingCount > 0
+                              ? '${syncStatus.pendingCount} por enviar'
+                              : 'Tudo sincronizado',
+                      icon: syncStatus.lastError != null
+                          ? Icons.sync_problem_rounded
+                          : syncStatus.pendingCount > 0
+                              ? Icons.cloud_upload_rounded
+                              : Icons.cloud_done_rounded,
                       onTap: () => context.push('/pending-sync'),
                     ),
                   ),
@@ -378,6 +419,93 @@ class _HeaderMetaChip extends StatelessWidget {
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
               color: Colors.white.withValues(alpha: 0.9),
               fontWeight: FontWeight.w600,
+            ),
+      ),
+    );
+  }
+}
+
+class _OfflineStatusBanner extends StatelessWidget {
+  const _OfflineStatusBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.secondaryLight,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, color: AppColors.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              AppStrings.semLigacao,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SyncStatusChip extends StatelessWidget {
+  const _SyncStatusChip({required this.status, required this.isOnline});
+
+  final SyncStatus status;
+  final bool isOnline;
+
+  @override
+  Widget build(BuildContext context) {
+    String label;
+    Color bg;
+    Color fg;
+
+    if (!isOnline) {
+      label = AppStrings.offline;
+      bg = Colors.white.withValues(alpha: 0.12);
+      fg = Colors.white;
+    } else if (status.lastError != null) {
+      label = AppStrings.syncInterrompida;
+      bg = AppColors.errorContainer.withValues(alpha: 0.9);
+      fg = AppColors.error;
+    } else if (status.phase == SyncPhase.retrying) {
+      label = 'A tentar novamente';
+      bg = Colors.white.withValues(alpha: 0.18);
+      fg = Colors.white;
+    } else if (status.isSyncing) {
+      label = AppStrings.sincronizando;
+      bg = Colors.white.withValues(alpha: 0.2);
+      fg = Colors.white;
+    } else if (status.pendingCount > 0) {
+      label = '${status.pendingCount} ${AppStrings.pendentesSync}';
+      bg = Colors.white.withValues(alpha: 0.2);
+      fg = Colors.white;
+    } else {
+      label = AppStrings.sincronizado;
+      bg = Colors.white.withValues(alpha: 0.16);
+      fg = Colors.white;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: fg,
+              fontWeight: FontWeight.w700,
             ),
       ),
     );
@@ -472,6 +600,181 @@ class _PrimarySaleCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DailySalesCard extends StatelessWidget {
+  const _DailySalesCard({required this.saleCount, required this.points});
+
+  final int saleCount;
+  final int points;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.g100),
+        boxShadow: AppTheme.shadowSm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.receipt_long_rounded,
+                color: AppColors.primary, size: 18),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '$saleCount',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: AppColors.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            AppStrings.vendasHoje,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '+$points ${AppStrings.pontosHoje.toLowerCase()}',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: AppColors.secondaryDark,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MerchantStreakCard extends StatelessWidget {
+  const _MerchantStreakCard({required this.streakDays, required this.atRisk});
+
+  final int streakDays;
+  final bool atRisk;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final label = streakDays == 1 ? 'dia seguido' : 'dias seguidos';
+    final status = atRisk ? 'Em risco' : 'Estável';
+    final statusColor = atRisk ? AppColors.amber : AppColors.green;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.secondary,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
+        boxShadow: AppTheme.shadowMd,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.local_fire_department_rounded,
+                color: AppColors.primary, size: 18),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '$streakDays',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.primary.withValues(alpha: 0.7),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            status,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: statusColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReturningCustomersCard extends StatelessWidget {
+  const _ReturningCustomersCard({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.g100),
+        boxShadow: AppTheme.shadowSm,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.secondary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.repeat_rounded,
+                color: AppColors.secondaryDark, size: 18),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '$count',
+            style: theme.textTheme.headlineSmall?.copyWith(
+              color: AppColors.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Clientes recorrentes',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -591,6 +894,8 @@ class _MiniActionTile extends StatelessWidget {
               const SizedBox(height: 14),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleSmall?.copyWith(
                   color: AppColors.onSurface,
                   fontWeight: FontWeight.w700,
@@ -605,6 +910,7 @@ class _MiniActionTile extends StatelessWidget {
                   height: 1.3,
                 ),
                 maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

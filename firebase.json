@@ -1,1 +1,30 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"loyaltyos-fc4dd","appId":"1:517299605672:android:69efc1c492e71637c7329d","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"loyaltyos-fc4dd","configurations":{"android":"1:517299605672:android:69efc1c492e71637c7329d"}}}}},"firestore":{"indexes":"firestore.indexes.json"}}
+{
+	"flutter": {
+		"platforms": {
+			"android": {
+				"default": {
+					"projectId": "loyaltyos-fc4dd",
+					"appId": "1:517299605672:android:392da87b191d830cc7329d",
+					"fileOutput": "android/app/google-services.json"
+				}
+			},
+			"dart": {
+				"lib/firebase_options.dart": {
+					"projectId": "loyaltyos-fc4dd",
+					"configurations": {
+						"android": "1:517299605672:android:392da87b191d830cc7329d"
+					}
+				}
+			}
+		}
+	},
+	"firestore": {
+		"indexes": "firestore.indexes.json"
+	},
+	"dataconnect": {
+		"source": "dataconnect"
+	},
+	"functions": {
+		"source": "functions"
+	}
+}

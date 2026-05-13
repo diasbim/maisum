@@ -18,6 +18,12 @@ class FirestoreSyncService implements SyncTransport {
     'sale': 'sales',
     'reward': 'rewards',
     'redemption': 'redemptions',
+    'subscription_state': 'subscription_state',
+    'entitlement': 'entitlements',
+    'feature_flag': 'feature_flags',
+    'remote_config': 'remote_config',
+    'usage_balance': 'usage_balances',
+    'usage_event': 'usage_events',
   };
 
   @override
@@ -25,18 +31,25 @@ class FirestoreSyncService implements SyncTransport {
 
   @override
   Future<List<Map<String, dynamic>>> fetchCollection(String entityType) async {
-    final collection = _collectionMap[entityType] ?? entityType;
-    final snapshot = await _firestore
-        .collection('businesses')
-        .doc(_businessUid)
-        .collection(collection)
-        .get();
+    try {
+      final collection = _collectionMap[entityType] ?? entityType;
+      final snapshot = await _firestore
+          .collection('businesses')
+          .doc(_businessUid)
+          .collection(collection)
+          .get();
 
-    return snapshot.docs.map((doc) {
-      final data = Map<String, dynamic>.from(doc.data());
-      data.putIfAbsent('id', () => doc.id);
-      return data;
-    }).toList();
+      return snapshot.docs.map((doc) {
+        final data = Map<String, dynamic>.from(doc.data());
+        data.putIfAbsent('id', () => doc.id);
+        return data;
+      }).toList();
+    } on FirebaseException catch (e) {
+      throw SyncTransportException(
+        e.message ?? 'Firestore error: ${e.code}',
+        code: e.code,
+      );
+    }
   }
 
   @override
@@ -47,44 +60,61 @@ class FirestoreSyncService implements SyncTransport {
     String? lastDocId,
     int limit = AppConstants.syncPullPageSize,
   }) async {
-    final collection = _collectionMap[entityType] ?? entityType;
-    Query<Map<String, dynamic>> query = _firestore
-        .collection('businesses')
-        .doc(_businessUid)
-        .collection(collection)
-        .orderBy(orderField)
-        .orderBy('id')
-        .limit(limit);
+    try {
+      final collection = _collectionMap[entityType] ?? entityType;
+      Query<Map<String, dynamic>> query = _firestore
+          .collection('businesses')
+          .doc(_businessUid)
+          .collection(collection)
+          .orderBy(orderField)
+          .orderBy(FieldPath.documentId)
+          .limit(limit);
 
-    if (lastValue != null && lastDocId != null) {
-      query = query.startAfter([lastValue, lastDocId]);
+      if (lastValue != null && lastDocId != null) {
+        query = query.startAfter([lastValue, lastDocId]);
+      }
+
+      final snapshot = await query.get();
+      return snapshot.docs.map((doc) {
+        final data = Map<String, dynamic>.from(doc.data());
+        data.putIfAbsent('id', () => doc.id);
+        return data;
+      }).toList();
+    } on FirebaseException catch (e) {
+      throw SyncTransportException(
+        e.message ?? 'Firestore error: ${e.code}',
+        code: e.code,
+      );
     }
-
-    final snapshot = await query.get();
-    return snapshot.docs.map((doc) {
-      final data = Map<String, dynamic>.from(doc.data());
-      data.putIfAbsent('id', () => doc.id);
-      return data;
-    }).toList();
   }
 
   @override
   Future<void> processSyncItem(SyncItem item) async {
-    final collection = _collectionMap[item.entityType] ?? item.entityType;
-    final docRef = _firestore
-        .collection('businesses')
-        .doc(_businessUid)
-        .collection(collection)
-        .doc(item.entityId);
+    try {
+      final collection = _collectionMap[item.entityType] ?? item.entityType;
+      final docRef = _firestore
+          .collection('businesses')
+          .doc(_businessUid)
+          .collection(collection)
+          .doc(item.entityId);
 
-    switch (item.operation) {
-      case 'create' || 'update':
-        final data = jsonDecode(item.payload) as Map<String, dynamic>;
-        await docRef.set(data, SetOptions(merge: true));
-      case 'delete':
-        await docRef.delete();
-      default:
-        throw ArgumentError('Unknown sync operation: ${item.operation}');
+      switch (item.operation) {
+        case 'create':
+        case 'update':
+          final data = jsonDecode(item.payload) as Map<String, dynamic>;
+          await docRef.set(data, SetOptions(merge: true));
+          break;
+        case 'delete':
+          await docRef.delete();
+          break;
+        default:
+          throw ArgumentError('Unknown sync operation: ${item.operation}');
+      }
+    } on FirebaseException catch (e) {
+      throw SyncTransportException(
+        e.message ?? 'Firestore error: ${e.code}',
+        code: e.code,
+      );
     }
   }
 }

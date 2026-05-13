@@ -173,7 +173,7 @@ class _SaleHistoryTile extends StatelessWidget {
                 Text(
                   '${amount.toStringAsFixed(0)} MZN · ${PtDateFormat.dayMonthYearTime(createdAt)}',
                   style: theme.textTheme.bodySmall,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

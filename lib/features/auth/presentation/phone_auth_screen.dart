@@ -5,8 +5,10 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/utils/connectivity_check.dart';
 import '../../../core/utils/moz_phone_input_formatter.dart';
 import '../../../core/utils/moz_phone_utils.dart';
@@ -101,8 +103,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
           onError: (error) {
             if (!mounted) return;
             setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context)
-                .showSnackBar(SnackBar(content: Text(error)));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text(AppStrings.erroAuth)),
+            );
           },
           onAutoVerify: (credential) async {
             if (!mounted) return;
@@ -116,7 +119,8 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
               final hasPin =
                   await ref.read(secureStorageServiceProvider).hasPin();
               if (mounted) context.go(hasPin ? '/pin-entry' : '/pin-setup');
-            } catch (_) {
+            } catch (e, st) {
+              AppErrorReporter.report(e, st, hint: 'auth_auto_verify');
               if (mounted) context.go('/pin-setup');
             }
           },

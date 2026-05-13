@@ -1,7 +1,7 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/core/database/app_database.dart';
-import 'package:loyalty_app/features/customers/data/customer_dao.dart';
-import 'package:loyalty_app/features/sales/data/sale_dao.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/core/database/app_database.dart';
+import 'package:maisum/features/customers/data/customer_dao.dart';
+import 'package:maisum/features/sales/data/sale_dao.dart';
 
 import '../../helpers/test_database.dart';
 
@@ -89,3 +89,4 @@ void main() {
     });
   });
 }
+

@@ -1,8 +1,8 @@
-import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+﻿import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/core/services/firestore_sync_service.dart';
-import 'package:loyalty_app/features/sync/data/sync_transport.dart';
-import 'package:loyalty_app/features/sync/domain/sync_item.dart';
+import 'package:maisum/core/services/firestore_sync_service.dart';
+import 'package:maisum/features/sync/data/sync_transport.dart';
+import 'package:maisum/features/sync/domain/sync_item.dart';
 
 void main() {
   late FakeFirebaseFirestore fakeFirestore;
@@ -231,3 +231,4 @@ void main() {
     });
   });
 }
+

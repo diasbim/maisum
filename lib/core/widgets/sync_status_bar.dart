@@ -4,6 +4,7 @@ import '../../features/sync/sync_service.dart';
 import '../constants/app_strings.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_layout.dart';
+import '../utils/pt_date_format.dart';
 
 class SyncStatusBar extends StatelessWidget {
   const SyncStatusBar({
@@ -127,6 +128,9 @@ class SyncStatusBar extends StatelessWidget {
     if (status.lastError != null) {
       return AppColors.error;
     }
+    if (status.phase == SyncPhase.retrying) {
+      return AppColors.amber;
+    }
     if (status.isSyncing) {
       return AppColors.primary;
     }
@@ -143,6 +147,9 @@ class SyncStatusBar extends StatelessWidget {
     if (status.lastError != null) {
       return AppColors.errorContainer;
     }
+    if (status.phase == SyncPhase.retrying) {
+      return AppColors.amberLight;
+    }
     if (status.pendingCount > 0 || status.isSyncing) {
       return AppColors.secondaryLight;
     }
@@ -156,6 +163,9 @@ class SyncStatusBar extends StatelessWidget {
     if (status.lastError != null) {
       return Icons.sync_problem_rounded;
     }
+    if (status.phase == SyncPhase.retrying) {
+      return Icons.schedule_rounded;
+    }
     if (status.pendingCount > 0) {
       return Icons.cloud_upload_rounded;
     }
@@ -167,10 +177,13 @@ class SyncStatusBar extends StatelessWidget {
       return AppStrings.semLigacao;
     }
     if (status.lastError != null) {
-      return 'Sincronização interrompida';
+      return AppStrings.syncInterrompida;
     }
     if (status.isSyncing) {
       return AppStrings.sincronizando;
+    }
+    if (status.phase == SyncPhase.retrying) {
+      return 'A tentar novamente';
     }
     if (status.pendingCount > 0) {
       return '${status.pendingCount} ${AppStrings.pendentesSync}';
@@ -188,8 +201,17 @@ class SyncStatusBar extends StatelessWidget {
     if (status.isSyncing) {
       return 'A atualizar clientes, vendas e recompensas.';
     }
+    if (status.phase == SyncPhase.retrying) {
+      if (status.nextRetryAt != null) {
+        return 'Nova tentativa às ${PtDateFormat.dayMonthTime(status.nextRetryAt!)}.';
+      }
+      return 'A aguardar a próxima tentativa automática.';
+    }
     if (status.pendingCount > 0) {
       return 'Toque para ver o que falta enviar.';
+    }
+    if (status.lastSyncAt != null) {
+      return 'Última sincronização em ${PtDateFormat.dayMonthTime(status.lastSyncAt!)}.';
     }
     return 'Tudo pronto para continuar a trabalhar.';
   }

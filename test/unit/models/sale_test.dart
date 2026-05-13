@@ -1,6 +1,6 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/core/constants/app_constants.dart';
-import 'package:loyalty_app/features/sales/domain/sale.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/core/constants/app_constants.dart';
+import 'package:maisum/features/sales/domain/sale.dart';
 
 void main() {
   final baseMap = <String, dynamic>{
@@ -57,3 +57,4 @@ void main() {
     test('1000 MZN → 10 pts', () => expect(calcPoints(1000), 10));
   });
 }
+

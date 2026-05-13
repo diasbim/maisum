@@ -1,15 +1,15 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'package:loyalty_app/app/providers.dart';
-import 'package:loyalty_app/core/database/app_database.dart';
-import 'package:loyalty_app/features/customers/data/customer_dao.dart';
-import 'package:loyalty_app/features/customers/data/customer_repository.dart';
-import 'package:loyalty_app/features/customers/domain/customer.dart';
-import 'package:loyalty_app/features/customers/presentation/customers_controller.dart';
-import 'package:loyalty_app/features/sales/presentation/new_sale_screen.dart';
-import 'package:loyalty_app/features/sales/presentation/sale_controller.dart';
-import 'package:loyalty_app/features/sync/data/sync_dao.dart';
+import 'package:maisum/app/providers.dart';
+import 'package:maisum/core/database/app_database.dart';
+import 'package:maisum/features/customers/data/customer_dao.dart';
+import 'package:maisum/features/customers/data/customer_repository.dart';
+import 'package:maisum/features/customers/domain/customer.dart';
+import 'package:maisum/features/customers/presentation/customers_controller.dart';
+import 'package:maisum/features/sales/presentation/new_sale_screen.dart';
+import 'package:maisum/features/sales/presentation/sale_controller.dart';
+import 'package:maisum/features/sync/data/sync_dao.dart';
 
 class _FakeSaleController extends SaleController {
   @override
@@ -104,3 +104,4 @@ void main() {
     });
   });
 }
+

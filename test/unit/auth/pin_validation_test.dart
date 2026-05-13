@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/core/constants/app_constants.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/core/constants/app_constants.dart';
 
 void main() {
   group('PIN validation rules', () {
@@ -60,3 +60,4 @@ void main() {
     });
   });
 }
+

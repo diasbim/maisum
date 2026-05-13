@@ -1,0 +1,148 @@
+query ConfigSnapshot($configKey: String) @auth(level: PUBLIC, insecureReason: "Server-side only") {
+  configItems(where: {configKey: {eq: $configKey}}) {
+    id
+    configKey
+    configType
+    isEnabled
+    defaultPayload
+    updatedAt
+  }
+  configRules(where: {configKey: {eq: $configKey}}, orderBy: [{priority: ASC}]) {
+    id
+    configKey
+    segmentId
+    priority
+    rolloutPct
+    isEnabled
+    payloadOverride
+    startsAt
+    endsAt
+  }
+  configSegments {
+    id
+    name
+    isEnabled
+    conditions
+  }
+}
+
+mutation UpsertConfigItem(
+  $id: UUID,
+  $configKey: String!,
+  $configType: ConfigType!,
+  $isEnabled: Boolean!,
+  $defaultPayload: Any
+) @auth(level: PUBLIC, insecureReason: "Server-side only") {
+  configItem_upsert(
+    key: {id: $id}
+    data: {
+      configKey: $configKey
+      configType: $configType
+      isEnabled: $isEnabled
+      defaultPayload: $defaultPayload
+      updatedAt_expr: "request.time"
+    }
+  ) {
+    id
+    configKey
+    updatedAt
+  }
+}
+
+mutation InsertConfigSegment(
+  $name: String!,
+  $isEnabled: Boolean!,
+  $conditions: Any!
+) @auth(level: PUBLIC, insecureReason: "Server-side only") {
+  configSegment_insert(data: {name: $name, isEnabled: $isEnabled, conditions: $conditions}) {
+    id
+    name
+  }
+}
+
+mutation InsertConfigRule(
+  $configKey: String!,
+  $segmentId: UUID,
+  $priority: Int!,
+  $rolloutPct: Int!,
+  $isEnabled: Boolean!,
+  $payloadOverride: Any,
+  $startsAt: Timestamp,
+  $endsAt: Timestamp
+) @auth(level: PUBLIC, insecureReason: "Server-side only") {
+  configRule_insert(
+    data: {
+      configKey: $configKey
+      segmentId: $segmentId
+      priority: $priority
+      rolloutPct: $rolloutPct
+      isEnabled: $isEnabled
+      payloadOverride: $payloadOverride
+      startsAt: $startsAt
+      endsAt: $endsAt
+    }
+  ) {
+    id
+    configKey
+  }
+}
+
+mutation AssignExperimentVariant(
+  $configKey: String!,
+  $merchantId: String!,
+  $variant: String!
+) @auth(level: PUBLIC, insecureReason: "Server-side only") {
+  experimentAssignment_insert(
+    data: {configKey: $configKey, merchantId: $merchantId, variant: $variant}
+  ) {
+    id
+  }
+}
+
+mutation RecordAnalyticsEvent(
+  $merchantId: String!,
+  $eventType: String!,
+  $occurredAt: Timestamp!,
+  $source: String,
+  $deviceId: String,
+  $appVersion: String,
+  $properties: Any
+) @auth(level: PUBLIC, insecureReason: "Server-side only") {
+  analyticsEvent_insert(
+    data: {
+      merchantId: $merchantId
+      eventType: $eventType
+      occurredAt: $occurredAt
+      source: $source
+      deviceId: $deviceId
+      appVersion: $appVersion
+      properties: $properties
+    }
+  ) {
+    id
+  }
+}
+
+query MerchantDailyKpis(
+  $merchantId: String!,
+  $from: Date,
+  $to: Date
+) @auth(level: PUBLIC, insecureReason: "Server-side only") {
+  merchantDailyKpis(
+    where: {
+      merchantId: {eq: $merchantId}
+      day: {gte: $from, lte: $to}
+    }
+    orderBy: [{day: DESC}]
+  ) {
+    day
+    salesCount
+    repeatCustomers
+    whatsappUsage
+    paidConversion
+    churnRiskScore
+    retentionCohort
+    healthScore
+    featureAdoption
+  }
+}

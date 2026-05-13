@@ -1,5 +1,5 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/features/rewards/domain/reward.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/features/rewards/domain/reward.dart';
 
 void main() {
   final baseMap = <String, dynamic>{
@@ -53,3 +53,4 @@ void main() {
     });
   });
 }
+

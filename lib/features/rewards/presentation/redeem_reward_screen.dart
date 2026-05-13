@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -33,11 +34,8 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
             rewardId: _selected!.id,
             pointsRequired: _selected!.pointsRequired,
           );
-      final code = const Uuid()
-          .v4()
-          .replaceAll('-', '')
-          .substring(0, 8)
-          .toUpperCase();
+      final code =
+          const Uuid().v4().replaceAll('-', '').substring(0, 8).toUpperCase();
       if (mounted) {
         setState(() {
           _confirmed = true;
@@ -55,16 +53,44 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
   }
 
   void _openWhatsApp() {
+    final connectivity = ref.read(connectivityServiceProvider);
     final clean = widget.customer.phone.replaceAll(RegExp(r'\D'), '');
     final number = clean.startsWith('258') ? clean : '258$clean';
     final msg = Uri.encodeComponent(
       'Olá ${widget.customer.name}! O seu resgate de "${_selected!.name}" foi confirmado. '
       'Código: $_redemptionCode. Obrigado por fazer parte do programa MaisUm!',
     );
+    if (!connectivity.isOnline) {
+      ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
+            phone: number,
+            message: Uri.decodeComponent(msg),
+            source: 'reward_redemption',
+          );
+      try {
+        ref.read(analyticsServiceProvider).record(
+          eventType: 'whatsapp_sent',
+          source: 'whatsapp',
+          properties: {'queued': true, 'source': 'reward_redemption'},
+        );
+      } catch (_) {}
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(AppStrings.whatsappQueued)),
+        );
+      }
+      return;
+    }
     launchUrl(
       Uri.parse('https://wa.me/$number?text=$msg'),
       mode: LaunchMode.externalApplication,
     );
+    try {
+      ref.read(analyticsServiceProvider).record(
+        eventType: 'whatsapp_sent',
+        source: 'whatsapp',
+        properties: {'queued': false, 'source': 'reward_redemption'},
+      );
+    } catch (_) {}
   }
 
   Widget _buildConfirmation(BuildContext context, ThemeData theme) {
@@ -75,14 +101,15 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
-                color: AppColors.g300,
-                borderRadius: BorderRadius.circular(2)),
+                color: AppColors.g300, borderRadius: BorderRadius.circular(2)),
           ),
           const SizedBox(height: 24),
           Container(
-            width: 64, height: 64,
+            width: 64,
+            height: 64,
             decoration: const BoxDecoration(
                 color: AppColors.secondaryLight, shape: BoxShape.circle),
             child: const Icon(Icons.check_rounded,
@@ -114,8 +141,8 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
             decoration: BoxDecoration(
               color: AppColors.secondaryLight,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: AppColors.secondary.withValues(alpha: 0.4)),
+              border:
+                  Border.all(color: AppColors.secondary.withValues(alpha: 0.4)),
             ),
             child: Text(
               _redemptionCode,
@@ -137,8 +164,7 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
               side: const BorderSide(color: AppColors.primary),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             ),
           ),
           const SizedBox(height: 12),

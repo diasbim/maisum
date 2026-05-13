@@ -5,7 +5,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/sync_status_bar.dart';
+import '../../../core/constants/app_strings.dart';
 import '../../../app/providers.dart';
 import '../domain/sync_item.dart';
 import '../sync_controller.dart';
@@ -66,38 +68,59 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
         isOnline: isOnline,
       ),
       body: itemsAsync.when(
-        data: (items) => items.isEmpty
-            ? const EmptyState(
-                title: 'Fila limpa e pronta.',
-                subtitle:
-                    'Quando estiver sem internet, as alterações aparecem aqui e seguem automaticamente depois.',
-              )
-            : RefreshIndicator(
-                color: AppColors.secondary,
-                onRefresh: () async => ref.invalidate(pendingSyncItemsProvider),
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                    AppSpacing.xxxl,
-                  ),
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _SyncItemTile(item: items[i]),
-                ),
+        data: (items) {
+          if (items.isEmpty) {
+            if (syncStatus.lastError != null) {
+              return EmptyState(
+                title: AppStrings.syncInterrompida,
+                subtitle: syncStatus.lastError,
+                actionLabel: AppStrings.tentar,
+                onAction: () =>
+                    ref.read(syncControllerProvider.notifier).sync(),
+              );
+            }
+            return const EmptyState(
+              title: 'Fila limpa e pronta.',
+              subtitle:
+                  'Quando estiver sem internet, as alterações aparecem aqui e seguem automaticamente depois.',
+            );
+          }
+          return RefreshIndicator(
+            color: AppColors.secondary,
+            onRefresh: () async => ref.invalidate(pendingSyncItemsProvider),
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.xxxl,
               ),
+              itemCount: items.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemBuilder: (_, i) => _SyncItemTile(
+                item: items[i],
+                onRetry: items[i].status == 'failed'
+                    ? () => ref.read(syncControllerProvider.notifier).sync()
+                    : null,
+              ),
+            ),
+          );
+        },
         loading: () => const Center(
             child: CircularProgressIndicator(color: AppColors.secondary)),
-        error: (e, _) => Center(child: Text(e.toString())),
+        error: (e, _) => ErrorState(
+          error: e,
+          onRetry: () => ref.read(syncControllerProvider.notifier).sync(),
+        ),
       ),
     );
   }
 }
 
 class _SyncItemTile extends StatelessWidget {
-  const _SyncItemTile({required this.item});
+  const _SyncItemTile({required this.item, this.onRetry});
   final SyncItem item;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +152,10 @@ class _SyncItemTile extends StatelessWidget {
         iconBg = AppColors.g100;
         typeLabel = item.entityType;
     }
+
+    final nextAttempt = item.nextAttemptAt;
+    final showNextAttempt =
+        nextAttempt != null && isPending && item.retryCount > 0;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -170,30 +197,52 @@ class _SyncItemTile extends StatelessWidget {
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: AppColors.amber),
                   ),
+                if (showNextAttempt)
+                  Text(
+                    'Proxima tentativa: ${PtDateFormat.dayMonthTime(nextAttempt)}',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: AppColors.onSurfaceVariant),
+                  ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: isFailed
-                  ? AppColors.errorContainer
-                  : isPending
-                      ? AppColors.secondaryLight
-                      : AppColors.g100,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              isFailed
-                  ? 'Falhou'
-                  : isPending
-                      ? 'Pendente'
-                      : item.status,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: isFailed ? AppColors.error : AppColors.secondaryDark,
-                fontWeight: FontWeight.w700,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isFailed
+                      ? AppColors.errorContainer
+                      : isPending
+                          ? AppColors.secondaryLight
+                          : AppColors.g100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isFailed
+                      ? 'Falhou'
+                      : isPending
+                          ? 'Pendente'
+                          : item.status,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: isFailed ? AppColors.error : AppColors.secondaryDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-            ),
+              if (isFailed && onRetry != null) ...[
+                const SizedBox(height: 6),
+                TextButton(
+                  onPressed: onRetry,
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                  child: const Text('Tentar agora'),
+                ),
+              ],
+            ],
           ),
         ],
       ),

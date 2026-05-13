@@ -1,11 +1,11 @@
-import 'package:flutter_test/flutter_test.dart';
-import 'package:loyalty_app/core/constants/app_constants.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:maisum/core/constants/app_constants.dart';
 
 void main() {
   group('AppConstants values', () {
     test('pointsPerMzn is 100', () => expect(AppConstants.pointsPerMzn, 100));
     test('maxSyncRetries is 3', () => expect(AppConstants.maxSyncRetries, 3));
-    test('dbVersion is 6', () => expect(AppConstants.dbVersion, 6));
+    test('dbVersion is 14', () => expect(AppConstants.dbVersion, 14));
     test(
       'backend auth is disabled by default',
       () => expect(AppConstants.enableBackendAuth, false),
