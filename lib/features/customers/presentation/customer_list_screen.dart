@@ -462,7 +462,11 @@ class _FilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = active ? AppColors.primaryDarker : Colors.white;
+    final foreground =
+        active ? AppColors.primaryDarker : Colors.white.withValues(alpha: 0.95);
+    final background = active ? null : Colors.white.withValues(alpha: 0.14);
+    final borderColor =
+        active ? AppColors.secondaryDark : Colors.white.withValues(alpha: 0.35);
 
     return Expanded(
       child: InkWell(
@@ -471,13 +475,11 @@ class _FilterChip extends StatelessWidget {
         child: Ink(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
-            color: active ? null : AppColors.primaryDark,
+            color: background,
             gradient: active ? AppTheme.goldGradient : null,
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: active
-                  ? AppColors.secondaryDark
-                  : Colors.white.withValues(alpha: 0.12),
+              color: borderColor,
             ),
             boxShadow: active
                 ? [
@@ -487,7 +489,13 @@ class _FilterChip extends StatelessWidget {
                       offset: const Offset(0, 6),
                     ),
                   ]
-                : null,
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.16),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

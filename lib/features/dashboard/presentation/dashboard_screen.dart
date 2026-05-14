@@ -25,6 +25,7 @@ class DashboardScreen extends ConsumerWidget {
     final isOnline =
         ref.watch(app_providers.isOnlineProvider).valueOrNull ?? true;
     final session = ref.watch(authControllerProvider).valueOrNull;
+    final statsValue = stats.valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
@@ -45,6 +46,7 @@ class DashboardScreen extends ConsumerWidget {
                 session: session,
                 syncStatus: syncStatus,
                 isOnline: isOnline,
+                stats: statsValue,
               ),
             ),
             if (!isOnline)
@@ -84,9 +86,8 @@ class DashboardScreen extends ConsumerWidget {
                     ),
                   ),
                   error: (e, _) => EmptyState(
-                    title: 'Não foi possível abrir o painel.',
-                    subtitle:
-                        'Puxe para atualizar ou tente novamente em alguns segundos.',
+                    title: AppStrings.dashboardLoadErrorTitle,
+                    subtitle: AppStrings.dashboardLoadErrorSubtitle,
                     actionLabel: AppStrings.tentar,
                     onAction: () => ref
                         .read(dashboardControllerProvider.notifier)
@@ -107,15 +108,22 @@ class _DashboardHeader extends StatelessWidget {
     required this.session,
     required this.syncStatus,
     required this.isOnline,
+    required this.stats,
   });
 
   final dynamic session;
   final SyncStatus syncStatus;
   final bool isOnline;
+  final DashboardStats? stats;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final merchantName = session?.merchantName?.toString().trim();
+    final greetingName = merchantName == null || merchantName.isEmpty
+        ? AppStrings.dashboardGreetingFallback
+        : merchantName;
+    final pointsToday = stats?.todayPoints ?? 0;
     return DecoratedBox(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
@@ -169,18 +177,44 @@ class _DashboardHeader extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${AppStrings.dashboardGreetingPrefix} $greetingName',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          AppStrings.dashboardGreetingSubtitle,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.75),
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                  _HeaderMetricCard(
+                    label: AppStrings.pontosHoje,
+                    value: '$pointsToday ${AppStrings.pontosAbrev}',
+                    icon: Icons.stars_rounded,
+                  ),
+                ],
+              ),
               if (session != null) ...[
                 const SizedBox(height: AppSpacing.lg),
-                Text(
-                  session.merchantName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sm),
                 Wrap(
                   spacing: AppSpacing.sm,
                   runSpacing: AppSpacing.sm,
@@ -218,7 +252,6 @@ class _DashboardBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final showEmpty = stats.totalCustomers == 0 &&
         stats.todaySaleCount == 0 &&
         stats.todayPoints == 0;
@@ -230,14 +263,13 @@ class _DashboardBody extends StatelessWidget {
         const SizedBox(height: AppSpacing.xxl),
         if (showEmpty)
           EmptyState(
-            title: 'Tudo pronto para a primeira venda.',
-            subtitle:
-                'Adicione o primeiro cliente e registe uma venda em menos de 3 toques.',
+            title: AppStrings.dashboardEmptyTitle,
+            subtitle: AppStrings.dashboardEmptySubtitle,
             actionLabel: AppStrings.adicionarCliente,
             onAction: () => context.push('/customers'),
           )
         else ...[
-          const _SectionLabel('Hoje'),
+          const _SectionLabel(AppStrings.dashboardSectionToday),
           const SizedBox(height: AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -258,9 +290,14 @@ class _DashboardBody extends StatelessWidget {
                   ),
                   SizedBox(
                     width: cardWidth,
-                    child: _MerchantStreakCard(
-                      streakDays: stats.streakDays,
-                      atRisk: stats.streakAtRisk,
+                    child: _PointsTodayCard(
+                      points: stats.todayPoints,
+                    ),
+                  ),
+                  SizedBox(
+                    width: cardWidth,
+                    child: _TotalCustomersCard(
+                      count: stats.totalCustomers,
                     ),
                   ),
                   SizedBox(
@@ -273,16 +310,13 @@ class _DashboardBody extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            '${stats.totalCustomers} clientes registados',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
+          const SizedBox(height: AppSpacing.lg),
+          _StreakBanner(
+            streakDays: stats.streakDays,
+            atRisk: stats.streakAtRisk,
           ),
           const SizedBox(height: AppSpacing.xxl),
-          const _SectionLabel('Rápido'),
+          const _SectionLabel(AppStrings.dashboardSectionQuick),
           const SizedBox(height: AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -298,7 +332,7 @@ class _DashboardBody extends StatelessWidget {
                     width: tileWidth,
                     child: _MiniActionTile(
                       label: AppStrings.clientes,
-                      subtitle: 'Abrir lista',
+                      subtitle: AppStrings.dashboardQuickClientsSubtitle,
                       icon: Icons.people_alt_rounded,
                       onTap: () => context.push('/customers'),
                     ),
@@ -307,7 +341,7 @@ class _DashboardBody extends StatelessWidget {
                     width: tileWidth,
                     child: _MiniActionTile(
                       label: AppStrings.historicoVendas,
-                      subtitle: 'Últimas vendas',
+                      subtitle: AppStrings.dashboardQuickSalesSubtitle,
                       icon: Icons.receipt_long_rounded,
                       onTap: () => context.push('/sales'),
                     ),
@@ -316,7 +350,7 @@ class _DashboardBody extends StatelessWidget {
                     width: tileWidth,
                     child: _MiniActionTile(
                       label: AppStrings.recompensas,
-                      subtitle: 'Criar ou resgatar',
+                      subtitle: AppStrings.dashboardQuickRewardsSubtitle,
                       icon: Icons.card_giftcard_rounded,
                       onTap: () => context.push('/rewards'),
                     ),
@@ -328,8 +362,8 @@ class _DashboardBody extends StatelessWidget {
                       subtitle: syncStatus.lastError != null
                           ? AppStrings.syncInterrompida
                           : syncStatus.pendingCount > 0
-                              ? '${syncStatus.pendingCount} por enviar'
-                              : 'Tudo sincronizado',
+                              ? '${syncStatus.pendingCount} ${AppStrings.syncPendingToSend}'
+                              : AppStrings.dashboardQuickSyncOk,
                       icon: syncStatus.lastError != null
                           ? Icons.sync_problem_rounded
                           : syncStatus.pendingCount > 0
@@ -350,7 +384,7 @@ class _DashboardBody extends StatelessWidget {
 
 String _formatSubscriptionStatus(String status) {
   if (status.trim().isEmpty) {
-    return 'Sem estado';
+    return AppStrings.subscriptionNoStatus;
   }
   return status
       .split('_')
@@ -359,6 +393,13 @@ String _formatSubscriptionStatus(String status) {
         (part) => '${part[0].toUpperCase()}${part.substring(1).toLowerCase()}',
       )
       .join(' ');
+}
+
+String _formatStreakLabel(int days) {
+  final suffix = days == 1
+      ? AppStrings.dashboardStreakDaySingular
+      : AppStrings.dashboardStreakDayPlural;
+  return '$days $suffix';
 }
 
 class _SectionLabel extends StatelessWidget {
@@ -425,6 +466,61 @@ class _HeaderMetaChip extends StatelessWidget {
   }
 }
 
+class _HeaderMetricCard extends StatelessWidget {
+  const _HeaderMetricCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppColors.secondary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 16, color: AppColors.primary),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.75),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _OfflineStatusBanner extends StatelessWidget {
   const _OfflineStatusBanner();
 
@@ -478,7 +574,7 @@ class _SyncStatusChip extends StatelessWidget {
       bg = AppColors.errorContainer.withValues(alpha: 0.9);
       fg = AppColors.error;
     } else if (status.phase == SyncPhase.retrying) {
-      label = 'A tentar novamente';
+      label = AppStrings.syncRetrying;
       bg = Colors.white.withValues(alpha: 0.18);
       fg = Colors.white;
     } else if (status.isSyncing) {
@@ -520,87 +616,184 @@ class _PrimarySaleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Material(
-      color: AppColors.primary,
-      borderRadius: BorderRadius.circular(24),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
-          decoration: BoxDecoration(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final artWidth = constraints.maxWidth < 360 ? 110.0 : 140.0;
+        return Material(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(24),
+          child: InkWell(
+            onTap: onTap,
             borderRadius: BorderRadius.circular(24),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [AppColors.primary, AppColors.primaryDark],
-            ),
-            boxShadow: AppTheme.shadowMd,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.secondary,
-                  borderRadius: BorderRadius.circular(15),
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.primary, AppColors.primaryDark],
                 ),
-                child: const Icon(
-                  Icons.add_shopping_cart_rounded,
-                  color: AppColors.primary,
-                  size: 26,
-                ),
+                boxShadow: AppTheme.shadowMd,
               ),
-              const SizedBox(height: 18),
-              Text(
-                AppStrings.novaVenda,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Registe em segundos com uma única ação.',
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondary,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Registar venda',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w800,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      right: -28,
+                      top: -36,
+                      child: Container(
+                        width: 160,
+                        height: 160,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withValues(alpha: 0.06),
+                        ),
                       ),
                     ),
-                  ),
-                  const Spacer(),
-                  Icon(
-                    Icons.arrow_forward_rounded,
-                    color: Colors.white.withValues(alpha: 0.82),
-                  ),
-                ],
+                    Positioned(
+                      right: 14,
+                      bottom: 16,
+                      child: const _SaleIllustrationBadge(),
+                    ),
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(22, 22, artWidth, 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: AppColors.secondary,
+                              borderRadius: BorderRadius.circular(15),
+                            ),
+                            child: const Icon(
+                              Icons.add_shopping_cart_rounded,
+                              color: AppColors.primary,
+                              size: 26,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            AppStrings.novaVenda,
+                            style: theme.textTheme.headlineSmall?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            AppStrings.dashboardSaleCardSubtitle,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.white.withValues(alpha: 0.72),
+                              height: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.secondary,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  AppStrings.dashboardSaleCta,
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: AppColors.primary,
+                                  size: 18,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SaleIllustrationBadge extends StatelessWidget {
+  const _SaleIllustrationBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 90,
+          height: 90,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
           ),
         ),
-      ),
+        Positioned(
+          left: 12,
+          top: 12,
+          child: Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: AppColors.secondary,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.secondary.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.receipt_long_rounded,
+              color: AppColors.primary,
+              size: 28,
+            ),
+          ),
+        ),
+        Positioned(
+          right: -6,
+          bottom: -6,
+          child: Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: AppColors.secondaryLight,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.secondary, width: 1.4),
+            ),
+            child: const Icon(
+              Icons.star_rounded,
+              size: 16,
+              color: AppColors.secondaryDark,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -613,54 +806,49 @@ class _DailySalesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.g100),
-        boxShadow: AppTheme.shadowSm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.receipt_long_rounded,
-                color: AppColors.primary, size: 18),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '$saleCount',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: AppColors.onSurface,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            AppStrings.vendasHoje,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '+$points ${AppStrings.pontosHoje.toLowerCase()}',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: AppColors.secondaryDark,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
+    return _MetricCard(
+      icon: Icons.bar_chart_rounded,
+      iconBg: AppColors.primary.withValues(alpha: 0.12),
+      iconColor: AppColors.primary,
+      value: '$saleCount',
+      label: AppStrings.vendasHoje,
+      helper: '+$points ${AppStrings.pontosAbrev}',
+      helperColor: AppColors.secondaryDark,
+    );
+  }
+}
+
+class _PointsTodayCard extends StatelessWidget {
+  const _PointsTodayCard({required this.points});
+
+  final int points;
+
+  @override
+  Widget build(BuildContext context) {
+    return _MetricCard(
+      icon: Icons.stars_rounded,
+      iconBg: AppColors.secondaryLight,
+      iconColor: AppColors.secondaryDark,
+      value: '$points',
+      label: AppStrings.pontosHoje,
+    );
+  }
+}
+
+class _TotalCustomersCard extends StatelessWidget {
+  const _TotalCustomersCard({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return _MetricCard(
+      icon: Icons.people_alt_rounded,
+      iconBg: AppColors.primary.withValues(alpha: 0.1),
+      iconColor: AppColors.primary,
+      value: '$count',
+      label: AppStrings.totalClientes,
+      helper: AppStrings.dashboardRegistered,
     );
   }
 }
@@ -674,8 +862,9 @@ class _MerchantStreakCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = streakDays == 1 ? 'dia seguido' : 'dias seguidos';
-    final status = atRisk ? 'Em risco' : 'Estável';
+    final status = atRisk
+        ? AppStrings.dashboardStreakStatusRisk
+        : AppStrings.dashboardStreakStatusStable;
     final statusColor = atRisk ? AppColors.amber : AppColors.green;
 
     return Container(
@@ -709,7 +898,7 @@ class _MerchantStreakCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            label,
+            _formatStreakLabel(streakDays),
             style: theme.textTheme.bodySmall?.copyWith(
               color: AppColors.primary.withValues(alpha: 0.7),
               fontWeight: FontWeight.w600,
@@ -736,13 +925,44 @@ class _ReturningCustomersCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _MetricCard(
+      icon: Icons.repeat_rounded,
+      iconBg: AppColors.secondary.withValues(alpha: 0.15),
+      iconColor: AppColors.secondaryDark,
+      value: '$count',
+      label: AppStrings.dashboardReturningCustomers,
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  const _MetricCard({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.value,
+    required this.label,
+    this.helper,
+    this.helperColor,
+  });
+
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String value;
+  final String label;
+  final String? helper;
+  final Color? helperColor;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.g100),
+        border: Border.all(color: AppColors.g100, width: 1.2),
         boxShadow: AppTheme.shadowSm,
       ),
       child: Column(
@@ -752,15 +972,14 @@ class _ReturningCustomersCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: AppColors.secondary.withValues(alpha: 0.15),
+              color: iconBg,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.repeat_rounded,
-                color: AppColors.secondaryDark, size: 18),
+            child: Icon(icon, color: iconColor, size: 18),
           ),
           const SizedBox(height: 12),
           Text(
-            '$count',
+            value,
             style: theme.textTheme.headlineSmall?.copyWith(
               color: AppColors.onSurface,
               fontWeight: FontWeight.w800,
@@ -768,10 +987,109 @@ class _ReturningCustomersCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Clientes recorrentes',
+            label,
             style: theme.textTheme.bodySmall?.copyWith(
               color: AppColors.onSurfaceVariant,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (helper != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              helper!,
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: helperColor ?? AppColors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StreakBanner extends StatelessWidget {
+  const _StreakBanner({required this.streakDays, required this.atRisk});
+
+  final int streakDays;
+  final bool atRisk;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final statusLabel = atRisk
+        ? AppStrings.dashboardStreakStatusRisk
+        : AppStrings.dashboardStreakStatusStable;
+    final statusColor = atRisk ? AppColors.amber : AppColors.green;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.primary, AppColors.primaryDark],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: AppTheme.shadowMd,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.local_fire_department_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  AppStrings.dashboardStreakTitle,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.72),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatStreakLabel(streakDays),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.circle, size: 6, color: statusColor),
+                const SizedBox(width: 6),
+                Text(
+                  statusLabel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -882,16 +1200,26 @@ class _MiniActionTile extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: AppColors.primary, size: 20),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: AppColors.primary, size: 20),
+                  ),
+                  const Spacer(),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.g300,
+                    size: 20,
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 label,
                 maxLines: 1,

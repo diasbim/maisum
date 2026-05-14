@@ -60,6 +60,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final salesAsync = ref.watch(customerSalesProvider(widget.id));
     final rewardProgressAsync = ref.watch(rewardProgressProvider(widget.id));
 
+    final isCompact = MediaQuery.of(context).size.width < 360;
+    final expandedHeight = isCompact ? 280.0 : 240.0;
+
     final customer = customerAsync.valueOrNull;
 
     return Scaffold(
@@ -100,7 +103,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             controller: _scrollController,
             slivers: [
               SliverAppBar(
-                expandedHeight: 240,
+                expandedHeight: expandedHeight,
                 pinned: true,
                 backgroundColor: AppColors.primary,
                 elevation: 0,
@@ -127,7 +130,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     ),
                     child: SafeArea(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
+                        padding: EdgeInsets.fromLTRB(
+                          20,
+                          isCompact ? 44 : 56,
+                          20,
+                          isCompact ? 16 : 20,
+                        ),
                         child: LayoutBuilder(
                           builder: (context, constraints) {
                             final isNarrow = constraints.maxWidth < 360;

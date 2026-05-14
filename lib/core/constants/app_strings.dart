@@ -21,6 +21,36 @@ class AppStrings {
   static const String vendasHoje = 'Vendas hoje';
   static const String pontosHoje = 'Pontos hoje';
   static const String pendentes = 'Pendentes';
+  static const String dashboardGreetingPrefix = 'Olá,';
+  static const String dashboardGreetingFallback = 'Vendedor';
+  static const String dashboardGreetingSubtitle =
+      'Vamos vender mais hoje com menos toques.';
+  static const String dashboardEmptyTitle =
+      'Tudo pronto para a primeira venda.';
+  static const String dashboardEmptySubtitle =
+      'Adicione o primeiro cliente e registe uma venda em menos de 3 toques.';
+  static const String dashboardLoadErrorTitle =
+      'Não foi possível abrir o painel.';
+  static const String dashboardLoadErrorSubtitle =
+      'Puxe para atualizar ou tente novamente em alguns segundos.';
+  static const String dashboardSectionToday = 'Hoje';
+  static const String dashboardSectionQuick = 'Rápido';
+  static const String dashboardQuickClientsSubtitle = 'Abrir lista';
+  static const String dashboardQuickSalesSubtitle = 'Últimas vendas';
+  static const String dashboardQuickRewardsSubtitle = 'Criar ou resgatar';
+  static const String dashboardQuickSyncOk = 'Tudo sincronizado';
+  static const String dashboardRegistered = 'Registados';
+  static const String dashboardReturningCustomers = 'Clientes recorrentes';
+  static const String dashboardStreakTitle = 'Sequência de vendas';
+  static const String dashboardStreakDaySingular = 'dia seguido';
+  static const String dashboardStreakDayPlural = 'dias seguidos';
+  static const String dashboardStreakStatusRisk = 'Em risco';
+  static const String dashboardStreakStatusStable = 'Estável';
+  static const String dashboardSaleCardSubtitle =
+      'Registe uma venda e atribua pontos em segundos.';
+  static const String dashboardSaleCta = 'Registar venda';
+  static const String subscriptionNoStatus = 'Sem estado';
+  static const String syncRetrying = 'A tentar novamente';
 
   // Sales
   static const String novaVendaTitle = 'Nova Venda';
@@ -109,6 +139,7 @@ class AppStrings {
       'Alguns itens não foram sincronizados.';
   static const String syncIndiceFaltando = 'Índice do Firestore em falta.';
   static const String syncPermissaoNegada = 'Sem permissão para sincronizar.';
+  static const String syncPendingToSend = 'por enviar';
   static const String offline = 'Sem ligação à internet';
   static const String semLigacao = 'A trabalhar offline';
 

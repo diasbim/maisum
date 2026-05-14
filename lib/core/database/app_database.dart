@@ -13,21 +13,38 @@ class AppDatabase {
 
   Database? _db;
 
+  Future<Database> get database async {
+    final existing = _db;
+    if (existing != null) return existing;
+    final opened = await _open();
+    _db = opened;
+    return opened;
+  }
+
+  Future<Database> _open() async {
+    final path = join(await getDatabasesPath(), AppConstants.dbName);
+    return openDatabase(
+      path,
+      version: AppMigrations.latestVersion,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
       onOpen: _onOpen,
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
-        await db.execute('PRAGMA journal_mode = WAL');
+        await db.rawQuery('PRAGMA journal_mode = WAL');
       },
+    );
   }
 
-  Future<Database> _open() async {
-    final path = join(await getDatabasesPath(), AppConstants.dbName);
+  Future<void> _onCreate(Database db, int version) async {
     await AppMigrations.migrate(db, fromVersion: 0, toVersion: version);
-    await _createV4Schema(db);
-    await _createV5Schema(db);
-    await _createV6Schema(db);
+  }
+
+  Future<void> _onUpgrade(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
     try {
       await AppMigrations.migrate(
         db,
@@ -48,7 +65,7 @@ class AppDatabase {
         rethrow;
       }
     }
-      await _createV10Schema(db);
+  }
 
   Future<void> _onOpen(Database db) async {
     try {
@@ -56,20 +73,6 @@ class AppDatabase {
     } catch (e, st) {
       Log.e(_tag, 'Schema verification failed.', e, st);
       rethrow;
-    }
-  }
-  }
-
-  Future<void> _addColumnIfMissing(
-    Database db,
-    String table,
-    String columnDefinition,
-  ) async {
-    final columnName = columnDefinition.split(' ').first;
-    final columns = await db.rawQuery('PRAGMA table_info($table)');
-    final hasColumn = columns.any((column) => column['name'] == columnName);
-    if (!hasColumn) {
-      await db.execute('ALTER TABLE $table ADD COLUMN $columnDefinition');
     }
   }
 
