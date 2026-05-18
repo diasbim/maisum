@@ -152,7 +152,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                                     offset: const Offset(0, 16),
                                   ),
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.25),
+                                    color: AppColors.primary
+                                        .withValues(alpha: 0.25),
                                     blurRadius: 30,
                                     offset: const Offset(0, 20),
                                   ),

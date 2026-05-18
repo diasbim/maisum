@@ -54,6 +54,17 @@ class AppStrings {
 
   // Sales
   static const String novaVendaTitle = 'Nova Venda';
+    static const String cliente = 'Cliente';
+    static const String confirmar = 'Confirmar';
+    static const String resumo = 'Resumo';
+    static const String valorStep = 'Valor';
+    static const String nomeOuTelefoneCliente = 'Nome ou telefone do cliente';
+    static const String outroValor = 'Outro valor';
+    static const String ultimo = 'Último';
+    static const String clienteGanhara = 'O cliente ganhará';
+    static const String pontosAposConfirmacao =
+            'Os pontos serão adicionados após confirmação da venda.';
+    static const String por = 'por';
   static const String selecionarCliente = 'Selecionar cliente';
   static const String buscarTelefone = 'Buscar por telefone';
   static const String novoCliente = 'Novo cliente';

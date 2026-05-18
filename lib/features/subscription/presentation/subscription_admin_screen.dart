@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/error_state.dart';
 import '../domain/feature_keys.dart';
 import '../domain/plan_catalog.dart';
 import '../domain/subscription_snapshot.dart';
@@ -22,7 +23,10 @@ class SubscriptionAdminScreen extends ConsumerWidget {
         loading: () => const Center(
           child: CircularProgressIndicator(color: AppColors.secondary),
         ),
-        error: (e, _) => Center(child: Text(e.toString())),
+        error: (e, _) => ErrorState(
+          error: e,
+          onRetry: () => ref.invalidate(subscriptionSnapshotProvider),
+        ),
         data: (data) => _SubscriptionAdminBody(snapshot: data),
       ),
     );

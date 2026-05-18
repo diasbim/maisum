@@ -27,7 +27,13 @@ class RewardsScreen extends ConsumerWidget {
             padding: EdgeInsets.zero,
             children: [
               _RewardsHeader(
-                onBack: () => context.pop(),
+                onBack: () {
+                  if (context.canPop()) {
+                    context.pop();
+                    return;
+                  }
+                  context.go('/dashboard');
+                },
                 onInfo: () => context.push('/privacy'),
               ),
               Container(
@@ -295,7 +301,7 @@ class _RewardTile extends StatelessWidget {
         border: Border.all(color: AppColors.g100, width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: AppColors.primary.withValues(alpha: 0.08),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),

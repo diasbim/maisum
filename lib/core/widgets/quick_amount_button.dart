@@ -21,35 +21,58 @@ class QuickAmountButton extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 88,
-        height: 72,
+        width: 86,
+        height: 78,
         decoration: BoxDecoration(
-          color: selected ? AppColors.primary : AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
+          color: selected ? AppColors.secondaryLight : AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: selected ? AppColors.primary : AppColors.divider,
-            width: 2,
+            color: selected ? AppColors.secondary : AppColors.g100,
+            width: 1.5,
           ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Text(
-              '$amount',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: selected ? Colors.white : AppColors.textPrimary,
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$amount',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: selected
+                          ? AppColors.primary
+                          : AppColors.textPrimary,
+                    ),
+                  ),
+                  if (label != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      label!,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: selected
+                            ? AppColors.primary
+                            : AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
-            Text(
-              label ?? 'MZN',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: selected ? Colors.white70 : AppColors.textSecondary,
+            if (selected)
+              const Positioned(
+                right: 6,
+                top: 6,
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  size: 18,
+                  color: AppColors.secondaryDark,
+                ),
               ),
-            ),
           ],
         ),
       ),

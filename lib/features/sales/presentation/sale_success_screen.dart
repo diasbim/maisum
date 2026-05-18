@@ -35,6 +35,14 @@ class SaleSuccessScreen extends ConsumerStatefulWidget {
 class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
   bool _playedFeedback = false;
 
+  void _handleBackPressed() {
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go('/dashboard');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -116,7 +124,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                         Row(
                           children: [
                             IconButton(
-                              onPressed: () => context.pop(),
+                              onPressed: _handleBackPressed,
                               icon: const Icon(
                                 Icons.arrow_back_rounded,
                                 color: Colors.white,
@@ -517,8 +525,8 @@ class _RewardProgressCard extends StatelessWidget {
     final displayTarget = targetPoints ?? currentPoints;
     final unclampedCurrent = isUnlocked ? displayTarget : currentPoints;
     final displayCurrent = displayTarget > 0
-      ? unclampedCurrent.clamp(0, displayTarget).toInt()
-      : unclampedCurrent;
+        ? unclampedCurrent.clamp(0, displayTarget).toInt()
+        : unclampedCurrent;
     final label = hasRewards
         ? (nextRewardName != null
             ? 'Faltam $pointsLeft pontos para $nextRewardName'

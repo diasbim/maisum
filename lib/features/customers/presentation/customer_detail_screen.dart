@@ -10,6 +10,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/pt_date_format.dart';
 import '../../../core/utils/moz_phone_utils.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/errors/app_error_reporter.dart';
 import '../domain/customer.dart';
@@ -37,6 +38,14 @@ class CustomerDetailScreen extends ConsumerStatefulWidget {
 class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _historyKey = GlobalKey();
+
+  void _handleBackPressed() {
+    if (context.canPop()) {
+      context.pop();
+      return;
+    }
+    context.go('/customers');
+  }
 
   @override
   void dispose() {
@@ -98,6 +107,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               ? AppStrings.phoneRequired
               : MozPhoneUtils.maskForDisplay(customer.phone);
           final approxValue = _formatApproxMzn(customer.totalPoints);
+          final bottomPadding = MediaQuery.of(context).padding.bottom + 120;
 
           return CustomScrollView(
             controller: _scrollController,
@@ -111,7 +121,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 leading: IconButton(
                   icon:
                       const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                  onPressed: () => context.pop(),
+                  onPressed: _handleBackPressed,
                 ),
                 actions: [
                   IconButton(
@@ -253,33 +263,77 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
                     child: Column(
                       children: [
-                        Row(
-                          children: [
-                            _ActionShortcut(
-                              icon: Icons.add_rounded,
-                              label: AppStrings.adicionarPontos,
-                              onTap: () => context.push(
-                                '/new-sale',
-                                extra: NewSaleArgs(
-                                  preselectedCustomerId: customer.id,
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isExtraNarrow = constraints.maxWidth < 340;
+                            if (!isExtraNarrow) {
+                              return Row(
+                                children: [
+                                  _ActionShortcut(
+                                    icon: Icons.add_rounded,
+                                    label: AppStrings.adicionarPontos,
+                                    onTap: () => context.push(
+                                      '/new-sale',
+                                      extra: NewSaleArgs(
+                                        preselectedCustomerId: customer.id,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _ActionShortcut(
+                                    icon: Icons.chat_rounded,
+                                    label: AppStrings.enviarWhatsApp,
+                                    iconColor: const Color(0xFF27C26A),
+                                    onTap: () =>
+                                        _openWhatsApp(context, ref, customer),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _ActionShortcut(
+                                    icon: Icons.receipt_long_rounded,
+                                    label: AppStrings.verHistorico,
+                                    onTap: _scrollToHistory,
+                                  ),
+                                ],
+                              );
+                            }
+
+                            final itemWidth = (constraints.maxWidth - 12) / 2;
+                            return Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              alignment: WrapAlignment.center,
+                              children: [
+                                _ActionShortcut(
+                                  icon: Icons.add_rounded,
+                                  label: AppStrings.adicionarPontos,
+                                  expand: false,
+                                  width: itemWidth,
+                                  onTap: () => context.push(
+                                    '/new-sale',
+                                    extra: NewSaleArgs(
+                                      preselectedCustomerId: customer.id,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            _ActionShortcut(
-                              icon: Icons.chat_rounded,
-                              label: AppStrings.enviarWhatsApp,
-                              iconColor: const Color(0xFF27C26A),
-                              onTap: () =>
-                                  _openWhatsApp(context, ref, customer),
-                            ),
-                            const SizedBox(width: 12),
-                            _ActionShortcut(
-                              icon: Icons.receipt_long_rounded,
-                              label: AppStrings.verHistorico,
-                              onTap: _scrollToHistory,
-                            ),
-                          ],
+                                _ActionShortcut(
+                                  icon: Icons.chat_rounded,
+                                  label: AppStrings.enviarWhatsApp,
+                                  iconColor: const Color(0xFF27C26A),
+                                  expand: false,
+                                  width: itemWidth,
+                                  onTap: () =>
+                                      _openWhatsApp(context, ref, customer),
+                                ),
+                                _ActionShortcut(
+                                  icon: Icons.receipt_long_rounded,
+                                  label: AppStrings.verHistorico,
+                                  expand: false,
+                                  width: itemWidth,
+                                  onTap: _scrollToHistory,
+                                ),
+                              ],
+                            );
+                          },
                         ),
                         const SizedBox(height: 16),
                         rewardProgressAsync.when(
@@ -325,13 +379,18 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               ),
               salesAsync.when(
                 data: (sales) => sales.isEmpty
-                    ? const SliverFillRemaining(
-                        child: EmptyState(
-                          title: AppStrings.semVendas,
+                    ? SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Padding(
+                          padding:
+                              EdgeInsets.fromLTRB(16, 8, 16, bottomPadding),
+                          child: const EmptyState(
+                            title: AppStrings.semVendas,
+                          ),
                         ),
                       )
                     : SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 140),
+                        padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPadding),
                         sliver: SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (_, i) => Padding(
@@ -345,15 +404,27 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           ),
                         ),
                       ),
-                loading: () => const SliverToBoxAdapter(
-                  child: Center(
-                    heightFactor: 3,
-                    child:
-                        CircularProgressIndicator(color: AppColors.secondary),
+                loading: () => SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: bottomPadding),
+                    child: const Center(
+                      heightFactor: 3,
+                      child: CircularProgressIndicator(
+                        color: AppColors.secondary,
+                      ),
+                    ),
                   ),
                 ),
-                error: (_, __) => const SliverToBoxAdapter(
-                  child: SizedBox.shrink(),
+                error: (e, __) => SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, bottomPadding),
+                    child: ErrorState(
+                      error: e,
+                      onRetry: () =>
+                          ref.invalidate(customerSalesProvider(widget.id)),
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -364,8 +435,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             child: CircularProgressIndicator(color: AppColors.secondary),
           ),
         ),
-        error: (_, __) => const Scaffold(
-          body: Center(child: Text(AppStrings.erroGenerico)),
+        error: (e, __) => Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ErrorState(
+                error: e,
+                onRetry: () =>
+                    ref.invalidate(customerDetailProvider(widget.id)),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -637,27 +717,33 @@ class _ActionShortcut extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.iconColor,
+    this.expand = true,
+    this.width,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final Color? iconColor;
+  final bool expand;
+  final double? width;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
+    final shortcut = Material(
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Ink(
+          constraints: const BoxConstraints(minHeight: 96),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: AppColors.primary,
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
+                color: AppColors.primary.withValues(alpha: 0.22),
                 blurRadius: 14,
                 offset: const Offset(0, 8),
               ),
@@ -666,8 +752,8 @@ class _ActionShortcut extends StatelessWidget {
           child: Column(
             children: [
               Container(
-                width: 38,
-                height: 38,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
@@ -678,6 +764,8 @@ class _ActionShortcut extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                       color: Colors.white,
@@ -689,6 +777,14 @@ class _ActionShortcut extends StatelessWidget {
         ),
       ),
     );
+
+    if (expand) {
+      return Expanded(child: shortcut);
+    }
+    if (width != null) {
+      return SizedBox(width: width, child: shortcut);
+    }
+    return shortcut;
   }
 }
 
@@ -776,6 +872,8 @@ class _RewardProgressPanel extends StatelessWidget {
             Expanded(
               child: Text(
                 AppStrings.semRecompensasAtivas,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: AppColors.onSurfaceVariant,
                   fontWeight: FontWeight.w600,
@@ -800,6 +898,7 @@ class _RewardProgressPanel extends StatelessWidget {
         ? '${AppStrings.faltam} ${progress.pointsRemaining} '
             '${AppStrings.pontosAbrev} ${AppStrings.para} $rewardName'
         : '${AppStrings.recompensaPronta} $rewardName';
+    final progressValue = progress.progressFraction.clamp(0.0, 1.0).toDouble();
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -809,7 +908,7 @@ class _RewardProgressPanel extends StatelessWidget {
         border: Border.all(color: AppColors.g100),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: AppColors.primary.withValues(alpha: 0.08),
             blurRadius: 16,
             offset: const Offset(0, 10),
           ),
@@ -842,6 +941,8 @@ class _RewardProgressPanel extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   statusText,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: AppColors.onSurface,
                     fontWeight: FontWeight.w700,
@@ -851,7 +952,7 @@ class _RewardProgressPanel extends StatelessWidget {
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: LinearProgressIndicator(
-                    value: progress.progressFraction,
+                    value: progressValue,
                     minHeight: 8,
                     backgroundColor: AppColors.g100,
                     valueColor: const AlwaysStoppedAnimation<Color>(

@@ -1,5 +1,8 @@
 class AppConstants {
   static const int pointsPerMzn = 100;
+  static const int salePointsBaseMzn = 100;
+  static const List<int> saleQuickAmounts = [100, 200, 500, 1000];
+  static const int minSalePhoneDigitsForNewCustomer = 7;
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'https://api.loyaltyos.com/v1',

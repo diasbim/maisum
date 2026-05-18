@@ -202,7 +202,15 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _TopBar(onBack: () => context.pop()),
+                          _TopBar(
+                            onBack: () {
+                              if (context.canPop()) {
+                                context.pop();
+                                return;
+                              }
+                              context.go('/settings');
+                            },
+                          ),
                           const SizedBox(height: 24),
                           const _SetupSteps(currentStep: 0),
                           const SizedBox(height: 28),
@@ -576,9 +584,9 @@ class _ConfigDropdownField extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
       initialValue: value,
-      icon: const Icon(
+      icon: Icon(
         Icons.keyboard_arrow_down_rounded,
-        color: Colors.white70,
+        color: Colors.white.withValues(alpha: 0.7),
       ),
       style: const TextStyle(
         color: Colors.white,
