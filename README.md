@@ -6,6 +6,16 @@ Offline-first loyalty app for barbershops in Maputo, Mozambique. Barbers registe
 
 Future features are evaluated through a strict decision framework before they enter the roadmap. See `docs/feature_decision_framework.md`.
 
+## GitHub Pages Prerequisites
+
+If deployment fails in GitHub Actions with Pages permission/setup errors, configure this once in the repository:
+
+1. Open **GitHub -> Settings -> Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+3. Save.
+
+The workflow in `.github/workflows/deploy.yml` expects Pages to be pre-enabled and deploys the static site from `docs/`.
+
 ## Quick Start
 
 ```bash
