@@ -15,6 +15,7 @@ import '../../rewards/domain/reward_progress.dart';
 import '../../rewards/presentation/rewards_controller.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/domain/usage_metrics.dart';
+import '../../appointments/providers/appointments_providers.dart';
 import 'sale_controller.dart';
 
 class SaleSuccessArgs {
@@ -34,6 +35,8 @@ class SaleSuccessScreen extends ConsumerStatefulWidget {
 
 class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
   bool _playedFeedback = false;
+  DateTime? _scheduledDate;
+  bool _appointmentCreated = false;
 
   void _handleBackPressed() {
     if (context.canPop()) {
@@ -71,6 +74,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     final theme = Theme.of(context);
     final sale = widget.args.result.sale;
     final customer = widget.args.result.customer;
+    final createAppointmentState = ref.watch(createAppointmentProvider);
 
     final rewardsAsync = ref.watch(rewardsControllerProvider);
     final rewards = rewardsAsync.valueOrNull ?? const <Reward>[];
@@ -180,6 +184,15 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                           onSendSms: () => _sendSms(context, customer, message),
                           onSendWhatsApp: () =>
                               _sendWhatsApp(context, ref, customer, message),
+                        ),
+                        const SizedBox(height: 16),
+                        _ScheduleNextVisitCard(
+                          selectedDate: _scheduledDate,
+                          appointmentCreated: _appointmentCreated,
+                          isSaving: createAppointmentState.isLoading,
+                          onQuickSelect: (days) =>
+                              _handleQuickSchedule(customer.id, days),
+                          onPickDate: () => _handleManualSchedule(customer.id),
                         ),
                         const SizedBox(height: 18),
                         _PrimaryCtaButton(
@@ -347,6 +360,75 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         );
       } catch (_) {}
     }
+  }
+
+  Future<void> _handleQuickSchedule(String customerId, int days) async {
+    final now = DateTime.now();
+    final target = DateTime(
+      now.year,
+      now.month,
+      now.day + days,
+      10,
+    );
+    await _createAppointment(customerId, target);
+  }
+
+  Future<void> _handleManualSchedule(String customerId) async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 14)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Escolher data do próximo corte',
+      cancelText: 'Cancelar',
+      confirmText: 'Guardar',
+    );
+    if (picked == null) return;
+
+    final target = DateTime(
+      picked.year,
+      picked.month,
+      picked.day,
+      10,
+    );
+    await _createAppointment(customerId, target);
+  }
+
+  Future<void> _createAppointment(
+    String customerId,
+    DateTime scheduledDate,
+  ) async {
+    try {
+      await ref.read(createAppointmentProvider.notifier).createAppointment(
+            customerId: customerId,
+            scheduledDate: scheduledDate,
+            source: 'post_sale_flow',
+          );
+      if (!mounted) return;
+      setState(() {
+        _scheduledDate = scheduledDate;
+        _appointmentCreated = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Próximo corte agendado para ${_formatDate(scheduledDate)}',
+          ),
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(AppStrings.erroGenerico)),
+      );
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
   }
 }
 
@@ -763,6 +845,132 @@ class _PrimaryCtaButton extends StatelessWidget {
           const Icon(Icons.arrow_forward_rounded),
         ],
       ),
+    );
+  }
+}
+
+class _ScheduleNextVisitCard extends StatelessWidget {
+  const _ScheduleNextVisitCard({
+    required this.selectedDate,
+    required this.appointmentCreated,
+    required this.isSaving,
+    required this.onQuickSelect,
+    required this.onPickDate,
+  });
+
+  final DateTime? selectedDate;
+  final bool appointmentCreated;
+  final bool isSaving;
+  final ValueChanged<int> onQuickSelect;
+  final VoidCallback onPickDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.primaryDark.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.08),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Agendar próximo corte?',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Escolha em 1 toque para aumentar a recorrência.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.78),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final days in const [7, 14, 21, 30])
+                _QuickDayActionButton(
+                  days: days,
+                  isSaving: isSaving,
+                  onTap: () => onQuickSelect(days),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: isSaving ? null : onPickDate,
+            icon: const Icon(Icons.calendar_month_rounded, size: 18),
+            label: const Text('Escolher no calendário'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.white,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+              backgroundColor: Colors.white.withValues(alpha: 0.05),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          if (isSaving) ...[
+            const SizedBox(height: 10),
+            const LinearProgressIndicator(color: AppColors.secondary),
+          ],
+          if (appointmentCreated && selectedDate != null) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.check_circle_rounded,
+                    color: AppColors.secondary, size: 18),
+                const SizedBox(width: 6),
+                Text(
+                  'Agendado para ${selectedDate!.day.toString().padLeft(2, '0')}/${selectedDate!.month.toString().padLeft(2, '0')}/${selectedDate!.year}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickDayActionButton extends StatelessWidget {
+  const _QuickDayActionButton({
+    required this.days,
+    required this.isSaving,
+    required this.onTap,
+  });
+
+  final int days;
+  final bool isSaving;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: isSaving ? null : onTap,
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.secondary,
+        foregroundColor: AppColors.primary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      child: Text('+$days'),
     );
   }
 }

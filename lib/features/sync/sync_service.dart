@@ -38,6 +38,8 @@ const _syncEntities = [
   _SyncEntityConfig(entityType: 'sale', cursorField: 'created_at'),
   _SyncEntityConfig(entityType: 'reward', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'redemption', cursorField: 'redeemed_at'),
+  _SyncEntityConfig(entityType: 'appointment', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'retention_metric', cursorField: 'updated_at'),
   _SyncEntityConfig(
       entityType: 'subscription_state', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'entitlement', cursorField: 'updated_at'),
@@ -342,6 +344,10 @@ class SyncService {
         return _applyReward(txn, remote);
       case 'redemption':
         return _applyRedemption(txn, remote);
+      case 'appointment':
+        return _applyAppointment(txn, remote);
+      case 'retention_metric':
+        return _applyRetentionMetric(txn, remote);
       case 'subscription_state':
         return _applySubscriptionState(txn, remote);
       case 'entitlement':
@@ -575,6 +581,88 @@ class SyncService {
     );
   }
 
+  Future<void> _applyAppointment(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'appointments',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('appointments', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
+        local['scheduled_date'] == incoming['scheduled_date'] &&
+        local['status'] == incoming['status'] &&
+        local['source'] == incoming['source'] &&
+        local['reminder_sent'] == incoming['reminder_sent'] &&
+        local['updated_at'] == incoming['updated_at'];
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'appointments',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applyRetentionMetric(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'retention_metrics',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('retention_metrics', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
+        local['last_visit_at'] == incoming['last_visit_at'] &&
+        local['days_inactive'] == incoming['days_inactive'] &&
+        local['risk_level'] == incoming['risk_level'] &&
+        local['total_visits'] == incoming['total_visits'] &&
+        local['average_visit_interval'] == incoming['average_visit_interval'] &&
+        local['total_spent'] == incoming['total_spent'] &&
+        local['is_recurring'] == incoming['is_recurring'] &&
+        local['recovered'] == incoming['recovered'] &&
+        local['updated_at'] == incoming['updated_at'];
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'retention_metrics',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
   Future<void> _applySubscriptionState(
     dynamic txn,
     Map<String, dynamic> remote,
@@ -791,6 +879,22 @@ class SyncService {
       case 'redemption':
         await db.update(
           'redemptions',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'appointment':
+        await db.update(
+          'appointments',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'retention_metric':
+        await db.update(
+          'retention_metrics',
           {'synced': 1},
           where: _entityWhereClause('id = ?'),
           whereArgs: _entityWhereArgs([entityId]),

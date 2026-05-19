@@ -125,6 +125,60 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "appointments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "merchant_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "scheduled_date",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "retention_metrics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "merchant_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "risk_level",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "retention_metrics",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "merchant_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "last_visit_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -25,3 +25,6 @@ platform:
     snapshotTtlSeconds: 30
   admin:
     apiKey: ${ADMIN_API_KEY:}
+  jobs:
+    appointmentReminderCron: ${APPOINTMENT_REMINDER_CRON:0 0 8 * * *}
+    retentionMetricsCron: ${RETENTION_METRICS_CRON:0 20 1 * * *}

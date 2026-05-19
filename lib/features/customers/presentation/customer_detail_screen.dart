@@ -70,7 +70,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final rewardProgressAsync = ref.watch(rewardProgressProvider(widget.id));
 
     final isCompact = MediaQuery.of(context).size.width < 360;
-    final expandedHeight = isCompact ? 280.0 : 240.0;
+    // Keep enough vertical room for avatar, status chip, and points card on phones.
+    final expandedHeight = isCompact ? 340.0 : 310.0;
 
     final customer = customerAsync.valueOrNull;
 
@@ -97,11 +98,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           }
 
           final sales = salesAsync.valueOrNull ?? const <Sale>[];
-          final initials =
-              customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?';
+          final initials = customer.name.isNotEmpty
+              ? customer.name[0].toUpperCase()
+              : '?';
           final isActive = _isActiveCustomer(customer, sales);
-          final statusLabel =
-              isActive ? AppStrings.clienteAtivo : AppStrings.clienteInativo;
+          final statusLabel = isActive
+              ? AppStrings.clienteAtivo
+              : AppStrings.clienteInativo;
           final statusColor = isActive ? AppColors.green : AppColors.amber;
           final phoneLabel = customer.phone.isEmpty
               ? AppStrings.phoneRequired
@@ -119,8 +122,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 elevation: 0,
                 scrolledUnderElevation: 0,
                 leading: IconButton(
-                  icon:
-                      const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  icon: const Icon(
+                    Icons.arrow_back_rounded,
+                    color: Colors.white,
+                  ),
                   onPressed: _handleBackPressed,
                 ),
                 actions: [
@@ -160,8 +165,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                     borderRadius: BorderRadius.circular(22),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: AppColors.secondary
-                                            .withValues(alpha: 0.4),
+                                        color: AppColors.secondary.withValues(
+                                          alpha: 0.4,
+                                        ),
                                         blurRadius: 18,
                                         offset: const Offset(0, 10),
                                       ),
@@ -198,8 +204,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                       Text(
                                         phoneLabel,
                                         style: TextStyle(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.65),
+                                          color: Colors.white.withValues(
+                                            alpha: 0.65,
+                                          ),
                                           fontSize: 14,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -340,11 +347,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           data: (progress) => _RewardProgressPanel(
                             progress: progress,
                             onRedeem: progress.unlockedRewardName != null
-                                ? () => _showRedeemSheet(
-                                      context,
-                                      ref,
-                                      customer,
-                                    )
+                                ? () => _showRedeemSheet(context, ref, customer)
                                 : null,
                           ),
                           loading: () => const SizedBox(height: 16),
@@ -364,9 +367,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       Text(
                         AppStrings.historicoCompras,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: AppColors.onSurface,
-                              fontWeight: FontWeight.w700,
-                            ),
+                          color: AppColors.onSurface,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const Spacer(),
                       TextButton(
@@ -382,11 +385,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     ? SliverFillRemaining(
                         hasScrollBody: false,
                         child: Padding(
-                          padding:
-                              EdgeInsets.fromLTRB(16, 8, 16, bottomPadding),
-                          child: const EmptyState(
-                            title: AppStrings.semVendas,
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            8,
+                            16,
+                            bottomPadding,
                           ),
+                          child: const EmptyState(title: AppStrings.semVendas),
                         ),
                       )
                     : SliverPadding(
@@ -503,9 +508,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       return;
     }
     if (decision.softLimited && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.limiteSoftAviso)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.limiteSoftAviso)));
     }
 
     List<Sale> sales;
@@ -534,21 +539,25 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       'https://wa.me/$number?text=${Uri.encodeComponent(draft.message)}',
     );
     if (!connectivity.isOnline) {
-      await ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
+      await ref
+          .read(notificationQueueServiceProvider)
+          .enqueueWhatsApp(
             phone: number,
             message: draft.message,
             source: 'customer_detail',
           );
       try {
-        await ref.read(analyticsServiceProvider).record(
-          eventType: 'whatsapp_sent',
-          source: 'whatsapp',
-          properties: {
-            'queued': true,
-            'source': 'customer_detail',
-            'message_type': draft.type.name,
-          },
-        );
+        await ref
+            .read(analyticsServiceProvider)
+            .record(
+              eventType: 'whatsapp_sent',
+              source: 'whatsapp',
+              properties: {
+                'queued': true,
+                'source': 'customer_detail',
+                'message_type': draft.type.name,
+              },
+            );
       } catch (e, st) {
         AppErrorReporter.report(e, st, hint: 'whatsapp_queued_analytics');
       }
@@ -561,27 +570,31 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
     final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.erroGenerico)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.erroGenerico)));
       return;
     }
     if (launched) {
       try {
-        await ref.read(usageTrackerProvider).record(
-          metricKey: UsageMetrics.whatsappMessages,
-          source: 'whatsapp',
-          metadata: {'message_type': draft.type.name},
-        );
-        await ref.read(analyticsServiceProvider).record(
-          eventType: 'whatsapp_sent',
-          source: 'whatsapp',
-          properties: {
-            'queued': false,
-            'source': 'customer_detail',
-            'message_type': draft.type.name,
-          },
-        );
+        await ref
+            .read(usageTrackerProvider)
+            .record(
+              metricKey: UsageMetrics.whatsappMessages,
+              source: 'whatsapp',
+              metadata: {'message_type': draft.type.name},
+            );
+        await ref
+            .read(analyticsServiceProvider)
+            .record(
+              eventType: 'whatsapp_sent',
+              source: 'whatsapp',
+              properties: {
+                'queued': false,
+                'source': 'customer_detail',
+                'message_type': draft.type.name,
+              },
+            );
       } catch (e, st) {
         AppErrorReporter.report(e, st, hint: 'whatsapp_sent_analytics');
       }
@@ -648,10 +661,7 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _PointsSummaryCard extends StatelessWidget {
-  const _PointsSummaryCard({
-    required this.points,
-    required this.approxValue,
-  });
+  const _PointsSummaryCard({required this.points, required this.approxValue});
 
   final int points;
   final String approxValue;
@@ -671,9 +681,9 @@ class _PointsSummaryCard extends StatelessWidget {
           Text(
             AppStrings.saldoPontos,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontWeight: FontWeight.w600,
-                ),
+              color: Colors.white.withValues(alpha: 0.7),
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const SizedBox(height: 6),
           Row(
@@ -681,9 +691,9 @@ class _PointsSummaryCard extends StatelessWidget {
               Text(
                 '$points ${AppStrings.pontosAbrev}',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.secondary,
-                      fontWeight: FontWeight.w800,
-                    ),
+                  color: AppColors.secondary,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(width: 8),
               Container(
@@ -693,8 +703,11 @@ class _PointsSummaryCard extends StatelessWidget {
                   color: AppColors.secondary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.star_rounded,
-                    size: 16, color: AppColors.primary),
+                child: const Icon(
+                  Icons.star_rounded,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
               ),
             ],
           ),
@@ -702,8 +715,8 @@ class _PointsSummaryCard extends StatelessWidget {
           Text(
             approxValue,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.7),
-                ),
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),
@@ -730,6 +743,11 @@ class _ActionShortcut extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: AppColors.primary,
+      fontWeight: FontWeight.w800,
+    );
+
     final shortcut = Material(
       color: Colors.transparent,
       child: InkWell(
@@ -739,13 +757,14 @@ class _ActionShortcut extends StatelessWidget {
           constraints: const BoxConstraints(minHeight: 96),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: AppColors.primary,
+            color: Colors.white,
             borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.g100),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.22),
-                blurRadius: 14,
-                offset: const Offset(0, 8),
+                color: AppColors.primary.withValues(alpha: 0.08),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -755,11 +774,14 @@ class _ActionShortcut extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
+                  color: AppColors.secondaryLight,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(icon,
-                    color: iconColor ?? AppColors.secondary, size: 20),
+                child: Icon(
+                  icon,
+                  color: iconColor ?? AppColors.secondary,
+                  size: 20,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -767,10 +789,7 @@ class _ActionShortcut extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
+                style: textStyle,
               ),
             ],
           ),
@@ -825,8 +844,10 @@ class _BottomCtaButton extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.25),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.add_shopping_cart_rounded,
-                    color: AppColors.primary),
+                child: const Icon(
+                  Icons.add_shopping_cart_rounded,
+                  color: AppColors.primary,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -834,9 +855,9 @@ class _BottomCtaButton extends StatelessWidget {
                   label,
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
               const Icon(Icons.arrow_forward_rounded, color: AppColors.primary),
@@ -889,14 +910,15 @@ class _RewardProgressPanel extends StatelessWidget {
     final rewardName = progress.nextRewardName ?? progress.unlockedRewardName;
     final target = progress.targetPoints ?? 0;
     final displayTarget = target > 0 ? target : progress.currentPoints;
-    final unclampedCurrent =
-        !hasNext && displayTarget > 0 ? displayTarget : progress.currentPoints;
+    final unclampedCurrent = !hasNext && displayTarget > 0
+        ? displayTarget
+        : progress.currentPoints;
     final displayCurrent = displayTarget > 0
         ? unclampedCurrent.clamp(0, displayTarget).toInt()
         : unclampedCurrent;
     final statusText = hasNext
         ? '${AppStrings.faltam} ${progress.pointsRemaining} '
-            '${AppStrings.pontosAbrev} ${AppStrings.para} $rewardName'
+              '${AppStrings.pontosAbrev} ${AppStrings.para} $rewardName'
         : '${AppStrings.recompensaPronta} $rewardName';
     final progressValue = progress.progressFraction.clamp(0.0, 1.0).toDouble();
 
@@ -923,8 +945,11 @@ class _RewardProgressPanel extends StatelessWidget {
               color: AppColors.secondaryLight,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Icon(Icons.card_giftcard_rounded,
-                color: AppColors.secondaryDark, size: 26),
+            child: const Icon(
+              Icons.card_giftcard_rounded,
+              color: AppColors.secondaryDark,
+              size: 26,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -956,7 +981,8 @@ class _RewardProgressPanel extends StatelessWidget {
                     minHeight: 8,
                     backgroundColor: AppColors.g100,
                     valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppColors.secondary),
+                      AppColors.secondary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -1011,8 +1037,11 @@ class _SaleTimelineItem extends StatelessWidget {
                 border: Border.all(color: AppColors.secondary, width: 1.4),
               ),
               alignment: Alignment.center,
-              child:
-                  const Icon(Icons.add, size: 16, color: AppColors.secondary),
+              child: const Icon(
+                Icons.add,
+                size: 16,
+                color: AppColors.secondary,
+              ),
             ),
             if (!isLast)
               Container(
@@ -1052,8 +1081,11 @@ class _SaleCard extends StatelessWidget {
               color: AppColors.primary.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.receipt_rounded,
-                color: AppColors.primary, size: 22),
+            child: const Icon(
+              Icons.receipt_rounded,
+              color: AppColors.primary,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1063,7 +1095,9 @@ class _SaleCard extends StatelessWidget {
                 Text(
                   '${sale.amount.toStringAsFixed(0)} ${AppStrings.moedaMzn}',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700, color: AppColors.onSurface),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
@@ -1126,9 +1160,9 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
     final name = _nameCtrl.text.trim();
     final phone = _phoneCtrl.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.nameRequired)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(AppStrings.nameRequired)));
       return;
     }
     setState(() => _saving = true);
@@ -1139,8 +1173,9 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -1152,7 +1187,11 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
     final theme = Theme.of(context);
     return Padding(
       padding: EdgeInsets.fromLTRB(
-          20, 16, 20, MediaQuery.of(context).viewInsets.bottom + 32),
+        20,
+        16,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 32,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1162,8 +1201,9 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                  color: AppColors.g300,
-                  borderRadius: BorderRadius.circular(2)),
+                color: AppColors.g300,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(height: 20),

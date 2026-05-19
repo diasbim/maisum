@@ -25,6 +25,8 @@ import '../core/sms/validation/duplicate_detector.dart';
 import '../core/sms/validation/transaction_validator.dart';
 import '../core/storage/secure_storage.dart';
 import '../features/auth/data/backend_auth_api.dart';
+import '../features/appointments/data/appointment_dao.dart';
+import '../features/appointments/data/appointment_repository.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/customers/data/customer_dao.dart';
@@ -33,6 +35,8 @@ import '../features/rewards/data/redemption_dao.dart';
 import '../features/rewards/data/redemption_repository.dart';
 import '../features/rewards/data/reward_dao.dart';
 import '../features/rewards/data/reward_repository.dart';
+import '../features/retention/data/retention_dao.dart';
+import '../features/retention/data/retention_repository.dart';
 import '../features/sales/data/sale_dao.dart';
 import '../features/sales/data/sale_repository.dart';
 import '../features/sync/data/backend_sync_transport.dart';
@@ -255,6 +259,20 @@ final usageEventDaoProvider = Provider<UsageEventDao>(
   ),
 );
 
+final appointmentDaoProvider = Provider<AppointmentDao>(
+  (ref) => AppointmentDao(
+    ref.read(appDatabaseProvider),
+    merchantId: ref.watch(activeMerchantIdProvider),
+  ),
+);
+
+final retentionDaoProvider = Provider<RetentionDao>(
+  (ref) => RetentionDao(
+    ref.read(appDatabaseProvider),
+    merchantId: ref.watch(activeMerchantIdProvider),
+  ),
+);
+
 // ── Repositories ──────────────────────────────────────────────────────────────
 
 final customerRepositoryProvider = Provider<CustomerRepository>(
@@ -289,6 +307,20 @@ final redemptionRepositoryProvider = Provider<RedemptionRepository>(
   (ref) => RedemptionRepository(
     ref.read(redemptionDaoProvider),
     ref.read(customerDaoProvider),
+    ref.read(syncDaoProvider),
+  ),
+);
+
+final appointmentRepositoryProvider = Provider<AppointmentRepository>(
+  (ref) => AppointmentRepository(
+    ref.read(appointmentDaoProvider),
+    ref.read(syncDaoProvider),
+  ),
+);
+
+final retentionRepositoryProvider = Provider<RetentionRepository>(
+  (ref) => RetentionRepository(
+    ref.read(retentionDaoProvider),
     ref.read(syncDaoProvider),
   ),
 );

@@ -5,24 +5,24 @@ import '../constants/app_strings.dart';
 import '../theme/app_colors.dart';
 import 'pin_pad.dart';
 
-mixin PinVerificationShakeMixin<T extends StatefulWidget>
-    on State<T>, TickerProvider {
+mixin PinVerificationShakeMixin<T extends StatefulWidget> on State<T> {
   late final AnimationController pinShakeController;
   late final Animation<double> pinShakeAnimation;
 
   void initPinShakeAnimation() {
     pinShakeController = AnimationController(
-      vsync: this,
+      vsync: this as TickerProvider,
       duration: const Duration(milliseconds: 400),
     );
-    pinShakeAnimation = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: -8.0), weight: 1),
-      TweenSequenceItem(tween: Tween(begin: -8.0, end: 8.0), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: 8.0, end: -8.0), weight: 2),
-      TweenSequenceItem(tween: Tween(begin: -8.0, end: 0.0), weight: 1),
-    ]).animate(
-      CurvedAnimation(parent: pinShakeController, curve: Curves.easeInOut),
-    );
+    pinShakeAnimation =
+        TweenSequence<double>([
+          TweenSequenceItem(tween: Tween(begin: 0.0, end: -8.0), weight: 1),
+          TweenSequenceItem(tween: Tween(begin: -8.0, end: 8.0), weight: 2),
+          TweenSequenceItem(tween: Tween(begin: 8.0, end: -8.0), weight: 2),
+          TweenSequenceItem(tween: Tween(begin: -8.0, end: 0.0), weight: 1),
+        ]).animate(
+          CurvedAnimation(parent: pinShakeController, curve: Curves.easeInOut),
+        );
   }
 
   void disposePinShakeAnimation() {
@@ -65,18 +65,20 @@ class PinVerificationFeedback extends StatelessWidget {
     final theme = Theme.of(context);
     final remaining = AppConstants.maxPinAttempts - attempts;
     final showAttemptsWarning = showAttemptStatus && attempts > 0;
-    final statusText = helperText ??
+    final statusText =
+        helperText ??
         (isError
             ? AppStrings.pinIncorrect
             : showAttemptsWarning
-                ? '$remaining tentativa${remaining == 1 ? '' : 's'} restante${remaining == 1 ? '' : 's'}'
-                : null);
-    final statusColor = helperColor ??
+            ? '$remaining tentativa${remaining == 1 ? '' : 's'} restante${remaining == 1 ? '' : 's'}'
+            : null);
+    final statusColor =
+        helperColor ??
         (remaining <= 1
             ? AppColors.error
             : darkMode
-                ? AppColors.secondary.withValues(alpha: 0.85)
-                : AppColors.amber);
+            ? AppColors.secondary.withValues(alpha: 0.85)
+            : AppColors.amber);
 
     return Column(
       children: [
@@ -105,14 +107,16 @@ class PinVerificationFeedback extends StatelessWidget {
                   ? const SizedBox.shrink()
                   : Text(
                       statusText,
-                      style: (darkMode
-                              ? const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                )
-                              : theme.textTheme.bodySmall
-                                  ?.copyWith(fontWeight: FontWeight.w600))
-                          ?.copyWith(color: statusColor),
+                      style:
+                          (darkMode
+                                  ? const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    )
+                                  : theme.textTheme.bodySmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ))
+                              ?.copyWith(color: statusColor),
                       textAlign: TextAlign.center,
                     ),
             ),

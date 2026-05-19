@@ -358,6 +358,15 @@ class _DashboardBody extends StatelessWidget {
                   SizedBox(
                     width: tileWidth,
                     child: _MiniActionTile(
+                      label: 'Retencao',
+                      subtitle: 'Recorrentes e clientes em risco',
+                      icon: Icons.insights_rounded,
+                      onTap: () => context.push('/retention'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: tileWidth,
+                    child: _MiniActionTile(
                       label: AppStrings.pendentes,
                       subtitle: syncStatus.lastError != null
                           ? AppStrings.syncInterrompida

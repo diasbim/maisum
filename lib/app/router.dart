@@ -14,6 +14,7 @@ import '../features/customers/presentation/customer_list_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/rewards/presentation/create_reward_screen.dart';
 import '../features/rewards/presentation/rewards_screen.dart';
+import '../features/retention/presentation/retention_dashboard_screen.dart';
 import '../features/sales/presentation/new_sale_screen.dart';
 import '../features/sales/presentation/sales_history_screen.dart';
 import '../features/sales/presentation/sale_success_screen.dart';
@@ -126,6 +127,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(path: '/sales', builder: (_, __) => const SalesHistoryScreen()),
+      GoRoute(
+        path: '/retention',
+        builder: (_, __) => const RetentionDashboardScreen(),
+      ),
       GoRoute(
         path: '/pending-sync',
         builder: (_, __) => const PendingSyncScreen(),

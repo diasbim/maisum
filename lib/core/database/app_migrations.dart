@@ -42,6 +42,10 @@ class AppMigrations {
     MigrationStep(version: 13, name: 'merchant backfill', up: _createV13Schema),
     MigrationStep(
         version: 14, name: 'customer device id', up: _createV14Schema),
+    MigrationStep(
+        version: 15,
+        name: 'appointments + retention metrics',
+        up: _createV15Schema),
   ];
 
   static Future<void> migrate(
@@ -187,6 +191,33 @@ class _SchemaVerifier {
       'next_attempt_at',
     },
     'sync_state': {'entity_type', 'last_value', 'last_doc_id'},
+    'appointments': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'scheduled_date',
+      'status',
+      'source',
+      'reminder_sent',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
+    'retention_metrics': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'last_visit_at',
+      'days_inactive',
+      'risk_level',
+      'total_visits',
+      'average_visit_interval',
+      'total_spent',
+      'is_recurring',
+      'recovered',
+      'updated_at',
+      'synced',
+    },
   };
 
   Future<bool> needsRepair(Database db) async {
@@ -220,6 +251,7 @@ class _SchemaVerifier {
       await _createV12Schema(txn);
       await _createV13Schema(txn);
       await _createV14Schema(txn);
+      await _createV15Schema(txn);
     });
   }
 
@@ -630,6 +662,61 @@ Future<void> _createV13Schema(DatabaseExecutor db) async {
 
 Future<void> _createV14Schema(DatabaseExecutor db) async {
   await _addColumnIfMissing(db, 'customers', 'device_id TEXT');
+}
+
+Future<void> _createV15Schema(DatabaseExecutor db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS appointments (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      scheduled_date INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      source TEXT NOT NULL,
+      reminder_sent INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_appointments_merchant_date ON appointments(merchant_id, scheduled_date)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_appointments_merchant_status ON appointments(merchant_id, status, scheduled_date)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_appointments_synced ON appointments(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS retention_metrics (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      last_visit_at INTEGER,
+      days_inactive INTEGER NOT NULL DEFAULT 0,
+      risk_level TEXT NOT NULL,
+      total_visits INTEGER NOT NULL DEFAULT 0,
+      average_visit_interval INTEGER,
+      total_spent REAL NOT NULL DEFAULT 0,
+      is_recurring INTEGER NOT NULL DEFAULT 0,
+      recovered INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_retention_metrics_merchant_risk ON retention_metrics(merchant_id, risk_level, days_inactive)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_retention_metrics_merchant_last_visit ON retention_metrics(merchant_id, last_visit_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_retention_metrics_synced ON retention_metrics(merchant_id, synced)',
+  );
 }
 
 Future<void> _addColumnIfMissing(
