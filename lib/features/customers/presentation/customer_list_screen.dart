@@ -53,7 +53,8 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
         data: (list) {
           final filtered = _applyFilter(list);
           final isSearching = searchText.isNotEmpty;
-          final emptyTitle = isSearching ? 'Sem resultados' : AppStrings.semClientes;
+          final emptyTitle =
+              isSearching ? 'Sem resultados' : AppStrings.semClientes;
           final emptySubtitle = isSearching
               ? 'Nenhum cliente encontrado para "$searchText". Ajuste a pesquisa ou limpe o campo para ver todos.'
               : 'Crie o primeiro cliente para começar a registar cortes e pontos sem complicação.';
@@ -63,8 +64,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                 ref.read(customersControllerProvider.notifier).refresh(),
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               slivers: [
                 SliverToBoxAdapter(
                   child: _CustomerHeader(
@@ -146,15 +146,15 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                   TextButton.icon(
                     icon: const Icon(Icons.refresh),
                     label: const Text(AppStrings.tentar),
-                    onPressed: () =>
-                        ref.read(customersControllerProvider.notifier).refresh(),
+                    onPressed: () => ref
+                        .read(customersControllerProvider.notifier)
+                        .refresh(),
                   ),
                 ],
               ),
             ),
           );
         },
-        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: Padding(
@@ -216,24 +216,25 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
     });
   }
 
-  void _showAddCustomerSheet(BuildContext context) {
+  Future<void> _showAddCustomerSheet(BuildContext context) async {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
     final theme = Theme.of(context);
     var isSaving = false;
 
-    showModalBottomSheet(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
-          return Padding(
+          return SingleChildScrollView(
             padding: EdgeInsets.fromLTRB(
               24,
+              16,
               24,
-              24,
-              MediaQuery.of(ctx).viewInsets.bottom + 32,
+              MediaQuery.of(ctx).viewInsets.bottom + 24,
             ),
             child: Form(
               key: formKey,
@@ -261,6 +262,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                     controller: nameCtrl,
                     enabled: !isSaving,
                     textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
                     decoration: const InputDecoration(
                       labelText: AppStrings.nome,
                       hintText: AppStrings.nomeHint,
@@ -274,12 +276,45 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                     controller: phoneCtrl,
                     enabled: !isSaving,
                     keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.done,
                     decoration: const InputDecoration(
                       labelText: AppStrings.phoneNumber,
                     ),
                     validator: (v) => v == null || v.trim().isEmpty
                         ? AppStrings.phoneRequired
                         : null,
+                    onFieldSubmitted: (_) async {
+                      if (isSaving) return;
+                      if (!formKey.currentState!.validate()) return;
+                      setModalState(() => isSaving = true);
+                      try {
+                        await ref
+                            .read(customersControllerProvider.notifier)
+                            .createCustomer(
+                              name: nameCtrl.text.trim(),
+                              phone: phoneCtrl.text.trim(),
+                            );
+                        if (ctx.mounted) {
+                          Navigator.pop(ctx);
+                        }
+                      } catch (e, st) {
+                        AppErrorReporter.report(
+                          e,
+                          st,
+                          hint: 'customer_create',
+                        );
+                        if (ctx.mounted) {
+                          final info = AppErrorMapper.describe(e);
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(content: Text(info.message)),
+                          );
+                        }
+                      } finally {
+                        if (ctx.mounted) {
+                          setModalState(() => isSaving = false);
+                        }
+                      }
+                    },
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
@@ -315,407 +350,263 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                                   st,
                                   hint: 'customer_create',
                                 );
-                                    final normalizedQuery = query.trim();
-                                    if (normalizedQuery.isEmpty) {
+                                if (ctx.mounted) {
                                   final info = AppErrorMapper.describe(e);
                                   ScaffoldMessenger.of(ctx).showSnackBar(
                                     SnackBar(content: Text(info.message)),
                                   );
                                 }
-                                      ref.read(customersControllerProvider.notifier).search(normalizedQuery);
+                              } finally {
                                 if (ctx.mounted) {
                                   setModalState(() => isSaving = false);
                                 }
-                                  Future<void> _showAddCustomerSheet(BuildContext context) async {
+                              }
                             },
                       child: isSaving
                           ? const SizedBox(
                               width: 20,
                               height: 20,
                               child: CircularProgressIndicator(
-                                    await showModalBottomSheet<void>(
+                                strokeWidth: 2,
                                 color: Colors.white,
                               ),
-                                      useSafeArea: true,
                             )
                           : const Text(AppStrings.criarCliente),
-                                          return SingleChildScrollView(
-                                            padding: EdgeInsets.fromLTRB(
-                                              24,
-                                              16,
-                                              24,
-                                              MediaQuery.of(ctx).viewInsets.bottom + 24,
-                                            ),
-                                            child: Form(
-                                              key: formKey,
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.min,
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Center(
-                                                    child: Container(
-                                                      width: 40,
-                                                      height: 4,
-                                                      margin: const EdgeInsets.only(bottom: 20),
-                                                      decoration: BoxDecoration(
-                                                        color: AppColors.g300,
-                                                        borderRadius: BorderRadius.circular(2),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    AppStrings.adicionarCliente,
-                                                    style: theme.textTheme.headlineSmall,
-                                                  ),
-                                                  const SizedBox(height: 20),
-                                                  TextFormField(
-                                                    controller: nameCtrl,
-                                                    enabled: !isSaving,
-                                                    textCapitalization: TextCapitalization.words,
-                                                    textInputAction: TextInputAction.next,
-                                                    decoration: const InputDecoration(
-                                                      labelText: AppStrings.nome,
-                                                      hintText: AppStrings.nomeHint,
-                                                    ),
-                                                    validator: (v) => v == null || v.trim().isEmpty
-                                                        ? AppStrings.nameRequired
-                                                        : null,
-                                                  ),
-                                                  const SizedBox(height: 12),
-                                                  TextFormField(
-                                                    controller: phoneCtrl,
-                                                    enabled: !isSaving,
-                                                    keyboardType: TextInputType.phone,
-                                                    textInputAction: TextInputAction.done,
-                                                    decoration: const InputDecoration(
-                                                      labelText: AppStrings.phoneNumber,
-                                                    ),
-                                                    validator: (v) => v == null || v.trim().isEmpty
-                                                        ? AppStrings.phoneRequired
-                                                        : null,
-                                                    onFieldSubmitted: (_) async {
-                                                      if (isSaving) return;
-                                                      if (!formKey.currentState!.validate()) return;
-                                                      setModalState(() => isSaving = true);
-                                                      try {
-                                                        await ref
-                                                            .read(customersControllerProvider.notifier)
-                                                            .createCustomer(
-                                                              name: nameCtrl.text.trim(),
-                                                              phone: phoneCtrl.text.trim(),
-                                                            );
-                                                        if (ctx.mounted) {
-                                                          Navigator.pop(ctx);
-                                                        }
-                                                      } catch (e, st) {
-                                                        AppErrorReporter.report(
-                                                          e,
-                                                          st,
-                                                          hint: 'customer_create',
-                                                        );
-                                                        if (ctx.mounted) {
-                                                          final info = AppErrorMapper.describe(e);
-                                                          ScaffoldMessenger.of(ctx).showSnackBar(
-                                                            SnackBar(content: Text(info.message)),
-                                                          );
-                                                        }
-                                                      } finally {
-                                                        if (ctx.mounted) {
-                                                          setModalState(() => isSaving = false);
-                                                        }
-                                                      }
-                                                    },
-                                                  ),
-                                                  const SizedBox(height: 24),
-                                                  SizedBox(
-                                                    width: double.infinity,
-                                                    height: 56,
-                                                    child: ElevatedButton(
-                                                      style: ElevatedButton.styleFrom(
-                                                        backgroundColor: AppColors.primary,
-                                                        foregroundColor: Colors.white,
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius: BorderRadius.circular(14),
-                                                        ),
-                                                        elevation: 0,
-                                                      ),
-                                                      onPressed: isSaving
-                                                          ? null
-                                                          : () async {
-                                                              if (!formKey.currentState!.validate()) return;
-                                                              setModalState(() => isSaving = true);
-                                                              try {
-                                                                await ref
-                                                                    .read(customersControllerProvider.notifier)
-                                                                    .createCustomer(
-                                                                      name: nameCtrl.text.trim(),
-                                                                      phone: phoneCtrl.text.trim(),
-                                                                    );
-                                                                if (ctx.mounted) {
-                                                                  Navigator.pop(ctx);
-                                                                }
-                                                              } catch (e, st) {
-                                                                AppErrorReporter.report(
-                                                                  e,
-                                                                  st,
-                                                                  hint: 'customer_create',
-                                                                );
-                                                                if (ctx.mounted) {
-                                                                  final info = AppErrorMapper.describe(e);
-                                                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                                                    SnackBar(content: Text(info.message)),
-                                                                  );
-                                                                }
-                                                              } finally {
-                                                                if (ctx.mounted) {
-                                                                  setModalState(() => isSaving = false);
-                                                                }
-                                                              }
-                                                            },
-                                                      child: isSaving
-                                                          ? const SizedBox(
-                                                              width: 20,
-                                                              height: 20,
-                                                              child: CircularProgressIndicator(
-                                                                strokeWidth: 2,
-                                                                color: Colors.white,
-                                                              ),
-                                                            )
-                                                          : const Text(AppStrings.criarCliente),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    );
-                                    nameCtrl.dispose();
-                                    phoneCtrl.dispose();
-                                  }
-                                }
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
 
-                                enum _CustomerFilter { all, recent, top }
+    nameCtrl.dispose();
+    phoneCtrl.dispose();
+  }
+}
 
-                                class _CustomerHeader extends StatelessWidget {
-                                  const _CustomerHeader({
-                                    required this.controller,
-                                    required this.showClear,
-                                    required this.filter,
-                                    required this.totalCustomers,
-                                    required this.visibleCustomers,
-                                    required this.onSearchChanged,
-                                    required this.onClear,
-                                    required this.onFilterChanged,
-                                    required this.onBack,
-                                  });
+enum _CustomerFilter { all, recent, top }
 
-                                  final TextEditingController controller;
-                                  final bool showClear;
-                                  final _CustomerFilter filter;
-                                  final int totalCustomers;
-                                  final int visibleCustomers;
-                                  final ValueChanged<String> onSearchChanged;
-                                  final VoidCallback onClear;
-                                  final ValueChanged<_CustomerFilter> onFilterChanged;
-                                  final VoidCallback onBack;
+class _CustomerHeader extends StatelessWidget {
+  const _CustomerHeader({
+    required this.controller,
+    required this.showClear,
+    required this.filter,
+    required this.totalCustomers,
+    required this.visibleCustomers,
+    required this.onSearchChanged,
+    required this.onClear,
+    required this.onFilterChanged,
+    required this.onBack,
+  });
 
-                                  @override
-                                  Widget build(BuildContext context) {
-                                    final resultLabel = controller.text.trim().isEmpty
-                                        ? '$totalCustomers clientes'
-                                        : '$visibleCustomers de $totalCustomers clientes';
+  final TextEditingController controller;
+  final bool showClear;
+  final _CustomerFilter filter;
+  final int totalCustomers;
+  final int visibleCustomers;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onClear;
+  final ValueChanged<_CustomerFilter> onFilterChanged;
+  final VoidCallback onBack;
 
-                                    return Container(
-                                      decoration: BoxDecoration(
-                                        gradient: AppTheme.primaryGradient,
-                                        borderRadius: const BorderRadius.vertical(
-                                          bottom: Radius.circular(28),
-                                        ),
-                                      ),
-                                      child: SafeArea(
-                                        bottom: false,
-                                        child: Padding(
-                                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  IconButton(
-                                                    onPressed: onBack,
-                                                    icon: const Icon(Icons.arrow_back_rounded,
-                                                        color: Colors.white),
-                                                  ),
-                                                  const SizedBox(width: 4),
-                                                  Expanded(
-                                                    child: Text(
-                                                      AppStrings.clientesTitle,
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                                            color: Colors.white,
-                                                            fontWeight: FontWeight.w700,
-                                                          ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 12),
-                                              TextField(
-                                                controller: controller,
-                                                onChanged: onSearchChanged,
-                                                textInputAction: TextInputAction.search,
-                                                onSubmitted: onSearchChanged,
-                                                decoration: InputDecoration(
-                                                  hintText: AppStrings.buscarCliente,
-                                                  prefixIcon: const Icon(
-                                                    Icons.search_rounded,
-                                                    color: AppColors.g500,
-                                                    size: 22,
-                                                  ),
-                                                  suffixIcon: showClear
-                                                      ? IconButton(
-                                                          onPressed: onClear,
-                                                          icon: const Icon(Icons.close_rounded),
-                                                          tooltip: 'Limpar pesquisa',
-                                                        )
-                                                      : null,
-                                                  filled: true,
-                                                  fillColor: Colors.white,
-                                                  contentPadding:
-                                                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                                  border: OutlineInputBorder(
-                                                    borderRadius: BorderRadius.circular(18),
-                                                    borderSide: const BorderSide(color: Colors.transparent),
-                                                  ),
-                                                  enabledBorder: OutlineInputBorder(
-                                                    borderRadius: BorderRadius.circular(18),
-                                                    borderSide: const BorderSide(color: Colors.transparent),
-                                                  ),
-                                                  focusedBorder: OutlineInputBorder(
-                                                    borderRadius: BorderRadius.circular(18),
-                                                    borderSide:
-                                                        const BorderSide(color: AppColors.secondary, width: 2),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(height: 10),
-                                              Text(
-                                                resultLabel,
-                                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                                      color: Colors.white.withValues(alpha: 0.9),
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                              ),
-                                              const SizedBox(height: 14),
-                                              SingleChildScrollView(
-                                                scrollDirection: Axis.horizontal,
-                                                child: Row(
-                                                  children: [
-                                                    _FilterChip(
-                                                      label: 'Todos',
-                                                      icon: Icons.people_alt_rounded,
-                                                      active: filter == _CustomerFilter.all,
-                                                      onTap: () => onFilterChanged(_CustomerFilter.all),
-                                                    ),
-                                                    const SizedBox(width: 10),
-                                                    _FilterChip(
-                                                      label: 'Recentes',
-                                                      icon: Icons.schedule_rounded,
-                                                      active: filter == _CustomerFilter.recent,
-                                                      onTap: () => onFilterChanged(_CustomerFilter.recent),
-                                                    ),
-                                                    const SizedBox(width: 10),
-                                                    _FilterChip(
-                                                      label: 'Top clientes',
-                                                      icon: Icons.emoji_events_rounded,
-                                                      active: filter == _CustomerFilter.top,
-                                                      onTap: () => onFilterChanged(_CustomerFilter.top),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                }
+  @override
+  Widget build(BuildContext context) {
+    final resultLabel = controller.text.trim().isEmpty
+        ? '$totalCustomers clientes'
+        : '$visibleCustomers de $totalCustomers clientes';
 
-                                class _FilterChip extends StatelessWidget {
-                                  const _FilterChip({
-                                    required this.label,
-                                    required this.icon,
-                                    required this.active,
-                                    required this.onTap,
-                                  });
+    return Container(
+      decoration: BoxDecoration(
+        gradient: AppTheme.primaryGradient,
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(28),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: onBack,
+                    icon: const Icon(Icons.arrow_back_rounded,
+                        color: Colors.white),
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      AppStrings.clientesTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                onChanged: onSearchChanged,
+                textInputAction: TextInputAction.search,
+                onSubmitted: onSearchChanged,
+                decoration: InputDecoration(
+                  hintText: AppStrings.buscarCliente,
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: AppColors.g500,
+                    size: 22,
+                  ),
+                  suffixIcon: showClear
+                      ? IconButton(
+                          onPressed: onClear,
+                          icon: const Icon(Icons.close_rounded),
+                          tooltip: 'Limpar pesquisa',
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    borderSide: const BorderSide(color: Colors.transparent),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    borderSide: const BorderSide(color: Colors.transparent),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    borderSide:
+                        const BorderSide(color: AppColors.secondary, width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                resultLabel,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+              const SizedBox(height: 14),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _FilterChip(
+                      label: 'Todos',
+                      icon: Icons.people_alt_rounded,
+                      active: filter == _CustomerFilter.all,
+                      onTap: () => onFilterChanged(_CustomerFilter.all),
+                    ),
+                    const SizedBox(width: 10),
+                    _FilterChip(
+                      label: 'Recentes',
+                      icon: Icons.schedule_rounded,
+                      active: filter == _CustomerFilter.recent,
+                      onTap: () => onFilterChanged(_CustomerFilter.recent),
+                    ),
+                    const SizedBox(width: 10),
+                    _FilterChip(
+                      label: 'Top clientes',
+                      icon: Icons.emoji_events_rounded,
+                      active: filter == _CustomerFilter.top,
+                      onTap: () => onFilterChanged(_CustomerFilter.top),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
-                                  final String label;
-                                  final IconData icon;
-                                  final bool active;
-                                  final VoidCallback onTap;
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.icon,
+    required this.active,
+    required this.onTap,
+  });
 
-                                  @override
-                                  Widget build(BuildContext context) {
-                                    final foreground =
-                                        active ? AppColors.primaryDarker : Colors.white.withValues(alpha: 0.95);
-                                    final background = active ? null : Colors.white.withValues(alpha: 0.14);
-                                    final borderColor =
-                                        active ? AppColors.secondaryDark : Colors.white.withValues(alpha: 0.35);
-                                    final overlay = active
-                                        ? AppColors.secondary.withValues(alpha: 0.16)
-                                        : Colors.white.withValues(alpha: 0.12);
+  final String label;
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
 
-                                    return InkWell(
-                                      onTap: onTap,
-                                      borderRadius: BorderRadius.circular(18),
-                                      overlayColor: MaterialStatePropertyAll(overlay),
-                                      child: Ink(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                        decoration: BoxDecoration(
-                                          color: background,
-                                          gradient: active ? AppTheme.goldGradient : null,
-                                          borderRadius: BorderRadius.circular(18),
-                                          border: Border.all(
-                                            color: borderColor,
-                                          ),
-                                          boxShadow: active
-                                              ? [
-                                                  BoxShadow(
-                                                    color: AppColors.secondary.withValues(alpha: 0.35),
-                                                    blurRadius: 16,
-                                                    offset: const Offset(0, 6),
-                                                  ),
-                                                ]
-                                              : [
-                                                  BoxShadow(
-                                                    color: AppColors.primary.withValues(alpha: 0.16),
-                                                    blurRadius: 14,
-                                                    offset: const Offset(0, 6),
-                                                  ),
-                                                ],
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(icon, size: 16, color: foreground),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              label,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: foreground,
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                }
+  @override
+  Widget build(BuildContext context) {
+    final foreground =
+        active ? AppColors.primaryDarker : Colors.white.withValues(alpha: 0.95);
+    final background = active ? null : Colors.white.withValues(alpha: 0.14);
+    final borderColor =
+        active ? AppColors.secondaryDark : Colors.white.withValues(alpha: 0.35);
+    final overlay = active
+        ? AppColors.secondary.withValues(alpha: 0.16)
+        : Colors.white.withValues(alpha: 0.12);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      overlayColor: MaterialStatePropertyAll(overlay),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: background,
+          gradient: active ? AppTheme.goldGradient : null,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: borderColor,
+          ),
+          boxShadow: active
+              ? [
+                  BoxShadow(
+                    color: AppColors.secondary.withValues(alpha: 0.35),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.16),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: foreground),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: foreground,
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

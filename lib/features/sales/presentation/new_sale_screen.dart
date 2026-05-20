@@ -220,7 +220,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                               return const SizedBox.shrink();
                             }
                             return SizedBox(
-                              height: 110,
+                              height: 156,
                               child: ListView.separated(
                                 scrollDirection: Axis.horizontal,
                                 itemCount: customers.length,
@@ -645,7 +645,7 @@ class _CustomerCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: 170,
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: AppColors.white,
           borderRadius: BorderRadius.circular(18),
@@ -661,27 +661,35 @@ class _CustomerCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _CustomerAvatar(name: customer.name),
-            const SizedBox(height: 10),
-            Text(
-              customer.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
+            _CustomerAvatar(name: customer.name, radius: 16),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    customer.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface,
+                        ),
                   ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              customer.phone,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.onSurfaceVariant,
+                  const SizedBox(height: 2),
+                  Text(
+                    customer.phone,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
                   ),
+                ],
+              ),
             ),
-            const Spacer(),
+            const SizedBox(height: 6),
             _PointsPill(points: customer.totalPoints),
           ],
         ),
@@ -742,13 +750,14 @@ class _SearchResultTile extends StatelessWidget {
 }
 
 class _CustomerAvatar extends StatelessWidget {
-  const _CustomerAvatar({required this.name});
+  const _CustomerAvatar({required this.name, this.radius = 18});
   final String name;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
     return CircleAvatar(
-      radius: 18,
+      radius: radius,
       backgroundColor: AppColors.primary,
       child: Text(
         name.isNotEmpty ? name[0].toUpperCase() : '?',

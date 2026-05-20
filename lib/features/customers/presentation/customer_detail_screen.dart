@@ -70,8 +70,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final rewardProgressAsync = ref.watch(rewardProgressProvider(widget.id));
 
     final isCompact = MediaQuery.of(context).size.width < 360;
-    // Keep enough vertical room for avatar, status chip, and points card on phones.
-    final expandedHeight = isCompact ? 340.0 : 310.0;
+    // Keep enough room for identity, status, and metric cards in the hero section.
+    final expandedHeight = isCompact ? 400.0 : 360.0;
 
     final customer = customerAsync.valueOrNull;
 
@@ -98,18 +98,21 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           }
 
           final sales = salesAsync.valueOrNull ?? const <Sale>[];
-          final initials = customer.name.isNotEmpty
-              ? customer.name[0].toUpperCase()
-              : '?';
+          final initials =
+              customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?';
           final isActive = _isActiveCustomer(customer, sales);
-          final statusLabel = isActive
-              ? AppStrings.clienteAtivo
-              : AppStrings.clienteInativo;
+          final statusLabel =
+              isActive ? AppStrings.clienteAtivo : AppStrings.clienteInativo;
           final statusColor = isActive ? AppColors.green : AppColors.amber;
           final phoneLabel = customer.phone.isEmpty
               ? AppStrings.phoneRequired
               : MozPhoneUtils.maskForDisplay(customer.phone);
           final approxValue = _formatApproxMzn(customer.totalPoints);
+          final totalSpent = sales.fold<double>(
+            0,
+            (sum, sale) => sum + sale.amount,
+          );
+          final lastActivity = _lastActivity(customer, sales);
           final bottomPadding = MediaQuery.of(context).padding.bottom + 120;
 
           return CustomScrollView(
@@ -149,12 +152,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           20,
                           isCompact ? 44 : 56,
                           20,
-                          isCompact ? 16 : 20,
+                          isCompact ? 18 : 22,
                         ),
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isNarrow = constraints.maxWidth < 360;
-                            final infoRow = Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Container(
@@ -186,7 +189,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
@@ -211,7 +213,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                           fontWeight: FontWeight.w500,
                                         ),
                                       ),
-                                      const SizedBox(height: 8),
+                                      const SizedBox(height: 10),
                                       _StatusChip(
                                         label: statusLabel,
                                         color: statusColor,
@@ -220,37 +222,34 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                   ),
                                 ),
                               ],
-                            );
-
-                            if (isNarrow) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  infoRow,
-                                  const SizedBox(height: 12),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: _PointsSummaryCard(
-                                      points: customer.totalPoints,
-                                      approxValue: approxValue,
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }
-
-                            return Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
+                            ),
+                            const SizedBox(height: 16),
+                            _PointsSummaryCard(
+                              points: customer.totalPoints,
+                              approxValue: approxValue,
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
                               children: [
-                                Expanded(child: infoRow),
-                                const SizedBox(width: 12),
-                                _PointsSummaryCard(
-                                  points: customer.totalPoints,
-                                  approxValue: approxValue,
+                                Expanded(
+                                  child: _HeroMetricTile(
+                                    label: 'Total em vendas',
+                                    value:
+                                        '${totalSpent.toStringAsFixed(0)} ${AppStrings.moedaMzn}',
+                                    icon: Icons.payments_rounded,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _HeroMetricTile(
+                                    label: 'Ultima atividade',
+                                    value: _formatDayMonthYear(lastActivity),
+                                    icon: Icons.schedule_rounded,
+                                  ),
                                 ),
                               ],
-                            );
-                          },
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -269,50 +268,29 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                     ),
                     padding: const EdgeInsets.fromLTRB(16, 18, 16, 12),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Text(
+                          'Acoes rapidas',
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: AppColors.onSurface,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                        const SizedBox(height: 10),
                         LayoutBuilder(
                           builder: (context, constraints) {
-                            final isExtraNarrow = constraints.maxWidth < 340;
-                            if (!isExtraNarrow) {
-                              return Row(
-                                children: [
-                                  _ActionShortcut(
-                                    icon: Icons.add_rounded,
-                                    label: AppStrings.adicionarPontos,
-                                    onTap: () => context.push(
-                                      '/new-sale',
-                                      extra: NewSaleArgs(
-                                        preselectedCustomerId: customer.id,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  _ActionShortcut(
-                                    icon: Icons.chat_rounded,
-                                    label: AppStrings.enviarWhatsApp,
-                                    iconColor: const Color(0xFF27C26A),
-                                    onTap: () =>
-                                        _openWhatsApp(context, ref, customer),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  _ActionShortcut(
-                                    icon: Icons.receipt_long_rounded,
-                                    label: AppStrings.verHistorico,
-                                    onTap: _scrollToHistory,
-                                  ),
-                                ],
-                              );
-                            }
-
                             final itemWidth = (constraints.maxWidth - 12) / 2;
                             return Wrap(
                               spacing: 12,
                               runSpacing: 12,
-                              alignment: WrapAlignment.center,
+                              alignment: WrapAlignment.start,
                               children: [
                                 _ActionShortcut(
                                   icon: Icons.add_rounded,
                                   label: AppStrings.adicionarPontos,
+                                  isPrimary: true,
                                   expand: false,
                                   width: itemWidth,
                                   onTap: () => context.push(
@@ -337,6 +315,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                   expand: false,
                                   width: itemWidth,
                                   onTap: _scrollToHistory,
+                                ),
+                                _ActionShortcut(
+                                  icon: Icons.card_giftcard_rounded,
+                                  label: AppStrings.resgatarRecompensa,
+                                  expand: false,
+                                  width: itemWidth,
+                                  onTap: () =>
+                                      _showRedeemSheet(context, ref, customer),
                                 ),
                               ],
                             );
@@ -367,9 +353,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       Text(
                         AppStrings.historicoCompras,
                         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppColors.onSurface,
-                          fontWeight: FontWeight.w700,
-                        ),
+                              color: AppColors.onSurface,
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
                       const Spacer(),
                       TextButton(
@@ -539,25 +525,21 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       'https://wa.me/$number?text=${Uri.encodeComponent(draft.message)}',
     );
     if (!connectivity.isOnline) {
-      await ref
-          .read(notificationQueueServiceProvider)
-          .enqueueWhatsApp(
+      await ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
             phone: number,
             message: draft.message,
             source: 'customer_detail',
           );
       try {
-        await ref
-            .read(analyticsServiceProvider)
-            .record(
-              eventType: 'whatsapp_sent',
-              source: 'whatsapp',
-              properties: {
-                'queued': true,
-                'source': 'customer_detail',
-                'message_type': draft.type.name,
-              },
-            );
+        await ref.read(analyticsServiceProvider).record(
+          eventType: 'whatsapp_sent',
+          source: 'whatsapp',
+          properties: {
+            'queued': true,
+            'source': 'customer_detail',
+            'message_type': draft.type.name,
+          },
+        );
       } catch (e, st) {
         AppErrorReporter.report(e, st, hint: 'whatsapp_queued_analytics');
       }
@@ -577,24 +559,20 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
     if (launched) {
       try {
-        await ref
-            .read(usageTrackerProvider)
-            .record(
-              metricKey: UsageMetrics.whatsappMessages,
-              source: 'whatsapp',
-              metadata: {'message_type': draft.type.name},
-            );
-        await ref
-            .read(analyticsServiceProvider)
-            .record(
-              eventType: 'whatsapp_sent',
-              source: 'whatsapp',
-              properties: {
-                'queued': false,
-                'source': 'customer_detail',
-                'message_type': draft.type.name,
-              },
-            );
+        await ref.read(usageTrackerProvider).record(
+          metricKey: UsageMetrics.whatsappMessages,
+          source: 'whatsapp',
+          metadata: {'message_type': draft.type.name},
+        );
+        await ref.read(analyticsServiceProvider).record(
+          eventType: 'whatsapp_sent',
+          source: 'whatsapp',
+          properties: {
+            'queued': false,
+            'source': 'customer_detail',
+            'message_type': draft.type.name,
+          },
+        );
       } catch (e, st) {
         AppErrorReporter.report(e, st, hint: 'whatsapp_sent_analytics');
       }
@@ -620,6 +598,25 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final approxValue = points * AppConstants.pointsPerMzn;
     return '${AppStrings.aproxPrefix} $approxValue ${AppStrings.moedaMzn} '
         '${AppStrings.comprasSuffix}';
+  }
+
+  String _formatDayMonthYear(DateTime value) {
+    final monthNames = [
+      'jan',
+      'fev',
+      'mar',
+      'abr',
+      'mai',
+      'jun',
+      'jul',
+      'ago',
+      'set',
+      'out',
+      'nov',
+      'dez',
+    ];
+    final day = value.day.toString().padLeft(2, '0');
+    return '$day ${monthNames[value.month - 1]} ${value.year}';
   }
 }
 
@@ -669,7 +666,8 @@ class _PointsSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
         color: AppColors.primaryDark.withValues(alpha: 0.75),
         borderRadius: BorderRadius.circular(16),
@@ -681,9 +679,9 @@ class _PointsSummaryCard extends StatelessWidget {
           Text(
             AppStrings.saldoPontos,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontWeight: FontWeight.w600,
-            ),
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 6),
           Row(
@@ -691,9 +689,9 @@ class _PointsSummaryCard extends StatelessWidget {
               Text(
                 '$points ${AppStrings.pontosAbrev}',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.secondary,
-                  fontWeight: FontWeight.w800,
-                ),
+                      color: AppColors.secondary,
+                      fontWeight: FontWeight.w800,
+                    ),
               ),
               const SizedBox(width: 8),
               Container(
@@ -715,7 +713,71 @@ class _PointsSummaryCard extends StatelessWidget {
           Text(
             approxValue,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: Colors.white.withValues(alpha: 0.7),
+                  color: Colors.white.withValues(alpha: 0.7),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeroMetricTile extends StatelessWidget {
+  const _HeroMetricTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: AppColors.primaryDark.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Icon(icon, size: 16, color: AppColors.secondary),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ],
             ),
           ),
         ],
@@ -732,6 +794,7 @@ class _ActionShortcut extends StatelessWidget {
     this.iconColor,
     this.expand = true,
     this.width,
+    this.isPrimary = false,
   });
 
   final IconData icon;
@@ -740,13 +803,14 @@ class _ActionShortcut extends StatelessWidget {
   final Color? iconColor;
   final bool expand;
   final double? width;
+  final bool isPrimary;
 
   @override
   Widget build(BuildContext context) {
     final textStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
-      color: AppColors.primary,
-      fontWeight: FontWeight.w800,
-    );
+          color: isPrimary ? Colors.white : AppColors.primary,
+          fontWeight: FontWeight.w700,
+        );
 
     final shortcut = Material(
       color: Colors.transparent,
@@ -754,15 +818,25 @@ class _ActionShortcut extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Ink(
-          constraints: const BoxConstraints(minHeight: 96),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            gradient: isPrimary
+                ? const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [AppColors.primary, AppColors.primaryDark],
+                  )
+                : null,
+            color: isPrimary ? null : Colors.white,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.g100),
+            border: Border.all(
+              color: isPrimary ? Colors.transparent : AppColors.g100,
+            ),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.08),
+                color: isPrimary
+                    ? AppColors.primary.withValues(alpha: 0.24)
+                    : AppColors.primary.withValues(alpha: 0.08),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -774,12 +848,17 @@ class _ActionShortcut extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.secondaryLight,
+                  color: isPrimary
+                      ? AppColors.secondary.withValues(alpha: 0.18)
+                      : AppColors.secondaryLight,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   icon,
-                  color: iconColor ?? AppColors.secondary,
+                  color: iconColor ??
+                      (isPrimary
+                          ? AppColors.secondary
+                          : AppColors.secondaryDark),
                   size: 20,
                 ),
               ),
@@ -837,29 +916,18 @@ class _BottomCtaButton extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.add_shopping_cart_rounded,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   label,
-                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
                 ),
               ),
+              const SizedBox(width: 10),
               const Icon(Icons.arrow_forward_rounded, color: AppColors.primary),
             ],
           ),
@@ -910,15 +978,14 @@ class _RewardProgressPanel extends StatelessWidget {
     final rewardName = progress.nextRewardName ?? progress.unlockedRewardName;
     final target = progress.targetPoints ?? 0;
     final displayTarget = target > 0 ? target : progress.currentPoints;
-    final unclampedCurrent = !hasNext && displayTarget > 0
-        ? displayTarget
-        : progress.currentPoints;
+    final unclampedCurrent =
+        !hasNext && displayTarget > 0 ? displayTarget : progress.currentPoints;
     final displayCurrent = displayTarget > 0
         ? unclampedCurrent.clamp(0, displayTarget).toInt()
         : unclampedCurrent;
     final statusText = hasNext
         ? '${AppStrings.faltam} ${progress.pointsRemaining} '
-              '${AppStrings.pontosAbrev} ${AppStrings.para} $rewardName'
+            '${AppStrings.pontosAbrev} ${AppStrings.para} $rewardName'
         : '${AppStrings.recompensaPronta} $rewardName';
     final progressValue = progress.progressFraction.clamp(0.0, 1.0).toDouble();
 
@@ -1095,9 +1162,9 @@ class _SaleCard extends StatelessWidget {
                 Text(
                   '${sale.amount.toStringAsFixed(0)} ${AppStrings.moedaMzn}',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onSurface,
-                  ),
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
                 ),
                 const SizedBox(height: 2),
                 Text(

@@ -23,6 +23,7 @@ import '../features/legal/presentation/terms_screen.dart';
 import '../features/onboarding/presentation/sms_permission_screen.dart';
 import '../features/settings/presentation/merchant_config_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
+import '../features/appointments/presentation/appointments_screen.dart';
 import '../features/subscription/presentation/subscription_admin_screen.dart';
 import '../features/sync/presentation/pending_sync_screen.dart';
 
@@ -127,6 +128,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(path: '/sales', builder: (_, __) => const SalesHistoryScreen()),
+      GoRoute(
+        path: '/appointments',
+        builder: (_, __) => const AppointmentsScreen(),
+      ),
       GoRoute(
         path: '/retention',
         builder: (_, __) => const RetentionDashboardScreen(),

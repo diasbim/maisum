@@ -21,7 +21,7 @@ class RecurringCustomerCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.g100),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

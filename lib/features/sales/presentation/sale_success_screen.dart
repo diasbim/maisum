@@ -193,6 +193,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                           onQuickSelect: (days) =>
                               _handleQuickSchedule(customer.id, days),
                           onPickDate: () => _handleManualSchedule(customer.id),
+                          onViewAll: () => context.push('/appointments'),
                         ),
                         const SizedBox(height: 18),
                         _PrimaryCtaButton(
@@ -856,6 +857,7 @@ class _ScheduleNextVisitCard extends StatelessWidget {
     required this.isSaving,
     required this.onQuickSelect,
     required this.onPickDate,
+    required this.onViewAll,
   });
 
   final DateTime? selectedDate;
@@ -863,6 +865,7 @@ class _ScheduleNextVisitCard extends StatelessWidget {
   final bool isSaving;
   final ValueChanged<int> onQuickSelect;
   final VoidCallback onPickDate;
+  final VoidCallback onViewAll;
 
   @override
   Widget build(BuildContext context) {
@@ -881,18 +884,41 @@ class _ScheduleNextVisitCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Agendar próximo corte?',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Agendar próximo corte?',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: onViewAll,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.secondary,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                icon: const Icon(Icons.calendar_month_rounded, size: 16),
+                label: const Text('Ver agenda'),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 2),
           Text(
             'Escolha em 1 toque para aumentar a recorrência.',
             style: theme.textTheme.bodySmall?.copyWith(
               color: Colors.white.withValues(alpha: 0.78),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Sugestão rápida',
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: Colors.white.withValues(alpha: 0.65),
+              fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 10),
