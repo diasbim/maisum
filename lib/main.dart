@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'app/app.dart';
+import 'core/constants/app_constants.dart';
 import 'core/sync/background_sync.dart';
 import 'firebase_options.dart';
 
@@ -56,14 +57,14 @@ Future<void> _warmUpApp() async {
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]),
-    _configureFirebaseAuth(),
   ]);
 }
 
 Future<void> _configureFirebaseAuth() async {
   if (!kDebugMode ||
       kIsWeb ||
-      defaultTargetPlatform != TargetPlatform.android) {
+      defaultTargetPlatform != TargetPlatform.android ||
+      !AppConstants.allowTestPhoneAuthBypass) {
     return;
   }
 

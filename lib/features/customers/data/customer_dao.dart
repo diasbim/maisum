@@ -1,6 +1,7 @@
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/utils/moz_phone_utils.dart';
 import '../domain/customer.dart';
 
 class CustomerDao {
@@ -32,6 +33,7 @@ class CustomerDao {
     final digitsOnly = trimmed.replaceAll(RegExp(r'\D'), '');
     final isPhoneSearch =
         digitsOnly.isNotEmpty && digitsOnly.length == trimmed.length;
+    final normalizedPhoneQuery = _normalizeSearchDigits(digitsOnly);
 
     final rows = await db.query(
       'customers',
@@ -39,7 +41,7 @@ class CustomerDao {
         isPhoneSearch ? 'phone LIKE ?' : 'name LIKE ? COLLATE NOCASE',
       ),
       whereArgs: _withMerchantArgs([
-        '${isPhoneSearch ? digitsOnly : trimmed}%',
+        '${isPhoneSearch ? normalizedPhoneQuery : trimmed}%',
       ]),
       orderBy: 'name COLLATE NOCASE ASC',
       limit: 20,
@@ -47,12 +49,28 @@ class CustomerDao {
     return rows.map(customerFromMap).toList();
   }
 
+  String _normalizeSearchDigits(String digitsOnly) {
+    if (digitsOnly.length == 12 && digitsOnly.startsWith('258')) {
+      return digitsOnly.substring(3);
+    }
+    if (digitsOnly.length == 13 && digitsOnly.startsWith('0258')) {
+      return digitsOnly.substring(4);
+    }
+    return digitsOnly;
+  }
+
   Future<Customer?> findByPhone(String phone) async {
+    String normalizedPhone;
+    try {
+      normalizedPhone = MozPhoneUtils.normalizeToLocal(phone);
+    } on FormatException {
+      return null;
+    }
     final db = await _db.database;
     final rows = await db.query(
       'customers',
       where: _withMerchantScope('phone = ?'),
-      whereArgs: _withMerchantArgs([phone]),
+      whereArgs: _withMerchantArgs([normalizedPhone]),
       limit: 1,
     );
     if (rows.isEmpty) return null;
@@ -97,10 +115,11 @@ class CustomerDao {
   Future<Customer> create({required String name, required String phone}) async {
     final db = await _db.database;
     final now = DateTime.now();
+    final normalizedPhone = MozPhoneUtils.normalizeToLocal(phone);
     final customer = Customer(
       id: _uuid.v4(),
       name: name.isNotEmpty ? name : phone,
-      phone: phone,
+      phone: normalizedPhone,
       createdAt: now,
       updatedAt: now,
     );
@@ -131,11 +150,12 @@ class CustomerDao {
     required String phone,
   }) async {
     final db = await _db.database;
+    final normalizedPhone = MozPhoneUtils.normalizeToLocal(phone);
     await db.update(
       'customers',
       {
         'name': name,
-        'phone': phone,
+        'phone': normalizedPhone,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
         'synced': 0,
       },

@@ -46,6 +46,12 @@ class AppMigrations {
         version: 15,
         name: 'appointments + retention metrics',
         up: _createV15Schema),
+    MigrationStep(
+        version: 16,
+        name: 'customers phone scoped uniqueness',
+        up: _createV16Schema),
+    MigrationStep(
+        version: 17, name: 'appointments device id', up: _createV17Schema),
   ];
 
   static Future<void> migrate(
@@ -202,6 +208,7 @@ class _SchemaVerifier {
       'created_at',
       'updated_at',
       'synced',
+      'device_id',
     },
     'retention_metrics': {
       'id',
@@ -252,6 +259,8 @@ class _SchemaVerifier {
       await _createV13Schema(txn);
       await _createV14Schema(txn);
       await _createV15Schema(txn);
+      await _createV16Schema(txn);
+      await _createV17Schema(txn);
     });
   }
 
@@ -277,7 +286,7 @@ Future<void> _createV2Schema(DatabaseExecutor db) async {
     CREATE TABLE IF NOT EXISTS customers (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      phone TEXT UNIQUE NOT NULL,
+      phone TEXT NOT NULL,
       total_points INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL,
@@ -717,6 +726,78 @@ Future<void> _createV15Schema(DatabaseExecutor db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_retention_metrics_synced ON retention_metrics(merchant_id, synced)',
   );
+}
+
+Future<void> _createV16Schema(DatabaseExecutor db) async {
+  final customerColumns = await db.rawQuery('PRAGMA table_info(customers)');
+  if (customerColumns.isEmpty) {
+    return;
+  }
+
+  await db.execute('PRAGMA foreign_keys = OFF');
+  try {
+    await db.execute('DROP TABLE IF EXISTS customers_new');
+    await db.execute('''
+      CREATE TABLE customers_new (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        total_points INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        synced INTEGER NOT NULL DEFAULT 0,
+        merchant_id TEXT,
+        device_id TEXT
+      )
+    ''');
+
+    await db.execute('''
+      INSERT INTO customers_new (
+        id,
+        name,
+        phone,
+        total_points,
+        created_at,
+        updated_at,
+        synced,
+        merchant_id,
+        device_id
+      )
+      SELECT
+        id,
+        name,
+        phone,
+        total_points,
+        created_at,
+        updated_at,
+        synced,
+        merchant_id,
+        device_id
+      FROM customers
+    ''');
+
+    await db.execute('DROP TABLE customers');
+    await db.execute('ALTER TABLE customers_new RENAME TO customers');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_name_nocase ON customers(name COLLATE NOCASE)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_customers_merchant_id ON customers(merchant_id)',
+    );
+    await db.execute(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_scope_phone ON customers(COALESCE(merchant_id, '__global__'), phone)",
+    );
+  } finally {
+    await db.execute('PRAGMA foreign_keys = ON');
+  }
+}
+
+Future<void> _createV17Schema(DatabaseExecutor db) async {
+  await _addColumnIfMissing(db, 'appointments', 'device_id TEXT');
 }
 
 Future<void> _addColumnIfMissing(

@@ -124,8 +124,14 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       setState(() => _isVerifying = false);
       _pinController.clear();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.toString())));
+      final rawMessage = e.toString().trim();
+      final message = rawMessage.startsWith('Exception: ')
+          ? rawMessage.substring('Exception: '.length)
+          : rawMessage;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(message.isEmpty
+              ? 'Não foi possível validar o código. Tente novamente.'
+              : message)));
     }
   }
 

@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:sqflite/sqflite.dart' as sqflite;
 
 import '../constants/app_strings.dart';
 import 'app_exception.dart';
@@ -55,6 +56,22 @@ class AppErrorMapper {
       return const AppErrorInfo(
         title: 'Dados invalidos',
         message: AppStrings.erroGenerico,
+      );
+    }
+
+    if (error is sqflite.DatabaseException) {
+      final raw = error.toString().toLowerCase();
+      if (raw.contains('customers.phone') ||
+          raw.contains('idx_customers_merchant_phone') ||
+          raw.contains('unique constraint failed')) {
+        return const AppErrorInfo(
+          title: 'Número já registado',
+          message: AppStrings.customerPhoneDuplicate,
+        );
+      }
+      return const AppErrorInfo(
+        title: 'Erro de dados',
+        message: AppStrings.erroGenericoAcao,
       );
     }
 

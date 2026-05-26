@@ -104,7 +104,8 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
             if (!mounted) return;
             setState(() => _isLoading = false);
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text(AppStrings.erroAuth)),
+              SnackBar(
+                  content: Text(error.isEmpty ? AppStrings.erroAuth : error)),
             );
           },
           onAutoVerify: (credential) async {

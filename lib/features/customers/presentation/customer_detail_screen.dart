@@ -133,6 +133,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                 ),
                 actions: [
                   IconButton(
+                    icon: const Icon(
+                      Icons.calendar_month_rounded,
+                      color: Colors.white,
+                    ),
+                    tooltip: 'Ver marcações',
+                    onPressed: () => context.push('/appointments'),
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.edit_rounded, color: Colors.white),
                     onPressed: () => _showEditSheet(context, ref, customer),
                   ),

@@ -140,7 +140,7 @@ class AppTheme {
             borderSide: const BorderSide(color: AppColors.error, width: 2),
           ),
           hintStyle: const TextStyle(
-            color: AppColors.g300,
+            color: AppColors.g500,
             fontSize: 15,
             fontWeight: FontWeight.w400,
           ),
@@ -194,6 +194,7 @@ class AppTheme {
           behavior: SnackBarBehavior.floating,
           backgroundColor: AppColors.g800,
           contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+          insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),

@@ -12,11 +12,13 @@ class SyncStatusBar extends StatelessWidget {
     required this.status,
     required this.isOnline,
     this.onTap,
+    this.onRetry,
   });
 
   final SyncStatus status;
   final bool isOnline;
   final VoidCallback? onTap;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -108,10 +110,17 @@ class SyncStatusBar extends StatelessWidget {
                 ),
                 if (onTap != null) ...[
                   const SizedBox(width: AppSpacing.md),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: foreground.withValues(alpha: 0.7),
-                  ),
+                  if (status.viewState == SyncViewState.failed &&
+                      onRetry != null)
+                    TextButton(
+                      onPressed: onRetry,
+                      child: const Text(AppStrings.syncRetryNow),
+                    )
+                  else
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      color: foreground.withValues(alpha: 0.7),
+                    ),
                 ],
               ],
             ),
@@ -125,14 +134,11 @@ class SyncStatusBar extends StatelessWidget {
     if (!isOnline) {
       return AppColors.offline;
     }
-    if (status.lastError != null) {
+    if (status.viewState == SyncViewState.failed) {
       return AppColors.error;
     }
-    if (status.phase == SyncPhase.retrying) {
+    if (status.viewState == SyncViewState.syncing) {
       return AppColors.amber;
-    }
-    if (status.isSyncing) {
-      return AppColors.primary;
     }
     if (status.pendingCount > 0) {
       return AppColors.secondaryDark;
@@ -144,13 +150,10 @@ class SyncStatusBar extends StatelessWidget {
     if (!isOnline) {
       return AppColors.offlineBg;
     }
-    if (status.lastError != null) {
+    if (status.viewState == SyncViewState.failed) {
       return AppColors.errorContainer;
     }
-    if (status.phase == SyncPhase.retrying) {
-      return AppColors.amberLight;
-    }
-    if (status.pendingCount > 0 || status.isSyncing) {
+    if (status.pendingCount > 0 || status.viewState == SyncViewState.syncing) {
       return AppColors.secondaryLight;
     }
     return AppColors.white;
@@ -160,11 +163,8 @@ class SyncStatusBar extends StatelessWidget {
     if (!isOnline) {
       return Icons.wifi_off_rounded;
     }
-    if (status.lastError != null) {
+    if (status.viewState == SyncViewState.failed) {
       return Icons.sync_problem_rounded;
-    }
-    if (status.phase == SyncPhase.retrying) {
-      return Icons.schedule_rounded;
     }
     if (status.pendingCount > 0) {
       return Icons.cloud_upload_rounded;
@@ -176,14 +176,11 @@ class SyncStatusBar extends StatelessWidget {
     if (!isOnline) {
       return AppStrings.semLigacao;
     }
-    if (status.lastError != null) {
+    if (status.viewState == SyncViewState.failed) {
       return AppStrings.syncInterrompida;
     }
-    if (status.isSyncing) {
+    if (status.viewState == SyncViewState.syncing) {
       return AppStrings.sincronizando;
-    }
-    if (status.phase == SyncPhase.retrying) {
-      return 'A tentar novamente';
     }
     if (status.pendingCount > 0) {
       return '${status.pendingCount} ${AppStrings.pendentesSync}';
@@ -195,17 +192,11 @@ class SyncStatusBar extends StatelessWidget {
     if (!isOnline) {
       return 'As vendas continuam guardadas no telemóvel.';
     }
-    if (status.lastError != null) {
-      return status.lastError!;
+    if (status.viewState == SyncViewState.failed) {
+      return status.lastError ?? AppStrings.syncFailedActionable;
     }
-    if (status.isSyncing) {
+    if (status.viewState == SyncViewState.syncing) {
       return 'A atualizar clientes, vendas e recompensas.';
-    }
-    if (status.phase == SyncPhase.retrying) {
-      if (status.nextRetryAt != null) {
-        return 'Nova tentativa às ${PtDateFormat.dayMonthTime(status.nextRetryAt!)}.';
-      }
-      return 'A aguardar a próxima tentativa automática.';
     }
     if (status.pendingCount > 0) {
       return 'Toque para ver o que falta enviar.';

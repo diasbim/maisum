@@ -1,4 +1,13 @@
 class AppStrings {
+  static String clientesCount(int total) =>
+      '$total ${total == 1 ? 'cliente' : 'clientes'}';
+
+  static String clientesVisibleCount(int visible, int total) {
+    final visibleLabel = visible == 1 ? 'cliente' : 'clientes';
+    final totalLabel = total == 1 ? 'cliente' : 'clientes';
+    return '$visible $visibleLabel de $total $totalLabel';
+  }
+
   // App
   static const String appName = 'MaisUm';
 
@@ -54,17 +63,17 @@ class AppStrings {
 
   // Sales
   static const String novaVendaTitle = 'Nova Venda';
-    static const String cliente = 'Cliente';
-    static const String confirmar = 'Confirmar';
-    static const String resumo = 'Resumo';
-    static const String valorStep = 'Valor';
-    static const String nomeOuTelefoneCliente = 'Nome ou telefone do cliente';
-    static const String outroValor = 'Outro valor';
-    static const String ultimo = 'Último';
-    static const String clienteGanhara = 'O cliente ganhará';
-    static const String pontosAposConfirmacao =
-            'Os pontos serão adicionados após confirmação da venda.';
-    static const String por = 'por';
+  static const String cliente = 'Cliente';
+  static const String confirmar = 'Confirmar';
+  static const String resumo = 'Resumo';
+  static const String valorStep = 'Valor';
+  static const String nomeOuTelefoneCliente = 'Nome ou telefone do cliente';
+  static const String outroValor = 'Outro valor';
+  static const String ultimo = 'Último';
+  static const String clienteGanhara = 'O cliente ganhará';
+  static const String pontosAposConfirmacao =
+      'Os pontos serão adicionados após confirmação da venda.';
+  static const String por = 'por';
   static const String selecionarCliente = 'Selecionar cliente';
   static const String buscarTelefone = 'Buscar por telefone';
   static const String novoCliente = 'Novo cliente';
@@ -153,6 +162,9 @@ class AppStrings {
   static const String syncPendingToSend = 'por enviar';
   static const String offline = 'Sem ligação à internet';
   static const String semLigacao = 'A trabalhar offline';
+  static const String syncRetryNow = 'Tentar agora';
+  static const String syncFailedActionable =
+      'Não foi possível sincronizar alguns registos. Verifique a internet e tente novamente.';
 
   // Settings
   static const String definicoes = 'Definições';
@@ -225,6 +237,8 @@ class AppStrings {
 
   // Errors
   static const String erroGenerico = 'Algo correu mal. Tente novamente.';
+  static const String erroGenericoAcao =
+      'Não foi possível concluir esta ação. Tente novamente.';
   static const String erroRede = 'Sem ligação à internet.';
   static const String erroAuth = 'Sessão expirada. Faça login novamente.';
   static const String erroServidor = 'Erro no servidor. Tente mais tarde.';
@@ -240,6 +254,11 @@ class AppStrings {
   static const String amountRequired = 'Introduza o valor da venda';
   static const String amountInvalid = 'Valor inválido';
   static const String nameRequired = 'Introduza o nome do cliente';
+  static const String customerPhoneDuplicate =
+      'Este número já está associado a outro cliente nesta conta.';
+  static const String customerCreatedSuccess = 'Cliente criado com sucesso.';
+  static const String saleRegisteredSuccess = 'Venda registada com sucesso.';
+  static const String dateSavedSuccess = 'Data guardada com sucesso.';
   static const String rewardNameRequired = 'Introduza o nome da recompensa';
   static const String pointsRequired = 'Introduza os pontos necessários';
   static const String merchantNameRequired = 'Introduza o nome do negócio';

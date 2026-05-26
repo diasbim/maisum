@@ -4,6 +4,7 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:uuid/uuid.dart';
 
 import '../database/app_database.dart';
+import '../errors/app_exception.dart';
 import '../errors/app_error_reporter.dart';
 import '../network/json_api_client.dart';
 import '../services/connectivity_service.dart';
@@ -85,8 +86,12 @@ class AnalyticsService {
       params['source'] = source;
     }
     raw?.forEach((key, value) {
-      if (value is String || value is num || value is bool) {
+      if (value is String || value is num) {
         params[key] = value;
+        return;
+      }
+      if (value is bool) {
+        params[key] = value ? 1 : 0;
       }
     });
     return params;
@@ -121,7 +126,9 @@ class AnalyticsService {
       await _dao.markSynced(events.map((e) => e.id).toList());
     } catch (e, st) {
       // Best effort analytics; failures remain queued.
-      AppErrorReporter.report(e, st, hint: 'analytics_flush');
+      if (e is! NetworkException) {
+        AppErrorReporter.report(e, st, hint: 'analytics_flush');
+      }
     } finally {
       _flushing = false;
     }

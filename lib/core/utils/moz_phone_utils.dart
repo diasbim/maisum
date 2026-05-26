@@ -28,6 +28,12 @@ class MozPhoneUtils {
         'Número de telefone inválido. Use: 8X XXX XXXX');
   }
 
+  /// Normalises a raw phone input to local 9-digit format (8XXXXXXXX).
+  static String normalizeToLocal(String raw) {
+    final e164 = normalizeToE164(raw);
+    return e164.substring(4);
+  }
+
   static bool _isValidLocal(String local) {
     if (local.length != 9) return false;
     if (!RegExp(r'^\d{9}$').hasMatch(local)) return false;

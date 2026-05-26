@@ -1,9 +1,15 @@
 server:
   port: 8080
 
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/loyaltyos}
+    url: ${DB_URL:jdbc:postgresql://${DB_HOST:loyaltyos-fc4dd-service}:${DB_PORT:5432}/${DB_NAME:maisum}}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
   jpa:

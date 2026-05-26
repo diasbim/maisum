@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/app_lock_wrapper.dart';
@@ -18,6 +19,13 @@ class LoyaltyApp extends ConsumerWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
+      locale: const Locale('pt', 'PT'),
+      supportedLocales: const [Locale('pt', 'PT')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       routerConfig: router,
       builder: (_, child) => AppLockWrapper(
         child: SmsSuggestionListener(

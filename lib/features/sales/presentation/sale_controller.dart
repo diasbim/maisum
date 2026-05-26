@@ -46,6 +46,15 @@ class SaleController extends AsyncNotifier<SaleResult?> {
         source: 'sale',
         properties: {'amount': amount, 'points': sale.points},
       );
+      await ref.read(analyticsServiceProvider).record(
+        eventType: 'sale_registration_completed',
+        source: 'sale',
+        properties: {
+          'amount': amount,
+          'points': sale.points,
+          'customer_id': customerId,
+        },
+      );
       final streak = await ref.read(streakServiceProvider).getCurrentStreak();
       await ref.read(analyticsServiceProvider).record(
         eventType: 'streak_updated',

@@ -10,6 +10,7 @@
         android:label="MaisUm"
         android:icon="@mipmap/ic_launcher"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:enableOnBackInvokedCallback="true"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"

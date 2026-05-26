@@ -10,6 +10,8 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/quick_amount_button.dart';
+import '../../../core/widgets/app_feedback.dart';
+import '../../../core/errors/app_error_mapper.dart';
 import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customers_controller.dart';
 import 'sale_controller.dart';
@@ -123,23 +125,34 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   Future<void> _createAndSelectCustomer() async {
     final phone = _phoneCtrl.text.trim();
     if (phone.isEmpty) return;
-    final customer = await ref
-        .read(customersControllerProvider.notifier)
-        .createCustomer(name: phone, phone: phone);
-    _selectCustomer(customer);
+    try {
+      final customer = await ref
+          .read(customersControllerProvider.notifier)
+          .createCustomer(name: phone, phone: phone);
+      _selectCustomer(customer);
+      if (mounted) {
+        AppFeedback.showMessage(
+          context,
+          message: AppStrings.customerCreatedSuccess,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final info = AppErrorMapper.describe(e);
+      AppFeedback.showMessage(context, message: info.message);
+    }
   }
 
   Future<void> _confirmSale() async {
     if (_selectedCustomer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecione um cliente primeiro')),
+      AppFeedback.showMessage(
+        context,
+        message: 'Selecione um cliente primeiro.',
       );
       return;
     }
     if (_amount < 1) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text(AppStrings.amountInvalid)));
+      AppFeedback.showMessage(context, message: AppStrings.amountInvalid);
       return;
     }
 

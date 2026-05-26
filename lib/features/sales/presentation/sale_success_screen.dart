@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/errors/app_error_reporter.dart';
 import '../../customers/domain/customer.dart';
@@ -278,8 +279,9 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     );
     final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.erroGenerico)),
+      AppFeedback.showMessage(
+        context,
+        message: 'Não foi possível abrir o SMS neste dispositivo.',
       );
     }
   }
@@ -298,16 +300,15 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     );
     if (!decision.allowed) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.funcaoIndisponivel)),
+        AppFeedback.showMessage(
+          context,
+          message: AppStrings.funcaoIndisponivel,
         );
       }
       return;
     }
     if (decision.softLimited && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.limiteSoftAviso)),
-      );
+      AppFeedback.showMessage(context, message: AppStrings.limiteSoftAviso);
     }
 
     if (!connectivity.isOnline) {
@@ -327,9 +328,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         );
       } catch (_) {}
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.whatsappQueued)),
-        );
+        AppFeedback.showMessage(context, message: AppStrings.whatsappQueued);
       }
       return;
     }
@@ -342,8 +341,9 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     );
     final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.erroGenerico)),
+      AppFeedback.showMessage(
+        context,
+        message: 'Não foi possível abrir o WhatsApp neste dispositivo.',
       );
       return;
     }
@@ -375,12 +375,13 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
   }
 
   Future<void> _handleManualSchedule(String customerId) async {
-    final now = DateTime.now();
+    final now = DateUtils.dateOnly(DateTime.now());
     final picked = await showDatePicker(
       context: context,
       initialDate: now.add(const Duration(days: 14)),
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
+      locale: const Locale('pt', 'PT'),
       helpText: 'Escolher data do próximo corte',
       cancelText: 'Cancelar',
       confirmText: 'Guardar',
@@ -411,18 +412,13 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         _scheduledDate = scheduledDate;
         _appointmentCreated = true;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Próximo corte agendado para ${_formatDate(scheduledDate)}',
-          ),
-        ),
+      AppFeedback.showMessage(
+        context,
+        message: 'Próximo corte agendado para ${_formatDate(scheduledDate)}.',
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(AppStrings.erroGenerico)),
-      );
+      AppFeedback.showMessage(context, message: AppStrings.erroGenericoAcao);
     }
   }
 

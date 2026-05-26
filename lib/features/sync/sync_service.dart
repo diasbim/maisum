@@ -70,6 +70,19 @@ class SyncStatus {
   bool get isSyncing => phase == SyncPhase.syncing;
   bool get hasPending => pendingCount > 0;
   bool get hasFailures => failedCount > 0;
+  SyncViewState get viewState {
+    if (!isOnline) return SyncViewState.idle;
+    if (phase == SyncPhase.syncing || phase == SyncPhase.retrying) {
+      return SyncViewState.syncing;
+    }
+    if (phase == SyncPhase.syncFailed || lastError != null || hasFailures) {
+      return SyncViewState.failed;
+    }
+    if (phase == SyncPhase.synced && pendingCount == 0) {
+      return SyncViewState.success;
+    }
+    return SyncViewState.idle;
+  }
 
   SyncStatus copyWith({
     bool? isOnline,
@@ -100,6 +113,8 @@ enum SyncPhase {
   syncFailed,
   retrying,
 }
+
+enum SyncViewState { idle, syncing, success, failed }
 
 const _keep = Object();
 
@@ -594,7 +609,19 @@ class SyncService {
       whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'scheduled_date',
+      'status',
+      'source',
+      'reminder_sent',
+      'created_at',
+      'updated_at',
+      'synced',
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('appointments', incoming);

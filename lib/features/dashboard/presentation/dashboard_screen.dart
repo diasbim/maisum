@@ -7,6 +7,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/brand_mark.dart';
+import '../../../core/widgets/contextual_error_state.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/sync_status_bar.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -14,6 +15,7 @@ import '../../sync/sync_controller.dart';
 import '../../sync/sync_service.dart';
 import '../../../app/providers.dart' as app_providers;
 import 'dashboard_controller.dart';
+import 'widgets/customer_conversion_widgets.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -33,6 +35,7 @@ class DashboardScreen extends ConsumerWidget {
         status: syncStatus,
         isOnline: isOnline,
         onTap: () => context.push('/pending-sync'),
+        onRetry: () => ref.read(syncControllerProvider.notifier).sync(),
       ),
       body: RefreshIndicator(
         color: AppColors.secondary,
@@ -73,7 +76,16 @@ class DashboardScreen extends ConsumerWidget {
                   data: (s) => _DashboardBody(
                     stats: s,
                     syncStatus: syncStatus,
+                    onRetrySync: () =>
+                        ref.read(syncControllerProvider.notifier).sync(),
                     onNewSale: () async {
+                      await ref
+                          .read(app_providers.analyticsServiceProvider)
+                          .record(
+                        eventType: 'sale_registration_started',
+                        source: 'dashboard',
+                        properties: {'entry_point': 'primary_sale_card'},
+                      );
                       await context.push('/new-sale');
                       ref.read(dashboardControllerProvider.notifier).refresh();
                     },
@@ -243,11 +255,13 @@ class _DashboardBody extends StatelessWidget {
   const _DashboardBody({
     required this.stats,
     required this.syncStatus,
+    required this.onRetrySync,
     required this.onNewSale,
   });
 
   final DashboardStats stats;
   final SyncStatus syncStatus;
+  final VoidCallback onRetrySync;
   final VoidCallback onNewSale;
 
   @override
@@ -260,6 +274,15 @@ class _DashboardBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _PrimarySaleCard(onTap: onNewSale),
+        if (syncStatus.viewState == SyncViewState.failed) ...[
+          const SizedBox(height: AppSpacing.lg),
+          SyncStatusBanner(
+            message: syncStatus.lastError ??
+                'A sincronização falhou. Toque para tentar novamente.',
+            icon: Icons.sync_problem_rounded,
+            onTap: onRetrySync,
+          ),
+        ],
         const SizedBox(height: AppSpacing.xxl),
         if (showEmpty)
           EmptyState(
@@ -358,7 +381,7 @@ class _DashboardBody extends StatelessWidget {
                   SizedBox(
                     width: tileWidth,
                     child: _MiniActionTile(
-                      label: 'Retencao',
+                      label: 'Retenção',
                       subtitle: 'Recorrentes e clientes em risco',
                       icon: Icons.insights_rounded,
                       onTap: () => context.push('/retention'),
@@ -558,6 +581,29 @@ class _OfflineStatusBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DashboardSyncErrorBanner extends StatelessWidget {
+  const _DashboardSyncErrorBanner({
+    required this.status,
+    required this.onRetry,
+  });
+
+  final SyncStatus status;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (status.viewState != SyncViewState.failed) {
+      return const SizedBox.shrink();
+    }
+    return ContextualErrorState(
+      title: AppStrings.syncInterrompida,
+      message: status.lastError ?? AppStrings.syncFailedActionable,
+      onRetry: onRetry,
+      compact: true,
     );
   }
 }
