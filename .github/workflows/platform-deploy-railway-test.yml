@@ -46,19 +46,19 @@ jobs:
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
-          RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE }}
+          RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT || vars.RAILWAY_ENVIRONMENT }}
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Missing secret: RAILWAY_TOKEN"
+            echo "Missing secret: RAILWAY_TOKEN (Environment: test)"
             exit 1
           fi
           if [ -z "$RAILWAY_SERVICE" ]; then
-            echo "Missing secret: RAILWAY_SERVICE"
+            echo "Missing config: RAILWAY_SERVICE (set as secret or variable in Environment: test)"
             exit 1
           fi
           if [ -z "$RAILWAY_ENVIRONMENT" ]; then
-            echo "Missing secret: RAILWAY_ENVIRONMENT"
+            echo "Missing config: RAILWAY_ENVIRONMENT (set as secret or variable in Environment: test)"
             exit 1
           fi
           railway up platform --service "$RAILWAY_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --detach
