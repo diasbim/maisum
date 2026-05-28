@@ -56,6 +56,8 @@ Example DATABASE_PUBLIC_URL format:
 
 The app already supports PORT fallback in application.yml.
 
+Note: The CI workflow also deploys using the explicit platform path (`railway up platform ...`) so Railpack analyzes the Java backend subdirectory in this monorepo instead of Flutter files at repository root.
+
 ---
 
 ## 3. Trigger deployment

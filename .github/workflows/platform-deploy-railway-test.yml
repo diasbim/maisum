@@ -143,5 +143,4 @@ jobs:
         run: railway environment $RAILWAY_ENVIRONMENT
 
       - name: Deploy to Railway
-        working-directory: platform
-        run: railway up --service=$RAILWAY_SERVICE
+        run: railway up platform --service=$RAILWAY_SERVICE
