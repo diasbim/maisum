@@ -87,6 +87,12 @@ jobs:
           set -euo pipefail
           if [ -z "$RAILWAY_TOKEN" ]; then
             echo "RAILWAY_TOKEN is empty"
+            echo "Expected source: repository secret named RAILWAY_TOKEN"
+            echo "Common causes:"
+            echo "- Secret exists only in an Environment, but this workflow uses repository-level secret scope"
+            echo "- Secret was added as a Variable instead of a Secret"
+            echo "- Workflow run does not have access to secrets (for example, forked PR contexts)"
+            echo "- Organization secret policy does not grant access to this repository"
             exit 1
           else
             echo "RAILWAY_TOKEN exists"
