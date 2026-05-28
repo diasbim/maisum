@@ -1,0 +1,64 @@
+name: Platform Deploy (Railway Test)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "platform/**"
+      - ".github/workflows/platform-deploy-railway-test.yml"
+
+permissions:
+  contents: read
+
+env:
+  JAVA_VERSION: "17"
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment:
+      name: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Run platform tests
+        run: mvn -f platform/pom.xml test -DfailIfNoTests=false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE }}
+          RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "Missing secret: RAILWAY_TOKEN"
+            exit 1
+          fi
+          if [ -z "$RAILWAY_SERVICE" ]; then
+            echo "Missing secret: RAILWAY_SERVICE"
+            exit 1
+          fi
+          if [ -z "$RAILWAY_ENVIRONMENT" ]; then
+            echo "Missing secret: RAILWAY_ENVIRONMENT"
+            exit 1
+          fi
+          railway up platform --service "$RAILWAY_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --detach
