@@ -69,4 +69,16 @@ jobs:
             exit 1
           fi
 
-          railway up platform --service "$RAILWAY_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --detach
+          service_lc="${RAILWAY_SERVICE,,}"
+          if [ "$service_lc" = "postgres" ] || [ "$service_lc" = "postgresql" ]; then
+            echo "Invalid RAILWAY_SERVICE: '$RAILWAY_SERVICE'"
+            echo "Use the Railway APP service name (backend), not the database service."
+            exit 1
+          fi
+
+          railway up platform --service "$RAILWAY_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --detach || {
+            echo "Railway deploy failed."
+            echo "Verify RAILWAY_SERVICE matches the exact app service name in the selected Railway project/environment."
+            echo "Current values: service='$RAILWAY_SERVICE', environment='$RAILWAY_ENVIRONMENT'."
+            exit 1
+          }
