@@ -37,6 +37,8 @@ jobs:
     name: Validate, Test, and Deploy Platform to Railway
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    environment:
+      name: production
 
     steps:
       - name: Checkout code

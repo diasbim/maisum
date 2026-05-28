@@ -2,7 +2,7 @@
 
 ## Goal
 
-Deploy the backend in platform/ using GitHub Actions with repository-level secrets and variables.
+Deploy the backend in platform/ using GitHub Actions with GitHub Environment-scoped secrets and variables.
 
 ## What is prepared in this repo
 
@@ -11,14 +11,14 @@ Deploy the backend in platform/ using GitHub Actions with repository-level secre
 
 ---
 
-## 1. Configure repository-level CI/CD values
+## 1. Configure CI/CD values in GitHub Environment
 
 In GitHub repository settings:
 
-1. Open Secrets and variables > Actions.
-2. Add repository secret:
+1. Open Environments > production.
+2. Add environment secret:
    - RAILWAY_TOKEN
-3. Add repository variables:
+3. Add environment variables:
    - RAILWAY_PROJECT_ID
    - RAILWAY_SERVICE
    - RAILWAY_ENVIRONMENT
