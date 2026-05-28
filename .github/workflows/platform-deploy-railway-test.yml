@@ -49,16 +49,24 @@ jobs:
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE }}
           RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT || vars.RAILWAY_ENVIRONMENT }}
         run: |
+          missing=0
+
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Missing config: RAILWAY_TOKEN (set as secret or variable in Environment: test)"
-            exit 1
+            echo "Missing RAILWAY_TOKEN"
+            missing=1
           fi
           if [ -z "$RAILWAY_SERVICE" ]; then
-            echo "Missing config: RAILWAY_SERVICE (set as secret or variable in Environment: test)"
-            exit 1
+            echo "Missing RAILWAY_SERVICE"
+            missing=1
           fi
           if [ -z "$RAILWAY_ENVIRONMENT" ]; then
-            echo "Missing config: RAILWAY_ENVIRONMENT (set as secret or variable in Environment: test)"
+            echo "Missing RAILWAY_ENVIRONMENT"
+            missing=1
+          fi
+
+          if [ "$missing" -eq 1 ]; then
+            echo "Configure the missing values in GitHub Actions Environment: test"
             exit 1
           fi
+
           railway up platform --service "$RAILWAY_SERVICE" --environment "$RAILWAY_ENVIRONMENT" --detach
