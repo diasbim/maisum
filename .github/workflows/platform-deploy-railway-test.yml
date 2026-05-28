@@ -82,6 +82,19 @@ jobs:
             echo "RAILWAY_ENVIRONMENT=${{ github.event.inputs.railway_environment }}" >> "$GITHUB_ENV"
           fi
 
+      - name: Log Current Environment Context
+        run: |
+          set -euo pipefail
+          echo "GITHUB_REPOSITORY=$GITHUB_REPOSITORY"
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_EVENT_NAME=$GITHUB_EVENT_NAME"
+          echo "RUNNER_OS=$RUNNER_OS"
+
+          if [ -n "${RAILWAY_PROJECT_ID:-}" ]; then echo "RAILWAY_PROJECT_ID is set"; else echo "RAILWAY_PROJECT_ID is not set"; fi
+          if [ -n "${RAILWAY_SERVICE:-}" ]; then echo "RAILWAY_SERVICE is set"; else echo "RAILWAY_SERVICE is not set"; fi
+          if [ -n "${RAILWAY_ENVIRONMENT:-}" ]; then echo "RAILWAY_ENVIRONMENT is set"; else echo "RAILWAY_ENVIRONMENT is not set"; fi
+          if [ -n "${RAILWAY_TOKEN:-}" ]; then echo "RAILWAY_TOKEN is set"; else echo "RAILWAY_TOKEN is not set"; fi
+
       - name: Validate Railway Token
         run: |
           set -euo pipefail
