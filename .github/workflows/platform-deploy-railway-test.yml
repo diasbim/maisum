@@ -45,12 +45,12 @@ jobs:
 
       - name: Deploy to Railway
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN || vars.RAILWAY_TOKEN }}
           RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE }}
           RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT || vars.RAILWAY_ENVIRONMENT }}
         run: |
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Missing secret: RAILWAY_TOKEN (Environment: test)"
+            echo "Missing config: RAILWAY_TOKEN (set as secret or variable in Environment: test)"
             exit 1
           fi
           if [ -z "$RAILWAY_SERVICE" ]; then
