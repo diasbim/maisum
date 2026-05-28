@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     environment:
-      name: test
+      name: production
 
     steps:
       - name: Checkout
@@ -66,7 +66,7 @@ jobs:
           fi
 
           if [ "$missing" -eq 1 ]; then
-            echo "Configure the missing values in GitHub Actions Environment: test"
+            echo "Configure the missing values in GitHub Actions Environment: production"
             exit 1
           fi
 
@@ -96,7 +96,7 @@ jobs:
             elif echo "$deploy_output" | grep -qi "Service not found"; then
               echo "Railway deploy failed: service not found."
               echo "Verify RAILWAY_SERVICE matches the exact app service name in the selected Railway project/environment."
-              echo "If CI is not linked to the intended Railway project, set RAILWAY_PROJECT_ID in GitHub Environment: test."
+              echo "If CI is not linked to the intended Railway project, set RAILWAY_PROJECT_ID in GitHub Actions Environment: production."
             else
               echo "Railway deploy failed."
               echo "Verify RAILWAY_SERVICE, RAILWAY_ENVIRONMENT, and optional RAILWAY_PROJECT_ID values."
