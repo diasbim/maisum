@@ -9,6 +9,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/pt_date_format.dart';
 import '../../../core/utils/moz_phone_utils.dart';
+import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/primary_button.dart';
@@ -475,8 +476,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     ).then((redeemed) {
       if (redeemed == true && context.mounted) {
         ref.invalidate(customerDetailProvider(widget.id));
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.resgateRegistado)),
+        AppFeedback.showSuccessToast(
+          context,
+          message: AppStrings.resgateRegistado,
         );
       }
     });
@@ -495,16 +497,18 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     );
     if (!decision.allowed) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.funcaoIndisponivel)),
+        AppFeedback.showMessage(
+          context,
+          message: AppStrings.funcaoIndisponivel,
         );
       }
       return;
     }
     if (decision.softLimited && context.mounted) {
-      ScaffoldMessenger.of(
+      AppFeedback.showMessage(
         context,
-      ).showSnackBar(const SnackBar(content: Text(AppStrings.limiteSoftAviso)));
+        message: AppStrings.limiteSoftAviso,
+      );
     }
 
     List<Sale> sales;
@@ -552,17 +556,20 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         AppErrorReporter.report(e, st, hint: 'whatsapp_queued_analytics');
       }
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.whatsappQueued)),
+        AppFeedback.showSuccessToast(
+          context,
+          message: AppStrings.whatsappQueued,
         );
       }
       return;
     }
     final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
     if (!launched && context.mounted) {
-      ScaffoldMessenger.of(
+      AppFeedback.showMessage(
         context,
-      ).showSnackBar(const SnackBar(content: Text(AppStrings.erroGenerico)));
+        message: AppStrings.erroGenerico,
+        isError: true,
+      );
       return;
     }
     if (launched) {
@@ -1235,9 +1242,11 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
     final name = _nameCtrl.text.trim();
     final phone = _phoneCtrl.text.trim();
     if (name.isEmpty) {
-      ScaffoldMessenger.of(
+      AppFeedback.showMessage(
         context,
-      ).showSnackBar(const SnackBar(content: Text(AppStrings.nameRequired)));
+        message: AppStrings.nameRequired,
+        isError: true,
+      );
       return;
     }
     setState(() => _saving = true);
@@ -1248,9 +1257,11 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        AppFeedback.showMessage(
           context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+          message: e.toString(),
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);

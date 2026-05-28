@@ -37,12 +37,18 @@ class DashboardController extends AsyncNotifier<DashboardStats> {
   Future<DashboardStats> build() => _load();
 
   Future<DashboardStats> _load() async {
-    final salesStats = await ref.read(saleRepositoryProvider).getTodayStats();
-    final pendingCount = await ref.read(syncDaoProvider).getPendingCount();
-    final totalCustomers = await ref.read(customerDaoProvider).getCount();
-    final returningCustomers =
-        await ref.read(saleDaoProvider).getReturningCustomersCount(days: 30);
-    final streak = await ref.read(streakServiceProvider).getCurrentStreak();
+    final salesFuture = ref.read(saleRepositoryProvider).getTodayStats();
+    final pendingFuture = ref.read(syncDaoProvider).getPendingCount();
+    final totalCustomersFuture = ref.read(customerDaoProvider).getCount();
+    final returningFuture =
+        ref.read(saleDaoProvider).getReturningCustomersCount(days: 30);
+    final streakFuture = ref.read(streakServiceProvider).getCurrentStreak();
+
+    final salesStats = await salesFuture;
+    final pendingCount = await pendingFuture;
+    final totalCustomers = await totalCustomersFuture;
+    final returningCustomers = await returningFuture;
+    final streak = await streakFuture;
 
     return DashboardStats(
       todaySaleCount: salesStats['count'] as int? ?? 0,
@@ -56,7 +62,6 @@ class DashboardController extends AsyncNotifier<DashboardStats> {
   }
 
   Future<void> refresh() async {
-    state = const AsyncLoading();
     state = await AsyncValue.guard(_load);
   }
 }

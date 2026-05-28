@@ -57,7 +57,11 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
               icon: const Icon(Icons.sync_rounded),
               tooltip: 'Sincronizar agora',
               onPressed: () async {
-                await ref.read(syncControllerProvider.notifier).sync();
+                final controller = ref.read(syncControllerProvider.notifier);
+                if (syncStatus.hasFailures) {
+                  await controller.retryFailed();
+                }
+                await controller.sync();
                 ref.invalidate(pendingSyncItemsProvider);
               },
             ),
@@ -82,7 +86,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
             return const EmptyState(
               title: 'Fila limpa e pronta.',
               subtitle:
-                  'Quando estiver sem internet, as alterações aparecem aqui e seguem automaticamente depois.',
+                  'Guardado offline e sincronização automática activa quando houver internet.',
             );
           }
           return RefreshIndicator(
@@ -100,7 +104,9 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
               itemBuilder: (_, i) => _SyncItemTile(
                 item: items[i],
                 onRetry: items[i].status == 'failed'
-                    ? () => ref.read(syncControllerProvider.notifier).sync()
+                    ? () => ref
+                        .read(syncControllerProvider.notifier)
+                        .retryFailed(itemId: items[i].id)
                     : null,
               ),
             ),

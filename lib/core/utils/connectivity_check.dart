@@ -1,6 +1,8 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/app_feedback.dart';
+
 class ConnectivityCheck {
   static Future<bool> isConnected() async {
     final results = await Connectivity().checkConnectivity();
@@ -8,10 +10,10 @@ class ConnectivityCheck {
   }
 
   static void showNoConnectionSnackBar(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Sem conexão à internet. Verifique a sua ligação.'),
-      ),
+    AppFeedback.showMessage(
+      context,
+      message: 'Sem conexão à internet. Verifique a sua ligação.',
+      isError: true,
     );
   }
 }

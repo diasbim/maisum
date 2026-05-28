@@ -111,8 +111,8 @@ void main() {
       await tester.pumpWidget(_buildCustomerList(customers));
       await tester.pumpAndSettle();
 
-      expect(find.text('841000001'), findsOneWidget);
-      expect(find.text('842000002'), findsOneWidget);
+      expect(find.text('*** *** 0001'), findsOneWidget);
+      expect(find.text('*** *** 0002'), findsOneWidget);
     });
 
     testWidgets('does not show EmptyState when customers exist',
@@ -145,7 +145,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(FloatingActionButton), findsOneWidget);
-      expect(find.byIcon(Icons.person_add_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.person_add_alt_1_rounded), findsOneWidget);
     });
 
     testWidgets('shows CircularProgressIndicator while loading',
@@ -163,4 +163,3 @@ void main() {
     });
   });
 }
-

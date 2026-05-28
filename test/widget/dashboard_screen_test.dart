@@ -23,7 +23,7 @@ class _FakeDashboardController extends DashboardController {
 
 class _FakeSyncController extends SyncController {
   @override
-  SyncStatus build() => const SyncStatus();
+  SyncStatus build() => const SyncStatus(isOnline: true);
 }
 
 class _SlowDashboardController extends DashboardController {
@@ -58,8 +58,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.vendasHoje), findsOneWidget);
-      expect(find.text(AppStrings.pontosHoje), findsOneWidget);
-      expect(find.text('1 clientes registados'), findsOneWidget);
+      expect(find.text(AppStrings.pontosHoje), findsAtLeastNWidgets(1));
+      expect(find.text(AppStrings.dashboardRegistered), findsOneWidget);
     });
 
     testWidgets('shows correct numeric values from stats', (tester) async {
@@ -75,7 +75,7 @@ void main() {
 
       expect(find.text('7'), findsOneWidget);
       expect(find.text('14'), findsOneWidget);
-      expect(find.text('1 clientes registados'), findsOneWidget);
+      expect(find.text(AppStrings.dashboardRegistered), findsOneWidget);
     });
 
     testWidgets('shows the empty-state onboarding for empty stats',
@@ -102,11 +102,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(AppStrings.novaVenda), findsOneWidget);
-      expect(find.text('Registar venda'), findsOneWidget);
-      expect(
-        find.text('Registe em segundos com uma única ação.'),
-        findsOneWidget,
-      );
+      expect(find.text(AppStrings.dashboardSaleCta), findsOneWidget);
+      expect(find.text(AppStrings.dashboardSaleCardSubtitle), findsOneWidget);
     });
   });
 
@@ -159,7 +156,7 @@ void main() {
   });
 
   group('DashboardScreen — loading state', () {
-    testWidgets('shows CircularProgressIndicator while loading', (
+    testWidgets('keeps scaffold visible while loading stats', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -177,8 +174,8 @@ void main() {
       await tester
           .pump(); // one pump — don't settle so loading state is visible
 
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(RefreshIndicator), findsOneWidget);
+      expect(find.text(AppStrings.appName), findsOneWidget);
     });
   });
 }
-

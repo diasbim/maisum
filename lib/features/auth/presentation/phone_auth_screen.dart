@@ -12,6 +12,7 @@ import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/utils/connectivity_check.dart';
 import '../../../core/utils/moz_phone_input_formatter.dart';
 import '../../../core/utils/moz_phone_utils.dart';
+import '../../../core/widgets/app_feedback.dart';
 import 'auth_controller.dart';
 import 'otp_verification_screen.dart';
 
@@ -75,8 +76,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
     try {
       cleanNumber = MozPhoneUtils.normalizeToE164(rawNumber);
     } on FormatException catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+      AppFeedback.showMessage(context, message: e.message, isError: true);
       return;
     }
     if (!await ConnectivityCheck.isConnected()) {
@@ -90,11 +90,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
           onCodeSent: (verificationId) {
             if (!mounted) return;
             setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Codigo de verificacao enviado com sucesso'),
-                backgroundColor: AppColors.secondary,
-              ),
+            AppFeedback.showSuccessToast(
+              context,
+              message: 'Codigo de verificacao enviado com sucesso',
             );
             context.push('/otp',
                 extra: OtpScreenArgs(
@@ -103,9 +101,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
           onError: (error) {
             if (!mounted) return;
             setState(() => _isLoading = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text(error.isEmpty ? AppStrings.erroAuth : error)),
+            AppFeedback.showMessage(
+              context,
+              message: error.isEmpty ? AppStrings.erroAuth : error,
+              isError: true,
             );
           },
           onAutoVerify: (credential) async {

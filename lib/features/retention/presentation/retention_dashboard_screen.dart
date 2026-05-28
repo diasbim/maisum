@@ -3,6 +3,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
+import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../domain/retention_metric.dart';
 import '../providers/retention_providers.dart';
@@ -164,11 +165,10 @@ class _InactiveTab extends ConsumerWidget {
                   child: InactiveCustomerCard(
                     customer: customer,
                     onSendReminder: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content:
-                              Text('Lembrete preparado para ${customer.name}'),
-                        ),
+                      AppFeedback.showSuccessToast(
+                        context,
+                        message: 'Lembrete preparado',
+                        subtitle: customer.name,
                       );
                     },
                   ),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
@@ -11,7 +12,9 @@ import '../../features/sales/presentation/sale_controller.dart';
 import '../../features/sales/presentation/sale_success_screen.dart';
 import '../../features/sales/presentation/new_sale_screen.dart';
 import '../../features/sales/presentation/widgets/suggested_sale_bottom_sheet.dart';
+import '../errors/app_error_mapper.dart';
 import '../errors/app_error_reporter.dart';
+import 'app_feedback.dart';
 
 class SmsSuggestionListener extends ConsumerStatefulWidget {
   const SmsSuggestionListener({super.key, required this.child});
@@ -104,30 +107,47 @@ class _SmsSuggestionListenerState extends ConsumerState<SmsSuggestionListener> {
     }
 
     final saleCtrl = ref.read(saleControllerProvider.notifier);
-    final result = await saleCtrl.createSale(
-      customerId: customer.id,
-      amount: suggestion.transaction.amount,
-    );
-    saleCtrl.reset();
-    if (!mounted) return;
-
     try {
-      ref.read(analyticsServiceProvider).record(
-        eventType: 'sale_suggestion_accepted',
-        source: 'sms',
-        properties: {
-          'amount': suggestion.transaction.amount,
-          'provider': suggestion.transaction.provider,
-          'match_reason': suggestion.matchReason,
+      final result = await saleCtrl.createSale(
+        customerId: customer.id,
+        amount: suggestion.transaction.amount,
+      );
+      saleCtrl.reset();
+      if (!mounted) return;
+
+      try {
+        ref.read(analyticsServiceProvider).record(
+          eventType: 'sale_suggestion_accepted',
+          source: 'sms',
+          properties: {
+            'amount': suggestion.transaction.amount,
+            'provider': suggestion.transaction.provider,
+            'match_reason': suggestion.matchReason,
+          },
+        );
+      } catch (e, st) {
+        AppErrorReporter.report(
+          e,
+          st,
+          hint: 'sms_suggestion_accepted_analytics',
+        );
+      }
+
+      Navigator.of(sheetContext).pop();
+      if (!mounted) return;
+      context.go('/sale-success', extra: SaleSuccessArgs(result: result));
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'sms_suggestion_confirm');
+      if (!mounted) return;
+      final info = AppErrorMapper.describe(e);
+      AppFeedback.showRetryableError(
+        context,
+        message: info.message,
+        onRetry: () {
+          unawaited(_confirmSuggestion(sheetContext, suggestion));
         },
       );
-    } catch (e, st) {
-      AppErrorReporter.report(e, st, hint: 'sms_suggestion_accepted_analytics');
     }
-
-    Navigator.of(sheetContext).pop();
-    if (!mounted) return;
-    context.go('/sale-success', extra: SaleSuccessArgs(result: result));
   }
 
   Future<void> _manualSuggestion(

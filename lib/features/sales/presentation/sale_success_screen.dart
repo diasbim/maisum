@@ -36,6 +36,7 @@ class SaleSuccessScreen extends ConsumerStatefulWidget {
 
 class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
   bool _playedFeedback = false;
+  bool _isSendingWhatsApp = false;
   DateTime? _scheduledDate;
   bool _appointmentCreated = false;
 
@@ -183,8 +184,9 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                         _MessagePreviewCard(
                           message: message,
                           onSendSms: () => _sendSms(context, customer, message),
+                          isSendingWhatsApp: _isSendingWhatsApp,
                           onSendWhatsApp: () =>
-                              _sendWhatsApp(context, ref, customer, message),
+                              _sendWhatsApp(customer, message),
                         ),
                         const SizedBox(height: 16),
                         _ScheduleNextVisitCard(
@@ -286,91 +288,104 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     }
   }
 
-  static Future<void> _sendWhatsApp(
-    BuildContext context,
-    WidgetRef ref,
-    Customer customer,
-    String message,
-  ) async {
-    final connectivity = ref.read(connectivityServiceProvider);
-    final gate = ref.read(featureGateProvider);
-    final decision = await gate.check(
-      featureKey: FeatureKeys.whatsappAutomation,
-      metricKey: UsageMetrics.whatsappMessages,
-    );
-    if (!decision.allowed) {
-      if (context.mounted) {
-        AppFeedback.showMessage(
-          context,
-          message: AppStrings.funcaoIndisponivel,
-        );
-      }
-      return;
-    }
-    if (decision.softLimited && context.mounted) {
-      AppFeedback.showMessage(context, message: AppStrings.limiteSoftAviso);
-    }
+  Future<void> _sendWhatsApp(Customer customer, String message) async {
+    if (_isSendingWhatsApp) return;
+    setState(() => _isSendingWhatsApp = true);
 
-    if (!connectivity.isOnline) {
+    try {
+      final connectivity = ref.read(connectivityServiceProvider);
+      final gate = ref.read(featureGateProvider);
+      final decision = await gate.check(
+        featureKey: FeatureKeys.whatsappAutomation,
+        metricKey: UsageMetrics.whatsappMessages,
+      );
+      if (!decision.allowed) {
+        if (context.mounted) {
+          AppFeedback.showMessage(
+            context,
+            message: AppStrings.funcaoIndisponivel,
+          );
+        }
+        return;
+      }
+      if (decision.softLimited && context.mounted) {
+        AppFeedback.showMessage(context, message: AppStrings.limiteSoftAviso);
+      }
+
+      if (!connectivity.isOnline) {
+        final clean = customer.phone.replaceAll(RegExp(r'\D'), '');
+        if (clean.isEmpty) return;
+        final number = clean.startsWith('258') ? clean : '258$clean';
+        await ref
+            .read(notificationQueueServiceProvider)
+            .enqueueWhatsApp(
+              phone: number,
+              message: message,
+              source: 'sale_success',
+            );
+        try {
+          await ref
+              .read(analyticsServiceProvider)
+              .record(
+                eventType: 'whatsapp_sent',
+                source: 'whatsapp',
+                properties: {'queued': true, 'source': 'sale_success'},
+              );
+        } catch (_) {}
+        if (context.mounted) {
+          AppFeedback.showMessage(context, message: AppStrings.whatsappQueued);
+        }
+        return;
+      }
+
       final clean = customer.phone.replaceAll(RegExp(r'\D'), '');
       if (clean.isEmpty) return;
       final number = clean.startsWith('258') ? clean : '258$clean';
-      await ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
-            phone: number,
-            message: message,
-            source: 'sale_success',
-          );
-      try {
-        await ref.read(analyticsServiceProvider).record(
-          eventType: 'whatsapp_sent',
-          source: 'whatsapp',
-          properties: {'queued': true, 'source': 'sale_success'},
-        );
-      } catch (_) {}
-      if (context.mounted) {
-        AppFeedback.showMessage(context, message: AppStrings.whatsappQueued);
-      }
-      return;
-    }
-
-    final clean = customer.phone.replaceAll(RegExp(r'\D'), '');
-    if (clean.isEmpty) return;
-    final number = clean.startsWith('258') ? clean : '258$clean';
-    final url = Uri.parse(
-      'https://wa.me/$number?text=${Uri.encodeComponent(message)}',
-    );
-    final launched = await launchUrl(url, mode: LaunchMode.externalApplication);
-    if (!launched && context.mounted) {
-      AppFeedback.showMessage(
-        context,
-        message: 'Não foi possível abrir o WhatsApp neste dispositivo.',
+      final url = Uri.parse(
+        'https://wa.me/$number?text=${Uri.encodeComponent(message)}',
       );
-      return;
-    }
-    if (launched) {
-      try {
-        await ref.read(usageTrackerProvider).record(
-          metricKey: UsageMetrics.whatsappMessages,
-          source: 'whatsapp',
-          metadata: {'message_type': 'sale_success'},
+      final launched = await launchUrl(
+        url,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && context.mounted) {
+        AppFeedback.showMessage(
+          context,
+          message: 'Não foi possível abrir o WhatsApp neste dispositivo.',
         );
-        await ref.read(analyticsServiceProvider).record(
-          eventType: 'whatsapp_sent',
-          source: 'whatsapp',
-          properties: {'queued': false, 'source': 'sale_success'},
-        );
-      } catch (_) {}
+        return;
+      }
+      if (launched) {
+        try {
+          await ref
+              .read(usageTrackerProvider)
+              .record(
+                metricKey: UsageMetrics.whatsappMessages,
+                source: 'whatsapp',
+                metadata: {'message_type': 'sale_success'},
+              );
+          await ref
+              .read(analyticsServiceProvider)
+              .record(
+                eventType: 'whatsapp_sent',
+                source: 'whatsapp',
+                properties: {'queued': false, 'source': 'sale_success'},
+              );
+        } catch (_) {}
+        if (context.mounted) {
+          AppFeedback.showMessage(context, message: AppStrings.whatsappSent);
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isSendingWhatsApp = false);
+      }
     }
   }
 
   Future<void> _handleQuickSchedule(String customerId, int days) async {
     final now = DateTime.now();
-    final target = DateTime(
-      now.year,
-      now.month,
-      now.day + days,
-      10,
-    );
+    final target = DateTime(now.year, now.month, now.day + days, 10);
     await _createAppointment(customerId, target);
   }
 
@@ -388,12 +403,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     );
     if (picked == null) return;
 
-    final target = DateTime(
-      picked.year,
-      picked.month,
-      picked.day,
-      10,
-    );
+    final target = DateTime(picked.year, picked.month, picked.day, 10);
     await _createAppointment(customerId, target);
   }
 
@@ -402,7 +412,9 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     DateTime scheduledDate,
   ) async {
     try {
-      await ref.read(createAppointmentProvider.notifier).createAppointment(
+      await ref
+          .read(createAppointmentProvider.notifier)
+          .createAppointment(
             customerId: customerId,
             scheduledDate: scheduledDate,
             source: 'post_sale_flow',
@@ -514,7 +526,9 @@ class _SuccessHero extends StatelessWidget {
                 color: AppColors.secondary,
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.4), width: 1.2),
+                  color: Colors.white.withValues(alpha: 0.4),
+                  width: 1.2,
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.secondary.withValues(alpha: 0.6),
@@ -535,20 +549,26 @@ class _SuccessHero extends StatelessWidget {
           Positioned(
             left: 12,
             top: 18,
-            child:
-                _Sparkle(size: 8, color: Colors.white.withValues(alpha: 0.7)),
+            child: _Sparkle(
+              size: 8,
+              color: Colors.white.withValues(alpha: 0.7),
+            ),
           ),
           Positioned(
             right: 4,
             top: 36,
-            child:
-                _Sparkle(size: 12, color: Colors.white.withValues(alpha: 0.8)),
+            child: _Sparkle(
+              size: 12,
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
           ),
           Positioned(
             left: 32,
             bottom: 12,
-            child:
-                _Sparkle(size: 10, color: Colors.white.withValues(alpha: 0.6)),
+            child: _Sparkle(
+              size: 10,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
           ),
         ],
       ),
@@ -608,10 +628,10 @@ class _RewardProgressCard extends StatelessWidget {
         : unclampedCurrent;
     final label = hasRewards
         ? (nextRewardName != null
-            ? 'Faltam $pointsLeft pontos para $nextRewardName'
-            : unlockedRewardName != null
-                ? 'Recompensa disponível: $unlockedRewardName'
-                : 'Recompensa disponível')
+              ? 'Faltam $pointsLeft pontos para $nextRewardName'
+              : unlockedRewardName != null
+              ? 'Recompensa disponível: $unlockedRewardName'
+              : 'Recompensa disponível')
         : 'Crie uma recompensa para continuar';
 
     return Container(
@@ -638,26 +658,41 @@ class _RewardProgressCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: LinearProgressIndicator(
-                    value: hasRewards ? progress : 0,
-                    minHeight: 8,
-                    backgroundColor: Colors.white.withValues(alpha: 0.12),
-                    valueColor:
-                        const AlwaysStoppedAnimation(AppColors.secondary),
-                  ),
+                TweenAnimationBuilder<double>(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  tween: Tween<double>(end: hasRewards ? progress : 0),
+                  builder: (context, animatedProgress, _) {
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: animatedProgress,
+                        minHeight: 8,
+                        backgroundColor: Colors.white.withValues(alpha: 0.12),
+                        valueColor: const AlwaysStoppedAnimation(
+                          AppColors.secondary,
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '$displayCurrent pts',
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        color: Colors.white.withValues(alpha: 0.7),
-                        fontWeight: FontWeight.w600,
-                      ),
+                    TweenAnimationBuilder<double>(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOutCubic,
+                      tween: Tween<double>(end: displayCurrent.toDouble()),
+                      builder: (context, animatedCurrent, _) {
+                        return Text(
+                          '${animatedCurrent.round()} pts',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.7),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        );
+                      },
                     ),
                     Text(
                       '$displayTarget pts',
@@ -695,11 +730,13 @@ class _MessagePreviewCard extends StatelessWidget {
   const _MessagePreviewCard({
     required this.message,
     required this.onSendSms,
+    required this.isSendingWhatsApp,
     required this.onSendWhatsApp,
   });
 
   final String message;
   final VoidCallback onSendSms;
+  final bool isSendingWhatsApp;
   final VoidCallback onSendWhatsApp;
 
   @override
@@ -783,9 +820,22 @@ class _MessagePreviewCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: onSendWhatsApp,
-                  icon: const Icon(Icons.send_rounded, size: 16),
-                  label: const Text(AppStrings.enviarWhatsApp),
+                  onPressed: isSendingWhatsApp ? null : onSendWhatsApp,
+                  icon: isSendingWhatsApp
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded, size: 16),
+                  label: Text(
+                    isSendingWhatsApp
+                        ? 'A enviar...'
+                        : AppStrings.enviarWhatsApp,
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.green,
                     foregroundColor: Colors.white,
@@ -953,8 +1003,11 @@ class _ScheduleNextVisitCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                const Icon(Icons.check_circle_rounded,
-                    color: AppColors.secondary, size: 18),
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.secondary,
+                  size: 18,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   'Agendado para ${selectedDate!.day.toString().padLeft(2, '0')}/${selectedDate!.month.toString().padLeft(2, '0')}/${selectedDate!.year}',

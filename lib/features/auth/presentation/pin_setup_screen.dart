@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/pin_pad.dart';
 import '../../../core/widgets/pin_verification_feedback.dart';
+import 'post_auth_navigation.dart';
 import 'phone_auth_screen.dart';
 
 class PinSetupScreen extends ConsumerStatefulWidget {
@@ -95,7 +96,9 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
         _isLoading = false;
       });
       await Future.delayed(const Duration(milliseconds: 700));
-      if (mounted) context.go('/dashboard');
+      if (!mounted) return;
+      final route = await resolvePostAuthRoute(ref);
+      if (mounted) context.go(route);
     } else {
       setState(() {
         _isError = true;

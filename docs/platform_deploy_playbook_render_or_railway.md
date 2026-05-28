@@ -27,7 +27,8 @@ Deploy the backend in platform/ to a test environment using GitHub Actions and G
 1. Create a Railway project and service connected to this repository.
 2. Set service root directory to platform.
 3. Configure service variables:
-   - Preferred option: DB_URL (full PostgreSQL URL)
+   - Preferred option: DB_URL (full JDBC PostgreSQL URL)
+   - Alternative supported: DATABASE_PUBLIC_URL (Railway public PostgreSQL URL)
    - SPRING_PROFILES_ACTIVE=test (optional)
    - DB_HOST
    - DB_PORT
@@ -40,8 +41,13 @@ Deploy the backend in platform/ to a test environment using GitHub Actions and G
    - PORT (usually injected automatically by Railway)
 
 If DB_URL is set, the app will use it directly and you do not need DB_HOST, DB_PORT, DB_NAME, DB_USER, and DB_PASSWORD.
+If DATABASE_PUBLIC_URL is set (without jdbc prefix), the app automatically adapts it to a JDBC URL.
 
 Example DB_URL format:
+
+- jdbc:postgresql://user:password@host:5432/database
+
+Example DATABASE_PUBLIC_URL format:
 
 - postgresql://user:password@host:5432/database
 

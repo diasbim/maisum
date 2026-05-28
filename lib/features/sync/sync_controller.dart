@@ -11,6 +11,9 @@ class SyncController extends Notifier<SyncStatus> {
   }
 
   Future<void> sync() => ref.read(syncServiceProvider).processQueue();
+
+  Future<void> retryFailed({String? itemId}) =>
+      ref.read(syncServiceProvider).retryFailed(itemId: itemId);
 }
 
 final syncControllerProvider = NotifierProvider<SyncController, SyncStatus>(

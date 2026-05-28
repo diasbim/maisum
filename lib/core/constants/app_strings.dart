@@ -165,6 +165,14 @@ class AppStrings {
   static const String syncRetryNow = 'Tentar agora';
   static const String syncFailedActionable =
       'Não foi possível sincronizar alguns registos. Verifique a internet e tente novamente.';
+  static const String syncOfflineSavedSubtitle =
+      'As vendas continuam guardadas no telemóvel.';
+  static const String syncRunningSubtitle =
+      'A atualizar clientes, vendas e recompensas.';
+  static const String syncPendingSubtitle =
+      'Toque para ver o que falta enviar.';
+  static const String syncReadySubtitle =
+      'Tudo pronto para continuar a trabalhar.';
 
   // Settings
   static const String definicoes = 'Definições';
@@ -247,8 +255,8 @@ class AppStrings {
       'Funcionalidade indisponível no seu plano.';
   static const String limiteSoftAviso =
       'Limite mensal atingido. Vamos sincronizar depois.';
-  static const String whatsappQueued =
-      'Mensagem WhatsApp será enviada quando estiver online.';
+  static const String whatsappQueued = 'Será enviado quando online ⏳';
+  static const String whatsappSent = 'WhatsApp enviado ✅';
   static const String phoneRequired = 'Introduza o número de telemóvel';
   static const String otpRequired = 'Introduza o código de 6 dígitos';
   static const String amountRequired = 'Introduza o valor da venda';

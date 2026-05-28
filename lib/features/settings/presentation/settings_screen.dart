@@ -8,6 +8,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/services/pin_verification_service.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/pin_pad.dart';
 import '../../../core/widgets/pin_verification_feedback.dart';
@@ -325,9 +326,11 @@ class _PinVerifySheetState extends State<_PinVerifySheet>
 
     if (result.isBlocked) {
       if (mounted) {
-        ScaffoldMessenger.of(
+        AppFeedback.showMessage(
           context,
-        ).showSnackBar(const SnackBar(content: Text(AppStrings.pinBlocked)));
+          message: AppStrings.pinBlocked,
+          isError: true,
+        );
         Navigator.of(context).pop(false);
       }
       return;

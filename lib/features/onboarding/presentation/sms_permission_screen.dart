@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -6,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/brand_mark.dart';
 
 class SmsPermissionScreen extends ConsumerStatefulWidget {
@@ -18,30 +22,101 @@ class SmsPermissionScreen extends ConsumerStatefulWidget {
 
 class _SmsPermissionScreenState extends ConsumerState<SmsPermissionScreen> {
   bool _loading = false;
+  int _processingStepIndex = 0;
+  Timer? _processingTicker;
+  List<String> _processingSteps = _allowSteps;
+
+  static const _allowSteps = [
+    'A validar permissao de SMS',
+    'A preparar deteccao automatica',
+    'A finalizar onboarding',
+  ];
+
+  static const _skipSteps = [
+    'A guardar preferencia',
+    'A preparar modo manual',
+    'A finalizar onboarding',
+  ];
+
+  @override
+  void dispose() {
+    _processingTicker?.cancel();
+    super.dispose();
+  }
+
+  void _startProcessingTicker(List<String> steps) {
+    _processingTicker?.cancel();
+    _processingTicker = Timer.periodic(const Duration(milliseconds: 650), (
+      timer,
+    ) {
+      if (!mounted || !_loading) {
+        timer.cancel();
+        return;
+      }
+      if (_processingStepIndex >= steps.length - 1) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _processingStepIndex += 1);
+    });
+  }
+
+  void _beginLoading(List<String> steps) {
+    setState(() {
+      _loading = true;
+      _processingStepIndex = 0;
+      _processingSteps = steps;
+    });
+    _startProcessingTicker(steps);
+  }
+
+  Future<void> _finishLoading(List<String> steps) async {
+    _processingTicker?.cancel();
+    if (!mounted) return;
+    setState(() => _processingStepIndex = steps.length - 1);
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+  }
 
   Future<void> _allow() async {
     if (_loading) return;
-    setState(() => _loading = true);
+    _beginLoading(_allowSteps);
+    HapticFeedback.selectionClick();
 
     final status = await Permission.sms.request();
     await ref.read(secureStorageServiceProvider).setSmsPermissionPrompted(true);
     if (status.isGranted) {
       await ref.read(smsListenerServiceProvider).start();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.smsPermissionDone)),
+        AppFeedback.showSuccessToast(
+          context,
+          message: AppStrings.smsPermissionDone,
+          subtitle: 'Sincronização automática activa.',
         );
       }
+    } else if (mounted) {
+      AppFeedback.showMessage(
+        context,
+        message: 'Continuamos sem SMS. Pode ativar depois nas definições.',
+      );
     }
 
     if (mounted) {
+      await _finishLoading(_allowSteps);
       context.go('/dashboard');
     }
   }
 
   Future<void> _skip() async {
+    if (_loading) return;
+    _beginLoading(_skipSteps);
+    HapticFeedback.selectionClick();
     await ref.read(secureStorageServiceProvider).setSmsPermissionPrompted(true);
     if (mounted) {
+      AppFeedback.showMessage(
+        context,
+        message: 'Guardado. Pode ativar SMS mais tarde.',
+      );
+      await _finishLoading(_skipSteps);
       context.go('/dashboard');
     }
   }
@@ -179,6 +254,21 @@ class _SmsPermissionScreenState extends ConsumerState<SmsPermissionScreen> {
                       ),
                     ),
                     const SizedBox(height: 28),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 240),
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      child: _loading
+                          ? _ProcessingTimeline(
+                              key: const ValueKey('sms-processing-timeline'),
+                              steps: _processingSteps,
+                              activeIndex: _processingStepIndex,
+                            )
+                          : const SizedBox.shrink(
+                              key: ValueKey('sms-processing-empty'),
+                            ),
+                    ),
+                    if (_loading) const SizedBox(height: 14),
                     _GradientButton(
                       label: AppStrings.smsPermissionAllow,
                       loading: _loading,
@@ -187,7 +277,7 @@ class _SmsPermissionScreenState extends ConsumerState<SmsPermissionScreen> {
                     const SizedBox(height: 12),
                     Center(
                       child: TextButton(
-                        onPressed: _skip,
+                        onPressed: _loading ? null : _skip,
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.white.withValues(alpha: 0.8),
                         ),
@@ -196,7 +286,8 @@ class _SmsPermissionScreenState extends ConsumerState<SmsPermissionScreen> {
                     ),
                     Center(
                       child: TextButton(
-                        onPressed: () => context.push('/privacy'),
+                        onPressed:
+                            _loading ? null : () => context.push('/privacy'),
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.white.withValues(alpha: 0.7),
                         ),
@@ -485,6 +576,90 @@ class _GradientButton extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ProcessingTimeline extends StatelessWidget {
+  const _ProcessingTimeline({
+    super.key,
+    required this.steps,
+    required this.activeIndex,
+  });
+
+  final List<String> steps;
+  final int activeIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _GlassCard(
+      tone: AppColors.secondary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'A preparar a sua experiência',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          for (var i = 0; i < steps.length; i++)
+            Padding(
+              padding: EdgeInsets.only(bottom: i == steps.length - 1 ? 0 : 8),
+              child: Row(
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i <= activeIndex
+                          ? Colors.white.withValues(alpha: 0.95)
+                          : Colors.white.withValues(alpha: 0.18),
+                    ),
+                    child: i < activeIndex
+                        ? const Icon(
+                            Icons.check,
+                            size: 12,
+                            color: AppColors.primary,
+                          )
+                        : i == activeIndex
+                            ? const Padding(
+                                padding: EdgeInsets.all(4),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.8,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppColors.primary,
+                                  ),
+                                ),
+                              )
+                            : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 220),
+                      opacity: i <= activeIndex ? 1 : 0.7,
+                      child: Text(
+                        steps[i],
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontWeight: i == activeIndex
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

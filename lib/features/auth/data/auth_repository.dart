@@ -11,6 +11,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/services/firebase_auth_service.dart';
 import '../../../core/storage/secure_storage.dart';
+import '../../../core/utils/moz_phone_utils.dart';
 import 'backend_auth_api.dart';
 import '../domain/auth_session.dart';
 import '../../subscription/domain/feature_keys.dart';
@@ -98,6 +99,7 @@ class AuthRepository {
       final storedFirebaseUid = storedSession?.firebaseUid;
       final phone =
           await _storage.getUserPhone() ?? firebaseUser.phoneNumber ?? '';
+      final existingMerchant = await _findMerchantByPhone(phone);
       final deviceId = await _getOrCreateDeviceId();
 
       String token;
@@ -111,11 +113,18 @@ class AuthRepository {
         await _persistSession(
           AuthSession(
             userId: firebaseUser.uid,
-            appUserId: storedAppUserId ?? firebaseUser.uid,
-            merchantId: storedMerchantId ?? firebaseUser.uid,
-            merchantName: storedMerchantName ?? _defaultMerchantName,
-            subscriptionStatus:
-                storedSubscriptionStatus ?? _defaultSubscriptionStatus,
+            appUserId: storedAppUserId ??
+                existingMerchant?.appUserId ??
+                firebaseUser.uid,
+            merchantId: storedMerchantId ??
+                existingMerchant?.merchantId ??
+                firebaseUser.uid,
+            merchantName: storedMerchantName ??
+                existingMerchant?.merchantName ??
+                _defaultMerchantName,
+            subscriptionStatus: storedSubscriptionStatus ??
+                existingMerchant?.subscriptionStatus ??
+                _defaultSubscriptionStatus,
             refreshToken: storedRefreshToken,
             deviceId: storedDeviceId ?? deviceId,
             firebaseUid: firebaseUser.uid,
@@ -142,11 +151,18 @@ class AuthRepository {
 
       final session = AuthSession(
         userId: firebaseUser.uid,
-        appUserId: storedAppUserId ?? firebaseUser.uid,
-        merchantId: storedMerchantId ?? storedFirebaseUid ?? firebaseUser.uid,
-        merchantName: storedMerchantName ?? _defaultMerchantName,
-        subscriptionStatus:
-            storedSubscriptionStatus ?? _defaultSubscriptionStatus,
+        appUserId:
+            storedAppUserId ?? existingMerchant?.appUserId ?? firebaseUser.uid,
+        merchantId: storedMerchantId ??
+            existingMerchant?.merchantId ??
+            storedFirebaseUid ??
+            firebaseUser.uid,
+        merchantName: storedMerchantName ??
+            existingMerchant?.merchantName ??
+            _defaultMerchantName,
+        subscriptionStatus: storedSubscriptionStatus ??
+            existingMerchant?.subscriptionStatus ??
+            _defaultSubscriptionStatus,
         refreshToken: storedRefreshToken,
         deviceId: storedDeviceId ?? deviceId,
         firebaseUid: firebaseUser.uid,
@@ -206,12 +222,15 @@ class AuthRepository {
       }
     }
 
+    final existingMerchant = await _findMerchantByPhone(phone);
+
     final session = AuthSession(
       userId: user.uid,
-      appUserId: user.uid,
-      merchantId: user.uid,
-      merchantName: _defaultMerchantName,
-      subscriptionStatus: _defaultSubscriptionStatus,
+      appUserId: existingMerchant?.appUserId ?? user.uid,
+      merchantId: existingMerchant?.merchantId ?? user.uid,
+      merchantName: existingMerchant?.merchantName ?? _defaultMerchantName,
+      subscriptionStatus:
+          existingMerchant?.subscriptionStatus ?? _defaultSubscriptionStatus,
       deviceId: deviceId,
       firebaseUid: user.uid,
       phone: phone,
@@ -316,6 +335,67 @@ class AuthRepository {
     ]);
     await _ensureLocalIdentity(session);
     await _syncMerchantDocument(session);
+  }
+
+  Future<_ExistingMerchantData?> _findMerchantByPhone(String rawPhone) async {
+    final firestore = _firestore;
+    if (firestore == null) {
+      return null;
+    }
+
+    final candidates = _phoneCandidates(rawPhone);
+    if (candidates.isEmpty) {
+      return null;
+    }
+
+    for (final candidate in candidates) {
+      final query = await firestore
+          .collection('businesses')
+          .where('phone', isEqualTo: candidate)
+          .limit(1)
+          .get();
+      if (query.docs.isEmpty) {
+        continue;
+      }
+
+      final doc = query.docs.first;
+      final data = doc.data();
+      final merchantName = (data['merchant_name'] as String?)?.trim();
+      final appUserId = (data['owner_user_id'] as String?)?.trim();
+      final subscriptionStatus =
+          (data['subscription_status'] as String?)?.trim();
+
+      return _ExistingMerchantData(
+        merchantId: doc.id,
+        merchantName: (merchantName == null || merchantName.isEmpty)
+            ? _defaultMerchantName
+            : merchantName,
+        appUserId: (appUserId == null || appUserId.isEmpty) ? null : appUserId,
+        subscriptionStatus:
+            (subscriptionStatus == null || subscriptionStatus.isEmpty)
+                ? _defaultSubscriptionStatus
+                : subscriptionStatus,
+      );
+    }
+
+    return null;
+  }
+
+  List<String> _phoneCandidates(String rawPhone) {
+    final input = rawPhone.trim();
+    if (input.isEmpty) {
+      return const [];
+    }
+
+    final candidates = <String>{input};
+    try {
+      final e164 = MozPhoneUtils.normalizeToE164(input);
+      candidates.add(e164);
+      candidates.add(MozPhoneUtils.normalizeToLocal(input));
+    } catch (_) {
+      // Keep raw input as fallback candidate when normalization fails.
+    }
+    return candidates.toList(growable: false);
   }
 
   Future<String> _getOrCreateDeviceId() async {
@@ -676,4 +756,18 @@ class _UsageWindow {
 
   final DateTime start;
   final DateTime end;
+}
+
+class _ExistingMerchantData {
+  const _ExistingMerchantData({
+    required this.merchantId,
+    required this.merchantName,
+    required this.subscriptionStatus,
+    this.appUserId,
+  });
+
+  final String merchantId;
+  final String merchantName;
+  final String subscriptionStatus;
+  final String? appUserId;
 }

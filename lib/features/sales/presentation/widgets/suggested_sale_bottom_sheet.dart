@@ -5,7 +5,7 @@ import '../../../../core/utils/moz_phone_utils.dart';
 import '../../../../core/widgets/brand_mark.dart';
 import '../../domain/suggested_sale.dart';
 
-class SuggestedSaleBottomSheet extends StatelessWidget {
+class SuggestedSaleBottomSheet extends StatefulWidget {
   const SuggestedSaleBottomSheet({
     super.key,
     required this.suggestion,
@@ -15,13 +15,34 @@ class SuggestedSaleBottomSheet extends StatelessWidget {
   });
 
   final SuggestedSale suggestion;
-  final VoidCallback onConfirm;
+  final Future<void> Function() onConfirm;
   final VoidCallback onIgnore;
   final VoidCallback onManual;
 
   @override
+  State<SuggestedSaleBottomSheet> createState() =>
+      _SuggestedSaleBottomSheetState();
+}
+
+class _SuggestedSaleBottomSheetState extends State<SuggestedSaleBottomSheet> {
+  bool _isSubmitting = false;
+
+  Future<void> _handleConfirm() async {
+    if (_isSubmitting) return;
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.onConfirm();
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final suggestion = widget.suggestion;
     final customerName = suggestion.customer?.name ?? 'Cliente';
     final phone = suggestion.customer?.phone ?? suggestion.transaction.phone;
     final maskedPhone =
@@ -103,7 +124,7 @@ class SuggestedSaleBottomSheet extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: onIgnore,
+                  onPressed: _isSubmitting ? null : widget.onIgnore,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.onSurface,
                     side: const BorderSide(color: AppColors.g300),
@@ -118,7 +139,7 @@ class SuggestedSaleBottomSheet extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: onConfirm,
+                  onPressed: _isSubmitting ? null : _handleConfirm,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -127,14 +148,23 @@ class SuggestedSaleBottomSheet extends StatelessWidget {
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
-                  child: const Text('Confirmar'),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Confirmar'),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
           TextButton(
-            onPressed: onManual,
+            onPressed: _isSubmitting ? null : widget.onManual,
             style: TextButton.styleFrom(
               foregroundColor: AppColors.primary,
             ),

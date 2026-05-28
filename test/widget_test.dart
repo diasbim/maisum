@@ -29,7 +29,7 @@ class _FakeDashboard extends DashboardController {
 
 class _FakeSync extends SyncController {
   @override
-  SyncStatus build() => const SyncStatus();
+  SyncStatus build() => const SyncStatus(isOnline: true);
 }
 
 void main() {
@@ -60,4 +60,3 @@ void main() {
     expect(find.text(AppStrings.appName), findsOneWidget);
   });
 }
-

@@ -180,4 +180,40 @@ class SyncDao {
       whereArgs: merchantId == null ? ['synced'] : [merchantId, 'synced'],
     );
   }
+
+  Future<void> retryFailed({String? id}) async {
+    final db = await _db.database;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+
+    String where;
+    List<Object?> whereArgs;
+    if (merchantId == null) {
+      if (id == null) {
+        where = 'status = ?';
+        whereArgs = ['failed'];
+      } else {
+        where = 'status = ? AND id = ?';
+        whereArgs = ['failed', id];
+      }
+    } else {
+      if (id == null) {
+        where = 'merchant_id = ? AND status = ?';
+        whereArgs = [merchantId, 'failed'];
+      } else {
+        where = 'merchant_id = ? AND status = ? AND id = ?';
+        whereArgs = [merchantId, 'failed', id];
+      }
+    }
+
+    await db.update(
+      'sync_queue',
+      {
+        'status': 'pending',
+        'retry_count': 0,
+        'next_attempt_at': nowMs,
+      },
+      where: where,
+      whereArgs: whereArgs,
+    );
+  }
 }

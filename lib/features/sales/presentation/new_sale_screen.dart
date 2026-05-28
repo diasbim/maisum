@@ -11,6 +11,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/quick_amount_button.dart';
 import '../../../core/widgets/app_feedback.dart';
+import '../../../core/widgets/primary_button.dart';
 import '../../../core/errors/app_error_mapper.dart';
 import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customers_controller.dart';
@@ -33,8 +34,10 @@ class NewSaleScreen extends ConsumerStatefulWidget {
 
 class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   final _phoneCtrl = TextEditingController();
+  final _phoneFocusNode = FocusNode();
   final _amountCtrl = TextEditingController();
   Timer? _searchDebounce;
+  bool _isSubmitting = false;
   Customer? _selectedCustomer;
   int? _quickAmount;
   int? _lastAmount;
@@ -82,6 +85,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   void dispose() {
     _searchDebounce?.cancel();
     _phoneCtrl.dispose();
+    _phoneFocusNode.dispose();
     _amountCtrl.dispose();
     super.dispose();
   }
@@ -144,6 +148,8 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   }
 
   Future<void> _confirmSale() async {
+    if (_isSubmitting) return;
+
     if (_selectedCustomer == null) {
       AppFeedback.showMessage(
         context,
@@ -157,14 +163,43 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     }
 
     final saleCtrl = ref.read(saleControllerProvider.notifier);
-    final result = await saleCtrl.createSale(
-      customerId: _selectedCustomer!.id,
-      amount: _amount,
-    );
+    final customer = _selectedCustomer!;
+    setState(() => _isSubmitting = true);
+    try {
+      final result = await saleCtrl.createSale(
+        customerId: customer.id,
+        amount: _amount,
+      );
 
-    saleCtrl.reset();
-    if (!mounted) return;
-    context.push('/sale-success', extra: SaleSuccessArgs(result: result));
+      saleCtrl.reset();
+      if (!mounted) return;
+      context.go('/sale-success', extra: SaleSuccessArgs(result: result));
+    } catch (e) {
+      if (!mounted) return;
+      final info = AppErrorMapper.describe(e);
+      AppFeedback.showMessage(context, message: info.message);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  void _resetFormForNextSale() {
+    final submittedAmount = _amount;
+    _searchDebounce?.cancel();
+    setState(() {
+      _selectedCustomer = null;
+      _searchResults = [];
+      _quickAmount = null;
+      _lastAmount = submittedAmount > 0 ? submittedAmount.toInt() : _lastAmount;
+      _phoneCtrl.clear();
+      _amountCtrl.clear();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _phoneFocusNode.requestFocus();
+    });
   }
 
   @override
@@ -184,8 +219,10 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
         child: _ConfirmSaleButton(
-          loading: saleState is AsyncLoading,
-          onPressed: saleState is AsyncLoading ? null : _confirmSale,
+          loading: saleState is AsyncLoading || _isSubmitting,
+          onPressed: (saleState is AsyncLoading || _isSubmitting)
+              ? null
+              : _confirmSale,
         ),
       ),
       body: SingleChildScrollView(
@@ -255,6 +292,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                       if (showRecentCustomers) const SizedBox(height: 12),
                       TextField(
                         controller: _phoneCtrl,
+                        focusNode: _phoneFocusNode,
                         keyboardType: TextInputType.text,
                         autofocus: widget.args?.preselectedCustomerId == null,
                         textCapitalization: TextCapitalization.words,
@@ -407,10 +445,7 @@ class _SaleHeader extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppColors.primaryDarker,
-            AppColors.primary,
-          ],
+          colors: [AppColors.primaryDarker, AppColors.primary],
         ),
         borderRadius: BorderRadius.only(
           bottomLeft: Radius.circular(28),
@@ -462,11 +497,7 @@ class _StepIndicator extends StatelessWidget {
     return Row(
       children: [
         for (var i = 0; i < steps.length; i++) ...[
-          _StepDot(
-            index: i + 1,
-            label: steps[i],
-            active: currentStep == i + 1,
-          ),
+          _StepDot(index: i + 1, label: steps[i], active: currentStep == i + 1),
           if (i < steps.length - 1)
             Expanded(
               child: Container(
@@ -563,9 +594,7 @@ class _SectionHeader extends StatelessWidget {
         ),
         TextButton(
           onPressed: onAction,
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.primaryLight,
-          ),
+          style: TextButton.styleFrom(foregroundColor: AppColors.primaryLight),
           child: Text(actionText),
         ),
       ],
@@ -798,11 +827,7 @@ class _PointsPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.star_rounded,
-            size: 14,
-            color: AppColors.green,
-          ),
+          const Icon(Icons.star_rounded, size: 14, color: AppColors.green),
           const SizedBox(width: 4),
           Text(
             '$points ${AppStrings.pontosAbrev}',
@@ -888,8 +913,10 @@ class _SummaryCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.white,
                   borderRadius: BorderRadius.circular(12),
@@ -935,53 +962,12 @@ class _ConfirmSaleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    return PrimaryButton(
+      label: AppStrings.confirmarVenda,
+      onPressed: onPressed,
+      loading: loading,
+      trailingIcon: Icons.arrow_forward_rounded,
       height: 58,
-      width: double.infinity,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: Colors.white,
-          shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (loading)
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: Colors.white,
-                ),
-              )
-            else
-              const Text(
-                AppStrings.confirmarVenda,
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-              ),
-            if (!loading)
-              Align(
-                alignment: Alignment.centerRight,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primaryDark,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.arrow_forward_rounded,
-                    color: AppColors.secondary,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }

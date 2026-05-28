@@ -9,9 +9,11 @@ import '../../../core/services/pin_verification_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/app_logger.dart';
+import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/pin_verification_feedback.dart';
 import '../../../core/widgets/pin_pad.dart';
 import 'auth_controller.dart';
+import 'post_auth_navigation.dart';
 
 const _tag = 'PinEntry';
 
@@ -78,7 +80,9 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
     if (result.isSuccess) {
       Log.i(_tag, 'PIN verified successfully');
       ref.read(appLockedProvider.notifier).state = false;
-      if (mounted) context.go('/dashboard');
+      if (!mounted) return;
+      final route = await resolvePostAuthRoute(ref);
+      if (mounted) context.go(route);
       return;
     }
 
@@ -96,8 +100,10 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
       Log.w(_tag, 'Max attempts reached — logging out');
       await ref.read(authControllerProvider.notifier).logout();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.pinBlocked)),
+        AppFeedback.showMessage(
+          context,
+          message: AppStrings.pinBlocked,
+          isError: true,
         );
         context.go('/login');
       }

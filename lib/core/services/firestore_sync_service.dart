@@ -69,15 +69,34 @@ class FirestoreSyncService implements SyncTransport {
           .doc(_businessUid)
           .collection(collection)
           .orderBy(orderField)
-          .orderBy(FieldPath.documentId)
           .limit(limit);
 
-      if (lastValue != null && lastDocId != null) {
-        query = query.startAfter([lastValue, lastDocId]);
+      if (lastValue != null) {
+        query = query.where(orderField, isGreaterThanOrEqualTo: lastValue);
       }
 
       final snapshot = await query.get();
-      return snapshot.docs.map((doc) {
+      var docs = [...snapshot.docs];
+
+      docs.sort((a, b) {
+        final aValue = (a.data()[orderField] as num?)?.toInt() ?? 0;
+        final bValue = (b.data()[orderField] as num?)?.toInt() ?? 0;
+        final byField = aValue.compareTo(bValue);
+        if (byField != 0) return byField;
+        return a.id.compareTo(b.id);
+      });
+
+      if (lastValue != null) {
+        docs = docs.where((doc) {
+          final value = (doc.data()[orderField] as num?)?.toInt() ?? 0;
+          if (value > lastValue) return true;
+          if (value < lastValue) return false;
+          if (lastDocId == null) return false;
+          return doc.id.compareTo(lastDocId) > 0;
+        }).toList();
+      }
+
+      return docs.take(limit).map((doc) {
         final data = Map<String, dynamic>.from(doc.data());
         data.putIfAbsent('id', () => doc.id);
         return data;

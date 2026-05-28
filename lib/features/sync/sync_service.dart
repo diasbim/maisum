@@ -229,6 +229,14 @@ class SyncService {
     }
   }
 
+  Future<void> retryFailed({String? itemId}) async {
+    await _syncDao.retryFailed(id: itemId);
+    await _refreshStatus(lastErrorOverride: null);
+    if (_connectivity.isOnline) {
+      await processQueue();
+    }
+  }
+
   Future<String?> _processItem(SyncItem item) async {
     final transport = _transport;
     if (transport == null) {

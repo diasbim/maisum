@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../customers/domain/customer.dart';
 import '../domain/reward.dart';
@@ -45,8 +46,11 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.toString())));
+        AppFeedback.showMessage(
+          context,
+          message: e.toString(),
+          isError: true,
+        );
         setState(() => _loading = false);
       }
     }
@@ -74,8 +78,9 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
         );
       } catch (_) {}
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(AppStrings.whatsappQueued)),
+        AppFeedback.showSuccessToast(
+          context,
+          message: AppStrings.whatsappQueued,
         );
       }
       return;

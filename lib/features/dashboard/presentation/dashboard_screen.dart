@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -39,8 +40,10 @@ class DashboardScreen extends ConsumerWidget {
       ),
       body: RefreshIndicator(
         color: AppColors.secondary,
-        onRefresh: () =>
-            ref.read(dashboardControllerProvider.notifier).refresh(),
+        onRefresh: () async {
+          HapticFeedback.selectionClick();
+          await ref.read(dashboardControllerProvider.notifier).refresh();
+        },
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -90,13 +93,7 @@ class DashboardScreen extends ConsumerWidget {
                       ref.read(dashboardControllerProvider.notifier).refresh();
                     },
                   ),
-                  loading: () => const SizedBox(
-                    height: 220,
-                    child: Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.secondary),
-                    ),
-                  ),
+                  loading: () => const _DashboardBodySkeleton(),
                   error: (e, _) => EmptyState(
                     title: AppStrings.dashboardLoadErrorTitle,
                     subtitle: AppStrings.dashboardLoadErrorSubtitle,
@@ -1013,6 +1010,7 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
+      constraints: const BoxConstraints(minHeight: 152),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -1033,11 +1031,17 @@ class _MetricCard extends StatelessWidget {
             child: Icon(icon, color: iconColor, size: 18),
           ),
           const SizedBox(height: 12),
-          Text(
-            value,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: AppColors.onSurface,
-              fontWeight: FontWeight.w800,
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            child: Text(
+              value,
+              key: ValueKey<String>(value),
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: AppColors.onSurface,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ),
           const SizedBox(height: 4),
@@ -1057,8 +1061,137 @@ class _MetricCard extends StatelessWidget {
                 fontWeight: FontWeight.w700,
               ),
             ),
-          ],
+          ] else
+            const SizedBox(height: 22),
         ],
+      ),
+    );
+  }
+}
+
+class _DashboardBodySkeleton extends StatelessWidget {
+  const _DashboardBodySkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SkeletonPulse(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _SkeletonBlock(
+            height: 180,
+            radius: AppRadius.xl,
+          ),
+          const SizedBox(height: AppSpacing.xxl),
+          _SkeletonBlock(height: 10, width: 72, radius: AppRadius.sm),
+          const SizedBox(height: AppSpacing.md),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cardWidth = (constraints.maxWidth - AppSpacing.md) / 2;
+              return Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.md,
+                children: List.generate(
+                  4,
+                  (_) => _SkeletonBlock(
+                    width: cardWidth,
+                    height: 152,
+                    radius: AppRadius.lg,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          _SkeletonBlock(
+            height: 84,
+            radius: AppRadius.lg,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonPulse extends StatefulWidget {
+  const _SkeletonPulse({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_SkeletonPulse> createState() => _SkeletonPulseState();
+}
+
+class _SkeletonPulseState extends State<_SkeletonPulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      child: widget.child,
+      builder: (context, child) {
+        final color = Color.lerp(
+          AppColors.g100,
+          Colors.white,
+          _controller.value,
+        )!;
+        return ColoredBox(
+          color: Colors.transparent,
+          child: Theme(
+            data: Theme.of(context).copyWith(
+              cardColor: color,
+            ),
+            child: DefaultTextStyle.merge(
+              style: TextStyle(color: color),
+              child: IconTheme.merge(
+                data: IconThemeData(color: color),
+                child: child!,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SkeletonBlock extends StatelessWidget {
+  const _SkeletonBlock({
+    required this.height,
+    required this.radius,
+    this.width,
+  });
+
+  final double height;
+  final double radius;
+  final double? width;
+
+  @override
+  Widget build(BuildContext context) {
+    final pulseColor = Theme.of(context).cardColor;
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: pulseColor,
+        borderRadius: BorderRadius.circular(radius),
       ),
     );
   }

@@ -9,7 +9,7 @@ springdoc:
 
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://${DB_HOST:loyaltyos-fc4dd-service}:${DB_PORT:5432}/${DB_NAME:maisum}}
+    url: ${DB_URL:jdbc:${DATABASE_PUBLIC_URL:postgresql://${DB_HOST:loyaltyos-fc4dd-service}:${DB_PORT:5432}/${DB_NAME:maisum}}}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
   jpa:

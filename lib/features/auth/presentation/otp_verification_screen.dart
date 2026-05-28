@@ -8,6 +8,7 @@ import 'package:pinput/pinput.dart';
 import '../../../app/providers.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/app_feedback.dart';
 import 'auth_controller.dart';
 import 'phone_auth_screen.dart';
 
@@ -77,21 +78,21 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
     _pinController.clear();
     setState(() => _resendTimer = 60);
     _startResendTimer();
-
-    final messenger = ScaffoldMessenger.of(context);
     ref.read(authControllerProvider.notifier).requestOtp(
           phone: widget.phoneNumber,
           onCodeSent: (newVerificationId) {
             _verificationId = newVerificationId;
-            messenger.showSnackBar(
-              const SnackBar(
-                content: Text('Código de verificação reenviado!'),
-                backgroundColor: AppColors.secondary,
-              ),
+            AppFeedback.showSuccessToast(
+              context,
+              message: 'Codigo de verificacao reenviado',
             );
           },
           onError: (error) {
-            messenger.showSnackBar(SnackBar(content: Text(error)));
+            AppFeedback.showMessage(
+              context,
+              message: error,
+              isError: true,
+            );
           },
         );
   }
@@ -100,8 +101,10 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
     final otp = pin ?? _pinController.text;
     if (otp.length != 6) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, insira o código completo')),
+      AppFeedback.showMessage(
+        context,
+        message: 'Por favor, insira o codigo completo',
+        isError: true,
       );
       return;
     }
@@ -128,10 +131,13 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       final message = rawMessage.startsWith('Exception: ')
           ? rawMessage.substring('Exception: '.length)
           : rawMessage;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(message.isEmpty
-              ? 'Não foi possível validar o código. Tente novamente.'
-              : message)));
+      AppFeedback.showMessage(
+        context,
+        message: message.isEmpty
+            ? 'Nao foi possivel validar o codigo. Tente novamente.'
+            : message,
+        isError: true,
+      );
     }
   }
 

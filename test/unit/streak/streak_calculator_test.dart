@@ -3,7 +3,7 @@ import 'package:maisum/core/services/streak/streak_calculator.dart';
 
 void main() {
   group('StreakCalculator', () {
-    const calc = StreakCalculator();
+    final calc = StreakCalculator();
 
     test('returns 0 for no sales', () {
       final result = calc.calculate(saleDays: []);

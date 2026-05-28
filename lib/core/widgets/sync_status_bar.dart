@@ -190,20 +190,20 @@ class SyncStatusBar extends StatelessWidget {
 
   String _subtitle() {
     if (!isOnline) {
-      return 'As vendas continuam guardadas no telemóvel.';
+      return AppStrings.syncOfflineSavedSubtitle;
     }
     if (status.viewState == SyncViewState.failed) {
       return status.lastError ?? AppStrings.syncFailedActionable;
     }
     if (status.viewState == SyncViewState.syncing) {
-      return 'A atualizar clientes, vendas e recompensas.';
+      return AppStrings.syncRunningSubtitle;
     }
     if (status.pendingCount > 0) {
-      return 'Toque para ver o que falta enviar.';
+      return AppStrings.syncPendingSubtitle;
     }
     if (status.lastSyncAt != null) {
       return 'Última sincronização em ${PtDateFormat.dayMonthTime(status.lastSyncAt!)}.';
     }
-    return 'Tudo pronto para continuar a trabalhar.';
+    return AppStrings.syncReadySubtitle;
   }
 }

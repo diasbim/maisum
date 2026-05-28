@@ -6,7 +6,8 @@ void main() {
     final registry = ParserRegistry();
 
     test('parses M-Pesa message', () {
-      const message = 'Recebeu 500 MT de 841234567. Txn ID: ABC123 Ref: REF777';
+      const message =
+          'M-Pesa: Recebeu 500 MT de 841234567. Txn ID: ABC123 Ref: REF777';
       final tx = registry.parse(message: message, receivedAt: DateTime.now());
       expect(tx, isNotNull);
       expect(tx!.amount, 500);
@@ -17,7 +18,7 @@ void main() {
     });
 
     test('parses eMola message', () {
-      const message = 'Pagamento eMola: 250 MT de 841112223. ID XYZ999';
+      const message = 'e-Mola: Pagamento 250 MT de 841112223. ID XYZ999';
       final tx = registry.parse(message: message, receivedAt: DateTime.now());
       expect(tx, isNotNull);
       expect(tx!.amount, 250);
