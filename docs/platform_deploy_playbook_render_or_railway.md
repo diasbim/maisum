@@ -1,8 +1,8 @@
-# Platform Test Deployment Playbook (Railway)
+# Platform Deployment Playbook (Railway)
 
 ## Goal
 
-Deploy the backend in platform/ to a test environment using GitHub Actions and GitHub Environment protections.
+Deploy the backend in platform/ using GitHub Actions with repository-level secrets and variables.
 
 ## What is prepared in this repo
 
@@ -11,14 +11,17 @@ Deploy the backend in platform/ to a test environment using GitHub Actions and G
 
 ---
 
-## 1. Create GitHub Environment
+## 1. Configure repository-level CI/CD values
 
-1. Go to GitHub repository settings.
-2. Open Environments.
-3. Create environment named test.
-4. Optional but recommended:
-   - Add required reviewers.
-   - Add branch rules for main.
+In GitHub repository settings:
+
+1. Open Secrets and variables > Actions.
+2. Add repository secret:
+   - RAILWAY_TOKEN
+3. Add repository variables:
+   - RAILWAY_PROJECT_ID
+   - RAILWAY_SERVICE
+   - RAILWAY_ENVIRONMENT
 
 ---
 
@@ -55,24 +58,16 @@ The app already supports PORT fallback in application.yml.
 
 ---
 
-## 3. Add GitHub Environment secrets
+## 3. Trigger deployment
 
-In GitHub Environment test, add:
-
-- RAILWAY_TOKEN
-- RAILWAY_SERVICE
-- RAILWAY_ENVIRONMENT
-
----
-
-## 4. Trigger deployment
-
-- Manual: run workflow Platform Deploy (Railway Test).
+- Manual: run workflow Platform Deploy (Railway).
 - Automatic: push to main changing platform/**.
 
+Optional manual overrides are available for service and environment in workflow_dispatch.
+
 ---
 
-## 5. Validation checklist
+## 4. Validation checklist
 
 1. Open Railway deployment logs.
 2. Confirm app started on assigned PORT.
@@ -82,13 +77,13 @@ In GitHub Environment test, add:
 
 ---
 
-## 6. Rollback
+## 5. Rollback
 
 - Roll back or redeploy previous successful release from Railway dashboard.
 
 ---
 
-## 7. Recommended next hardening
+## 6. Recommended next hardening
 
 - Add dedicated health endpoint and smoke test in workflow.
 - Add migration-safe deploy step before deployment.

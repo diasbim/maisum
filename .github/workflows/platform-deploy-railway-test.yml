@@ -1,7 +1,16 @@
-name: Platform Deploy (Railway Test)
+name: Platform Deploy (Railway)
 
 on:
   workflow_dispatch:
+    inputs:
+      railway_service:
+        description: Optional Railway service override
+        required: false
+        type: string
+      railway_environment:
+        description: Optional Railway environment override
+        required: false
+        type: string
   push:
     branches: ["main"]
     paths:
@@ -11,19 +20,40 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: railway-production-deploy
+  cancel-in-progress: false
+
 env:
   JAVA_VERSION: "17"
+  NODE_VERSION: "20"
+  RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+  RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
+  RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE }}
+  RAILWAY_ENVIRONMENT: ${{ vars.RAILWAY_ENVIRONMENT }}
 
 jobs:
-  test-and-deploy:
+  deploy-platform:
+    name: Validate, Test, and Deploy Platform to Railway
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    environment:
-      name: production
+    timeout-minutes: 40
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache npm packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ env.NODE_VERSION }}-railway-cli
+          restore-keys: |
+            ${{ runner.os }}-node-${{ env.NODE_VERSION }}-
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -32,75 +62,65 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
 
+      - name: Install platform dependencies
+        run: mvn -f platform/pom.xml -DskipTests dependency:go-offline
+
       - name: Run platform tests
         run: mvn -f platform/pom.xml test -DfailIfNoTests=false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Deploy to Railway
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN || vars.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE: ${{ secrets.RAILWAY_SERVICE || vars.RAILWAY_SERVICE }}
-          RAILWAY_ENVIRONMENT: ${{ secrets.RAILWAY_ENVIRONMENT || vars.RAILWAY_ENVIRONMENT }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID || vars.RAILWAY_PROJECT_ID }}
+      - name: Apply workflow dispatch overrides
+        if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
-          missing=0
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.railway_service }}" ]; then
+            echo "RAILWAY_SERVICE=${{ github.event.inputs.railway_service }}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${{ github.event.inputs.railway_environment }}" ]; then
+            echo "RAILWAY_ENVIRONMENT=${{ github.event.inputs.railway_environment }}" >> "$GITHUB_ENV"
+          fi
 
+      - name: Validate Railway Token
+        run: |
+          set -euo pipefail
           if [ -z "$RAILWAY_TOKEN" ]; then
-            echo "Missing RAILWAY_TOKEN"
-            missing=1
-          fi
-          if [ -z "$RAILWAY_SERVICE" ]; then
-            echo "Missing RAILWAY_SERVICE"
-            missing=1
-          fi
-          if [ -z "$RAILWAY_ENVIRONMENT" ]; then
-            echo "Missing RAILWAY_ENVIRONMENT"
-            missing=1
+            echo "RAILWAY_TOKEN is empty"
+            exit 1
+          else
+            echo "RAILWAY_TOKEN exists"
           fi
 
-          if [ "$missing" -eq 1 ]; then
-            echo "Configure the missing values in GitHub Actions Environment: production"
+      - name: Validate Variables
+        run: |
+          set -euo pipefail
+          if [ -z "$RAILWAY_PROJECT_ID" ] || [ -z "$RAILWAY_SERVICE" ] || [ -z "$RAILWAY_ENVIRONMENT" ]; then
+            echo "One or more required Railway variables are missing"
+            echo "Set repository variables: RAILWAY_PROJECT_ID, RAILWAY_SERVICE, RAILWAY_ENVIRONMENT"
             exit 1
           fi
+          echo "PROJECT=$RAILWAY_PROJECT_ID"
+          echo "SERVICE=$RAILWAY_SERVICE"
+          echo "ENVIRONMENT=$RAILWAY_ENVIRONMENT"
 
-          service_lc="${RAILWAY_SERVICE,,}"
-          if [ "$service_lc" = "postgres" ] || [ "$service_lc" = "postgresql" ]; then
-            echo "Invalid RAILWAY_SERVICE: '$RAILWAY_SERVICE'"
-            echo "Use the Railway APP service name (backend), not the database service."
-            exit 1
-          fi
+      - name: Mask Railway identifiers in logs
+        run: |
+          echo "::add-mask::$RAILWAY_PROJECT_ID"
+          echo "::add-mask::$RAILWAY_SERVICE"
+          echo "::add-mask::$RAILWAY_ENVIRONMENT"
 
-          project_args=()
-          if [ -n "$RAILWAY_PROJECT_ID" ]; then
-            project_args=(--project "$RAILWAY_PROJECT_ID")
-          fi
+      - name: Verify Railway Authentication
+        run: railway whoami
 
-          set +e
-          deploy_output=$(railway up platform --service "$RAILWAY_SERVICE" --environment "$RAILWAY_ENVIRONMENT" "${project_args[@]}" --detach 2>&1)
-          deploy_exit=$?
-          set -e
+      - name: Link Railway Project
+        working-directory: platform
+        run: railway link $RAILWAY_PROJECT_ID
 
-          if [ "$deploy_exit" -ne 0 ]; then
-            echo "$deploy_output"
-            if echo "$deploy_output" | grep -qi "Unauthorized"; then
-              echo "Railway authorization failed."
-              echo "Verify RAILWAY_TOKEN is valid and has access to project '$RAILWAY_PROJECT_ID'."
-              echo "If needed, regenerate token in the same Railway account/team that owns the target project."
-            elif echo "$deploy_output" | grep -qi "Service not found"; then
-              echo "Railway deploy failed: service not found."
-              echo "Verify RAILWAY_SERVICE matches the exact app service name in the selected Railway project/environment."
-              echo "If CI is not linked to the intended Railway project, set RAILWAY_PROJECT_ID in GitHub Actions Environment: production."
-            else
-              echo "Railway deploy failed."
-              echo "Verify RAILWAY_SERVICE, RAILWAY_ENVIRONMENT, and optional RAILWAY_PROJECT_ID values."
-            fi
-            echo "Current values: service='$RAILWAY_SERVICE', environment='$RAILWAY_ENVIRONMENT'."
-            exit "$deploy_exit"
-          fi
+      - name: Select Railway Environment
+        working-directory: platform
+        run: railway environment $RAILWAY_ENVIRONMENT
+
+      - name: Deploy to Railway
+        working-directory: platform
+        run: railway up --service=$RAILWAY_SERVICE
