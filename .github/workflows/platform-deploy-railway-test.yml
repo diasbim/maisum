@@ -132,15 +132,21 @@ jobs:
           echo "::add-mask::$RAILWAY_ENVIRONMENT"
 
       - name: Verify Railway Authentication
-        run: railway whoami
+        run: |
+          set -euo pipefail
+          if ! railway whoami --token "$RAILWAY_TOKEN"; then
+            echo "Railway authentication failed for RAILWAY_TOKEN"
+            echo "Regenerate a Railway account token with access to this project and update GitHub secret RAILWAY_TOKEN"
+            exit 1
+          fi
 
       - name: Link Railway Project
         working-directory: platform
-        run: railway link $RAILWAY_PROJECT_ID
+        run: railway link "$RAILWAY_PROJECT_ID" --token "$RAILWAY_TOKEN"
 
       - name: Select Railway Environment
         working-directory: platform
-        run: railway environment $RAILWAY_ENVIRONMENT
+        run: railway environment "$RAILWAY_ENVIRONMENT" --token "$RAILWAY_TOKEN"
 
       - name: Deploy to Railway
-        run: railway up platform --service=$RAILWAY_SERVICE
+        run: railway up platform --service="$RAILWAY_SERVICE" --token "$RAILWAY_TOKEN"
