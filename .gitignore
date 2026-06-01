@@ -47,3 +47,13 @@ app.*.map.json
 # Local Gradle cache and generated reports
 .gradle-local/
 /android/build/reports/
+
+# Local editor/agent settings
+/.claude/settings.local.json
+
+# Firebase local app config
+/android/app/google-services.json
+
+# Node.js dependencies (local only)
+/node_modules/
+/functions/node_modules/
