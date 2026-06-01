@@ -19,7 +19,7 @@ class AppErrorMapper {
     }
 
     if (error is FirebaseAuthException) {
-      return AppErrorInfo(
+      return const AppErrorInfo(
         title: 'Sessao expirada',
         message: AppStrings.erroAuth,
       );

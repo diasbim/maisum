@@ -208,7 +208,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     final recentCustomers = ref.watch(recentCustomersProvider);
     final showRecentCustomers =
         _selectedCustomer == null && _phoneCtrl.text.trim().isEmpty;
-    final pointsBaseMzn = AppConstants.salePointsBaseMzn;
+    const pointsBaseMzn = AppConstants.salePointsBaseMzn;
     final pointsPerBase = (pointsBaseMzn / AppConstants.pointsPerMzn).floor();
     final pointsPerBaseLabel = pointsPerBase == 1
         ? '1 ${AppStrings.pontosAbrev}'
@@ -241,7 +241,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                     BoxShadow(
                       color: AppColors.primary.withValues(alpha: 0.08),
                       blurRadius: 20,
-                      offset: Offset(0, 12),
+                      offset: const Offset(0, 12),
                     ),
                   ],
                 ),
@@ -345,7 +345,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                         ),
                     ],
                     const SizedBox(height: 20),
-                    _SectionTitle(title: '2. ${AppStrings.valor}'),
+                    const _SectionTitle(title: '2. ${AppStrings.valor}'),
                     const SizedBox(height: 12),
                     Wrap(
                       spacing: 12,
@@ -412,7 +412,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                       onChanged: (_) => setState(() => _quickAmount = null),
                     ),
                     const SizedBox(height: 18),
-                    _SectionTitle(title: '3. ${AppStrings.resumo}'),
+                    const _SectionTitle(title: '3. ${AppStrings.resumo}'),
                     const SizedBox(height: 12),
                     _SummaryCard(
                       points: _points,

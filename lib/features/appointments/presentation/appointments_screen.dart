@@ -39,7 +39,7 @@ class AppointmentsScreen extends ConsumerWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.event_busy_rounded,
                           size: 46,
                           color: AppColors.g500,

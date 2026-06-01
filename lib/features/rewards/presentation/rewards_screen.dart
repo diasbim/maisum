@@ -330,8 +330,8 @@ class _RewardTile extends StatelessWidget {
                     color: AppColors.greenLight,
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Row(
-                    children: const [
+                  child: const Row(
+                    children: [
                       Icon(Icons.circle, color: AppColors.green, size: 8),
                       SizedBox(width: 6),
                       Text(

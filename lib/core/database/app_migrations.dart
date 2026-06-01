@@ -23,34 +23,39 @@ class AppMigrations {
   static const int latestVersion = AppConstants.dbVersion;
 
   static final List<MigrationStep> steps = <MigrationStep>[
-    MigrationStep(version: 2, name: 'baseline', up: _createV2Schema),
-    MigrationStep(version: 3, name: 'redemptions', up: _createV3Schema),
-    MigrationStep(version: 4, name: 'customer name index', up: _createV4Schema),
-    MigrationStep(
+    const MigrationStep(version: 2, name: 'baseline', up: _createV2Schema),
+    const MigrationStep(version: 3, name: 'redemptions', up: _createV3Schema),
+    const MigrationStep(
+        version: 4, name: 'customer name index', up: _createV4Schema),
+    const MigrationStep(
         version: 5,
         name: 'rewards updated_at + sync_state',
         up: _createV5Schema),
-    MigrationStep(version: 6, name: 'merchant scoping', up: _createV6Schema),
-    MigrationStep(
+    const MigrationStep(
+        version: 6, name: 'merchant scoping', up: _createV6Schema),
+    const MigrationStep(
         version: 7, name: 'subscription + usage', up: _createV7Schema),
-    MigrationStep(version: 8, name: 'remote config', up: _createV8Schema),
-    MigrationStep(version: 9, name: 'merchant streak', up: _createV9Schema),
-    MigrationStep(version: 10, name: 'sync backoff', up: _createV10Schema),
-    MigrationStep(version: 11, name: 'sms inbox', up: _createV11Schema),
-    MigrationStep(
+    const MigrationStep(version: 8, name: 'remote config', up: _createV8Schema),
+    const MigrationStep(
+        version: 9, name: 'merchant streak', up: _createV9Schema),
+    const MigrationStep(
+        version: 10, name: 'sync backoff', up: _createV10Schema),
+    const MigrationStep(version: 11, name: 'sms inbox', up: _createV11Schema),
+    const MigrationStep(
         version: 12, name: 'analytics + notifications', up: _createV12Schema),
-    MigrationStep(version: 13, name: 'merchant backfill', up: _createV13Schema),
-    MigrationStep(
+    const MigrationStep(
+        version: 13, name: 'merchant backfill', up: _createV13Schema),
+    const MigrationStep(
         version: 14, name: 'customer device id', up: _createV14Schema),
-    MigrationStep(
+    const MigrationStep(
         version: 15,
         name: 'appointments + retention metrics',
         up: _createV15Schema),
-    MigrationStep(
+    const MigrationStep(
         version: 16,
         name: 'customers phone scoped uniqueness',
         up: _createV16Schema),
-    MigrationStep(
+    const MigrationStep(
         version: 17, name: 'appointments device id', up: _createV17Schema),
   ];
 

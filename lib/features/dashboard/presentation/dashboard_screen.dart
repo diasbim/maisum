@@ -704,10 +704,10 @@ class _PrimarySaleCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Positioned(
+                    const Positioned(
                       right: 14,
                       bottom: 16,
-                      child: const _SaleIllustrationBadge(),
+                      child: _SaleIllustrationBadge(),
                     ),
                     Padding(
                       padding: EdgeInsets.fromLTRB(22, 22, artWidth, 20),
@@ -1078,12 +1078,12 @@ class _DashboardBodySkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _SkeletonBlock(
+          const _SkeletonBlock(
             height: 180,
             radius: AppRadius.xl,
           ),
           const SizedBox(height: AppSpacing.xxl),
-          _SkeletonBlock(height: 10, width: 72, radius: AppRadius.sm),
+          const _SkeletonBlock(height: 10, width: 72, radius: AppRadius.sm),
           const SizedBox(height: AppSpacing.md),
           LayoutBuilder(
             builder: (context, constraints) {
@@ -1103,7 +1103,7 @@ class _DashboardBodySkeleton extends StatelessWidget {
             },
           ),
           const SizedBox(height: AppSpacing.lg),
-          _SkeletonBlock(
+          const _SkeletonBlock(
             height: 84,
             radius: AppRadius.lg,
           ),
@@ -1400,7 +1400,7 @@ class _MiniActionTile extends StatelessWidget {
                     child: Icon(icon, color: AppColors.primary, size: 20),
                   ),
                   const Spacer(),
-                  Icon(
+                  const Icon(
                     Icons.chevron_right_rounded,
                     color: AppColors.g300,
                     size: 20,

@@ -863,7 +863,7 @@ class SyncService {
     _normalizeBoolean(incoming, 'soft_limit');
 
     final windowStart = incoming['window_start'];
-    incoming['id'] ??= '${merchantId}_${metricKey}_${windowStart}';
+    incoming['id'] ??= '${merchantId}_${metricKey}_$windowStart';
 
     final filtered = _filterKeys(incoming, {
       'id',

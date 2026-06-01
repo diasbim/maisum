@@ -24,7 +24,7 @@ void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    final storage = SecureStorageService(const FlutterSecureStorage());
+    const storage = SecureStorageService(const FlutterSecureStorage());
     final merchantId = await storage.getMerchantId() ??
         await storage.getFirebaseUid() ??
         await storage.getUserId();
@@ -33,7 +33,7 @@ void callbackDispatcher() {
     final connectivity = ConnectivityService();
     await connectivity.check();
 
-    final config = const AppRuntimeConfig();
+    const config = AppRuntimeConfig();
     SyncTransport? transport;
 
     if (config.usesBackendSync) {

@@ -819,7 +819,7 @@ class _PrimaryActionButton extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 child: isLoading
                     ? _LoadingButtonContent(
-                        key: ValueKey('loading-content'),
+                        key: const ValueKey('loading-content'),
                         title: loadingLabel,
                         subtitle: loadingHint,
                       )
@@ -871,10 +871,10 @@ class _LoadingButtonContent extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
+        const SizedBox(
           width: 24,
           height: 24,
-          child: const CircularProgressIndicator(
+          child: CircularProgressIndicator(
             strokeWidth: 2.2,
             color: AppColors.primaryDarker,
           ),

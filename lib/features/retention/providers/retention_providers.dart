@@ -1,7 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../app/providers.dart';
-import '../../sync/sync_service.dart';
 import '../domain/retention_metric.dart';
 
 class RetentionDashboardData {

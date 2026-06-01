@@ -5,7 +5,7 @@ import 'package:maisum/core/sms/validation/transaction_validator.dart';
 void main() {
   const validator = TransactionValidator();
 
-  SmsTransaction _baseTransaction({
+  SmsTransaction baseTransaction({
     String provider = 'mpesa',
     double amount = 500,
   }) {
@@ -20,15 +20,15 @@ void main() {
   }
 
   test('rejects zero or negative amounts', () {
-    expect(validator.isValid(_baseTransaction(amount: 0)), false);
-    expect(validator.isValid(_baseTransaction(amount: -10)), false);
+    expect(validator.isValid(baseTransaction(amount: 0)), false);
+    expect(validator.isValid(baseTransaction(amount: -10)), false);
   });
 
   test('rejects empty provider', () {
-    expect(validator.isValid(_baseTransaction(provider: '  ')), false);
+    expect(validator.isValid(baseTransaction(provider: '  ')), false);
   });
 
   test('accepts valid transactions', () {
-    expect(validator.isValid(_baseTransaction()), true);
+    expect(validator.isValid(baseTransaction()), true);
   });
 }

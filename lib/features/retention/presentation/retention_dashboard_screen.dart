@@ -97,7 +97,7 @@ class _RecurringTab extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 720;
-        final spacing = AppSpacing.md;
+        const spacing = AppSpacing.md;
         final cardWidth = isWide
             ? (constraints.maxWidth - (AppSpacing.xl * 2) - spacing) / 2
             : constraints.maxWidth - (AppSpacing.xl * 2);
@@ -143,7 +143,7 @@ class _InactiveTab extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 720;
-        final spacing = AppSpacing.md;
+        const spacing = AppSpacing.md;
         final cardWidth = isWide
             ? (constraints.maxWidth - (AppSpacing.xl * 2) - spacing) / 2
             : constraints.maxWidth - (AppSpacing.xl * 2);

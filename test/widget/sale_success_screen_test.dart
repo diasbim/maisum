@@ -73,7 +73,7 @@ SaleResult _saleResult() => SaleResult(
 Widget _buildScreen() {
   final connectivity = ConnectivityService(
     initialOnline: true,
-    onConnectivityChanged: Stream<List<ConnectivityResult>>.empty(),
+    onConnectivityChanged: const Stream<List<ConnectivityResult>>.empty(),
     checkConnectivity: () async => [ConnectivityResult.wifi],
   );
 

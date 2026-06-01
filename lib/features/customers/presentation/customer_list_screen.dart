@@ -655,7 +655,7 @@ class _FilterChip extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
-      overlayColor: MaterialStatePropertyAll(overlay),
+      overlayColor: WidgetStatePropertyAll(overlay),
       child: Ink(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(

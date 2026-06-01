@@ -109,12 +109,12 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         child: SafeArea(
           child: Stack(
             children: [
-              Positioned(
+              const Positioned(
                 top: -80,
                 right: -60,
                 child: _GlowCircle(color: AppColors.secondary, size: 180),
               ),
-              Positioned(
+              const Positioned(
                 bottom: -120,
                 left: -80,
                 child: _GlowCircle(color: AppColors.primaryDark, size: 220),
@@ -219,7 +219,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                               vertical: 14,
                             ),
                           ),
-                          child: Text(AppStrings.voltarAoInicio),
+                          child: const Text(AppStrings.voltarAoInicio),
                         ),
                       ],
                     ),
@@ -316,21 +316,17 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         final clean = customer.phone.replaceAll(RegExp(r'\D'), '');
         if (clean.isEmpty) return;
         final number = clean.startsWith('258') ? clean : '258$clean';
-        await ref
-            .read(notificationQueueServiceProvider)
-            .enqueueWhatsApp(
+        await ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
               phone: number,
               message: message,
               source: 'sale_success',
             );
         try {
-          await ref
-              .read(analyticsServiceProvider)
-              .record(
-                eventType: 'whatsapp_sent',
-                source: 'whatsapp',
-                properties: {'queued': true, 'source': 'sale_success'},
-              );
+          await ref.read(analyticsServiceProvider).record(
+            eventType: 'whatsapp_sent',
+            source: 'whatsapp',
+            properties: {'queued': true, 'source': 'sale_success'},
+          );
         } catch (_) {}
         if (context.mounted) {
           AppFeedback.showMessage(context, message: AppStrings.whatsappQueued);
@@ -357,20 +353,16 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
       }
       if (launched) {
         try {
-          await ref
-              .read(usageTrackerProvider)
-              .record(
-                metricKey: UsageMetrics.whatsappMessages,
-                source: 'whatsapp',
-                metadata: {'message_type': 'sale_success'},
-              );
-          await ref
-              .read(analyticsServiceProvider)
-              .record(
-                eventType: 'whatsapp_sent',
-                source: 'whatsapp',
-                properties: {'queued': false, 'source': 'sale_success'},
-              );
+          await ref.read(usageTrackerProvider).record(
+            metricKey: UsageMetrics.whatsappMessages,
+            source: 'whatsapp',
+            metadata: {'message_type': 'sale_success'},
+          );
+          await ref.read(analyticsServiceProvider).record(
+            eventType: 'whatsapp_sent',
+            source: 'whatsapp',
+            properties: {'queued': false, 'source': 'sale_success'},
+          );
         } catch (_) {}
         if (context.mounted) {
           AppFeedback.showMessage(context, message: AppStrings.whatsappSent);
@@ -412,9 +404,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     DateTime scheduledDate,
   ) async {
     try {
-      await ref
-          .read(createAppointmentProvider.notifier)
-          .createAppointment(
+      await ref.read(createAppointmentProvider.notifier).createAppointment(
             customerId: customerId,
             scheduledDate: scheduledDate,
             source: 'post_sale_flow',
@@ -628,10 +618,10 @@ class _RewardProgressCard extends StatelessWidget {
         : unclampedCurrent;
     final label = hasRewards
         ? (nextRewardName != null
-              ? 'Faltam $pointsLeft pontos para $nextRewardName'
-              : unlockedRewardName != null
-              ? 'Recompensa disponível: $unlockedRewardName'
-              : 'Recompensa disponível')
+            ? 'Faltam $pointsLeft pontos para $nextRewardName'
+            : unlockedRewardName != null
+                ? 'Recompensa disponível: $unlockedRewardName'
+                : 'Recompensa disponível')
         : 'Crie uma recompensa para continuar';
 
     return Container(

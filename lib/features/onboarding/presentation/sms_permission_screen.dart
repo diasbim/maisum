@@ -162,7 +162,7 @@ class _SmsPermissionScreenState extends ConsumerState<SmsPermissionScreen> {
                           ),
                         ),
                         const Spacer(),
-                        _Pill(
+                        const _Pill(
                           label: 'M-Pesa + eMola',
                           icon: Icons.bolt_rounded,
                         ),
@@ -186,20 +186,20 @@ class _SmsPermissionScreenState extends ConsumerState<SmsPermissionScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Wrap(
+                    const Wrap(
                       spacing: 10,
                       runSpacing: 10,
-                      children: const [
+                      children: [
                         _TagChip(label: 'Deteção rápida'),
                         _TagChip(label: 'Sem escrever'),
                         _TagChip(label: 'Offline first'),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    _GlassCard(
+                    const _GlassCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
+                        children: [
                           _FeatureTile(
                             icon: Icons.receipt_long_rounded,
                             title: 'Sugestão automática',
@@ -310,8 +310,8 @@ class _GradientBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: const [
+    return const Stack(
+      children: [
         DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(

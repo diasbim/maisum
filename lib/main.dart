@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:ui';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -20,6 +17,8 @@ const _firestoreCacheSizeBytes = 20 * 1024 * 1024;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await _configureSystemUi();
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -36,8 +35,6 @@ void main() async {
   );
 
   runApp(const ProviderScope(child: LoyaltyApp()));
-
-  unawaited(_warmUpApp());
 }
 
 Future<void> _configureCrashlytics() async {
@@ -51,8 +48,9 @@ Future<void> _configureCrashlytics() async {
   };
 }
 
-Future<void> _warmUpApp() async {
+Future<void> _configureSystemUi() async {
   await Future.wait([
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
