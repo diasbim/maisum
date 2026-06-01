@@ -228,7 +228,7 @@ app.get('/sync/:entityType', async (req, res) => {
     return res.status(404).json({ success: false, message: 'Unknown entity' });
   }
 
-  const merchantId = (req as AuthedRequest).merchantId;
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
   const sql = `
     SELECT ${config.selectSql}
     FROM ${config.table}
@@ -251,7 +251,7 @@ app.get('/sync/:entityType/changes', async (req, res) => {
     return res.status(404).json({ success: false, message: 'Unknown entity' });
   }
 
-  const merchantId = (req as AuthedRequest).merchantId;
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
   const lastValue = parseNumber(req.query.last_value);
   const lastDocId =
     typeof req.query.last_doc_id === 'string' ? req.query.last_doc_id : null;
@@ -292,7 +292,7 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid operation' });
   }
 
-  const merchantId = (req as AuthedRequest).merchantId;
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
   const payloadMerchantId =
     pickString(payload, 'merchant_id') ?? pickString(payload, 'merchantId');
   if (payloadMerchantId && payloadMerchantId !== merchantId) {
@@ -341,6 +341,47 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
       default:
         return res.status(404).json({ success: false, message: 'Unknown entity' });
     }
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/notifications/queue', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+  const channel = pickString(req.body ?? {}, 'channel');
+  const payload = (req.body ?? {}).payload;
+  const scheduledAtRaw = pickString(req.body ?? {}, 'scheduled_at');
+
+  if (!channel) {
+    return res.status(400).json({ success: false, message: 'Missing channel' });
+  }
+  if (!payload || typeof payload !== 'object') {
+    return res.status(400).json({ success: false, message: 'Invalid payload' });
+  }
+
+  const scheduledAt = scheduledAtRaw ? Date.parse(scheduledAtRaw) : Date.now();
+  if (!Number.isFinite(scheduledAt)) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Invalid scheduled_at' });
+  }
+
+  try {
+    await admin
+      .firestore()
+      .collection('businesses')
+      .doc(merchantId)
+      .collection('notification_queue')
+      .add({
+        merchant_id: merchantId,
+        channel,
+        payload,
+        scheduled_at: scheduledAt,
+        status: 'queued',
+        created_at: Date.now(),
+      });
+
+    return res.json({ success: true });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error' });
   }

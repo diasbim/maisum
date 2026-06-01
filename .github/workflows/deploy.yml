@@ -1,5 +1,5 @@
-# Simple workflow for deploying static content to GitHub Pages
-name: Deploy static content to Pages
+# Deploy static content to Firebase Hosting
+name: Deploy static content to Firebase Hosting
 
 on:
   push:
@@ -8,30 +8,25 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "firebase-hosting"
   cancel-in-progress: false
 
 jobs:
   deploy:
     environment:
-      name: github-pages
+      name: production
       url: https://maisum.tsintsivadigital.com/
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+
+      - name: Deploy to Firebase Hosting (live)
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          enablement: false
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: 'docs'
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_LOYALTYOS_FC4DD }}
+          channelId: live
+          projectId: loyaltyos-fc4dd

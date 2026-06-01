@@ -16,13 +16,6 @@ import '../core/services/streak/streak_service.dart';
 import '../core/matching/customer_match_engine.dart';
 import '../core/analytics/analytics_service.dart';
 import '../core/notifications/notification_queue_service.dart';
-import '../core/sms/data/sms_inbox_dao.dart';
-import '../core/sms/data/sms_transaction_dao.dart';
-import '../core/sms/parsers/parser_registry.dart';
-import '../core/sms/sms_channel_bridge.dart';
-import '../core/sms/sms_listener_service.dart';
-import '../core/sms/validation/duplicate_detector.dart';
-import '../core/sms/validation/transaction_validator.dart';
 import '../core/storage/secure_storage.dart';
 import '../features/auth/data/backend_auth_api.dart';
 import '../features/appointments/data/appointment_dao.dart';
@@ -56,7 +49,6 @@ import '../features/subscription/services/remote_config_reader.dart';
 import '../features/subscription/services/usage_quota_engine.dart';
 import '../features/subscription/services/usage_tracker.dart';
 import '../features/sync/sync_service.dart';
-import '../features/sales/domain/suggested_sale.dart';
 
 // ── Firebase ──────────────────────────────────────────────────────────────────
 
@@ -104,16 +96,30 @@ final jsonApiClientProvider = Provider<JsonApiClient>((ref) {
   return JsonApiClient(baseUrl: config.apiBaseUrl);
 });
 
+final cloudFunctionsApiClientProvider = Provider<JsonApiClient>((ref) {
+  final config = ref.watch(appRuntimeConfigProvider);
+  final baseUrl = config.cloudFunctionsApiBaseUrl.isNotEmpty
+      ? config.cloudFunctionsApiBaseUrl
+      : config.apiBaseUrl;
+  return JsonApiClient(baseUrl: baseUrl);
+});
+
 final backendAuthApiProvider = Provider<BackendAuthApi>(
   (ref) => BackendAuthApi(ref.read(jsonApiClientProvider)),
 );
 
 final backendSyncTransportProvider = Provider<BackendSyncTransport?>((ref) {
-  final token = ref.watch(authControllerProvider).valueOrNull?.token;
-  if (token == null || token.isEmpty) {
-    return null;
-  }
-  return BackendSyncTransport(ref.read(jsonApiClientProvider), token);
+  return BackendSyncTransport(
+    ref.read(cloudFunctionsApiClientProvider),
+    () async {
+      final backendToken = ref.read(authControllerProvider).valueOrNull?.token;
+      if (backendToken != null && backendToken.isNotEmpty) {
+        return backendToken;
+      }
+      final currentUser = ref.read(firebaseAuthInstanceProvider).currentUser;
+      return currentUser?.getIdToken();
+    },
+  );
 });
 
 final syncTransportProvider = Provider<SyncTransport?>((ref) {
@@ -158,9 +164,18 @@ final notificationQueueServiceProvider =
     Provider<NotificationQueueService>((ref) {
   final service = NotificationQueueService(
     ref.read(appDatabaseProvider),
-    ref.read(jsonApiClientProvider),
+    ref.read(cloudFunctionsApiClientProvider),
     ref.read(connectivityServiceProvider),
     ref.read(secureStorageServiceProvider),
+    () async {
+      final backendToken =
+          await ref.read(secureStorageServiceProvider).getToken();
+      if (backendToken != null && backendToken.isNotEmpty) {
+        return backendToken;
+      }
+      final currentUser = ref.read(firebaseAuthInstanceProvider).currentUser;
+      return currentUser?.getIdToken();
+    },
   );
   service.init();
   ref.onDispose(service.dispose);
@@ -202,34 +217,9 @@ final streakServiceProvider = Provider<StreakService>(
   (ref) => StreakService(ref.read(saleDaoProvider)),
 );
 
-final smsInboxDaoProvider = Provider<SmsInboxDao>(
-  (ref) => SmsInboxDao(ref.read(appDatabaseProvider)),
-);
-
-final smsTransactionDaoProvider = Provider<SmsTransactionDao>(
-  (ref) => SmsTransactionDao(ref.read(appDatabaseProvider)),
-);
-
 final customerMatchEngineProvider = Provider<CustomerMatchEngine>(
   (ref) => CustomerMatchEngine(ref.read(customerDaoProvider)),
 );
-
-final smsListenerServiceProvider = Provider<SmsListenerService>((ref) {
-  final service = SmsListenerService(
-    SmsChannelBridge(),
-    ParserRegistry(),
-    const TransactionValidator(),
-    DuplicateDetector(ref.read(smsTransactionDaoProvider)),
-    ref.read(smsInboxDaoProvider),
-    ref.read(customerMatchEngineProvider),
-  );
-  ref.onDispose(service.dispose);
-  return service;
-});
-
-final smsSuggestionStreamProvider = StreamProvider<SuggestedSale>((ref) {
-  return ref.watch(smsListenerServiceProvider).suggestions;
-});
 
 final subscriptionDaoProvider = Provider<SubscriptionDao>(
   (ref) => SubscriptionDao(

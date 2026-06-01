@@ -20,7 +20,6 @@ import '../features/sales/presentation/sales_history_screen.dart';
 import '../features/sales/presentation/sale_success_screen.dart';
 import '../features/legal/presentation/privacy_screen.dart';
 import '../features/legal/presentation/terms_screen.dart';
-import '../features/onboarding/presentation/sms_permission_screen.dart';
 import '../features/settings/presentation/merchant_config_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/appointments/presentation/appointments_screen.dart';
@@ -36,8 +35,6 @@ const _publicRoutes = {
   '/terms',
   '/privacy',
 };
-
-const _smsPermissionRoute = '/sms-permission';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ValueNotifier<bool>(false);
@@ -61,24 +58,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
         return hasPin ? '/pin-entry' : '/pin-setup';
       }
-      if (isAuthenticated && state.matchedLocation != _smsPermissionRoute) {
-        final prompted = await ref
-            .read(secureStorageServiceProvider)
-            .hasSmsPermissionPrompted();
-        if (!prompted &&
-            state.matchedLocation != '/privacy' &&
-            state.matchedLocation != '/terms') {
-          return _smsPermissionRoute;
-        }
-      }
       return null;
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
-      GoRoute(
-        path: _smsPermissionRoute,
-        builder: (_, __) => const SmsPermissionScreen(),
-      ),
       GoRoute(path: '/login', builder: (_, __) => const PhoneAuthScreen()),
       GoRoute(
         path: '/otp',

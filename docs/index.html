@@ -56,6 +56,7 @@
       "inLanguage": "pt-MZ",
       "description": "App de fidelização para barbearias em Maputo. Regista vendas, atribui pontos automaticamente e traz clientes de volta pelo WhatsApp, mesmo sem internet.",
       "url": "https://maisum.tsintsivadigital.com/",
+      "downloadUrl": "https://play.google.com/store/apps/details?id=com.tsintsivadigital.maisum&hl=pt",
       "image": "https://maisum.tsintsivadigital.com/assets/images/landing/barbershop-hero.webp",
       "audience": {"@type": "BusinessAudience", "name": "Barbearias e salões em Maputo"},
       "areaServed": {"@type": "City", "name": "Maputo"},
@@ -502,7 +503,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
 .cta-copy h2{font-family:"Outfit",sans-serif;font-weight:800;letter-spacing:-.03em}
 .cta-copy>p{color:rgba(244,251,251,.74);font-size:1rem;max-width:52ch}
 .cta-actions{display:flex;flex-direction:column;gap:12px;margin-top:22px}
-.cta-actions .btn-primary,.cta-actions .btn-wa{width:100%}
+.cta-actions .btn-primary,.cta-actions .btn-wa,.cta-actions .btn-dark{width:100%}
 .cta-reassurance{margin-top:14px;font-size:.86rem;font-weight:700;color:rgba(244,251,251,.54)}
 .cta-side{padding:20px;border-radius:var(--r-lg);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08)}
 .cta-side h3{color:#fff;margin-bottom:12px}
@@ -630,7 +631,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
   .cta-shell{padding:40px;box-shadow:0 24px 56px rgba(18,33,42,.2)}
   .cta-layout{grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:36px;align-items:start}
   .cta-actions{flex-direction:row;align-items:center;flex-wrap:wrap}
-  .cta-actions .btn-primary,.cta-actions .btn-wa{width:auto}
+  .cta-actions .btn-primary,.cta-actions .btn-wa,.cta-actions .btn-dark{width:auto}
   .mobile-cta{display:none}
   .site-footer{padding-bottom:32px}
 }
@@ -715,6 +716,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
             <p>Registe vendas em segundos. Atribua pontos automaticamente. Traga clientes de volta pelo WhatsApp.</p>
             <div class="hero-actions">
               <a class="btn btn-primary btn-lg" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20come%C3%A7ar%20a%20usar%20o%20MaisUm%20na%20minha%20barbearia." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_hero_primary">Começar Grátis</a>
+              <a class="btn btn-dark btn-lg" href="https://play.google.com/store/apps/details?id=com.tsintsivadigital.maisum&hl=pt" target="_blank" rel="noopener" data-plausible-event="cta_play_store_hero">Instalar no Android</a>
               <a class="btn btn-ghost" href="#como-funciona" data-plausible-event="cta_demo_hero">Ver como funciona</a>
             </div>
             <p class="hero-meta">Funciona em Maputo. M-Pesa, MT e +258 prontos.</p>
@@ -1058,6 +1060,7 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
             <p>Fala connosco no WhatsApp e percebe em minutos se o MaisUm encaixa no teu balcão.</p>
             <div class="cta-actions">
               <a class="btn btn-wa btn-lg" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20come%C3%A7ar%20a%20usar%20o%20MaisUm%20na%20minha%20barbearia." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_final_primary">Começar Grátis no WhatsApp</a>
+              <a class="btn btn-dark btn-lg" href="https://play.google.com/store/apps/details?id=com.tsintsivadigital.maisum&hl=pt" target="_blank" rel="noopener" data-plausible-event="cta_play_store_final">Instalar app Android</a>
               <a class="btn btn-ghost" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20ver%20um%20exemplo%20real%20do%20MaisUm." target="_blank" rel="noopener" data-plausible-event="cta_demo_final">Ver exemplo real</a>
             </div>
             <p class="cta-reassurance">Sem formulários. Sem compromisso. Conversa direta no WhatsApp.</p>
@@ -1086,22 +1089,38 @@ h3{font-size:1.04rem;letter-spacing:-.03em;margin-bottom:8px}
       <a href="#whatsapp">WhatsApp</a>
       <a href="#offline">Offline</a>
       <a href="#faq">FAQ</a>
+      <a href="https://play.google.com/store/apps/details?id=com.tsintsivadigital.maisum&hl=pt" target="_blank" rel="noopener" data-plausible-event="cta_play_store_footer">App Android (Play Store)</a>
       <a href="privacy.html">Politica de Privacidade</a>
       <a href="https://wa.me/258823262347" target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_footer">+258 82 326 2347</a>
     </div>
   </div>
 </footer>
 
-<div class="mobile-cta style-conversion" role="complementary" aria-label="Ação rápida">
-  <a class="btn btn-wa" href="https://wa.me/258823262347?text=Ol%C3%A1.%20Quero%20come%C3%A7ar%20a%20usar%20o%20MaisUm%20na%20minha%20barbearia." target="_blank" rel="noopener" data-plausible-event="cta_whatsapp_mobile" aria-label="Começar grátis no WhatsApp">
-    <span class="fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/></svg></span>
-    <span class="fab-copy"><strong>Começar no WhatsApp</strong><span>Resposta rápida em minutos</span></span>
+<div class="mobile-cta style-conversion" role="complementary" aria-label="Ação rápida de instalação Android">
+  <a class="btn btn-dark" href="https://play.google.com/store/apps/details?id=com.tsintsivadigital.maisum&hl=pt" target="_blank" rel="noopener" data-plausible-event="cta_play_store_mobile" aria-label="Download on Google Play">
+    <span class="fab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 3l13 9L5 21V3z"/><path d="M18 12h3"/></svg></span>
+    <span class="fab-copy"><strong>Download on Google Play</strong><span>Instalar app Android agora</span></span>
   </a>
 </div>
 
 <script>
 window.plausible=window.plausible||function(){(window.plausible.q=window.plausible.q||[]).push(arguments)};
 (function(){
+  const mobilePlayStoreCta=document.querySelector('[data-plausible-event="cta_play_store_mobile"]');
+  if(mobilePlayStoreCta){
+    const mobilePlayStoreVariants=[
+      {id:'install_free',title:'Install Free on Google Play',subtitle:'Instalar app Android agora'},
+      {id:'get_app',title:'Get the App on Google Play',subtitle:'Instalar app Android agora'}
+    ];
+    const chosenMobilePlayStoreVariant=mobilePlayStoreVariants[Math.floor(Math.random()*mobilePlayStoreVariants.length)];
+    const mobileCtaTitle=mobilePlayStoreCta.querySelector('.fab-copy strong');
+    const mobileCtaSubtitle=mobilePlayStoreCta.querySelector('.fab-copy span');
+    if(mobileCtaTitle){mobileCtaTitle.textContent=chosenMobilePlayStoreVariant.title;}
+    if(mobileCtaSubtitle){mobileCtaSubtitle.textContent=chosenMobilePlayStoreVariant.subtitle;}
+    mobilePlayStoreCta.setAttribute('aria-label',chosenMobilePlayStoreVariant.title);
+    mobilePlayStoreCta.dataset.ctaVariant=chosenMobilePlayStoreVariant.id;
+  }
+
   const configuredDomain=document.querySelector('meta[name="plausible-domain"]')?.content.trim();
   const host=window.location.hostname;
   const skipPlausible=window.location.protocol==='file:'||!host||host==='localhost'||host==='127.0.0.1';
@@ -1113,7 +1132,9 @@ window.plausible=window.plausible||function(){(window.plausible.q=window.plausib
   }
   document.querySelectorAll('[data-plausible-event]').forEach(link=>{
     link.addEventListener('click',()=>{
-      window.plausible(link.dataset.plausibleEvent,{props:{cta_text:link.textContent.trim(),cta_href:link.getAttribute('href')||''}});
+      const plausibleProps={cta_text:link.textContent.trim(),cta_href:link.getAttribute('href')||''};
+      if(link.dataset.ctaVariant){plausibleProps.cta_variant=link.dataset.ctaVariant;}
+      window.plausible(link.dataset.plausibleEvent,{props:plausibleProps});
     });
   });
   const mobileCta=document.querySelector('.mobile-cta');

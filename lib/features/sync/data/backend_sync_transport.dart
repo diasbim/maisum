@@ -5,19 +5,20 @@ import '../domain/sync_item.dart';
 import 'sync_transport.dart';
 
 class BackendSyncTransport implements SyncTransport {
-  const BackendSyncTransport(this._client, this._accessToken);
+  const BackendSyncTransport(this._client, this._resolveAccessToken);
 
   final JsonApiClient _client;
-  final String _accessToken;
+  final Future<String?> Function() _resolveAccessToken;
 
   @override
   String get transportName => 'backend';
 
   @override
   Future<List<Map<String, dynamic>>> fetchCollection(String entityType) async {
+    final accessToken = await _requireAccessToken();
     final response = await _client.get(
       '/sync/$entityType',
-      bearerToken: _accessToken,
+      bearerToken: accessToken,
     );
     return _asMapList(response.data);
   }
@@ -30,9 +31,10 @@ class BackendSyncTransport implements SyncTransport {
     String? lastDocId,
     int limit = 200,
   }) async {
+    final accessToken = await _requireAccessToken();
     final response = await _client.get(
       '/sync/$entityType/changes',
-      bearerToken: _accessToken,
+      bearerToken: accessToken,
       queryParameters: {
         'order_field': orderField,
         'last_value': lastValue,
@@ -45,16 +47,25 @@ class BackendSyncTransport implements SyncTransport {
 
   @override
   Future<void> processSyncItem(SyncItem item) async {
+    final accessToken = await _requireAccessToken();
     final payload = jsonDecode(item.payload);
     await _client.post(
       '/sync/${item.entityType}/${item.entityId}',
-      bearerToken: _accessToken,
+      bearerToken: accessToken,
       body: {
         'operation': item.operation,
         'payload': payload,
         'queued_at': item.createdAt.toIso8601String(),
       },
     );
+  }
+
+  Future<String> _requireAccessToken() async {
+    final token = await _resolveAccessToken();
+    if (token == null || token.isEmpty) {
+      throw const SyncTransportException('Missing sync access token');
+    }
+    return token;
   }
 
   List<Map<String, dynamic>> _asMapList(dynamic data) {

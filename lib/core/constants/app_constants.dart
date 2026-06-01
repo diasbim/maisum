@@ -7,6 +7,10 @@ class AppConstants {
     'API_BASE_URL',
     defaultValue: 'https://api.loyaltyos.com/v1',
   );
+  static const String cloudFunctionsApiBaseUrl = String.fromEnvironment(
+    'CLOUD_FUNCTIONS_API_BASE_URL',
+    defaultValue: 'https://us-central1-loyaltyos-fc4dd.cloudfunctions.net/api',
+  );
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 15);
   static const int maxSyncRetries = 3;
@@ -24,7 +28,7 @@ class AppConstants {
   );
   static const String syncTransport = String.fromEnvironment(
     'SYNC_TRANSPORT',
-    defaultValue: syncTransportFirestore,
+    defaultValue: syncTransportBackend,
   );
   static const String syncTransportFirestore = 'firestore';
   static const String syncTransportBackend = 'backend';

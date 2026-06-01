@@ -6,15 +6,13 @@ Offline-first loyalty app for barbershops in Maputo, Mozambique. Barbers registe
 
 Future features are evaluated through a strict decision framework before they enter the roadmap. See `docs/feature_decision_framework.md`.
 
-## GitHub Pages Prerequisites
+## Firebase Hosting Prerequisites
 
-If deployment fails in GitHub Actions with Pages permission/setup errors, configure this once in the repository:
+This repository deploys the static site from `docs/` to Firebase Hosting via GitHub Actions.
 
-1. Open **GitHub -> Settings -> Pages**.
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-3. Save.
-
-The workflow in `.github/workflows/deploy.yml` expects Pages to be pre-enabled and deploys the static site from `docs/`.
+1. In GitHub repository secrets, add `FIREBASE_SERVICE_ACCOUNT_LOYALTYOS_FC4DD`.
+2. Use a Firebase service account JSON with Hosting deploy permissions for project `loyaltyos-fc4dd`.
+3. Push to `main` or run `.github/workflows/deploy.yml` manually.
 
 ## Quick Start
 
@@ -22,6 +20,14 @@ The workflow in `.github/workflows/deploy.yml` expects Pages to be pre-enabled a
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 flutter run -d android --dart-define=API_BASE_URL=https://your-api.example.com
+```
+
+Temporary Cloud Functions mode (sync + notifications):
+
+```bash
+flutter run -d android \
+  --dart-define=SYNC_TRANSPORT=backend \
+  --dart-define=CLOUD_FUNCTIONS_API_BASE_URL=https://us-central1-loyaltyos-fc4dd.cloudfunctions.net/api
 ```
 
 ## Stack
@@ -62,6 +68,8 @@ Pass at build time via `--dart-define`:
 | Variable | Default | Description |
 |---|---|---|
 | `API_BASE_URL` | `http://10.0.2.2:3000` | Backend base URL |
+| `CLOUD_FUNCTIONS_API_BASE_URL` | `https://us-central1-loyaltyos-fc4dd.cloudfunctions.net/api` | Cloud Functions HTTP API base URL for sync/notifications |
+| `SYNC_TRANSPORT` | `backend` | Sync transport (`backend` for Cloud Functions API, `firestore` for direct Firestore sync) |
 
 Read in `AppConstants`:
 ```dart

@@ -16,12 +16,14 @@ class NotificationQueueService {
     this._client,
     this._connectivity,
     this._storage,
+    this._resolveBearerToken,
   ) : _dao = NotificationQueueDao(_db);
 
   final AppDatabase _db;
   final JsonApiClient _client;
   final ConnectivityService _connectivity;
   final SecureStorageService _storage;
+  final Future<String?> Function() _resolveBearerToken;
   final NotificationQueueDao _dao;
   final SyncRetryPolicy _retryPolicy = const SyncRetryPolicy();
 
@@ -77,7 +79,7 @@ class NotificationQueueService {
       final merchantId = await _storage.getMerchantId();
       if (merchantId == null || merchantId.isEmpty) return;
 
-      final token = await _storage.getToken();
+      final token = await _resolveBearerToken();
       final deviceId = await _storage.getDeviceId();
       final headers = <String, String>{
         'X-Merchant-Id': merchantId,

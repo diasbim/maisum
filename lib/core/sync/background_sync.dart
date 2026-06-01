@@ -39,9 +39,12 @@ void callbackDispatcher() {
     if (config.usesBackendSync) {
       final token = await storage.getToken();
       if (token != null && token.isNotEmpty) {
+        final baseUrl = config.cloudFunctionsApiBaseUrl.isNotEmpty
+            ? config.cloudFunctionsApiBaseUrl
+            : config.apiBaseUrl;
         transport = BackendSyncTransport(
-          JsonApiClient(baseUrl: config.apiBaseUrl),
-          token,
+          JsonApiClient(baseUrl: baseUrl),
+          () async => token,
         );
       }
     } else {
