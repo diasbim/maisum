@@ -6,13 +6,13 @@ Offline-first loyalty app for barbershops in Maputo, Mozambique. Barbers registe
 
 Future features are evaluated through a strict decision framework before they enter the roadmap. See `docs/feature_decision_framework.md`.
 
-## Firebase Hosting Prerequisites
+## GitHub Pages Deployment
 
-This repository deploys the static site from `docs/` to Firebase Hosting via GitHub Actions.
+This repository deploys the static landing page from `docs/` to GitHub Pages via GitHub Actions.
 
-1. In GitHub repository secrets, add `FIREBASE_SERVICE_ACCOUNT_LOYALTYOS_FC4DD`.
-2. Use a Firebase service account JSON with Hosting deploy permissions for project `loyaltyos-fc4dd`.
-3. Push to `main` or run `.github/workflows/deploy.yml` manually.
+1. In repository settings, enable GitHub Pages and set Source to GitHub Actions.
+2. Push changes to `main` that touch `docs/` (or run `.github/workflows/deploy.yml` manually).
+3. The workflow uploads `docs/` and publishes it to the `github-pages` environment.
 
 ## Quick Start
 

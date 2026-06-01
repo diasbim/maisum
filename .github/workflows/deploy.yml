@@ -1,32 +1,41 @@
-# Deploy static content to Firebase Hosting
-name: Deploy static content to Firebase Hosting
+# Deploy landing page to GitHub Pages
+name: Deploy landing page to GitHub Pages
 
 on:
   push:
     branches: ["main"]
+    paths:
+      - "docs/**"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: "firebase-hosting"
-  cancel-in-progress: false
+  group: "github-pages"
+  cancel-in-progress: true
 
 jobs:
   deploy:
     environment:
-      name: production
-      url: https://maisum.tsintsivadigital.com/
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to Firebase Hosting (live)
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload landing page artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_LOYALTYOS_FC4DD }}
-          channelId: live
-          projectId: loyaltyos-fc4dd
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
