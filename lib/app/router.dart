@@ -12,6 +12,12 @@ import '../features/auth/presentation/splash_screen.dart';
 import '../features/customers/presentation/customer_detail_screen.dart';
 import '../features/customers/presentation/customer_list_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
+import '../features/engage/presentation/engage_dashboard_screen.dart';
+import '../features/engage/presentation/recovery_actions_screen.dart';
+import '../features/engage/presentation/survey_analytics_screen.dart';
+import '../features/engage/presentation/survey_builder_screen.dart';
+import '../features/engage/presentation/survey_response_screen.dart';
+import '../features/engage/presentation/visit_report_screen.dart';
 import '../features/rewards/presentation/create_reward_screen.dart';
 import '../features/rewards/presentation/rewards_screen.dart';
 import '../features/retention/presentation/retention_dashboard_screen.dart';
@@ -48,7 +54,8 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: authNotifier,
     redirect: (context, state) async {
-      final isPublic = _publicRoutes.contains(state.matchedLocation) ||
+      final isPublic =
+          _publicRoutes.contains(state.matchedLocation) ||
           state.matchedLocation.startsWith('/otp');
       final isAuthenticated =
           ref.read(authControllerProvider).valueOrNull != null;
@@ -118,6 +125,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/retention',
         builder: (_, __) => const RetentionDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/engage',
+        builder: (_, __) => const EngageDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/engage/actions',
+        builder: (_, __) => const RecoveryActionsScreen(),
+      ),
+      GoRoute(
+        path: '/engage/visit-report',
+        builder: (_, __) => const VisitReportScreen(),
+      ),
+      GoRoute(
+        path: '/engage/surveys/new',
+        builder: (_, __) => const SurveyBuilderScreen(),
+      ),
+      GoRoute(
+        path: '/engage/surveys/respond',
+        builder: (_, __) => const SurveyResponseScreen(),
+      ),
+      GoRoute(
+        path: '/engage/surveys/analytics',
+        builder: (_, __) => const SurveyAnalyticsScreen(),
       ),
       GoRoute(
         path: '/pending-sync',

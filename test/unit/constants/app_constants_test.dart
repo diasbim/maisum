@@ -5,16 +5,16 @@ void main() {
   group('AppConstants values', () {
     test('pointsPerMzn is 100', () => expect(AppConstants.pointsPerMzn, 100));
     test('maxSyncRetries is 3', () => expect(AppConstants.maxSyncRetries, 3));
-    test('dbVersion is 17', () => expect(AppConstants.dbVersion, 17));
+    test('dbVersion is 18', () => expect(AppConstants.dbVersion, 18));
     test(
       'backend auth is disabled by default',
       () => expect(AppConstants.enableBackendAuth, false),
     );
     test(
-      'sync transport defaults to firestore',
+      'sync transport defaults to backend',
       () => expect(
         AppConstants.syncTransport,
-        AppConstants.syncTransportFirestore,
+        AppConstants.syncTransportBackend,
       ),
     );
     test(

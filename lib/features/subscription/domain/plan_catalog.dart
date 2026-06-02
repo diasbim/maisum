@@ -27,14 +27,16 @@ class PlanCatalog {
         FeatureKeys.analytics,
         FeatureKeys.multiDevice,
         FeatureKeys.cloudBackup,
+        FeatureKeys.engageViewRisk,
+        FeatureKeys.engageManageRecovery,
+        FeatureKeys.engageManageVisits,
+        FeatureKeys.engageManageSurveys,
       },
       whatsappMonthlyLimit: 20000,
     ),
     Plan.free: PlanDefinition(
       plan: Plan.free,
-      features: {
-        FeatureKeys.whatsappAutomation,
-      },
+      features: {FeatureKeys.whatsappAutomation},
       whatsappMonthlyLimit: 150,
     ),
     Plan.starter: PlanDefinition(
@@ -46,6 +48,31 @@ class PlanCatalog {
       },
       whatsappMonthlyLimit: 1200,
     ),
+    Plan.pro: PlanDefinition(
+      plan: Plan.pro,
+      features: {
+        FeatureKeys.whatsappAutomation,
+        FeatureKeys.campaigns,
+        FeatureKeys.analytics,
+        FeatureKeys.engageViewRisk,
+      },
+      whatsappMonthlyLimit: 3000,
+    ),
+    Plan.business: PlanDefinition(
+      plan: Plan.business,
+      features: {
+        FeatureKeys.whatsappAutomation,
+        FeatureKeys.campaigns,
+        FeatureKeys.analytics,
+        FeatureKeys.multiDevice,
+        FeatureKeys.cloudBackup,
+        FeatureKeys.engageViewRisk,
+        FeatureKeys.engageManageRecovery,
+        FeatureKeys.engageManageVisits,
+        FeatureKeys.engageManageSurveys,
+      },
+      whatsappMonthlyLimit: 6000,
+    ),
     Plan.growth: PlanDefinition(
       plan: Plan.growth,
       features: {
@@ -54,6 +81,10 @@ class PlanCatalog {
         FeatureKeys.analytics,
         FeatureKeys.multiDevice,
         FeatureKeys.cloudBackup,
+        FeatureKeys.engageViewRisk,
+        FeatureKeys.engageManageRecovery,
+        FeatureKeys.engageManageVisits,
+        FeatureKeys.engageManageSurveys,
       },
       whatsappMonthlyLimit: 6000,
     ),

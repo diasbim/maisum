@@ -133,3 +133,118 @@ CREATE TABLE IF NOT EXISTS usage_balances (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_balances_window
   ON usage_balances(merchant_id, metric_key, window_start, window_end);
+
+CREATE TABLE IF NOT EXISTS customer_risk_scores (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  customer_id TEXT NOT NULL,
+  days_since_visit INTEGER NOT NULL DEFAULT 0,
+  risk_level TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 0,
+  updated_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_risk_scores_merchant_customer
+  ON customer_risk_scores(merchant_id, customer_id);
+CREATE INDEX IF NOT EXISTS idx_customer_risk_scores_risk_priority
+  ON customer_risk_scores(merchant_id, risk_level, priority);
+
+CREATE TABLE IF NOT EXISTS recovery_tasks (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  customer_id TEXT NOT NULL,
+  priority TEXT NOT NULL,
+  status TEXT NOT NULL,
+  due_at BIGINT,
+  notes TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recovery_tasks_merchant_status_due
+  ON recovery_tasks(merchant_id, status, due_at);
+CREATE INDEX IF NOT EXISTS idx_recovery_tasks_merchant_priority
+  ON recovery_tasks(merchant_id, priority, updated_at);
+
+CREATE TABLE IF NOT EXISTS recovery_actions (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  customer_id TEXT NOT NULL,
+  task_id TEXT REFERENCES recovery_tasks(id),
+  action_type TEXT NOT NULL,
+  payload JSONB,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recovery_actions_merchant_customer
+  ON recovery_actions(merchant_id, customer_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_recovery_actions_merchant_task
+  ON recovery_actions(merchant_id, task_id);
+
+CREATE TABLE IF NOT EXISTS visit_reports (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  task_id TEXT REFERENCES recovery_tasks(id),
+  customer_id TEXT NOT NULL,
+  result TEXT NOT NULL,
+  notes TEXT,
+  visited_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_visit_reports_merchant_visited_at
+  ON visit_reports(merchant_id, visited_at);
+CREATE INDEX IF NOT EXISTS idx_visit_reports_merchant_result
+  ON visit_reports(merchant_id, result, visited_at);
+
+CREATE TABLE IF NOT EXISTS surveys (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  title TEXT NOT NULL,
+  description TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_surveys_merchant_active
+  ON surveys(merchant_id, is_active, updated_at);
+
+CREATE TABLE IF NOT EXISTS survey_questions (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  survey_id TEXT NOT NULL REFERENCES surveys(id),
+  question_text TEXT NOT NULL,
+  question_type TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_required BOOLEAN NOT NULL DEFAULT false,
+  options_payload JSONB,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_survey_questions_survey_order
+  ON survey_questions(survey_id, sort_order);
+
+CREATE TABLE IF NOT EXISTS survey_responses (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  survey_id TEXT NOT NULL REFERENCES surveys(id),
+  customer_id TEXT,
+  submitted_at BIGINT NOT NULL,
+  channel TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_survey_responses_merchant_survey
+  ON survey_responses(merchant_id, survey_id, submitted_at);
+
+CREATE TABLE IF NOT EXISTS survey_response_answers (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  response_id TEXT NOT NULL REFERENCES survey_responses(id),
+  question_id TEXT NOT NULL REFERENCES survey_questions(id),
+  answer_text TEXT,
+  answer_numeric DOUBLE PRECISION,
+  answer_bool BOOLEAN,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_survey_response_answers_response
+  ON survey_response_answers(response_id, question_id);

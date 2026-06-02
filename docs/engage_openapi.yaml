@@ -1,0 +1,527 @@
+openapi: 3.0.3
+info:
+  title: MaisUm Engage API
+  version: 1.0.0
+  description: |
+    OpenAPI specification for Engage endpoints implemented in Cloud Functions.
+servers:
+  - url: https://<region>-<project>.cloudfunctions.net/api
+security:
+  - bearerAuth: []
+paths:
+  /engage/dashboard:
+    get:
+      summary: Get Engage dashboard metrics
+      tags: [Engage]
+      responses:
+        '200':
+          description: Dashboard loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+  /engage/recovery-queue:
+    get:
+      summary: Get prioritized recovery queue
+      tags: [Engage]
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Queue loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryQueueResponse'
+  /engage/task:
+    post:
+      summary: Create recovery task
+      tags: [Engage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTaskRequest'
+      responses:
+        '200':
+          description: Task created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskMutationResponse'
+  /engage/task/complete:
+    post:
+      summary: Complete recovery task
+      tags: [Engage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_id]
+              properties:
+                task_id:
+                  type: string
+      responses:
+        '200':
+          description: Task updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskMutationResponse'
+  /engage/action:
+    post:
+      summary: Register recovery action
+      tags: [Engage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateActionRequest'
+      responses:
+        '200':
+          description: Action registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActionMutationResponse'
+  /engage/visit-report:
+    post:
+      summary: Submit visit report
+      tags: [Engage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVisitReportRequest'
+      responses:
+        '200':
+          description: Visit report saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VisitMutationResponse'
+  /engage/surveys:
+    get:
+      summary: List active surveys with questions
+      tags: [Engage, Surveys]
+      responses:
+        '200':
+          description: Surveys loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurveysResponse'
+    post:
+      summary: Create survey with up to 5 questions
+      tags: [Engage, Surveys]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSurveyRequest'
+      responses:
+        '200':
+          description: Survey created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSurveyResponse'
+        '400':
+          description: Validation failed
+  /engage/survey-response:
+    post:
+      summary: Submit survey response
+      tags: [Engage, Surveys]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitSurveyResponseRequest'
+      responses:
+        '200':
+          description: Response saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmitSurveyResponseApiResponse'
+  /engage/analytics:
+    get:
+      summary: Get survey analytics metrics
+      tags: [Engage, Surveys]
+      responses:
+        '200':
+          description: Analytics loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ApiEnvelopeBase:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+    DashboardData:
+      type: object
+      properties:
+        customers_active:
+          type: integer
+        customers_at_risk:
+          type: integer
+        critical_customers:
+          type: integer
+        revenue_at_risk:
+          type: number
+        recovered_customers:
+          type: integer
+    DashboardResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/DashboardData'
+    RecoveryQueueItem:
+      type: object
+      properties:
+        customer_id:
+          type: string
+        customer_name:
+          type: string
+        days_since_visit:
+          type: integer
+        risk_level:
+          type: string
+          enum: [green, yellow, orange, red]
+        priority:
+          type: integer
+        total_spent:
+          type: number
+        total_points:
+          type: integer
+        last_visit_at:
+          type: integer
+          nullable: true
+    RecoveryQueueResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/RecoveryQueueItem'
+    CreateTaskRequest:
+      type: object
+      required: [customer_id]
+      properties:
+        id:
+          type: string
+        customer_id:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high]
+        due_at:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+    RecoveryTask:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        customer_id:
+          type: string
+        priority:
+          type: string
+        status:
+          type: string
+        due_at:
+          type: integer
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+    TaskMutationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RecoveryTask'
+    CreateActionRequest:
+      type: object
+      required: [customer_id, action_type]
+      properties:
+        id:
+          type: string
+        customer_id:
+          type: string
+        task_id:
+          type: string
+          nullable: true
+        action_type:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+    RecoveryAction:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        customer_id:
+          type: string
+        task_id:
+          type: string
+          nullable: true
+        action_type:
+          type: string
+        payload:
+          type: object
+          nullable: true
+          additionalProperties: true
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+    ActionMutationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/RecoveryAction'
+    CreateVisitReportRequest:
+      type: object
+      required: [customer_id, result]
+      properties:
+        id:
+          type: string
+        customer_id:
+          type: string
+        task_id:
+          type: string
+          nullable: true
+        result:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        visited_at:
+          type: integer
+    VisitReport:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        task_id:
+          type: string
+          nullable: true
+        customer_id:
+          type: string
+        result:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        visited_at:
+          type: integer
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+    VisitMutationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/VisitReport'
+    SurveyQuestionInput:
+      type: object
+      required: [question_text, question_type]
+      properties:
+        question_text:
+          type: string
+        question_type:
+          type: string
+          enum: [MULTIPLE_CHOICE, YES_NO, RATING, SHORT_TEXT]
+        sort_order:
+          type: integer
+        is_required:
+          type: boolean
+        options_payload:
+          type: array
+          items:
+            type: string
+    SurveyQuestion:
+      allOf:
+        - $ref: '#/components/schemas/SurveyQuestionInput'
+        - type: object
+          properties:
+            id:
+              type: string
+            merchant_id:
+              type: string
+            survey_id:
+              type: string
+            created_at:
+              type: integer
+            updated_at:
+              type: integer
+    Survey:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        is_active:
+          type: boolean
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurveyQuestion'
+    SurveysResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Survey'
+    CreateSurveyRequest:
+      type: object
+      required: [title, questions]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        questions:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/SurveyQuestionInput'
+    CreateSurveyResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Survey'
+    SubmitSurveyAnswerInput:
+      type: object
+      required: [question_id]
+      properties:
+        question_id:
+          type: string
+        answer_text:
+          type: string
+          nullable: true
+        answer_numeric:
+          type: number
+          nullable: true
+        answer_bool:
+          type: boolean
+          nullable: true
+    SubmitSurveyResponseRequest:
+      type: object
+      required: [survey_id, answers]
+      properties:
+        survey_id:
+          type: string
+        customer_id:
+          type: string
+          nullable: true
+        channel:
+          type: string
+        answers:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SubmitSurveyAnswerInput'
+    SubmitSurveyResponseApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                response_id:
+                  type: string
+    AnalyticsData:
+      type: object
+      properties:
+        response_rate:
+          type: number
+        customer_satisfaction:
+          type: number
+        responses_total:
+          type: integer
+        top_churn_reasons:
+          type: array
+          items:
+            type: string
+        top_recovery_incentives:
+          type: array
+          items:
+            type: string
+        staff_ratings:
+          type: array
+          items:
+            type: string
+    AnalyticsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AnalyticsData'

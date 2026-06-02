@@ -38,16 +38,18 @@ class ConnectivityService {
   }
 
   Future<void> _checkInitial() async {
-    final results = _overrideCheck != null
-        ? await _overrideCheck!()
+    final checkConnectivity = _overrideCheck;
+    final results = checkConnectivity != null
+        ? await checkConnectivity()
         : await _connectivity.checkConnectivity();
     _isOnline = results.any((r) => r != ConnectivityResult.none);
     _emit(_isOnline);
   }
 
   Future<bool> check() async {
-    final results = _overrideCheck != null
-        ? await _overrideCheck!()
+    final checkConnectivity = _overrideCheck;
+    final results = checkConnectivity != null
+        ? await checkConnectivity()
         : await _connectivity.checkConnectivity();
     _isOnline = results.any((r) => r != ConnectivityResult.none);
     return _isOnline;

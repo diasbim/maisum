@@ -13,6 +13,8 @@ import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/pin_pad.dart';
 import '../../../core/widgets/pin_verification_feedback.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../subscription/domain/plan.dart';
+import '../../subscription/domain/plan_catalog.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -53,6 +55,12 @@ class SettingsScreen extends ConsumerWidget {
               iconColor: AppColors.green,
               title: AppStrings.subscricao,
               subtitle: _formatSubscriptionStatus(session.subscriptionStatus),
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.g300,
+                size: 20,
+              ),
+              onTap: () => _showPlanPicker(context, ref),
             ),
             _SettingsTile(
               icon: Icons.admin_panel_settings_rounded,
@@ -195,6 +203,111 @@ class SettingsScreen extends ConsumerWidget {
     final hour = localExpiry.hour.toString().padLeft(2, '0');
     final minute = localExpiry.minute.toString().padLeft(2, '0');
     return '$day/$month/$year $hour:$minute';
+  }
+
+  Future<void> _showPlanPicker(BuildContext context, WidgetRef ref) async {
+    final merchantId = ref.read(activeMerchantIdProvider);
+    if (merchantId == null || merchantId.isEmpty) {
+      AppFeedback.showMessage(
+        context,
+        message: 'Sessao invalida.',
+        isError: true,
+      );
+      return;
+    }
+
+    try {
+      final snapshot = await ref.read(subscriptionSnapshotProvider.future);
+      if (!context.mounted) return;
+
+      final selectedPlan = await showModalBottomSheet<Plan>(
+        context: context,
+        useSafeArea: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (sheetContext) {
+          final plans =
+              Plan.values.where((plan) => plan != Plan.growth).toList();
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.g300,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Escolher novo plano',
+                style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Plano atual: ${PlanCatalog.forPlan(snapshot.plan).displayName}',
+                style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 10),
+              ...plans.map(
+                (plan) => ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                  title: Text(PlanCatalog.forPlan(plan).displayName),
+                  trailing: snapshot.plan == plan
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.green,
+                        )
+                      : null,
+                  onTap: () => Navigator.of(sheetContext).pop(plan),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+          );
+        },
+      );
+
+      if (!context.mounted || selectedPlan == null) return;
+      if (selectedPlan == snapshot.plan) {
+        AppFeedback.showMessage(
+          context,
+          message: 'Este plano ja esta ativo.',
+          isError: false,
+        );
+        return;
+      }
+
+      final session = ref.read(authControllerProvider).valueOrNull;
+      await ref.read(subscriptionRepositoryProvider).switchPlan(
+            merchantId: merchantId,
+            plan: selectedPlan,
+            status: snapshot.state?.status ?? session?.subscriptionStatus,
+          );
+      await ref.read(subscriptionSnapshotProvider.notifier).refresh();
+
+      if (!context.mounted) return;
+      AppFeedback.showMessage(
+        context,
+        message:
+            'Plano alterado para ${PlanCatalog.forPlan(selectedPlan).displayName}.',
+        isError: false,
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      AppFeedback.showMessage(
+        context,
+        message: 'Nao foi possivel atualizar o plano.',
+        isError: true,
+      );
+    }
   }
 
   Future<void> _showPinVerifySheet(BuildContext context, WidgetRef ref) async {

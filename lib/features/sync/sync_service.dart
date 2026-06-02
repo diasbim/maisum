@@ -41,7 +41,23 @@ const _syncEntities = [
   _SyncEntityConfig(entityType: 'appointment', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'retention_metric', cursorField: 'updated_at'),
   _SyncEntityConfig(
-      entityType: 'subscription_state', cursorField: 'updated_at'),
+    entityType: 'customer_risk_score',
+    cursorField: 'updated_at',
+  ),
+  _SyncEntityConfig(entityType: 'recovery_task', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'recovery_action', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'visit_report', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'survey', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'survey_question', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'survey_response', cursorField: 'updated_at'),
+  _SyncEntityConfig(
+    entityType: 'survey_response_answer',
+    cursorField: 'updated_at',
+  ),
+  _SyncEntityConfig(
+    entityType: 'subscription_state',
+    cursorField: 'updated_at',
+  ),
   _SyncEntityConfig(entityType: 'entitlement', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'feature_flag', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'remote_config', cursorField: 'updated_at'),
@@ -93,16 +109,15 @@ class SyncStatus {
     Object? lastError = _keep,
     DateTime? lastSyncAt,
     DateTime? nextRetryAt,
-  }) =>
-      SyncStatus(
-        isOnline: isOnline ?? this.isOnline,
-        phase: phase ?? this.phase,
-        pendingCount: pendingCount ?? this.pendingCount,
-        failedCount: failedCount ?? this.failedCount,
-        lastError: lastError == _keep ? this.lastError : lastError as String?,
-        lastSyncAt: lastSyncAt ?? this.lastSyncAt,
-        nextRetryAt: nextRetryAt ?? this.nextRetryAt,
-      );
+  }) => SyncStatus(
+    isOnline: isOnline ?? this.isOnline,
+    phase: phase ?? this.phase,
+    pendingCount: pendingCount ?? this.pendingCount,
+    failedCount: failedCount ?? this.failedCount,
+    lastError: lastError == _keep ? this.lastError : lastError as String?,
+    lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+    nextRetryAt: nextRetryAt ?? this.nextRetryAt,
+  );
 }
 
 enum SyncPhase {
@@ -126,8 +141,8 @@ class SyncService {
     this._connectivity, {
     AnalyticsService? analytics,
     SyncRetryPolicy? retryPolicy,
-  })  : _retryPolicy = retryPolicy ?? const SyncRetryPolicy(),
-        _analytics = analytics;
+  }) : _retryPolicy = retryPolicy ?? const SyncRetryPolicy(),
+       _analytics = analytics;
 
   final AppDatabase _database;
 
@@ -157,15 +172,17 @@ class SyncService {
 
   void init() {
     _connectivitySub = _connectivity.onConnectivityChanged.listen((isOnline) {
-      _emit(_status.copyWith(
-        isOnline: isOnline,
-        phase: _derivePhase(
+      _emit(
+        _status.copyWith(
           isOnline: isOnline,
-          isSyncing: _status.isSyncing,
-          stats: _cachedStats,
-          lastError: _status.lastError,
+          phase: _derivePhase(
+            isOnline: isOnline,
+            isSyncing: _status.isSyncing,
+            stats: _cachedStats,
+            lastError: _status.lastError,
+          ),
         ),
-      ));
+      );
       if (!isOnline) return;
       Log.i(_tag, 'Back online — triggering queue');
       unawaited(processQueue());
@@ -194,10 +211,12 @@ class SyncService {
 
     Log.i(_tag, 'Starting sync queue');
     _emit(_status.copyWith(phase: SyncPhase.syncing, lastError: null));
-    unawaited(_logSyncEvent('sync_started', {
-      'pending_ready': _cachedStats.pendingReady,
-      'pending_total': _cachedStats.pendingTotal,
-    }));
+    unawaited(
+      _logSyncEvent('sync_started', {
+        'pending_ready': _cachedStats.pendingReady,
+        'pending_total': _cachedStats.pendingTotal,
+      }),
+    );
 
     String? lastError;
     String? itemError;
@@ -213,16 +232,16 @@ class SyncService {
       await _pullRemoteChanges();
       await _syncDao.clearSynced();
       _lastSyncAt = DateTime.now();
-      unawaited(_logSyncEvent('sync_success', {
-        'processed': items.length,
-      }));
+      unawaited(_logSyncEvent('sync_success', {'processed': items.length}));
       Log.i(_tag, 'Queue processed successfully');
     } catch (e, st) {
       lastError = _formatSyncError(e);
       Log.e(_tag, 'processQueue failed', e, st);
-      unawaited(_logSyncEvent('sync_failed', {
-        'error': lastError ?? AppStrings.erroGenerico,
-      }));
+      unawaited(
+        _logSyncEvent('sync_failed', {
+          'error': lastError ?? AppStrings.erroGenerico,
+        }),
+      );
     } finally {
       final resolvedError = lastError ?? itemError;
       await _refreshStatus(lastErrorOverride: resolvedError);
@@ -256,7 +275,8 @@ class SyncService {
     } catch (e, st) {
       Log.e(_tag, '✗ ${item.entityType}/${item.entityId}', e, st);
       final transportError = e is SyncTransportException ? e : null;
-      final isPermanent = transportError != null &&
+      final isPermanent =
+          transportError != null &&
           (transportError.code == 'failed-precondition' ||
               transportError.code == 'permission-denied' ||
               transportError.code == 'unauthenticated');
@@ -371,6 +391,22 @@ class SyncService {
         return _applyAppointment(txn, remote);
       case 'retention_metric':
         return _applyRetentionMetric(txn, remote);
+      case 'customer_risk_score':
+        return _applyCustomerRiskScore(txn, remote);
+      case 'recovery_task':
+        return _applyRecoveryTask(txn, remote);
+      case 'recovery_action':
+        return _applyRecoveryAction(txn, remote);
+      case 'visit_report':
+        return _applyVisitReport(txn, remote);
+      case 'survey':
+        return _applySurvey(txn, remote);
+      case 'survey_question':
+        return _applySurveyQuestion(txn, remote);
+      case 'survey_response':
+        return _applySurveyResponse(txn, remote);
+      case 'survey_response_answer':
+        return _applySurveyResponseAnswer(txn, remote);
       case 'subscription_state':
         return _applySubscriptionState(txn, remote);
       case 'entitlement':
@@ -407,7 +443,8 @@ class SyncService {
     _SyncEntityConfig entity,
     Map<String, dynamic> remote,
   ) {
-    final rawValue = remote[entity.cursorField] ??
+    final rawValue =
+        remote[entity.cursorField] ??
         (entity.entityType == 'reward' ? remote['created_at'] : null);
     if (rawValue is num) {
       return rawValue.toInt();
@@ -451,14 +488,11 @@ class SyncService {
     String entityType,
     _SyncCursor cursor,
   ) async {
-    await txn.insert(
-        'sync_state',
-        {
-          'entity_type': entityType,
-          'last_value': cursor.lastValue,
-          'last_doc_id': cursor.lastDocId,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    await txn.insert('sync_state', {
+      'entity_type': entityType,
+      'last_value': cursor.lastValue,
+      'last_doc_id': cursor.lastDocId,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> _applyCustomer(dynamic txn, Map<String, dynamic> remote) async {
@@ -480,7 +514,8 @@ class SyncService {
 
     final local = Map<String, dynamic>.from(row.first);
     final localSynced = (local['synced'] as int? ?? 0) == 1;
-    final sameData = local['name'] == incoming['name'] &&
+    final sameData =
+        local['name'] == incoming['name'] &&
         local['phone'] == incoming['phone'] &&
         local['total_points'] == incoming['total_points'] &&
         local['updated_at'] == incoming['updated_at'];
@@ -516,7 +551,8 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData = local['customer_id'] == incoming['customer_id'] &&
+    final sameData =
+        local['customer_id'] == incoming['customer_id'] &&
         local['amount'] == incoming['amount'] &&
         local['points'] == incoming['points'] &&
         local['created_at'] == incoming['created_at'];
@@ -550,7 +586,8 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData = local['name'] == incoming['name'] &&
+    final sameData =
+        local['name'] == incoming['name'] &&
         local['points_required'] == incoming['points_required'] &&
         local['description'] == incoming['description'] &&
         local['active'] == incoming['active'] &&
@@ -588,7 +625,8 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData = local['customer_id'] == incoming['customer_id'] &&
+    final sameData =
+        local['customer_id'] == incoming['customer_id'] &&
         local['reward_id'] == incoming['reward_id'] &&
         local['points_spent'] == incoming['points_spent'] &&
         local['redeemed_at'] == incoming['redeemed_at'];
@@ -628,8 +666,7 @@ class SyncService {
       'created_at',
       'updated_at',
       'synced',
-    })
-      ..['synced'] = 1;
+    })..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('appointments', incoming);
@@ -637,7 +674,8 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData = local['customer_id'] == incoming['customer_id'] &&
+    final sameData =
+        local['customer_id'] == incoming['customer_id'] &&
         local['scheduled_date'] == incoming['scheduled_date'] &&
         local['status'] == incoming['status'] &&
         local['source'] == incoming['source'] &&
@@ -676,7 +714,8 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData = local['customer_id'] == incoming['customer_id'] &&
+    final sameData =
+        local['customer_id'] == incoming['customer_id'] &&
         local['last_visit_at'] == incoming['last_visit_at'] &&
         local['days_inactive'] == incoming['days_inactive'] &&
         local['risk_level'] == incoming['risk_level'] &&
@@ -692,6 +731,413 @@ class SyncService {
 
     await txn.update(
       'retention_metrics',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applyCustomerRiskScore(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'customer_risk_scores',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'days_since_visit',
+      'risk_level',
+      'priority',
+      'updated_at',
+      'synced',
+    })..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('customer_risk_scores', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData =
+        local['customer_id'] == incoming['customer_id'] &&
+        local['days_since_visit'] == incoming['days_since_visit'] &&
+        local['risk_level'] == incoming['risk_level'] &&
+        local['priority'] == incoming['priority'] &&
+        local['updated_at'] == incoming['updated_at'];
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'customer_risk_scores',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applyRecoveryTask(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'recovery_tasks',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'priority',
+      'status',
+      'due_at',
+      'notes',
+      'created_at',
+      'updated_at',
+      'synced',
+    })..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('recovery_tasks', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData =
+        local['customer_id'] == incoming['customer_id'] &&
+        local['priority'] == incoming['priority'] &&
+        local['status'] == incoming['status'] &&
+        local['due_at'] == incoming['due_at'] &&
+        local['notes'] == incoming['notes'] &&
+        local['updated_at'] == incoming['updated_at'];
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'recovery_tasks',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applyRecoveryAction(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'recovery_actions',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'task_id',
+      'action_type',
+      'payload',
+      'created_at',
+      'updated_at',
+      'synced',
+    })..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('recovery_actions', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData =
+        local['customer_id'] == incoming['customer_id'] &&
+        local['task_id'] == incoming['task_id'] &&
+        local['action_type'] == incoming['action_type'] &&
+        local['payload'] == incoming['payload'] &&
+        local['updated_at'] == incoming['updated_at'];
+
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'recovery_actions',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applyVisitReport(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'visit_reports',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'task_id',
+      'customer_id',
+      'result',
+      'notes',
+      'visited_at',
+      'created_at',
+      'updated_at',
+      'synced',
+    })..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('visit_reports', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData =
+        local['task_id'] == incoming['task_id'] &&
+        local['customer_id'] == incoming['customer_id'] &&
+        local['result'] == incoming['result'] &&
+        local['notes'] == incoming['notes'] &&
+        local['visited_at'] == incoming['visited_at'] &&
+        local['updated_at'] == incoming['updated_at'];
+
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'visit_reports',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applySurvey(dynamic txn, Map<String, dynamic> remote) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'surveys',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'title',
+      'description',
+      'is_active',
+      'created_at',
+      'updated_at',
+      'synced',
+    })..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('surveys', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData =
+        local['title'] == incoming['title'] &&
+        local['description'] == incoming['description'] &&
+        local['is_active'] == incoming['is_active'] &&
+        local['updated_at'] == incoming['updated_at'];
+
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'surveys',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applySurveyQuestion(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'survey_questions',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'survey_id',
+      'question_text',
+      'question_type',
+      'sort_order',
+      'is_required',
+      'options_payload',
+      'created_at',
+      'updated_at',
+      'synced',
+    })..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('survey_questions', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData =
+        local['question_text'] == incoming['question_text'] &&
+        local['question_type'] == incoming['question_type'] &&
+        local['sort_order'] == incoming['sort_order'] &&
+        local['is_required'] == incoming['is_required'] &&
+        local['options_payload'] == incoming['options_payload'] &&
+        local['updated_at'] == incoming['updated_at'];
+
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'survey_questions',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applySurveyResponse(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'survey_responses',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'survey_id',
+      'customer_id',
+      'submitted_at',
+      'channel',
+      'created_at',
+      'updated_at',
+      'synced',
+    })..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('survey_responses', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData =
+        local['survey_id'] == incoming['survey_id'] &&
+        local['customer_id'] == incoming['customer_id'] &&
+        local['submitted_at'] == incoming['submitted_at'] &&
+        local['channel'] == incoming['channel'] &&
+        local['updated_at'] == incoming['updated_at'];
+
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'survey_responses',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applySurveyResponseAnswer(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'survey_response_answers',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'response_id',
+      'question_id',
+      'answer_text',
+      'answer_numeric',
+      'answer_bool',
+      'created_at',
+      'updated_at',
+      'synced',
+    })..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('survey_response_answers', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData =
+        local['response_id'] == incoming['response_id'] &&
+        local['question_id'] == incoming['question_id'] &&
+        local['answer_text'] == incoming['answer_text'] &&
+        local['answer_numeric'] == incoming['answer_numeric'] &&
+        local['answer_bool'] == incoming['answer_bool'] &&
+        local['updated_at'] == incoming['updated_at'];
+
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'survey_response_answers',
       incoming,
       where: _entityWhereClause('id = ?'),
       whereArgs: _entityWhereArgs([id]),
@@ -935,6 +1381,70 @@ class SyncService {
           whereArgs: _entityWhereArgs([entityId]),
         );
         break;
+      case 'customer_risk_score':
+        await db.update(
+          'customer_risk_scores',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'recovery_task':
+        await db.update(
+          'recovery_tasks',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'recovery_action':
+        await db.update(
+          'recovery_actions',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'visit_report':
+        await db.update(
+          'visit_reports',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'survey':
+        await db.update(
+          'surveys',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'survey_question':
+        await db.update(
+          'survey_questions',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'survey_response':
+        await db.update(
+          'survey_responses',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'survey_response_answer':
+        await db.update(
+          'survey_response_answers',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
       case 'usage_event':
         await db.update(
           'usage_events',
@@ -1009,7 +1519,8 @@ class SyncService {
     final stats = await _syncDao.getStats();
     _cachedStats = stats;
 
-    final effectiveError = lastErrorOverride ??
+    final effectiveError =
+        lastErrorOverride ??
         (stats.failed > 0 ? AppStrings.syncFalhaPendentes : null);
     final phase = _derivePhase(
       isOnline: _connectivity.isOnline,
@@ -1018,15 +1529,17 @@ class SyncService {
       lastError: effectiveError,
     );
 
-    _emit(_status.copyWith(
-      isOnline: _connectivity.isOnline,
-      phase: phase,
-      pendingCount: stats.pendingTotal,
-      failedCount: stats.failed,
-      nextRetryAt: stats.nextRetryAt,
-      lastError: effectiveError,
-      lastSyncAt: _lastSyncAt,
-    ));
+    _emit(
+      _status.copyWith(
+        isOnline: _connectivity.isOnline,
+        phase: phase,
+        pendingCount: stats.pendingTotal,
+        failedCount: stats.failed,
+        nextRetryAt: stats.nextRetryAt,
+        lastError: effectiveError,
+        lastSyncAt: _lastSyncAt,
+      ),
+    );
   }
 
   SyncPhase _derivePhase({

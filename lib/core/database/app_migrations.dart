@@ -26,37 +26,72 @@ class AppMigrations {
     const MigrationStep(version: 2, name: 'baseline', up: _createV2Schema),
     const MigrationStep(version: 3, name: 'redemptions', up: _createV3Schema),
     const MigrationStep(
-        version: 4, name: 'customer name index', up: _createV4Schema),
+      version: 4,
+      name: 'customer name index',
+      up: _createV4Schema,
+    ),
     const MigrationStep(
-        version: 5,
-        name: 'rewards updated_at + sync_state',
-        up: _createV5Schema),
+      version: 5,
+      name: 'rewards updated_at + sync_state',
+      up: _createV5Schema,
+    ),
     const MigrationStep(
-        version: 6, name: 'merchant scoping', up: _createV6Schema),
+      version: 6,
+      name: 'merchant scoping',
+      up: _createV6Schema,
+    ),
     const MigrationStep(
-        version: 7, name: 'subscription + usage', up: _createV7Schema),
+      version: 7,
+      name: 'subscription + usage',
+      up: _createV7Schema,
+    ),
     const MigrationStep(version: 8, name: 'remote config', up: _createV8Schema),
     const MigrationStep(
-        version: 9, name: 'merchant streak', up: _createV9Schema),
+      version: 9,
+      name: 'merchant streak',
+      up: _createV9Schema,
+    ),
     const MigrationStep(
-        version: 10, name: 'sync backoff', up: _createV10Schema),
+      version: 10,
+      name: 'sync backoff',
+      up: _createV10Schema,
+    ),
     const MigrationStep(version: 11, name: 'sms inbox', up: _createV11Schema),
     const MigrationStep(
-        version: 12, name: 'analytics + notifications', up: _createV12Schema),
+      version: 12,
+      name: 'analytics + notifications',
+      up: _createV12Schema,
+    ),
     const MigrationStep(
-        version: 13, name: 'merchant backfill', up: _createV13Schema),
+      version: 13,
+      name: 'merchant backfill',
+      up: _createV13Schema,
+    ),
     const MigrationStep(
-        version: 14, name: 'customer device id', up: _createV14Schema),
+      version: 14,
+      name: 'customer device id',
+      up: _createV14Schema,
+    ),
     const MigrationStep(
-        version: 15,
-        name: 'appointments + retention metrics',
-        up: _createV15Schema),
+      version: 15,
+      name: 'appointments + retention metrics',
+      up: _createV15Schema,
+    ),
     const MigrationStep(
-        version: 16,
-        name: 'customers phone scoped uniqueness',
-        up: _createV16Schema),
+      version: 16,
+      name: 'customers phone scoped uniqueness',
+      up: _createV16Schema,
+    ),
     const MigrationStep(
-        version: 17, name: 'appointments device id', up: _createV17Schema),
+      version: 17,
+      name: 'appointments device id',
+      up: _createV17Schema,
+    ),
+    const MigrationStep(
+      version: 18,
+      name: 'engage foundation tables',
+      up: _createV18Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -88,11 +123,13 @@ class _MigrationRunner {
     required int fromVersion,
     required int toVersion,
   }) async {
-    final pending = steps
-        .where(
-            (step) => step.version > fromVersion && step.version <= toVersion)
-        .toList()
-      ..sort((a, b) => a.version.compareTo(b.version));
+    final pending =
+        steps
+            .where(
+              (step) => step.version > fromVersion && step.version <= toVersion,
+            )
+            .toList()
+          ..sort((a, b) => a.version.compareTo(b.version));
 
     if (pending.isEmpty) return;
 
@@ -133,15 +170,11 @@ class _MigrationRunner {
   }
 
   Future<void> _recordApplied(DatabaseExecutor db, MigrationStep step) async {
-    await db.insert(
-      'migration_log',
-      {
-        'version': step.version,
-        'name': step.name,
-        'applied_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.ignore,
-    );
+    await db.insert('migration_log', {
+      'version': step.version,
+      'name': step.name,
+      'applied_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 }
 
@@ -230,6 +263,97 @@ class _SchemaVerifier {
       'updated_at',
       'synced',
     },
+    'customer_risk_scores': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'days_since_visit',
+      'risk_level',
+      'priority',
+      'updated_at',
+      'synced',
+    },
+    'recovery_tasks': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'priority',
+      'status',
+      'due_at',
+      'notes',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
+    'recovery_actions': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'task_id',
+      'action_type',
+      'payload',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
+    'visit_reports': {
+      'id',
+      'merchant_id',
+      'task_id',
+      'customer_id',
+      'result',
+      'notes',
+      'visited_at',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
+    'surveys': {
+      'id',
+      'merchant_id',
+      'title',
+      'description',
+      'is_active',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
+    'survey_questions': {
+      'id',
+      'merchant_id',
+      'survey_id',
+      'question_text',
+      'question_type',
+      'sort_order',
+      'is_required',
+      'options_payload',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
+    'survey_responses': {
+      'id',
+      'merchant_id',
+      'survey_id',
+      'customer_id',
+      'submitted_at',
+      'channel',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
+    'survey_response_answers': {
+      'id',
+      'merchant_id',
+      'response_id',
+      'question_id',
+      'answer_text',
+      'answer_numeric',
+      'answer_bool',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
   };
 
   Future<bool> needsRepair(Database db) async {
@@ -266,6 +390,7 @@ class _SchemaVerifier {
       await _createV15Schema(txn);
       await _createV16Schema(txn);
       await _createV17Schema(txn);
+      await _createV18Schema(txn);
     });
   }
 
@@ -316,8 +441,9 @@ Future<void> _createV2Schema(DatabaseExecutor db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_sales_customer_id ON sales(customer_id)',
   );
-  await db
-      .execute('CREATE INDEX IF NOT EXISTS idx_sales_synced ON sales(synced)');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sales_synced ON sales(synced)',
+  );
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at)',
   );
@@ -803,6 +929,194 @@ Future<void> _createV16Schema(DatabaseExecutor db) async {
 
 Future<void> _createV17Schema(DatabaseExecutor db) async {
   await _addColumnIfMissing(db, 'appointments', 'device_id TEXT');
+}
+
+Future<void> _createV18Schema(DatabaseExecutor db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS customer_risk_scores (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      days_since_visit INTEGER NOT NULL DEFAULT 0,
+      risk_level TEXT NOT NULL,
+      priority INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_customer_risk_scores_merchant_customer ON customer_risk_scores(merchant_id, customer_id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_customer_risk_scores_risk_priority ON customer_risk_scores(merchant_id, risk_level, priority)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_customer_risk_scores_synced ON customer_risk_scores(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS recovery_tasks (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      priority TEXT NOT NULL,
+      status TEXT NOT NULL,
+      due_at INTEGER,
+      notes TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_recovery_tasks_merchant_status_due ON recovery_tasks(merchant_id, status, due_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_recovery_tasks_merchant_priority ON recovery_tasks(merchant_id, priority, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_recovery_tasks_synced ON recovery_tasks(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS recovery_actions (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      task_id TEXT,
+      action_type TEXT NOT NULL,
+      payload TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (customer_id) REFERENCES customers(id),
+      FOREIGN KEY (task_id) REFERENCES recovery_tasks(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_recovery_actions_merchant_customer ON recovery_actions(merchant_id, customer_id, created_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_recovery_actions_merchant_task ON recovery_actions(merchant_id, task_id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_recovery_actions_synced ON recovery_actions(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS visit_reports (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      task_id TEXT,
+      customer_id TEXT NOT NULL,
+      result TEXT NOT NULL,
+      notes TEXT,
+      visited_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (task_id) REFERENCES recovery_tasks(id),
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_visit_reports_merchant_visited_at ON visit_reports(merchant_id, visited_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_visit_reports_merchant_result ON visit_reports(merchant_id, result, visited_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_visit_reports_synced ON visit_reports(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS surveys (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_surveys_merchant_active ON surveys(merchant_id, is_active, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_surveys_synced ON surveys(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS survey_questions (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      survey_id TEXT NOT NULL,
+      question_text TEXT NOT NULL,
+      question_type TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      is_required INTEGER NOT NULL DEFAULT 0,
+      options_payload TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (survey_id) REFERENCES surveys(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_survey_questions_survey_order ON survey_questions(survey_id, sort_order)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_survey_questions_synced ON survey_questions(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS survey_responses (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      survey_id TEXT NOT NULL,
+      customer_id TEXT,
+      submitted_at INTEGER NOT NULL,
+      channel TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (survey_id) REFERENCES surveys(id),
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_survey_responses_merchant_survey ON survey_responses(merchant_id, survey_id, submitted_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_survey_responses_synced ON survey_responses(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS survey_response_answers (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      response_id TEXT NOT NULL,
+      question_id TEXT NOT NULL,
+      answer_text TEXT,
+      answer_numeric REAL,
+      answer_bool INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (response_id) REFERENCES survey_responses(id),
+      FOREIGN KEY (question_id) REFERENCES survey_questions(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_survey_response_answers_response ON survey_response_answers(response_id, question_id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_survey_response_answers_synced ON survey_response_answers(merchant_id, synced)',
+  );
 }
 
 Future<void> _addColumnIfMissing(

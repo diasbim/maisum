@@ -17,6 +17,8 @@ FROM ts,
   (VALUES
     ('free', 1, 'Free'),
     ('starter', 1, 'Starter'),
+    ('pro', 1, 'Pro'),
+    ('business', 1, 'Business'),
     ('growth', 1, 'Growth')
   ) AS seed(plan_code, version, name)
 ON CONFLICT (plan_code, version)
@@ -43,6 +45,8 @@ FROM ts,
   (VALUES
     ('free', 1, 'MZN', 0),
     ('starter', 1, 'MZN', 2000),
+    ('pro', 1, 'MZN', 3500),
+    ('business', 1, 'MZN', 5000),
     ('growth', 1, 'MZN', 5000)
   ) AS seed(plan_code, pricing_version, currency, amount)
 ON CONFLICT (plan_code, pricing_version, currency)

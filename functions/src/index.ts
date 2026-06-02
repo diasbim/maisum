@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import { randomUUID } from 'crypto';
 import express from 'express';
 import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -26,6 +27,54 @@ type AuthedRequest = express.Request & {
 };
 
 const ENTITY_CONFIG: Record<string, EntityConfig> = {
+  customer_risk_score: {
+    table: 'customer_risk_scores',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
+  recovery_task: {
+    table: 'recovery_tasks',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
+  recovery_action: {
+    table: 'recovery_actions',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
+  visit_report: {
+    table: 'visit_reports',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
+  survey: {
+    table: 'surveys',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
+  survey_question: {
+    table: 'survey_questions',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
+  survey_response: {
+    table: 'survey_responses',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
+  survey_response_answer: {
+    table: 'survey_response_answers',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
   subscription_state: {
     table: 'subscription_state',
     orderField: 'updated_at',
@@ -306,6 +355,62 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
 
   try {
     switch (entityType) {
+      case 'customer_risk_score':
+        if (operation === 'delete') {
+          await deleteById('customer_risk_scores', entityId, merchantId);
+        } else {
+          await upsertCustomerRiskScore(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
+      case 'recovery_task':
+        if (operation === 'delete') {
+          await deleteById('recovery_tasks', entityId, merchantId);
+        } else {
+          await upsertRecoveryTask(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
+      case 'recovery_action':
+        if (operation === 'delete') {
+          await deleteById('recovery_actions', entityId, merchantId);
+        } else {
+          await upsertRecoveryAction(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
+      case 'visit_report':
+        if (operation === 'delete') {
+          await deleteById('visit_reports', entityId, merchantId);
+        } else {
+          await upsertVisitReport(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
+      case 'survey':
+        if (operation === 'delete') {
+          await deleteById('surveys', entityId, merchantId);
+        } else {
+          await upsertSurvey(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
+      case 'survey_question':
+        if (operation === 'delete') {
+          await deleteById('survey_questions', entityId, merchantId);
+        } else {
+          await upsertSurveyQuestion(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
+      case 'survey_response':
+        if (operation === 'delete') {
+          await deleteById('survey_responses', entityId, merchantId);
+        } else {
+          await upsertSurveyResponse(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
+      case 'survey_response_answer':
+        if (operation === 'delete') {
+          await deleteById('survey_response_answers', entityId, merchantId);
+        } else {
+          await upsertSurveyResponseAnswer(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
       case 'subscription_state':
         await upsertSubscriptionState(merchantId, payload);
         return res.json({ success: true });
@@ -382,6 +487,586 @@ app.post('/notifications/queue', async (req, res) => {
       });
 
     return res.json({ success: true });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/engage/dashboard', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+
+  const sql = `
+    SELECT
+      SUM(CASE WHEN crs.risk_level = 'green' THEN 1 ELSE 0 END) AS customers_active,
+      SUM(CASE WHEN crs.risk_level IN ('yellow', 'orange', 'red') THEN 1 ELSE 0 END) AS customers_at_risk,
+      SUM(CASE WHEN crs.risk_level = 'red' THEN 1 ELSE 0 END) AS critical_customers,
+      SUM(CASE WHEN crs.risk_level IN ('orange', 'red') THEN COALESCE(rm.total_spent, 0) ELSE 0 END) AS revenue_at_risk,
+      SUM(CASE WHEN COALESCE(rm.recovered, 0) = 1 THEN 1 ELSE 0 END) AS recovered_customers
+    FROM customer_risk_scores crs
+    LEFT JOIN retention_metrics rm
+      ON rm.customer_id = crs.customer_id AND rm.merchant_id = crs.merchant_id
+    WHERE crs.merchant_id = $1
+  `;
+
+  try {
+    const result = await pool.query(sql, [merchantId]);
+    return res.json({ success: true, data: result.rows[0] ?? {} });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/engage/recovery-queue', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+  const limit = clampLimit(req.query.limit, 20, 100);
+
+  const sql = `
+    SELECT crs.customer_id,
+           c.name AS customer_name,
+           crs.days_since_visit,
+           crs.risk_level,
+           crs.priority,
+           COALESCE(rm.total_spent, 0) AS total_spent,
+           COALESCE(c.total_points, 0) AS total_points,
+           rm.last_visit_at
+    FROM customer_risk_scores crs
+    INNER JOIN customers c
+      ON c.id = crs.customer_id AND c.merchant_id = crs.merchant_id
+    LEFT JOIN retention_metrics rm
+      ON rm.customer_id = crs.customer_id AND rm.merchant_id = crs.merchant_id
+    WHERE crs.merchant_id = $1
+      AND crs.risk_level IN ('yellow', 'orange', 'red')
+    ORDER BY COALESCE(rm.total_spent, 0) DESC,
+             crs.priority DESC,
+             COALESCE(c.total_points, 0) DESC
+    LIMIT $2
+  `;
+
+  try {
+    const result = await pool.query(sql, [merchantId, limit]);
+    return res.json({ success: true, data: result.rows });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/engage/task', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+  const payload = req.body ?? {};
+
+  const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  const priority = pickString(payload, 'priority') ?? 'medium';
+  const dueAt = pickNumber(payload, 'due_at') ?? pickNumber(payload, 'dueAt');
+  const notes = pickString(payload, 'notes');
+
+  if (!customerId) {
+    return res.status(400).json({ success: false, message: 'Missing customer_id' });
+  }
+
+  const id = pickString(payload, 'id') ?? randomUUID();
+  const now = Date.now();
+
+  const sql = `
+    INSERT INTO recovery_tasks (
+      id,
+      merchant_id,
+      customer_id,
+      priority,
+      status,
+      due_at,
+      notes,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      customer_id = EXCLUDED.customer_id,
+      priority = EXCLUDED.priority,
+      status = EXCLUDED.status,
+      due_at = EXCLUDED.due_at,
+      notes = EXCLUDED.notes,
+      updated_at = EXCLUDED.updated_at
+    RETURNING *
+  `;
+
+  try {
+    const result = await pool.query(sql, [
+      id,
+      merchantId,
+      customerId,
+      priority,
+      'open',
+      dueAt,
+      notes,
+      now,
+      now,
+    ]);
+    return res.json({ success: true, data: result.rows[0] ?? null });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/engage/task/complete', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+  const payload = req.body ?? {};
+  const taskId = pickString(payload, 'task_id') ?? pickString(payload, 'taskId');
+
+  if (!taskId) {
+    return res.status(400).json({ success: false, message: 'Missing task_id' });
+  }
+
+  const sql = `
+    UPDATE recovery_tasks
+    SET status = 'completed',
+        updated_at = $3
+    WHERE id = $1 AND merchant_id = $2
+    RETURNING *
+  `;
+
+  try {
+    const now = Date.now();
+    const result = await pool.query(sql, [taskId, merchantId, now]);
+    return res.json({ success: true, data: result.rows[0] ?? null });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/engage/action', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+  const payload = req.body ?? {};
+
+  const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  const actionType = pickString(payload, 'action_type') ?? pickString(payload, 'actionType');
+  const taskId = pickString(payload, 'task_id') ?? pickString(payload, 'taskId');
+  const details = payload['payload'] && typeof payload['payload'] === 'object'
+    ? payload['payload']
+    : null;
+
+  if (!customerId || !actionType) {
+    return res.status(400).json({ success: false, message: 'Missing action data' });
+  }
+
+  const id = pickString(payload, 'id') ?? randomUUID();
+  const now = Date.now();
+
+  const sql = `
+    INSERT INTO recovery_actions (
+      id,
+      merchant_id,
+      customer_id,
+      task_id,
+      action_type,
+      payload,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    RETURNING *
+  `;
+
+  try {
+    const result = await pool.query(sql, [
+      id,
+      merchantId,
+      customerId,
+      taskId,
+      actionType,
+      details,
+      now,
+      now,
+    ]);
+    return res.json({ success: true, data: result.rows[0] ?? null });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/engage/visit-report', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+  const payload = req.body ?? {};
+
+  const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  const resultValue = pickString(payload, 'result');
+  const taskId = pickString(payload, 'task_id') ?? pickString(payload, 'taskId');
+  const notes = pickString(payload, 'notes');
+  const visitedAt =
+    pickNumber(payload, 'visited_at') ?? pickNumber(payload, 'visitedAt') ?? Date.now();
+
+  if (!customerId || !resultValue) {
+    return res.status(400).json({ success: false, message: 'Missing visit report data' });
+  }
+
+  const id = pickString(payload, 'id') ?? randomUUID();
+  const now = Date.now();
+
+  const sql = `
+    INSERT INTO visit_reports (
+      id,
+      merchant_id,
+      task_id,
+      customer_id,
+      result,
+      notes,
+      visited_at,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    RETURNING *
+  `;
+
+  try {
+    const result = await pool.query(sql, [
+      id,
+      merchantId,
+      taskId,
+      customerId,
+      resultValue,
+      notes,
+      visitedAt,
+      now,
+      now,
+    ]);
+    return res.json({ success: true, data: result.rows[0] ?? null });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.get('/engage/surveys', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+
+  const surveysSql = `
+    SELECT id, merchant_id, title, description, is_active, created_at, updated_at
+    FROM surveys
+    WHERE merchant_id = $1 AND is_active = true
+    ORDER BY updated_at DESC
+  `;
+
+  const questionsSql = `
+    SELECT id,
+           merchant_id,
+           survey_id,
+           question_text,
+           question_type,
+           sort_order,
+           is_required,
+           options_payload,
+           created_at,
+           updated_at
+    FROM survey_questions
+    WHERE merchant_id = $1
+    ORDER BY survey_id ASC, sort_order ASC
+  `;
+
+  try {
+    const [surveysResult, questionsResult] = await Promise.all([
+      pool.query(surveysSql, [merchantId]),
+      pool.query(questionsSql, [merchantId]),
+    ]);
+
+    const questionsBySurvey = new Map<string, Array<Record<string, unknown>>>();
+    for (const row of questionsResult.rows) {
+      const surveyId = String(row.survey_id ?? '');
+      if (!questionsBySurvey.has(surveyId)) {
+        questionsBySurvey.set(surveyId, []);
+      }
+      questionsBySurvey.get(surveyId)!.push(row as Record<string, unknown>);
+    }
+
+    const data = surveysResult.rows.map((row) => ({
+      ...row,
+      questions: questionsBySurvey.get(String(row.id)) ?? [],
+    }));
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/engage/surveys', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+  const payload = req.body ?? {};
+  const title = pickString(payload, 'title');
+  const description = pickString(payload, 'description');
+  const rawQuestions = Array.isArray(payload.questions) ? payload.questions : [];
+
+  if (!title) {
+    return res.status(400).json({ success: false, message: 'Missing title' });
+  }
+  if (rawQuestions.length === 0) {
+    return res.status(400).json({ success: false, message: 'Missing questions' });
+  }
+  if (rawQuestions.length > 5) {
+    return res.status(400).json({ success: false, message: 'Max 5 questions allowed' });
+  }
+
+  const activeCountSql = `
+    SELECT COUNT(*)::int AS total
+    FROM surveys
+    WHERE merchant_id = $1 AND is_active = true
+  `;
+
+  const surveyId = randomUUID();
+  const now = Date.now();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const activeCountResult = await client.query(activeCountSql, [merchantId]);
+    const totalActive = Number(activeCountResult.rows[0]?.total ?? 0);
+    if (totalActive >= 10) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ success: false, message: 'Max 10 active surveys allowed' });
+    }
+
+    await client.query(
+      `
+      INSERT INTO surveys (
+        id, merchant_id, title, description, is_active, created_at, updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `,
+      [surveyId, merchantId, title, description, true, now, now],
+    );
+
+    const questionsData: Array<Record<string, unknown>> = [];
+    for (let index = 0; index < rawQuestions.length; index += 1) {
+      const item = rawQuestions[index] as Record<string, unknown>;
+      const questionText = pickString(item, 'question_text');
+      const questionType = pickString(item, 'question_type') ?? 'SHORT_TEXT';
+      const isRequired = pickBoolean(item, 'is_required') ?? false;
+      const sortOrder = pickNumber(item, 'sort_order') ?? index;
+      const optionsPayload = Array.isArray(item.options_payload)
+        ? item.options_payload
+        : [];
+
+      if (!questionText) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: 'Question text is required' });
+      }
+
+      const questionId = randomUUID();
+      await client.query(
+        `
+        INSERT INTO survey_questions (
+          id,
+          merchant_id,
+          survey_id,
+          question_text,
+          question_type,
+          sort_order,
+          is_required,
+          options_payload,
+          created_at,
+          updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `,
+        [
+          questionId,
+          merchantId,
+          surveyId,
+          questionText,
+          questionType,
+          sortOrder,
+          isRequired,
+          optionsPayload,
+          now,
+          now,
+        ],
+      );
+
+      questionsData.push({
+        id: questionId,
+        merchant_id: merchantId,
+        survey_id: surveyId,
+        question_text: questionText,
+        question_type: questionType,
+        sort_order: sortOrder,
+        is_required: isRequired,
+        options_payload: optionsPayload,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+
+    await client.query('COMMIT');
+    return res.json({
+      success: true,
+      data: {
+        id: surveyId,
+        merchant_id: merchantId,
+        title,
+        description,
+        is_active: true,
+        created_at: now,
+        updated_at: now,
+        questions: questionsData,
+      },
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ success: false, message: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+app.post('/engage/survey-response', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+  const payload = req.body ?? {};
+
+  const surveyId = pickString(payload, 'survey_id') ?? pickString(payload, 'surveyId');
+  const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  const channel = pickString(payload, 'channel') ?? 'manual';
+  const answers = Array.isArray(payload.answers) ? payload.answers : [];
+
+  if (!surveyId) {
+    return res.status(400).json({ success: false, message: 'Missing survey_id' });
+  }
+  if (answers.length === 0) {
+    return res.status(400).json({ success: false, message: 'Missing answers' });
+  }
+
+  const responseId = randomUUID();
+  const now = Date.now();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
+      `
+      INSERT INTO survey_responses (
+        id,
+        merchant_id,
+        survey_id,
+        customer_id,
+        submitted_at,
+        channel,
+        created_at,
+        updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `,
+      [responseId, merchantId, surveyId, customerId, now, channel, now, now],
+    );
+
+    for (const item of answers) {
+      const row = item as Record<string, unknown>;
+      const questionId = pickString(row, 'question_id') ?? pickString(row, 'questionId');
+      if (!questionId) continue;
+
+      const answerText = pickString(row, 'answer_text') ?? pickString(row, 'answerText');
+      const answerNumeric = pickNumber(row, 'answer_numeric') ?? pickNumber(row, 'answerNumeric');
+      const answerBool = pickBoolean(row, 'answer_bool') ?? pickBoolean(row, 'answerBool');
+
+      await client.query(
+        `
+        INSERT INTO survey_response_answers (
+          id,
+          merchant_id,
+          response_id,
+          question_id,
+          answer_text,
+          answer_numeric,
+          answer_bool,
+          created_at,
+          updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        `,
+        [
+          randomUUID(),
+          merchantId,
+          responseId,
+          questionId,
+          answerText,
+          answerNumeric,
+          answerBool,
+          now,
+          now,
+        ],
+      );
+    }
+
+    await client.query('COMMIT');
+
+    // Best-effort automation: survey-completed action log and risk adjustment.
+    try {
+      await runSurveyCompletedAutomation(
+        merchantId,
+        surveyId,
+        customerId,
+        answers as Array<Record<string, unknown>>,
+        responseId,
+        now,
+      );
+    } catch {
+      // Do not fail response delivery if automation side-effects fail.
+    }
+
+    return res.json({ success: true, data: { response_id: responseId } });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ success: false, message: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/engage/analytics', async (req, res) => {
+  const merchantId = (req as unknown as AuthedRequest).merchantId;
+
+  const totalsSql = `
+    SELECT
+      (SELECT COUNT(*)::int FROM surveys WHERE merchant_id = $1 AND is_active = true) AS active_surveys,
+      (SELECT COUNT(*)::int FROM survey_responses WHERE merchant_id = $1) AS responses_total,
+      (
+        SELECT AVG(sra.answer_numeric)
+        FROM survey_response_answers sra
+        WHERE sra.merchant_id = $1
+          AND sra.answer_numeric IS NOT NULL
+      ) AS customer_satisfaction
+  `;
+
+  const topSql = `
+    SELECT COALESCE(answer_text, '') AS answer_text, COUNT(*)::int AS total
+    FROM survey_response_answers
+    WHERE merchant_id = $1
+      AND answer_text IS NOT NULL
+      AND answer_text <> ''
+    GROUP BY answer_text
+    ORDER BY total DESC
+    LIMIT 3
+  `;
+
+  try {
+    const [totalsResult, topResult] = await Promise.all([
+      pool.query(totalsSql, [merchantId]),
+      pool.query(topSql, [merchantId]),
+    ]);
+
+    const totals = totalsResult.rows[0] ?? {};
+    const activeSurveys = Number(totals.active_surveys ?? 0);
+    const responsesTotal = Number(totals.responses_total ?? 0);
+    const customerSatisfaction = Number(totals.customer_satisfaction ?? 0);
+    const topTexts = topResult.rows
+      .map((row) => String(row.answer_text ?? '').trim())
+      .filter((value) => value.length > 0);
+
+    const responseRate = activeSurveys === 0 ? 0 : (responsesTotal / activeSurveys) * 100;
+
+    return res.json({
+      success: true,
+      data: {
+        response_rate: responseRate,
+        customer_satisfaction: customerSatisfaction,
+        responses_total: responsesTotal,
+        top_churn_reasons: topTexts,
+        top_recovery_incentives: topTexts,
+        staff_ratings: topTexts,
+      },
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -560,6 +1245,697 @@ async function upsertSubscriptionState(
   ]);
 }
 
+async function upsertCustomerRiskScore(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const customerId =
+    pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  if (!customerId) {
+    throw new Error('Missing customer_id');
+  }
+
+  const id = pickString(payload, 'id') ?? entityId;
+  const daysSinceVisit =
+    pickNumber(payload, 'days_since_visit') ??
+    pickNumber(payload, 'daysSinceVisit') ??
+    0;
+  const riskLevel = pickString(payload, 'risk_level') ?? 'green';
+  const priority = pickNumber(payload, 'priority') ?? 0;
+  const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+
+  const sql = `
+    INSERT INTO customer_risk_scores (
+      id,
+      merchant_id,
+      customer_id,
+      days_since_visit,
+      risk_level,
+      priority,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      customer_id = EXCLUDED.customer_id,
+      days_since_visit = EXCLUDED.days_since_visit,
+      risk_level = EXCLUDED.risk_level,
+      priority = EXCLUDED.priority,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    customerId,
+    daysSinceVisit,
+    riskLevel,
+    priority,
+    updatedAt,
+  ]);
+
+  if (normalizeRiskLevel(riskLevel) === 'red') {
+    await ensureRecoveryTaskForRedCustomer(merchantId, customerId, updatedAt);
+  }
+
+  await maybeQueueNearRewardReminder(merchantId, customerId, updatedAt);
+}
+
+function normalizeRiskLevel(riskLevel: string | null): 'green' | 'yellow' | 'orange' | 'red' {
+  const normalized = (riskLevel ?? '').trim().toLowerCase();
+  if (normalized === 'yellow') return 'yellow';
+  if (normalized === 'orange') return 'orange';
+  if (normalized === 'red') return 'red';
+  return 'green';
+}
+
+async function ensureRecoveryTaskForRedCustomer(
+  merchantId: string,
+  customerId: string,
+  now: number,
+): Promise<void> {
+  const sql = `
+    INSERT INTO recovery_tasks (
+      id,
+      merchant_id,
+      customer_id,
+      priority,
+      status,
+      due_at,
+      notes,
+      created_at,
+      updated_at
+    )
+    SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM recovery_tasks
+      WHERE merchant_id = $2
+        AND customer_id = $3
+        AND status = 'open'
+    )
+  `;
+
+  await pool.query(sql, [
+    randomUUID(),
+    merchantId,
+    customerId,
+    'high',
+    'open',
+    now,
+    'Auto-created because customer moved to RED risk level',
+    now,
+    now,
+  ]);
+}
+
+async function maybeQueueNearRewardReminder(
+  merchantId: string,
+  customerId: string,
+  now: number,
+): Promise<void> {
+  const customerSql = `
+    SELECT total_points
+    FROM customers
+    WHERE merchant_id = $1 AND id = $2
+    LIMIT 1
+  `;
+  const customerResult = await pool.query(customerSql, [merchantId, customerId]);
+  if (!customerResult.rows[0]) return;
+
+  const totalPoints = Number(customerResult.rows[0].total_points ?? 0);
+  if (!Number.isFinite(totalPoints)) return;
+
+  const rewardSql = `
+    SELECT points_required, name
+    FROM rewards
+    WHERE merchant_id = $1
+      AND active = true
+      AND points_required > $2
+    ORDER BY points_required ASC
+    LIMIT 1
+  `;
+  const rewardResult = await pool.query(rewardSql, [merchantId, totalPoints]);
+  const nextReward = rewardResult.rows[0] ?? null;
+  if (!nextReward) return;
+
+  const requiredPoints = Number(nextReward.points_required ?? 0);
+  const delta = requiredPoints - totalPoints;
+  if (!Number.isFinite(requiredPoints) || delta < 0 || delta > 20) {
+    return;
+  }
+
+  const duplicateSql = `
+    SELECT 1
+    FROM recovery_actions
+    WHERE merchant_id = $1
+      AND customer_id = $2
+      AND action_type = 'NEAR_REWARD_REMINDER'
+      AND created_at >= $3
+    LIMIT 1
+  `;
+  const duplicateResult = await pool.query(duplicateSql, [merchantId, customerId, now - 24 * 60 * 60 * 1000]);
+  if (duplicateResult.rows.length > 0) {
+    return;
+  }
+
+  const actionSql = `
+    INSERT INTO recovery_actions (
+      id,
+      merchant_id,
+      customer_id,
+      task_id,
+      action_type,
+      payload,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+  `;
+
+  const payload = {
+    points_remaining: delta,
+    total_points: totalPoints,
+    reward_name: String(nextReward.name ?? 'recompensa'),
+  };
+
+  await pool.query(actionSql, [
+    randomUUID(),
+    merchantId,
+    customerId,
+    null,
+    'NEAR_REWARD_REMINDER',
+    payload,
+    now,
+    now,
+  ]);
+
+  await admin
+    .firestore()
+    .collection('businesses')
+    .doc(merchantId)
+    .collection('notification_queue')
+    .add({
+      merchant_id: merchantId,
+      channel: 'whatsapp',
+      payload: {
+        type: 'near_reward_reminder',
+        customer_id: customerId,
+        points_remaining: delta,
+        reward_name: String(nextReward.name ?? 'recompensa'),
+      },
+      scheduled_at: now,
+      status: 'queued',
+      created_at: now,
+    });
+}
+
+async function runSurveyCompletedAutomation(
+  merchantId: string,
+  surveyId: string,
+  customerId: string | null,
+  answers: Array<Record<string, unknown>>,
+  responseId: string,
+  now: number,
+): Promise<void> {
+  const numericAnswers = answers
+    .map((row) => pickNumber(row, 'answer_numeric') ?? pickNumber(row, 'answerNumeric'))
+    .filter((value): value is number => value != null && Number.isFinite(value));
+
+  const avgScore =
+    numericAnswers.length === 0
+      ? null
+      : numericAnswers.reduce((sum, value) => sum + value, 0) / numericAnswers.length;
+
+  const actionPayload = {
+    survey_id: surveyId,
+    response_id: responseId,
+    answers_count: answers.length,
+    avg_score: avgScore,
+  };
+
+  await pool.query(
+    `
+    INSERT INTO recovery_actions (
+      id,
+      merchant_id,
+      customer_id,
+      task_id,
+      action_type,
+      payload,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    `,
+    [
+      randomUUID(),
+      merchantId,
+      customerId,
+      null,
+      'SURVEY_COMPLETED',
+      actionPayload,
+      now,
+      now,
+    ],
+  );
+
+  if (!customerId || avgScore == null) {
+    return;
+  }
+
+  const customerRiskSql = `
+    SELECT risk_level
+    FROM customer_risk_scores
+    WHERE merchant_id = $1 AND customer_id = $2
+    LIMIT 1
+  `;
+  const riskResult = await pool.query(customerRiskSql, [merchantId, customerId]);
+  if (!riskResult.rows[0]) {
+    return;
+  }
+
+  const current = normalizeRiskLevel(String(riskResult.rows[0].risk_level ?? 'green'));
+  let next = current;
+  if (avgScore >= 4) {
+    if (current === 'red') next = 'orange';
+    else if (current === 'orange') next = 'yellow';
+    else if (current === 'yellow') next = 'green';
+  } else if (avgScore <= 2) {
+    if (current === 'green') next = 'yellow';
+    else if (current === 'yellow') next = 'orange';
+    else if (current === 'orange') next = 'red';
+  }
+
+  if (next === current) {
+    return;
+  }
+
+  await pool.query(
+    `
+    UPDATE customer_risk_scores
+    SET risk_level = $3,
+        updated_at = $4
+    WHERE merchant_id = $1
+      AND customer_id = $2
+    `,
+    [merchantId, customerId, next, now],
+  );
+
+  if (next === 'red') {
+    await ensureRecoveryTaskForRedCustomer(merchantId, customerId, now);
+  }
+}
+
+async function upsertRecoveryTask(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const customerId =
+    pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  if (!customerId) {
+    throw new Error('Missing customer_id');
+  }
+
+  const id = pickString(payload, 'id') ?? entityId;
+  const priority = pickString(payload, 'priority') ?? 'medium';
+  const status = pickString(payload, 'status') ?? 'open';
+  const dueAt = pickNumber(payload, 'due_at') ?? pickNumber(payload, 'dueAt');
+  const notes = pickString(payload, 'notes');
+  const createdAt =
+    pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+
+  const sql = `
+    INSERT INTO recovery_tasks (
+      id,
+      merchant_id,
+      customer_id,
+      priority,
+      status,
+      due_at,
+      notes,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      customer_id = EXCLUDED.customer_id,
+      priority = EXCLUDED.priority,
+      status = EXCLUDED.status,
+      due_at = EXCLUDED.due_at,
+      notes = EXCLUDED.notes,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    customerId,
+    priority,
+    status,
+    dueAt,
+    notes,
+    createdAt,
+    updatedAt,
+  ]);
+}
+
+async function upsertRecoveryAction(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const customerId =
+    pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  const actionType =
+    pickString(payload, 'action_type') ?? pickString(payload, 'actionType');
+  if (!customerId || !actionType) {
+    throw new Error('Missing recovery action data');
+  }
+
+  const id = pickString(payload, 'id') ?? entityId;
+  const taskId = pickString(payload, 'task_id') ?? pickString(payload, 'taskId');
+  const payloadValue = payload['payload'] && typeof payload['payload'] === 'object'
+    ? payload['payload']
+    : null;
+  const createdAt =
+    pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+
+  const sql = `
+    INSERT INTO recovery_actions (
+      id,
+      merchant_id,
+      customer_id,
+      task_id,
+      action_type,
+      payload,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      customer_id = EXCLUDED.customer_id,
+      task_id = EXCLUDED.task_id,
+      action_type = EXCLUDED.action_type,
+      payload = EXCLUDED.payload,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    customerId,
+    taskId,
+    actionType,
+    payloadValue,
+    createdAt,
+    updatedAt,
+  ]);
+}
+
+async function upsertVisitReport(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const customerId =
+    pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  const resultValue = pickString(payload, 'result');
+  if (!customerId || !resultValue) {
+    throw new Error('Missing visit report data');
+  }
+
+  const id = pickString(payload, 'id') ?? entityId;
+  const taskId = pickString(payload, 'task_id') ?? pickString(payload, 'taskId');
+  const notes = pickString(payload, 'notes');
+  const visitedAt =
+    pickNumber(payload, 'visited_at') ?? pickNumber(payload, 'visitedAt') ?? Date.now();
+  const createdAt =
+    pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+
+  const sql = `
+    INSERT INTO visit_reports (
+      id,
+      merchant_id,
+      task_id,
+      customer_id,
+      result,
+      notes,
+      visited_at,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      task_id = EXCLUDED.task_id,
+      customer_id = EXCLUDED.customer_id,
+      result = EXCLUDED.result,
+      notes = EXCLUDED.notes,
+      visited_at = EXCLUDED.visited_at,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    taskId,
+    customerId,
+    resultValue,
+    notes,
+    visitedAt,
+    createdAt,
+    updatedAt,
+  ]);
+}
+
+async function upsertSurvey(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const title = pickString(payload, 'title');
+  if (!title) {
+    throw new Error('Missing survey title');
+  }
+
+  const id = pickString(payload, 'id') ?? entityId;
+  const description = pickString(payload, 'description');
+  const isActive = pickBoolean(payload, 'is_active') ?? pickBoolean(payload, 'isActive') ?? true;
+  const createdAt =
+    pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+
+  const sql = `
+    INSERT INTO surveys (
+      id,
+      merchant_id,
+      title,
+      description,
+      is_active,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      title = EXCLUDED.title,
+      description = EXCLUDED.description,
+      is_active = EXCLUDED.is_active,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    title,
+    description,
+    isActive,
+    createdAt,
+    updatedAt,
+  ]);
+}
+
+async function upsertSurveyQuestion(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const surveyId = pickString(payload, 'survey_id') ?? pickString(payload, 'surveyId');
+  const questionText = pickString(payload, 'question_text') ?? pickString(payload, 'questionText');
+  if (!surveyId || !questionText) {
+    throw new Error('Missing survey question data');
+  }
+
+  const id = pickString(payload, 'id') ?? entityId;
+  const questionType = pickString(payload, 'question_type') ?? pickString(payload, 'questionType') ?? 'SHORT_TEXT';
+  const sortOrder = pickNumber(payload, 'sort_order') ?? pickNumber(payload, 'sortOrder') ?? 0;
+  const isRequired = pickBoolean(payload, 'is_required') ?? pickBoolean(payload, 'isRequired') ?? false;
+  const optionsPayload = Array.isArray(payload.options_payload)
+    ? payload.options_payload
+    : Array.isArray(payload.options)
+      ? payload.options
+      : [];
+  const createdAt =
+    pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+
+  const sql = `
+    INSERT INTO survey_questions (
+      id,
+      merchant_id,
+      survey_id,
+      question_text,
+      question_type,
+      sort_order,
+      is_required,
+      options_payload,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      survey_id = EXCLUDED.survey_id,
+      question_text = EXCLUDED.question_text,
+      question_type = EXCLUDED.question_type,
+      sort_order = EXCLUDED.sort_order,
+      is_required = EXCLUDED.is_required,
+      options_payload = EXCLUDED.options_payload,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    surveyId,
+    questionText,
+    questionType,
+    sortOrder,
+    isRequired,
+    optionsPayload,
+    createdAt,
+    updatedAt,
+  ]);
+}
+
+async function upsertSurveyResponse(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const surveyId = pickString(payload, 'survey_id') ?? pickString(payload, 'surveyId');
+  if (!surveyId) {
+    throw new Error('Missing survey_id');
+  }
+
+  const id = pickString(payload, 'id') ?? entityId;
+  const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+  const channel = pickString(payload, 'channel');
+  const submittedAt =
+    pickNumber(payload, 'submitted_at') ?? pickNumber(payload, 'submittedAt') ?? Date.now();
+  const createdAt =
+    pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+
+  const sql = `
+    INSERT INTO survey_responses (
+      id,
+      merchant_id,
+      survey_id,
+      customer_id,
+      submitted_at,
+      channel,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      survey_id = EXCLUDED.survey_id,
+      customer_id = EXCLUDED.customer_id,
+      submitted_at = EXCLUDED.submitted_at,
+      channel = EXCLUDED.channel,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    surveyId,
+    customerId,
+    submittedAt,
+    channel,
+    createdAt,
+    updatedAt,
+  ]);
+
+  const answers = Array.isArray(payload.answers) ? payload.answers : [];
+  for (const answer of answers) {
+    const row = answer as Record<string, unknown>;
+    await upsertSurveyResponseAnswer(
+      merchantId,
+      {
+        ...row,
+        response_id: id,
+      },
+      randomUUID(),
+    );
+  }
+}
+
+async function upsertSurveyResponseAnswer(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const responseId = pickString(payload, 'response_id') ?? pickString(payload, 'responseId');
+  const questionId = pickString(payload, 'question_id') ?? pickString(payload, 'questionId');
+  if (!responseId || !questionId) {
+    throw new Error('Missing survey answer data');
+  }
+
+  const id = pickString(payload, 'id') ?? entityId;
+  const answerText = pickString(payload, 'answer_text') ?? pickString(payload, 'answerText');
+  const answerNumeric = pickNumber(payload, 'answer_numeric') ?? pickNumber(payload, 'answerNumeric');
+  const answerBool = pickBoolean(payload, 'answer_bool') ?? pickBoolean(payload, 'answerBool');
+  const createdAt =
+    pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+
+  const sql = `
+    INSERT INTO survey_response_answers (
+      id,
+      merchant_id,
+      response_id,
+      question_id,
+      answer_text,
+      answer_numeric,
+      answer_bool,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      response_id = EXCLUDED.response_id,
+      question_id = EXCLUDED.question_id,
+      answer_text = EXCLUDED.answer_text,
+      answer_numeric = EXCLUDED.answer_numeric,
+      answer_bool = EXCLUDED.answer_bool,
+      updated_at = EXCLUDED.updated_at
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    responseId,
+    questionId,
+    answerText,
+    answerNumeric,
+    answerBool,
+    createdAt,
+    updatedAt,
+  ]);
+}
+
 type SubscriptionStateRow = {
   plan_code: string;
   plan_name: string;
@@ -582,19 +1958,19 @@ async function resolvePlanAndPricing(
 
   const planVersion =
     planVersionInput ??
-    (samePlan ? existing?.plan_version ?? null : null) ??
+    (samePlan ? existing?.plan_version : null) ??
     activePlan?.version ??
     1;
 
   const pricingVersion =
     pricingVersionInput ??
-    (samePlan ? existing?.pricing_version ?? null : null) ??
+    (samePlan ? existing?.pricing_version : null) ??
     activePricingVersion ??
     1;
 
   const planName =
     planNameInput ??
-    (samePlan ? existing?.plan_name ?? null : null) ??
+    (samePlan ? existing?.plan_name : null) ??
     activePlan?.name ??
     planCode;
 

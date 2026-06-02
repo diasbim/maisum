@@ -8,11 +8,18 @@ import '../../../core/widgets/empty_state.dart';
 import '../domain/reward.dart';
 import 'rewards_controller.dart';
 
-class RewardsScreen extends ConsumerWidget {
+class RewardsScreen extends ConsumerStatefulWidget {
   const RewardsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RewardsScreen> createState() => _RewardsScreenState();
+}
+
+class _RewardsScreenState extends ConsumerState<RewardsScreen> {
+  bool _ascendingSort = true;
+
+  @override
+  Widget build(BuildContext context) {
     final rewards = ref.watch(rewardsControllerProvider);
 
     return Scaffold(
@@ -64,9 +71,19 @@ class RewardsScreen extends ConsumerWidget {
                                 ),
                           );
                           final action = TextButton.icon(
-                            onPressed: list.isEmpty ? null : () {},
+                            onPressed: list.isEmpty
+                                ? null
+                                : () {
+                                    setState(() {
+                                      _ascendingSort = !_ascendingSort;
+                                    });
+                                  },
                             icon: const Icon(Icons.sort_rounded, size: 18),
-                            label: const Text(AppStrings.recompensasOrdenar),
+                            label: Text(
+                              _ascendingSort
+                                  ? '${AppStrings.recompensasOrdenar} ↑'
+                                  : '${AppStrings.recompensasOrdenar} ↓',
+                            ),
                             style: TextButton.styleFrom(
                               foregroundColor: AppColors.secondaryDark,
                             ),
@@ -99,22 +116,41 @@ class RewardsScreen extends ConsumerWidget {
                           onAction: () => context.push('/rewards/new'),
                         )
                       else ...[
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isNarrow = constraints.maxWidth < 360;
-                            return GridView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: isNarrow ? 1 : 2,
-                                crossAxisSpacing: 14,
-                                mainAxisSpacing: 14,
-                                childAspectRatio: isNarrow ? 1.35 : 0.82,
-                              ),
-                              itemCount: list.length,
-                              itemBuilder: (_, i) =>
-                                  _RewardTile(reward: list[i]),
+                        Builder(
+                          builder: (_) {
+                            final sortedList = [...list]..sort((a, b) {
+                                final pointsComparison = a.pointsRequired
+                                    .compareTo(b.pointsRequired);
+                                if (pointsComparison != 0) {
+                                  return _ascendingSort
+                                      ? pointsComparison
+                                      : -pointsComparison;
+                                }
+                                final nameComparison = a.name
+                                    .toLowerCase()
+                                    .compareTo(b.name.toLowerCase());
+                                return _ascendingSort
+                                    ? nameComparison
+                                    : -nameComparison;
+                              });
+                            return LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isNarrow = constraints.maxWidth < 360;
+                                return GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: isNarrow ? 1 : 2,
+                                    crossAxisSpacing: 14,
+                                    mainAxisSpacing: 14,
+                                    childAspectRatio: isNarrow ? 1.35 : 0.82,
+                                  ),
+                                  itemCount: sortedList.length,
+                                  itemBuilder: (_, i) =>
+                                      _RewardTile(reward: sortedList[i]),
+                                );
+                              },
                             );
                           },
                         ),

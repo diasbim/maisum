@@ -1,6 +1,7 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../subscription/domain/feature_keys.dart';
 import '../domain/retention_metric.dart';
 
 class RetentionDashboardData {
@@ -21,6 +22,12 @@ final recurringCustomersProvider =
 final inactiveCustomersProvider =
     FutureProvider<List<InactiveCustomerSummary>>((ref) {
   return ref.read(retentionRepositoryProvider).getInactiveCustomers(limit: 50);
+});
+
+final retentionPremiumAccessProvider = FutureProvider<bool>((ref) async {
+  final gate = ref.read(featureGateProvider);
+  final decision = await gate.check(featureKey: FeatureKeys.engageViewRisk);
+  return decision.allowed;
 });
 
 class RetentionDashboardController

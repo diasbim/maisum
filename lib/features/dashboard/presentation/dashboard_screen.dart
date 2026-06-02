@@ -7,16 +7,41 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/moz_phone_utils.dart';
+import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/contextual_error_state.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/sync_status_bar.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../subscription/domain/feature_keys.dart';
 import '../../sync/sync_controller.dart';
 import '../../sync/sync_service.dart';
 import '../../../app/providers.dart' as app_providers;
 import 'dashboard_controller.dart';
 import 'widgets/customer_conversion_widgets.dart';
+
+class _DashboardPremiumAccess {
+  const _DashboardPremiumAccess({
+    required this.canUseEngage,
+    required this.canUseRetention,
+  });
+
+  final bool canUseEngage;
+  final bool canUseRetention;
+}
+
+final dashboardPremiumAccessProvider =
+    FutureProvider<_DashboardPremiumAccess>((ref) async {
+  final gate = ref.read(app_providers.featureGateProvider);
+  final engageDecision = await gate.check(
+    featureKey: FeatureKeys.engageViewRisk,
+  );
+  return _DashboardPremiumAccess(
+    canUseEngage: engageDecision.allowed,
+    canUseRetention: engageDecision.allowed,
+  );
+});
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -89,7 +114,9 @@ class DashboardScreen extends ConsumerWidget {
                         source: 'dashboard',
                         properties: {'entry_point': 'primary_sale_card'},
                       );
+                      if (!context.mounted) return;
                       await context.push('/new-sale');
+                      if (!context.mounted) return;
                       ref.read(dashboardControllerProvider.notifier).refresh();
                     },
                   ),
@@ -180,8 +207,10 @@ class _DashboardHeader extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.settings_outlined,
-                        color: Colors.white),
+                    icon: const Icon(
+                      Icons.settings_outlined,
+                      color: Colors.white,
+                    ),
                     onPressed: () => context.push('/settings'),
                   ),
                 ],
@@ -229,14 +258,14 @@ class _DashboardHeader extends StatelessWidget {
                   runSpacing: AppSpacing.sm,
                   children: [
                     _SubscriptionChip(
-                      label:
-                          _formatSubscriptionStatus(session.subscriptionStatus),
+                      label: _formatSubscriptionStatus(
+                        session.subscriptionStatus,
+                      ),
                     ),
-                    _HeaderMetaChip(label: session.phone),
-                    _SyncStatusChip(
-                      status: syncStatus,
-                      isOnline: isOnline,
+                    _HeaderMetaChip(
+                      label: MozPhoneUtils.maskForDisplay(session.phone),
                     ),
+                    _SyncStatusChip(status: syncStatus, isOnline: isOnline),
                   ],
                 ),
               ],
@@ -248,7 +277,7 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
-class _DashboardBody extends StatelessWidget {
+class _DashboardBody extends ConsumerWidget {
   const _DashboardBody({
     required this.stats,
     required this.syncStatus,
@@ -262,10 +291,13 @@ class _DashboardBody extends StatelessWidget {
   final VoidCallback onNewSale;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final showEmpty = stats.totalCustomers == 0 &&
         stats.todaySaleCount == 0 &&
         stats.todayPoints == 0;
+    final premiumAccess = ref.watch(dashboardPremiumAccessProvider);
+    final canUseEngage = premiumAccess.valueOrNull?.canUseEngage ?? false;
+    final canUseRetention = premiumAccess.valueOrNull?.canUseRetention ?? false;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,15 +342,11 @@ class _DashboardBody extends StatelessWidget {
                   ),
                   SizedBox(
                     width: cardWidth,
-                    child: _PointsTodayCard(
-                      points: stats.todayPoints,
-                    ),
+                    child: _PointsTodayCard(points: stats.todayPoints),
                   ),
                   SizedBox(
                     width: cardWidth,
-                    child: _TotalCustomersCard(
-                      count: stats.totalCustomers,
-                    ),
+                    child: _TotalCustomersCard(count: stats.totalCustomers),
                   ),
                   SizedBox(
                     width: cardWidth,
@@ -379,9 +407,32 @@ class _DashboardBody extends StatelessWidget {
                     width: tileWidth,
                     child: _MiniActionTile(
                       label: 'Retenção',
-                      subtitle: 'Recorrentes e clientes em risco',
+                      subtitle: canUseRetention
+                          ? 'Recorrentes e clientes em risco'
+                          : 'Funcionalidade premium. Atualize o plano.',
                       icon: Icons.insights_rounded,
-                      onTap: () => context.push('/retention'),
+                      onTap: () => _openPremiumModule(
+                        context,
+                        allowed: canUseRetention,
+                        moduleName: 'Retenção',
+                        route: '/retention',
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: tileWidth,
+                    child: _MiniActionTile(
+                      label: 'Engage',
+                      subtitle: canUseEngage
+                          ? 'Recuperação de clientes em risco'
+                          : 'Funcionalidade premium. Atualize o plano.',
+                      icon: Icons.auto_graph_rounded,
+                      onTap: () => _openPremiumModule(
+                        context,
+                        allowed: canUseEngage,
+                        moduleName: 'Engage',
+                        route: '/engage',
+                      ),
                     ),
                   ),
                   SizedBox(
@@ -407,6 +458,28 @@ class _DashboardBody extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+
+  void _openPremiumModule(
+    BuildContext context, {
+    required bool allowed,
+    required String moduleName,
+    required String route,
+  }) {
+    if (allowed) {
+      context.push(route);
+      return;
+    }
+
+    AppFeedback.showMessage(
+      context,
+      message:
+          '$moduleName é uma funcionalidade premium. Atualize o plano para desbloquear.',
+      action: SnackBarAction(
+        label: 'Gerir plano',
+        onPressed: () => context.push('/subscription-admin'),
+      ),
     );
   }
 }
@@ -937,8 +1010,11 @@ class _MerchantStreakCard extends StatelessWidget {
               color: AppColors.primary.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.local_fire_department_rounded,
-                color: AppColors.primary, size: 18),
+            child: const Icon(
+              Icons.local_fire_department_rounded,
+              color: AppColors.primary,
+              size: 18,
+            ),
           ),
           const SizedBox(height: 12),
           Text(
@@ -1078,10 +1154,7 @@ class _DashboardBodySkeleton extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _SkeletonBlock(
-            height: 180,
-            radius: AppRadius.xl,
-          ),
+          const _SkeletonBlock(height: 180, radius: AppRadius.xl),
           const SizedBox(height: AppSpacing.xxl),
           const _SkeletonBlock(height: 10, width: 72, radius: AppRadius.sm),
           const SizedBox(height: AppSpacing.md),
@@ -1103,10 +1176,7 @@ class _DashboardBodySkeleton extends StatelessWidget {
             },
           ),
           const SizedBox(height: AppSpacing.lg),
-          const _SkeletonBlock(
-            height: 84,
-            radius: AppRadius.lg,
-          ),
+          const _SkeletonBlock(height: 84, radius: AppRadius.lg),
         ],
       ),
     );
@@ -1155,9 +1225,7 @@ class _SkeletonPulseState extends State<_SkeletonPulse>
         return ColoredBox(
           color: Colors.transparent,
           child: Theme(
-            data: Theme.of(context).copyWith(
-              cardColor: color,
-            ),
+            data: Theme.of(context).copyWith(cardColor: color),
             child: DefaultTextStyle.merge(
               style: TextStyle(color: color),
               child: IconTheme.merge(

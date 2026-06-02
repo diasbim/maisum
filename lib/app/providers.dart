@@ -323,6 +323,7 @@ final subscriptionRepositoryProvider = Provider<SubscriptionRepository>(
   (ref) => SubscriptionRepository(
     ref.read(subscriptionDaoProvider),
     ref.read(usageQuotaEngineProvider),
+    ref.read(syncDaoProvider),
   ),
 );
 
