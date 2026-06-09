@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/theme/app_colors.dart';
 import 'auth_controller.dart';
+import 'post_auth_navigation.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -49,7 +50,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     if (session != null && session.isValid) {
       final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
       if (!mounted) return;
-      context.go(hasPin ? '/pin-entry' : '/pin-setup');
+      if (hasPin) {
+        context.go('/pin-entry');
+        return;
+      }
+      final route = await resolvePostAuthRoute(ref.read);
+      if (!mounted) return;
+      context.go(route);
     } else {
       context.go('/login');
     }

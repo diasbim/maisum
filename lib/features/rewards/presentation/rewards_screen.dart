@@ -6,6 +6,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../domain/reward.dart';
+import 'reward_templates.dart';
 import 'rewards_controller.dart';
 
 class RewardsScreen extends ConsumerStatefulWidget {
@@ -104,6 +105,13 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> {
                               action,
                             ],
                           );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _QuickTemplateSection(
+                        onSelect: (template) {
+                          context
+                              .push('/rewards/new?template=${template.code}');
                         },
                       ),
                       const SizedBox(height: 16),
@@ -492,6 +500,52 @@ class _InsightBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _QuickTemplateSection extends StatelessWidget {
+  const _QuickTemplateSection({required this.onSelect});
+
+  final ValueChanged<RewardTemplatePreset> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Templates rapidos',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 38,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: rewardTemplatePresets.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, index) {
+              final template = rewardTemplatePresets[index];
+              return ActionChip(
+                key: Key('quick_reward_template_${template.code}'),
+                avatar: Icon(
+                  template.icon,
+                  size: 16,
+                  color: AppColors.primary,
+                ),
+                label: Text(template.label),
+                onPressed: () => onSelect(template),
+                backgroundColor: Colors.white,
+                side: const BorderSide(color: AppColors.g100),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

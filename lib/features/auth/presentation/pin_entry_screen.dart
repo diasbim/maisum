@@ -81,7 +81,7 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
       Log.i(_tag, 'PIN verified successfully');
       ref.read(appLockedProvider.notifier).state = false;
       if (!mounted) return;
-      final route = await resolvePostAuthRoute(ref);
+      final route = await resolvePostAuthRoute(ref.read);
       if (mounted) context.go(route);
       return;
     }

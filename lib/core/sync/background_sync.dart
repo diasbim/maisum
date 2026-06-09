@@ -24,7 +24,7 @@ void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    const storage = SecureStorageService(const FlutterSecureStorage());
+    const storage = SecureStorageService(FlutterSecureStorage());
     final merchantId = await storage.getMerchantId() ??
         await storage.getFirebaseUid() ??
         await storage.getUserId();
@@ -83,10 +83,7 @@ void callbackDispatcher() {
 }
 
 Future<void> registerBackgroundSync({bool debug = false}) async {
-  await Workmanager().initialize(
-    callbackDispatcher,
-    isInDebugMode: debug,
-  );
+  await Workmanager().initialize(callbackDispatcher);
 
   await Workmanager().registerPeriodicTask(
     backgroundSyncUniqueName,
@@ -94,4 +91,11 @@ Future<void> registerBackgroundSync({bool debug = false}) async {
     frequency: const Duration(minutes: 15),
     constraints: Constraints(networkType: NetworkType.connected),
   );
+
+  if (debug) {
+    // Best-effort debugging aid now that isInDebugMode no longer has effect.
+    try {
+      await Workmanager().printScheduledTasks();
+    } catch (_) {}
+  }
 }

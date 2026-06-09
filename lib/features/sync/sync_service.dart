@@ -62,6 +62,7 @@ const _syncEntities = [
   _SyncEntityConfig(entityType: 'feature_flag', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'remote_config', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'usage_balance', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'app_user', cursorField: 'updated_at'),
 ];
 
 class SyncStatus {
@@ -109,15 +110,16 @@ class SyncStatus {
     Object? lastError = _keep,
     DateTime? lastSyncAt,
     DateTime? nextRetryAt,
-  }) => SyncStatus(
-    isOnline: isOnline ?? this.isOnline,
-    phase: phase ?? this.phase,
-    pendingCount: pendingCount ?? this.pendingCount,
-    failedCount: failedCount ?? this.failedCount,
-    lastError: lastError == _keep ? this.lastError : lastError as String?,
-    lastSyncAt: lastSyncAt ?? this.lastSyncAt,
-    nextRetryAt: nextRetryAt ?? this.nextRetryAt,
-  );
+  }) =>
+      SyncStatus(
+        isOnline: isOnline ?? this.isOnline,
+        phase: phase ?? this.phase,
+        pendingCount: pendingCount ?? this.pendingCount,
+        failedCount: failedCount ?? this.failedCount,
+        lastError: lastError == _keep ? this.lastError : lastError as String?,
+        lastSyncAt: lastSyncAt ?? this.lastSyncAt,
+        nextRetryAt: nextRetryAt ?? this.nextRetryAt,
+      );
 }
 
 enum SyncPhase {
@@ -141,8 +143,8 @@ class SyncService {
     this._connectivity, {
     AnalyticsService? analytics,
     SyncRetryPolicy? retryPolicy,
-  }) : _retryPolicy = retryPolicy ?? const SyncRetryPolicy(),
-       _analytics = analytics;
+  })  : _retryPolicy = retryPolicy ?? const SyncRetryPolicy(),
+        _analytics = analytics;
 
   final AppDatabase _database;
 
@@ -235,13 +237,22 @@ class SyncService {
       unawaited(_logSyncEvent('sync_success', {'processed': items.length}));
       Log.i(_tag, 'Queue processed successfully');
     } catch (e, st) {
-      lastError = _formatSyncError(e);
       Log.e(_tag, 'processQueue failed', e, st);
-      unawaited(
-        _logSyncEvent('sync_failed', {
-          'error': lastError ?? AppStrings.erroGenerico,
-        }),
-      );
+      if (_isTransientSyncError(e)) {
+        Log.w(_tag, 'Transient network issue while processing queue; will retry');
+        unawaited(
+          _logSyncEvent('sync_deferred', {
+            'reason': 'transient_network',
+          }),
+        );
+      } else {
+        lastError = _formatSyncError(e);
+        unawaited(
+          _logSyncEvent('sync_failed', {
+            'error': lastError,
+          }),
+        );
+      }
     } finally {
       final resolvedError = lastError ?? itemError;
       await _refreshStatus(lastErrorOverride: resolvedError);
@@ -275,8 +286,7 @@ class SyncService {
     } catch (e, st) {
       Log.e(_tag, '✗ ${item.entityType}/${item.entityId}', e, st);
       final transportError = e is SyncTransportException ? e : null;
-      final isPermanent =
-          transportError != null &&
+      final isPermanent = transportError != null &&
           (transportError.code == 'failed-precondition' ||
               transportError.code == 'permission-denied' ||
               transportError.code == 'unauthenticated');
@@ -285,6 +295,18 @@ class SyncService {
         await _syncDao.markFailed(item.id);
         Log.w(_tag, 'Item ${item.id} marked failed (non-retryable)');
         return _formatSyncError(e);
+      }
+
+      if (_isTransientSyncError(e)) {
+        final retryCountForDelay = item.retryCount <= 0 ? 1 : item.retryCount;
+        final nextAttemptAt =
+            _retryPolicy.nextAttempt(retryCount: retryCountForDelay);
+        await _syncDao.scheduleRetry(item.id, nextAttemptAt);
+        Log.d(
+          _tag,
+          'Item ${item.id} deferred due to transient network issue',
+        );
+        return null;
       }
 
       await _syncDao.incrementRetry(item.id);
@@ -417,6 +439,8 @@ class SyncService {
         return _applyRemoteConfig(txn, remote);
       case 'usage_balance':
         return _applyUsageBalance(txn, remote);
+      case 'app_user':
+        return _applyAppUser(txn, remote);
       default:
         return Future.value();
     }
@@ -443,8 +467,7 @@ class SyncService {
     _SyncEntityConfig entity,
     Map<String, dynamic> remote,
   ) {
-    final rawValue =
-        remote[entity.cursorField] ??
+    final rawValue = remote[entity.cursorField] ??
         (entity.entityType == 'reward' ? remote['created_at'] : null);
     if (rawValue is num) {
       return rawValue.toInt();
@@ -488,11 +511,14 @@ class SyncService {
     String entityType,
     _SyncCursor cursor,
   ) async {
-    await txn.insert('sync_state', {
-      'entity_type': entityType,
-      'last_value': cursor.lastValue,
-      'last_doc_id': cursor.lastDocId,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await txn.insert(
+        'sync_state',
+        {
+          'entity_type': entityType,
+          'last_value': cursor.lastValue,
+          'last_doc_id': cursor.lastDocId,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<void> _applyCustomer(dynamic txn, Map<String, dynamic> remote) async {
@@ -514,8 +540,7 @@ class SyncService {
 
     final local = Map<String, dynamic>.from(row.first);
     final localSynced = (local['synced'] as int? ?? 0) == 1;
-    final sameData =
-        local['name'] == incoming['name'] &&
+    final sameData = local['name'] == incoming['name'] &&
         local['phone'] == incoming['phone'] &&
         local['total_points'] == incoming['total_points'] &&
         local['updated_at'] == incoming['updated_at'];
@@ -551,8 +576,7 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['customer_id'] == incoming['customer_id'] &&
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
         local['amount'] == incoming['amount'] &&
         local['points'] == incoming['points'] &&
         local['created_at'] == incoming['created_at'];
@@ -586,8 +610,7 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['name'] == incoming['name'] &&
+    final sameData = local['name'] == incoming['name'] &&
         local['points_required'] == incoming['points_required'] &&
         local['description'] == incoming['description'] &&
         local['active'] == incoming['active'] &&
@@ -625,8 +648,7 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['customer_id'] == incoming['customer_id'] &&
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
         local['reward_id'] == incoming['reward_id'] &&
         local['points_spent'] == incoming['points_spent'] &&
         local['redeemed_at'] == incoming['redeemed_at'];
@@ -666,7 +688,8 @@ class SyncService {
       'created_at',
       'updated_at',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('appointments', incoming);
@@ -674,8 +697,7 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['customer_id'] == incoming['customer_id'] &&
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
         local['scheduled_date'] == incoming['scheduled_date'] &&
         local['status'] == incoming['status'] &&
         local['source'] == incoming['source'] &&
@@ -714,8 +736,7 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['customer_id'] == incoming['customer_id'] &&
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
         local['last_visit_at'] == incoming['last_visit_at'] &&
         local['days_inactive'] == incoming['days_inactive'] &&
         local['risk_level'] == incoming['risk_level'] &&
@@ -759,7 +780,8 @@ class SyncService {
       'priority',
       'updated_at',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('customer_risk_scores', incoming);
@@ -767,8 +789,7 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['customer_id'] == incoming['customer_id'] &&
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
         local['days_since_visit'] == incoming['days_since_visit'] &&
         local['risk_level'] == incoming['risk_level'] &&
         local['priority'] == incoming['priority'] &&
@@ -808,8 +829,11 @@ class SyncService {
       'notes',
       'created_at',
       'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('recovery_tasks', incoming);
@@ -817,12 +841,13 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['customer_id'] == incoming['customer_id'] &&
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
         local['priority'] == incoming['priority'] &&
         local['status'] == incoming['status'] &&
         local['due_at'] == incoming['due_at'] &&
         local['notes'] == incoming['notes'] &&
+        local['created_by_app_user_id'] == incoming['created_by_app_user_id'] &&
+        local['updated_by_app_user_id'] == incoming['updated_by_app_user_id'] &&
         local['updated_at'] == incoming['updated_at'];
     if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
       return;
@@ -859,8 +884,11 @@ class SyncService {
       'payload',
       'created_at',
       'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('recovery_actions', incoming);
@@ -868,11 +896,12 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['customer_id'] == incoming['customer_id'] &&
+    final sameData = local['customer_id'] == incoming['customer_id'] &&
         local['task_id'] == incoming['task_id'] &&
         local['action_type'] == incoming['action_type'] &&
         local['payload'] == incoming['payload'] &&
+        local['created_by_app_user_id'] == incoming['created_by_app_user_id'] &&
+        local['updated_by_app_user_id'] == incoming['updated_by_app_user_id'] &&
         local['updated_at'] == incoming['updated_at'];
 
     if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
@@ -911,8 +940,11 @@ class SyncService {
       'visited_at',
       'created_at',
       'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('visit_reports', incoming);
@@ -920,12 +952,13 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['task_id'] == incoming['task_id'] &&
+    final sameData = local['task_id'] == incoming['task_id'] &&
         local['customer_id'] == incoming['customer_id'] &&
         local['result'] == incoming['result'] &&
         local['notes'] == incoming['notes'] &&
         local['visited_at'] == incoming['visited_at'] &&
+        local['created_by_app_user_id'] == incoming['created_by_app_user_id'] &&
+        local['updated_by_app_user_id'] == incoming['updated_by_app_user_id'] &&
         local['updated_at'] == incoming['updated_at'];
 
     if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
@@ -959,8 +992,11 @@ class SyncService {
       'is_active',
       'created_at',
       'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('surveys', incoming);
@@ -968,10 +1004,11 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['title'] == incoming['title'] &&
+    final sameData = local['title'] == incoming['title'] &&
         local['description'] == incoming['description'] &&
         local['is_active'] == incoming['is_active'] &&
+        local['created_by_app_user_id'] == incoming['created_by_app_user_id'] &&
+        local['updated_by_app_user_id'] == incoming['updated_by_app_user_id'] &&
         local['updated_at'] == incoming['updated_at'];
 
     if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
@@ -1011,8 +1048,11 @@ class SyncService {
       'options_payload',
       'created_at',
       'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('survey_questions', incoming);
@@ -1020,12 +1060,13 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['question_text'] == incoming['question_text'] &&
+    final sameData = local['question_text'] == incoming['question_text'] &&
         local['question_type'] == incoming['question_type'] &&
         local['sort_order'] == incoming['sort_order'] &&
         local['is_required'] == incoming['is_required'] &&
         local['options_payload'] == incoming['options_payload'] &&
+        local['created_by_app_user_id'] == incoming['created_by_app_user_id'] &&
+        local['updated_by_app_user_id'] == incoming['updated_by_app_user_id'] &&
         local['updated_at'] == incoming['updated_at'];
 
     if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
@@ -1063,8 +1104,11 @@ class SyncService {
       'channel',
       'created_at',
       'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('survey_responses', incoming);
@@ -1072,11 +1116,12 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['survey_id'] == incoming['survey_id'] &&
+    final sameData = local['survey_id'] == incoming['survey_id'] &&
         local['customer_id'] == incoming['customer_id'] &&
         local['submitted_at'] == incoming['submitted_at'] &&
         local['channel'] == incoming['channel'] &&
+        local['created_by_app_user_id'] == incoming['created_by_app_user_id'] &&
+        local['updated_by_app_user_id'] == incoming['updated_by_app_user_id'] &&
         local['updated_at'] == incoming['updated_at'];
 
     if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
@@ -1115,8 +1160,11 @@ class SyncService {
       'answer_bool',
       'created_at',
       'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
       'synced',
-    })..['synced'] = 1;
+    })
+      ..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('survey_response_answers', incoming);
@@ -1124,12 +1172,13 @@ class SyncService {
     }
 
     final local = Map<String, dynamic>.from(row.first);
-    final sameData =
-        local['response_id'] == incoming['response_id'] &&
+    final sameData = local['response_id'] == incoming['response_id'] &&
         local['question_id'] == incoming['question_id'] &&
         local['answer_text'] == incoming['answer_text'] &&
         local['answer_numeric'] == incoming['answer_numeric'] &&
         local['answer_bool'] == incoming['answer_bool'] &&
+        local['created_by_app_user_id'] == incoming['created_by_app_user_id'] &&
+        local['updated_by_app_user_id'] == incoming['updated_by_app_user_id'] &&
         local['updated_at'] == incoming['updated_at'];
 
     if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
@@ -1330,6 +1379,45 @@ class SyncService {
     );
   }
 
+  Future<void> _applyAppUser(dynamic txn, Map<String, dynamic> remote) async {
+    final incoming = _normalizedIncoming(remote);
+    _copyIfAbsent(incoming, 'merchant_id', 'merchantId');
+    _copyIfAbsent(incoming, 'firebase_uid', 'firebaseUid');
+    _copyIfAbsent(incoming, 'display_name', 'displayName');
+    _copyIfAbsent(incoming, 'phone_number', 'phoneNumber');
+    _copyIfAbsent(incoming, 'accepted_at', 'acceptedAt');
+    _copyIfAbsent(incoming, 'inactive_at', 'inactiveAt');
+
+    final id = incoming['id'] as String?;
+    final merchantId =
+        incoming['merchant_id'] as String? ?? _syncDao.merchantId;
+    if (id == null || merchantId == null) return;
+
+    incoming['merchant_id'] = merchantId;
+    incoming['created_at'] ??= DateTime.now().millisecondsSinceEpoch;
+    incoming['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
+
+    final filtered = _filterKeys(incoming, {
+      'id',
+      'merchant_id',
+      'firebase_uid',
+      'display_name',
+      'phone_number',
+      'role',
+      'status',
+      'accepted_at',
+      'inactive_at',
+      'created_at',
+      'updated_at',
+    });
+
+    await txn.insert(
+      'app_users',
+      filtered,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<void> _markEntitySynced(String entityType, String entityId) async {
     final db = await _database.database;
     switch (entityType) {
@@ -1519,8 +1607,7 @@ class SyncService {
     final stats = await _syncDao.getStats();
     _cachedStats = stats;
 
-    final effectiveError =
-        lastErrorOverride ??
+    final effectiveError = lastErrorOverride ??
         (stats.failed > 0 ? AppStrings.syncFalhaPendentes : null);
     final phase = _derivePhase(
       isOnline: _connectivity.isOnline,
@@ -1594,6 +1681,31 @@ class SyncService {
       }
     }
     return AppStrings.erroGenerico;
+  }
+
+  bool _isTransientSyncError(Object error) {
+    if (error is SyncTransportException) {
+      final code = error.code?.toLowerCase();
+      if (code == 'unavailable' ||
+          code == 'deadline-exceeded' ||
+          code == 'resource-exhausted') {
+        return true;
+      }
+
+      final message = error.message.toLowerCase();
+      if (message.contains('socket') ||
+          message.contains('unable to resolve host') ||
+          message.contains('network') ||
+          message.contains('internet')) {
+        return true;
+      }
+    }
+
+    final text = error.toString().toLowerCase();
+    return text.contains('socketexception') ||
+        text.contains('unable to resolve host') ||
+        text.contains('network is unreachable') ||
+        text.contains('eai_nodata');
   }
 
   void _emit(SyncStatus s) {

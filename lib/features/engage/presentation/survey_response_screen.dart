@@ -80,15 +80,13 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
                 orElse: () => surveys.first,
               );
 
-              if (_selectedSurveyId == null) {
-                _selectedSurveyId = selected.id;
-              }
+              _selectedSurveyId ??= selected.id;
 
               return ListView(
                 padding: const EdgeInsets.all(AppSpacing.xl),
                 children: [
                   DropdownButtonFormField<String>(
-                    value: _selectedSurveyId,
+                    initialValue: _selectedSurveyId,
                     decoration: const InputDecoration(labelText: 'Survey'),
                     items: surveys
                         .map(
@@ -173,7 +171,7 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
       case SurveyQuestionType.yesNo:
         final value = _answers[question.id] as bool?;
         return DropdownButtonFormField<bool>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(labelText: label),
           items: const [
             DropdownMenuItem(value: true, child: Text('Sim')),
@@ -193,7 +191,7 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
               min: 1,
               max: 5,
               divisions: 4,
-              label: '${(value ?? 3).toStringAsFixed(0)}',
+              label: (value ?? 3).toStringAsFixed(0),
               onChanged: (selected) =>
                   setState(() => _answers[question.id] = selected),
             ),
@@ -202,7 +200,7 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
       case SurveyQuestionType.multipleChoice:
         final value = _answers[question.id] as String?;
         return DropdownButtonFormField<String>(
-          value: value,
+          initialValue: value,
           decoration: InputDecoration(labelText: label),
           items: question.options
               .map(

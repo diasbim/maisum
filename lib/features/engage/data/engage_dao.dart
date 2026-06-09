@@ -8,11 +8,16 @@ import '../domain/engage_models.dart';
 import '../services/engage_risk_service.dart';
 
 class EngageDao {
-  EngageDao(this._db, {this.merchantId, EngageRiskService? riskService})
-    : _riskService = riskService ?? const EngageRiskService();
+  EngageDao(
+    this._db, {
+    this.merchantId,
+    this.appUserId,
+    EngageRiskService? riskService,
+  }) : _riskService = riskService ?? const EngageRiskService();
 
   final AppDatabase _db;
   final String? merchantId;
+  final String? appUserId;
   final EngageRiskService _riskService;
   static const _uuid = Uuid();
 
@@ -52,8 +57,7 @@ class EngageDao {
       final customerId = (row['customer_id'] as String?) ?? '';
       if (customerId.isEmpty) continue;
 
-      final lastVisitAt =
-          _toDateTime(row['last_visit_at']) ??
+      final lastVisitAt = _toDateTime(row['last_visit_at']) ??
           _toDateTime(row['customer_created_at']) ??
           nowDate;
       final daysSinceVisit = _riskService.daysSinceVisit(lastVisitAt, nowDate);
@@ -77,10 +81,13 @@ class EngageDao {
         synced: false,
       );
 
-      await db.insert('customer_risk_scores', {
-        ...score.toJson(),
-        'merchant_id': merchantId,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await db.insert(
+          'customer_risk_scores',
+          {
+            ...score.toJson(),
+            'merchant_id': merchantId,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
       scores.add(score);
     }
 
@@ -215,6 +222,8 @@ class EngageDao {
     await db.insert('recovery_tasks', {
       ...task.toJson(),
       'merchant_id': merchantId,
+      'created_by_app_user_id': appUserId,
+      'updated_by_app_user_id': appUserId,
     });
 
     return task;
@@ -222,10 +231,15 @@ class EngageDao {
 
   Future<RecoveryTask> upsertRecoveryTask(RecoveryTask task) async {
     final db = await _db.database;
-    await db.insert('recovery_tasks', {
-      ...task.toJson(),
-      'merchant_id': merchantId,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+        'recovery_tasks',
+        {
+          ...task.toJson(),
+          'merchant_id': merchantId,
+          'created_by_app_user_id': appUserId,
+          'updated_by_app_user_id': appUserId,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
     return task;
   }
 
@@ -237,6 +251,7 @@ class EngageDao {
         'status': RecoveryTaskStatus.completed,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
         'synced': 0,
+        'updated_by_app_user_id': appUserId,
       },
       where: _withMerchantScope('id = ?'),
       whereArgs: _withMerchantArgs([taskId]),
@@ -275,6 +290,8 @@ class EngageDao {
     await db.insert('recovery_actions', {
       ...action.toJson(),
       'merchant_id': merchantId,
+      'created_by_app_user_id': appUserId,
+      'updated_by_app_user_id': appUserId,
     });
     return action;
   }
@@ -283,10 +300,15 @@ class EngageDao {
     RecoveryActionLog action,
   ) async {
     final db = await _db.database;
-    await db.insert('recovery_actions', {
-      ...action.toJson(),
-      'merchant_id': merchantId,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+        'recovery_actions',
+        {
+          ...action.toJson(),
+          'merchant_id': merchantId,
+          'created_by_app_user_id': appUserId,
+          'updated_by_app_user_id': appUserId,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
     return action;
   }
 
@@ -315,16 +337,23 @@ class EngageDao {
     await db.insert('visit_reports', {
       ...report.toJson(),
       'merchant_id': merchantId,
+      'created_by_app_user_id': appUserId,
+      'updated_by_app_user_id': appUserId,
     });
     return report;
   }
 
   Future<VisitReport> upsertVisitReport(VisitReport report) async {
     final db = await _db.database;
-    await db.insert('visit_reports', {
-      ...report.toJson(),
-      'merchant_id': merchantId,
-    }, conflictAlgorithm: ConflictAlgorithm.replace);
+    await db.insert(
+        'visit_reports',
+        {
+          ...report.toJson(),
+          'merchant_id': merchantId,
+          'created_by_app_user_id': appUserId,
+          'updated_by_app_user_id': appUserId,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace);
     return report;
   }
 
@@ -427,31 +456,41 @@ class EngageDao {
     );
 
     await db.transaction((txn) async {
-      await txn.insert('surveys', {
-        'id': survey.id,
-        'merchant_id': merchantId,
-        'title': survey.title,
-        'description': survey.description,
-        'is_active': survey.isActive ? 1 : 0,
-        'created_at': survey.createdAt.millisecondsSinceEpoch,
-        'updated_at': survey.updatedAt.millisecondsSinceEpoch,
-        'synced': survey.synced ? 1 : 0,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert(
+          'surveys',
+          {
+            'id': survey.id,
+            'merchant_id': merchantId,
+            'title': survey.title,
+            'description': survey.description,
+            'is_active': survey.isActive ? 1 : 0,
+            'created_at': survey.createdAt.millisecondsSinceEpoch,
+            'updated_at': survey.updatedAt.millisecondsSinceEpoch,
+            'created_by_app_user_id': appUserId,
+            'updated_by_app_user_id': appUserId,
+            'synced': survey.synced ? 1 : 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
 
       for (final question in survey.questions) {
-        await txn.insert('survey_questions', {
-          'id': question.id,
-          'merchant_id': merchantId,
-          'survey_id': survey.id,
-          'question_text': question.questionText,
-          'question_type': question.questionType,
-          'sort_order': question.sortOrder,
-          'is_required': question.isRequired ? 1 : 0,
-          'options_payload': jsonEncode(question.options),
-          'created_at': question.createdAt.millisecondsSinceEpoch,
-          'updated_at': question.updatedAt.millisecondsSinceEpoch,
-          'synced': question.synced ? 1 : 0,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        await txn.insert(
+            'survey_questions',
+            {
+              'id': question.id,
+              'merchant_id': merchantId,
+              'survey_id': survey.id,
+              'question_text': question.questionText,
+              'question_type': question.questionType,
+              'sort_order': question.sortOrder,
+              'is_required': question.isRequired ? 1 : 0,
+              'options_payload': jsonEncode(question.options),
+              'created_at': question.createdAt.millisecondsSinceEpoch,
+              'updated_at': question.updatedAt.millisecondsSinceEpoch,
+              'created_by_app_user_id': appUserId,
+              'updated_by_app_user_id': appUserId,
+              'synced': question.synced ? 1 : 0,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace);
       }
     });
 
@@ -468,17 +507,22 @@ class EngageDao {
     final responseId = forcedResponseId ?? _uuid.v4();
 
     await db.transaction((txn) async {
-      await txn.insert('survey_responses', {
-        'id': responseId,
-        'merchant_id': merchantId,
-        'survey_id': submission.surveyId,
-        'customer_id': submission.customerId,
-        'submitted_at': now.millisecondsSinceEpoch,
-        'channel': submission.channel,
-        'created_at': now.millisecondsSinceEpoch,
-        'updated_at': now.millisecondsSinceEpoch,
-        'synced': synced ? 1 : 0,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.insert(
+          'survey_responses',
+          {
+            'id': responseId,
+            'merchant_id': merchantId,
+            'survey_id': submission.surveyId,
+            'customer_id': submission.customerId,
+            'submitted_at': now.millisecondsSinceEpoch,
+            'channel': submission.channel,
+            'created_at': now.millisecondsSinceEpoch,
+            'updated_at': now.millisecondsSinceEpoch,
+            'created_by_app_user_id': appUserId,
+            'updated_by_app_user_id': appUserId,
+            'synced': synced ? 1 : 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
 
       for (final answer in submission.answers) {
         await txn.insert('survey_response_answers', {
@@ -488,11 +532,12 @@ class EngageDao {
           'question_id': answer.questionId,
           'answer_text': answer.answerText,
           'answer_numeric': answer.answerNumeric,
-          'answer_bool': answer.answerBool == null
-              ? null
-              : (answer.answerBool! ? 1 : 0),
+          'answer_bool':
+              answer.answerBool == null ? null : (answer.answerBool! ? 1 : 0),
           'created_at': now.millisecondsSinceEpoch,
           'updated_at': now.millisecondsSinceEpoch,
+          'created_by_app_user_id': appUserId,
+          'updated_by_app_user_id': appUserId,
           'synced': synced ? 1 : 0,
         });
       }
@@ -503,9 +548,8 @@ class EngageDao {
 
   Future<EngageSurveyAnalytics> getSurveyAnalytics() async {
     final db = await _db.database;
-    final merchantArgs = merchantId == null
-        ? const <Object?>[]
-        : <Object?>[merchantId];
+    final merchantArgs =
+        merchantId == null ? const <Object?>[] : <Object?>[merchantId];
 
     final surveysRows = await db.rawQuery(
       merchantId == null
@@ -543,9 +587,8 @@ class EngageDao {
       LIMIT 3
       ''', merchantArgs);
 
-    final responseRate = activeSurveys == 0
-        ? 0.0
-        : (responsesTotal / activeSurveys) * 100;
+    final responseRate =
+        activeSurveys == 0 ? 0.0 : (responsesTotal / activeSurveys) * 100;
 
     final topReasons = reasonsRows
         .map((row) => (row['answer_text'] as String?) ?? '')

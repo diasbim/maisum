@@ -1,3 +1,5 @@
+import 'moz_phone_validator.dart';
+
 /// Utility for Mozambique phone number validation and normalisation.
 class MozPhoneUtils {
   // Valid Mozambican prefixes (first two digits of a 9-digit local number)
@@ -35,9 +37,8 @@ class MozPhoneUtils {
   }
 
   static bool _isValidLocal(String local) {
-    if (local.length != 9) return false;
-    if (!RegExp(r'^\d{9}$').hasMatch(local)) return false;
-    return _validPrefixes.any((p) => local.startsWith(p));
+    return MozPhoneValidator.isValidLocalPhone(local) &&
+        _validPrefixes.any((p) => local.startsWith(p));
   }
 
   /// Masks a phone number for UI display, keeping only the last 4 digits.
@@ -63,7 +64,7 @@ class MozPhoneUtils {
   /// Returns an error string or null — suitable for [TextFormField.validator].
   static String? validatorMessage(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Insira o número de telefone';
+      return 'Insira o numero de telefone';
     }
     try {
       normalizeToE164(value.trim());

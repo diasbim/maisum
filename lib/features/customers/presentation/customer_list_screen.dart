@@ -12,11 +12,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/customer_card.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/app_feedback.dart';
-import '../../../core/widgets/client_created_success_sheet.dart';
 import '../../../core/errors/app_error_mapper.dart';
-import '../../../core/errors/app_error_reporter.dart';
-import '../../../core/utils/moz_phone_utils.dart';
-import '../../sales/presentation/new_sale_screen.dart';
 import '../domain/customer.dart';
 import 'customers_controller.dart';
 
@@ -32,6 +28,22 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
   _CustomerFilter _filter = _CustomerFilter.all;
   Timer? _searchDebounce;
   bool _isSearching = false;
+
+  Future<bool> _ensurePinForCustomerCreation() async {
+    final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
+    if (hasPin) {
+      return true;
+    }
+
+    if (!mounted) return false;
+    AppFeedback.showMessage(
+      context,
+      message: 'Configure o PIN para criar o primeiro cliente.',
+    );
+    final nextRoute = Uri.encodeComponent('/customers');
+    context.go('/pin-setup?next=$nextRoute');
+    return false;
+  }
 
   void _handleBackPressed() {
     if (context.canPop()) {
@@ -103,7 +115,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                       title: emptyTitle,
                       subtitle: emptySubtitle,
                       actionLabel: AppStrings.adicionarCliente,
-                      onAction: () => _showAddCustomerSheet(context),
+                      onAction: _openCustomerCreateScreen,
                     ),
                   )
                 else
@@ -167,7 +179,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(bottom: AppSpacing.sm),
         child: FloatingActionButton.extended(
-          onPressed: () => _showAddCustomerSheet(context),
+          onPressed: _openCustomerCreateScreen,
           backgroundColor: AppColors.secondary,
           foregroundColor: AppColors.primaryDarker,
           extendedPadding: const EdgeInsets.symmetric(horizontal: 14),
@@ -232,243 +244,18 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
     });
   }
 
-  Future<Customer> _createCustomer({
-    required String name,
-    required String phone,
-  }) async {
-    final customer = await ref
-        .read(customersControllerProvider.notifier)
-        .createCustomer(name: name, phone: phone);
-
-    unawaited(
-      ref.read(analyticsServiceProvider).record(
-        eventType: 'client_created',
-        source: 'customers',
-        properties: {
-          'customer_id': customer.id,
-        },
-      ),
-    );
-
-    return customer;
-  }
-
-  Future<void> _showCustomerCreatedSuccess(Customer customer) async {
-    AppFeedback.showMessage(
-      context,
-      message: AppStrings.customerCreatedSuccess,
-    );
-
-    await showModalBottomSheet<void>(
-      context: context,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (sheetContext) => ClientCreatedSuccessSheet(
-        customerName: customer.name,
-        totalPoints: customer.totalPoints,
-        onRegisterSale: () async {
-          Navigator.of(sheetContext).pop();
-          unawaited(
-            ref.read(analyticsServiceProvider).record(
-              eventType: 'sale_registration_started',
-              source: 'customers',
-              properties: {
-                'entry_point': 'client_created_success_sheet',
-                'customer_id': customer.id,
-              },
-            ),
-          );
-          await context.push(
-            '/new-sale',
-            extra: NewSaleArgs(preselectedCustomerId: customer.id),
-          );
-        },
-        onLater: () => Navigator.of(sheetContext).pop(),
-      ),
-    );
-  }
-
-  Future<void> _showCustomerCreateErrorDialog(String message) async {
+  Future<void> _openCustomerCreateScreen() async {
+    final canCreate = await _ensurePinForCustomerCreation();
+    if (!canCreate || !mounted) {
+      return;
+    }
+    final destination = Uri(
+      path: '/customers/create',
+      queryParameters: const {'returnTo': '/customers'},
+    ).toString();
+    await context.push(destination);
     if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Não foi possível criar cliente'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text(AppStrings.continuar2),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _showAddCustomerSheet(BuildContext context) async {
-    final nameCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final formKey = GlobalKey<FormState>();
-    final theme = Theme.of(context);
-    var isSaving = false;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return AnimatedPadding(
-            duration: const Duration(milliseconds: 180),
-            padding:
-                EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-              child: Form(
-                key: formKey,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 20),
-                        decoration: BoxDecoration(
-                          color: AppColors.g300,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    Text(
-                      AppStrings.adicionarCliente,
-                      style: theme.textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 20),
-                    TextFormField(
-                      controller: nameCtrl,
-                      enabled: !isSaving,
-                      textCapitalization: TextCapitalization.words,
-                      textInputAction: TextInputAction.next,
-                      decoration: const InputDecoration(
-                        labelText: AppStrings.nome,
-                        hintText: AppStrings.nomeHint,
-                      ),
-                      validator: (v) => v == null || v.trim().isEmpty
-                          ? AppStrings.nameRequired
-                          : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: phoneCtrl,
-                      enabled: !isSaving,
-                      keyboardType: TextInputType.phone,
-                      textInputAction: TextInputAction.done,
-                      decoration: const InputDecoration(
-                        labelText: AppStrings.phoneNumber,
-                        hintText: '84 000 0000',
-                      ),
-                      validator: MozPhoneUtils.validatorMessage,
-                      onFieldSubmitted: (_) async {
-                        if (isSaving) return;
-                        if (!formKey.currentState!.validate()) return;
-                        setModalState(() => isSaving = true);
-                        try {
-                          final customer = await _createCustomer(
-                            name: nameCtrl.text.trim(),
-                            phone: phoneCtrl.text.trim(),
-                          );
-                          if (ctx.mounted) {
-                            Navigator.pop(ctx);
-                          }
-                          await _showCustomerCreatedSuccess(customer);
-                        } catch (e, st) {
-                          AppErrorReporter.report(
-                            e,
-                            st,
-                            hint: 'customer_create',
-                          );
-                          if (ctx.mounted) {
-                            final info = AppErrorMapper.describe(e);
-                            await _showCustomerCreateErrorDialog(info.message);
-                          }
-                        } finally {
-                          if (ctx.mounted) {
-                            setModalState(() => isSaving = false);
-                          }
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: isSaving
-                            ? null
-                            : () async {
-                                if (!formKey.currentState!.validate()) return;
-                                setModalState(() => isSaving = true);
-                                try {
-                                  final customer = await _createCustomer(
-                                    name: nameCtrl.text.trim(),
-                                    phone: phoneCtrl.text.trim(),
-                                  );
-                                  if (ctx.mounted) {
-                                    Navigator.pop(ctx);
-                                  }
-                                  await _showCustomerCreatedSuccess(customer);
-                                } catch (e, st) {
-                                  AppErrorReporter.report(
-                                    e,
-                                    st,
-                                    hint: 'customer_create',
-                                  );
-                                  if (ctx.mounted) {
-                                    final info = AppErrorMapper.describe(e);
-                                    await _showCustomerCreateErrorDialog(
-                                      info.message,
-                                    );
-                                  }
-                                } finally {
-                                  if (ctx.mounted) {
-                                    setModalState(() => isSaving = false);
-                                  }
-                                }
-                              },
-                        child: isSaving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(AppStrings.criarCliente),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-
-    nameCtrl.dispose();
-    phoneCtrl.dispose();
+    await ref.read(customersControllerProvider.notifier).refresh();
   }
 }
 

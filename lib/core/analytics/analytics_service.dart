@@ -14,15 +14,14 @@ import 'domain/analytics_event.dart';
 
 class AnalyticsService {
   AnalyticsService(
-    this._db,
+    AppDatabase db,
     this._client,
     this._connectivity,
     this._storage, {
     FirebaseAnalytics? firebaseAnalytics,
   })  : _firebaseAnalytics = firebaseAnalytics,
-        _dao = AnalyticsEventDao(_db);
+        _dao = AnalyticsEventDao(db);
 
-  final AppDatabase _db;
   final JsonApiClient _client;
   final ConnectivityService _connectivity;
   final SecureStorageService _storage;

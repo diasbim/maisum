@@ -28,6 +28,8 @@ class CustomerRepository {
   Future<List<Customer>> getRecent({int limit = 6}) =>
       _dao.getRecent(limit: limit);
 
+  Future<int> count() => _dao.getCount();
+
   Future<Customer> createCustomer({
     required String name,
     required String phone,
@@ -75,7 +77,7 @@ class CustomerRepository {
   }
 
   Map<String, dynamic> _customerPayload(Customer customer) => {
-    ...customer.toDbMap(),
-    'merchant_id': _dao.merchantId,
-  };
+        ...customer.toDbMap(),
+        'merchant_id': _dao.merchantId,
+      };
 }

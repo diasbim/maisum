@@ -5,12 +5,17 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/brand_mark.dart';
+import '../../../design_system/components/loading_button.dart';
+import '../../../design_system/components/maisum_text_field.dart';
+import '../../../design_system/components/maisum_toast.dart';
+import '../../../design_system/components/validation_state.dart';
+import 'reward_templates.dart';
 import 'rewards_controller.dart';
 
 class CreateRewardScreen extends ConsumerStatefulWidget {
-  const CreateRewardScreen({super.key});
+  const CreateRewardScreen({super.key, this.initialTemplateCode});
+
+  final String? initialTemplateCode;
 
   @override
   ConsumerState<CreateRewardScreen> createState() => _CreateRewardScreenState();
@@ -20,168 +25,299 @@ class _CreateRewardScreenState extends ConsumerState<CreateRewardScreen> {
   final _nameCtrl = TextEditingController();
   final _pointsCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
+  final _nameFocusNode = FocusNode();
+  final _pointsFocusNode = FocusNode();
   final _formKey = GlobalKey<FormState>();
+  String? _selectedTemplateCode;
+  bool _isSaving = false;
+  bool _hasSubmitted = false;
+  ValidationState _nameState = ValidationState.neutral;
+  ValidationState _pointsState = ValidationState.neutral;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameFocusNode.addListener(_onNameFocusChanged);
+    _pointsFocusNode.addListener(_onPointsFocusChanged);
+
+    final template = rewardTemplateByCode(widget.initialTemplateCode);
+    if (template != null) {
+      _applyTemplate(template);
+    }
+  }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _pointsCtrl.dispose();
     _descCtrl.dispose();
+    _nameFocusNode
+      ..removeListener(_onNameFocusChanged)
+      ..dispose();
+    _pointsFocusNode
+      ..removeListener(_onPointsFocusChanged)
+      ..dispose();
     super.dispose();
   }
 
+  void _onNameFocusChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_nameFocusNode.hasFocus) {
+        _nameState = ValidationState.focused;
+        return;
+      }
+
+      final hasName = _nameCtrl.text.trim().isNotEmpty;
+      if (!_hasSubmitted && !hasName) {
+        _nameState = ValidationState.neutral;
+        return;
+      }
+
+      _nameState = hasName ? ValidationState.valid : ValidationState.invalid;
+    });
+    if (!_nameFocusNode.hasFocus) {
+      _formKey.currentState?.validate();
+    }
+  }
+
+  void _onPointsFocusChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_pointsFocusNode.hasFocus) {
+        _pointsState = ValidationState.focused;
+        return;
+      }
+
+      final hasPoints = _hasValidPoints(_pointsCtrl.text);
+      if (!_hasSubmitted && _pointsCtrl.text.trim().isEmpty) {
+        _pointsState = ValidationState.neutral;
+        return;
+      }
+
+      _pointsState = hasPoints ? ValidationState.valid : ValidationState.invalid;
+    });
+    if (!_pointsFocusNode.hasFocus) {
+      _formKey.currentState?.validate();
+    }
+  }
+
+  void _applyTemplate(RewardTemplatePreset template) {
+    _nameCtrl.text = template.rewardName;
+    _pointsCtrl.text = template.pointsRequired.toString();
+    _descCtrl.text = template.description;
+    setState(() {
+      _selectedTemplateCode = template.code;
+      _nameState = ValidationState.valid;
+      _pointsState = ValidationState.valid;
+    });
+  }
+
+  bool _hasValidPoints(String input) {
+    final parsed = int.tryParse(input.trim());
+    return parsed != null && parsed > 0;
+  }
+
+  String? _validateName(String? value) {
+    if (!_hasSubmitted && _nameFocusNode.hasFocus) {
+      return null;
+    }
+    if (value == null || value.trim().isEmpty) {
+      return AppStrings.rewardNameRequired;
+    }
+    return null;
+  }
+
+  String? _validatePoints(String? value) {
+    if (!_hasSubmitted && _pointsFocusNode.hasFocus) {
+      return null;
+    }
+    if (value == null || value.trim().isEmpty) {
+      return AppStrings.pointsRequired;
+    }
+    if (!_hasValidPoints(value)) {
+      return 'Valor invalido';
+    }
+    return null;
+  }
+
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
-    await ref.read(rewardsControllerProvider.notifier).createReward(
-          name: _nameCtrl.text.trim(),
-          pointsRequired: int.parse(_pointsCtrl.text.trim()),
-          description:
-              _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        );
-    if (mounted) context.pop();
+    if (_isSaving) return;
+
+    FocusScope.of(context).unfocus();
+    if (!_hasSubmitted) {
+      setState(() => _hasSubmitted = true);
+    }
+
+    final form = _formKey.currentState;
+    if (form == null || !form.validate()) {
+      setState(() {
+        _nameState = _nameCtrl.text.trim().isEmpty
+            ? ValidationState.invalid
+            : ValidationState.valid;
+        _pointsState = _hasValidPoints(_pointsCtrl.text)
+            ? ValidationState.valid
+            : ValidationState.invalid;
+      });
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await ref.read(rewardsControllerProvider.notifier).createReward(
+            name: _nameCtrl.text.trim(),
+            pointsRequired: int.parse(_pointsCtrl.text.trim()),
+            description:
+                _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
+          );
+      if (!mounted) return;
+      MaisUmToast.show(
+        context,
+        message: 'Recompensa criada com sucesso.',
+        type: MaisUmToastType.success,
+      );
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go('/rewards');
+      }
+    } catch (e) {
+      if (!mounted) return;
+      MaisUmToast.show(
+        context,
+        message: e.toString(),
+        type: MaisUmToastType.error,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final state = ref.watch(rewardsControllerProvider);
-    final isLoading = state is AsyncLoading;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(title: const Text(AppStrings.novaRecompensa)),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + keyboardInset),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header card
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const BrandMark(size: 32),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Nova Recompensa',
-                        style: theme.textTheme.headlineSmall
-                            ?.copyWith(color: Colors.white),
+                Text(
+                  'Crie uma recompensa em segundos',
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.onSurface,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Defina o premio e os pontos necessarios para resgate.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white.withValues(alpha: 0.6)),
-                      ),
-                    ],
-                  ),
                 ),
-                const SizedBox(height: 28),
-
-                // Form fields
-                Text('NOME',
-                    style: theme.textTheme.labelSmall?.copyWith(
+                const SizedBox(height: 6),
+                Text(
+                  'Escolha um template rapido ou personalize os campos.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.onSurfaceVariant,
-                        letterSpacing: 0.8,
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _nameCtrl,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                      hintText: AppStrings.nomeRecompensa),
-                  validator: (v) => v == null || v.trim().isEmpty
-                      ? AppStrings.rewardNameRequired
-                      : null,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final template in rewardTemplatePresets)
+                      ChoiceChip(
+                        key: Key('reward_template_${template.code}'),
+                        avatar: Icon(
+                          template.icon,
+                          size: 16,
+                          color: _selectedTemplateCode == template.code
+                              ? AppColors.primary
+                              : AppColors.onSurfaceVariant,
+                        ),
+                        label: Text(template.label),
+                        selected: _selectedTemplateCode == template.code,
+                        onSelected: (_) => _applyTemplate(template),
+                        selectedColor: AppColors.secondaryLight,
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 20),
-
-                Text('PONTOS NECESSARIOS',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.onSurfaceVariant,
-                        letterSpacing: 0.8,
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _pointsCtrl,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                      hintText: AppStrings.pontosNecessarios,
-                      suffixText: 'pts'),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) {
-                      return AppStrings.pointsRequired;
+                MaisUmTextField(
+                  label: AppStrings.nome,
+                  controller: _nameCtrl,
+                  focusNode: _nameFocusNode,
+                  enabled: !_isSaving,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.next,
+                  hintText: AppStrings.nomeRecompensa,
+                  validator: _validateName,
+                  validationState: _nameState,
+                  showValidIcon: true,
+                  onChanged: (_) {
+                    if (_hasSubmitted && !_nameFocusNode.hasFocus) {
+                      setState(() {
+                        _nameState = _nameCtrl.text.trim().isEmpty
+                            ? ValidationState.invalid
+                            : ValidationState.valid;
+                      });
                     }
-                    if (int.tryParse(v) == null || int.parse(v) <= 0) {
-                      return 'Valor invalido';
-                    }
-                    return null;
                   },
                 ),
-                const SizedBox(height: 20),
-
-                Text('DESCRICAO (OPCIONAL)',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: AppColors.onSurfaceVariant,
-                        letterSpacing: 0.8,
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                TextFormField(
-                  controller: _descCtrl,
-                  textCapitalization: TextCapitalization.sentences,
-                  maxLines: 3,
-                  decoration:
-                      const InputDecoration(hintText: AppStrings.descricao),
+                const SizedBox(height: 14),
+                MaisUmTextField(
+                  label: AppStrings.pontosNecessarios,
+                  controller: _pointsCtrl,
+                  focusNode: _pointsFocusNode,
+                  enabled: !_isSaving,
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  hintText: AppStrings.pontosNecessarios,
+                  validator: _validatePoints,
+                  validationState: _pointsState,
+                  showValidIcon: true,
+                  onChanged: (_) {
+                    if (_hasSubmitted && !_pointsFocusNode.hasFocus) {
+                      setState(() {
+                        _pointsState = _hasValidPoints(_pointsCtrl.text)
+                            ? ValidationState.valid
+                            : ValidationState.invalid;
+                      });
+                    }
+                  },
                 ),
-                const SizedBox(height: 36),
-
-                SizedBox(
-                  width: double.infinity,
+                const SizedBox(height: 14),
+                MaisUmTextField(
+                  label: AppStrings.descricao,
+                  controller: _descCtrl,
+                  enabled: !_isSaving,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.done,
+                  maxLines: 3,
+                  hintText: 'Detalhe opcional para a equipa e cliente',
+                  onFieldSubmitted: (_) => _submit(),
+                ),
+                const SizedBox(height: 24),
+                LoadingButton(
+                  label: AppStrings.guardar,
+                  loadingLabel: 'A guardar recompensa...',
+                  onPressed: _submit,
+                  enabled: !_isSaving,
+                  isLoading: _isSaving,
                   height: 56,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: isLoading ? null : AppTheme.primaryGradient,
-                      color: isLoading ? AppColors.surfaceContainerHigh : null,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: isLoading ? null : AppTheme.shadowMd,
-                    ),
-                    child: ElevatedButton(
-                      onPressed: isLoading ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        disabledBackgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
+                  radius: 18,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Dica: mantenha 2-4 recompensas simples para facilitar o resgate.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.onSurfaceVariant,
                       ),
-                      child: isLoading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white)))
-                          : const Text(
-                              AppStrings.guardar,
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600),
-                            ),
-                    ),
-                  ),
                 ),
               ],
             ),

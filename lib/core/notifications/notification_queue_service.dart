@@ -12,14 +12,13 @@ import 'domain/notification_queue_item.dart';
 
 class NotificationQueueService {
   NotificationQueueService(
-    this._db,
+    AppDatabase db,
     this._client,
     this._connectivity,
     this._storage,
     this._resolveBearerToken,
-  ) : _dao = NotificationQueueDao(_db);
+  ) : _dao = NotificationQueueDao(db);
 
-  final AppDatabase _db;
   final JsonApiClient _client;
   final ConnectivityService _connectivity;
   final SecureStorageService _storage;

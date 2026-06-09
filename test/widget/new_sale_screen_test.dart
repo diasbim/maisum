@@ -297,5 +297,67 @@ void main() {
       expect(find.text('sale-success-destination'), findsOneWidget);
       expect(controller.createSaleCalls, 1);
     });
+
+    testWidgets('updates CTA and stepper states along the sale flow', (
+      tester,
+    ) async {
+      final controller = _FakeSaleController();
+
+      await tester.pumpWidget(
+        _buildScreenWithRouter([
+          _customer('Ana Costa', '841000001', points: 12),
+        ], saleController: controller),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escolha um cliente'), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+
+      await tester.tap(find.text('Ana Costa'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escolha um valor'), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).last, '200');
+      await tester.pump();
+
+      expect(find.text(AppStrings.confirmarVenda), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsNWidgets(2));
+
+      await tester.tap(find.text(AppStrings.confirmarVenda));
+      await tester.pump();
+
+      expect(find.byIcon(Icons.check_rounded), findsNWidgets(3));
+
+      await tester.pump(const Duration(milliseconds: 1000));
+      await tester.pumpAndSettle();
+
+      expect(find.text('sale-success-destination'), findsOneWidget);
+      expect(controller.createSaleCalls, 1);
+    });
+
+    testWidgets('resets stepper and CTA when clearing selected customer', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildScreen([
+          _customer('Ana Costa', '841000001', points: 12),
+        ]),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Ana Costa'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escolha um valor'), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Escolha um cliente'), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+    });
   });
 }

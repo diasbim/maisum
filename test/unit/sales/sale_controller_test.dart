@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:maisum/app/providers.dart';
 import 'package:maisum/core/database/app_database.dart';
+import 'package:maisum/core/services/connectivity_service.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
 import 'package:maisum/features/customers/data/customer_repository.dart';
 import 'package:maisum/features/customers/domain/customer.dart';
@@ -68,6 +70,11 @@ void main() {
   test(
     'createSale sets AsyncError and rethrows when repository fails',
     () async {
+      final connectivity = ConnectivityService(
+        initialOnline: true,
+        onConnectivityChanged: const Stream<List<ConnectivityResult>>.empty(),
+        checkConnectivity: () async => [ConnectivityResult.wifi],
+      );
       final repository = _FakeSaleRepository(
         db: AppDatabase.instance,
         saleDao: saleDao,
@@ -86,9 +93,13 @@ void main() {
         overrides: [
           saleRepositoryProvider.overrideWithValue(repository),
           customerRepositoryProvider.overrideWithValue(customerRepository),
+          connectivityServiceProvider.overrideWithValue(connectivity),
         ],
       );
-      addTearDown(container.dispose);
+      addTearDown(() {
+        connectivity.dispose();
+        container.dispose();
+      });
 
       await expectLater(
         container
@@ -105,6 +116,11 @@ void main() {
   test(
     'createSale sets AsyncError and rethrows when customer lookup is null',
     () async {
+      final connectivity = ConnectivityService(
+        initialOnline: true,
+        onConnectivityChanged: const Stream<List<ConnectivityResult>>.empty(),
+        checkConnectivity: () async => [ConnectivityResult.wifi],
+      );
       final repository = _FakeSaleRepository(
         db: AppDatabase.instance,
         saleDao: saleDao,
@@ -129,9 +145,13 @@ void main() {
         overrides: [
           saleRepositoryProvider.overrideWithValue(repository),
           customerRepositoryProvider.overrideWithValue(customerRepository),
+          connectivityServiceProvider.overrideWithValue(connectivity),
         ],
       );
-      addTearDown(container.dispose);
+      addTearDown(() {
+        connectivity.dispose();
+        container.dispose();
+      });
 
       await expectLater(
         container

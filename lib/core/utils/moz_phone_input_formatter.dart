@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 
 /// Formats a Mozambican phone number as: XX XXX XXXX (9 digits max).
-class MozPhoneInputFormatter extends TextInputFormatter {
+class MozPhoneFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
@@ -23,3 +23,6 @@ class MozPhoneInputFormatter extends TextInputFormatter {
     );
   }
 }
+
+/// Backward-compatible alias used by existing screens.
+class MozPhoneInputFormatter extends MozPhoneFormatter {}

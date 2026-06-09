@@ -1,4 +1,5 @@
 ﻿import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/constants/app_runtime_config.dart';
@@ -68,6 +69,46 @@ void main() {
   });
 
   group('AuthRepository.getStoredSession', () {
+    test(
+      'keeps entry flow alive when Firestore denies access',
+      () async {
+        const denyAllRules = '''
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+''';
+
+        final mockAuth = MockFirebaseAuth(
+          signedIn: true,
+          mockUser: MockUser(
+            uid: 'firebase-1',
+            phoneNumber: '+258840000999',
+          ),
+        );
+
+        final repository = AuthRepository(
+          FirebaseAuthService(mockAuth),
+          storage,
+          AppDatabase.instance,
+          config: const AppRuntimeConfig(enableBackendAuth: false),
+          firestore: FakeFirebaseFirestore(securityRules: denyAllRules),
+        );
+
+        final session = await repository.getStoredSession();
+
+        expect(session, isNotNull);
+        expect(session!.firebaseUid, 'firebase-1');
+        expect(session.merchantId, 'firebase-1');
+        expect(session.userId, 'firebase-1');
+        expect(await storage.getMerchantId(), 'firebase-1');
+        expect(await storage.getToken(), isNotEmpty);
+      },
+    );
+
     test(
       'restores backend session when runtime config enables backend auth',
       () async {
@@ -173,6 +214,98 @@ void main() {
       },
     );
   });
+
+  group('AuthRepository.linkDeviceToMerchantByCode', () {
+    test('links staff session to existing merchant by barbershop code',
+        () async {
+      await storage.seedSession(
+        userId: 'staff-1',
+        appUserId: 'staff-1',
+        merchantId: 'staff-1',
+        merchantName: 'Minha Loja',
+        subscriptionStatus: 'TRIAL',
+        phone: '+258841111111',
+        token: 'stored-token',
+        refreshToken: 'refresh-token',
+        deviceId: 'device-1',
+        firebaseUid: 'firebase-staff-1',
+        expiresAt: DateTime.now().add(const Duration(days: 1)),
+      );
+
+      final firestore = FakeFirebaseFirestore();
+      await firestore.collection('businesses').doc('merchant-abc').set({
+        'merchant_name': 'Barbearia Alpha',
+        'subscription_status': 'ACTIVE_PAID',
+        'owner_user_id': 'owner-1',
+        'firebase_uid': 'firebase-owner-1',
+        'phone': '+258842222222',
+        'link_code': 'ABCD-1234',
+        'link_code_normalized': 'ABCD1234',
+      });
+
+      final repository = AuthRepository(
+        FirebaseAuthService(MockFirebaseAuth()),
+        storage,
+        AppDatabase.instance,
+        config: const AppRuntimeConfig(enableBackendAuth: false),
+        firestore: firestore,
+      );
+
+      final session =
+          await repository.linkDeviceToMerchantByCode(linkCode: 'ABCD-1234');
+
+      expect(session.resolvedMerchantId, 'merchant-abc');
+      expect(session.merchantName, 'Barbearia Alpha');
+      expect(session.subscriptionStatus, 'ACTIVE_PAID');
+      expect(session.resolvedAppUserId, 'staff-1');
+      expect(await storage.getMerchantId(), 'merchant-abc');
+      expect(await storage.getAppUserRole(), 'STAFF');
+      expect(await storage.hasConfirmedOnboardingPlan(), isTrue);
+    });
+
+    test('keeps existing app user id when staff links by code', () async {
+      await storage.seedSession(
+        userId: 'firebase-user-2',
+        appUserId: 'staff-local-2',
+        merchantId: 'firebase-user-2',
+        merchantName: 'Minha Loja',
+        subscriptionStatus: 'TRIAL',
+        phone: '+258843333333',
+        token: 'stored-token',
+        refreshToken: 'refresh-token',
+        deviceId: 'device-2',
+        firebaseUid: 'firebase-user-2',
+        expiresAt: DateTime.now().add(const Duration(days: 1)),
+      );
+
+      final firestore = FakeFirebaseFirestore();
+      await firestore.collection('businesses').doc('merchant-xyz').set({
+        'merchant_name': 'Barbearia Beta',
+        'subscription_status': 'ACTIVE_PAID',
+        'owner_user_id': 'owner-xyz',
+        'firebase_uid': 'firebase-owner-xyz',
+        'phone': '+258844444444',
+        'link_code': 'WXYZ-5678',
+        'link_code_normalized': 'WXYZ5678',
+      });
+
+      final repository = AuthRepository(
+        FirebaseAuthService(MockFirebaseAuth()),
+        storage,
+        AppDatabase.instance,
+        config: const AppRuntimeConfig(enableBackendAuth: false),
+        firestore: firestore,
+      );
+
+      final session =
+          await repository.linkDeviceToMerchantByCode(linkCode: 'WXYZ-5678');
+
+      expect(session.resolvedMerchantId, 'merchant-xyz');
+      expect(session.resolvedAppUserId, 'staff-local-2');
+      expect(await storage.getAppUserId(), 'staff-local-2');
+      expect(await storage.getAppUserRole(), 'STAFF');
+    });
+  });
 }
 
 class _FakeBackendAuthApi extends BackendAuthApi {
@@ -267,6 +400,13 @@ class _InMemorySecureStorageService extends SecureStorageService {
   Future<String?> getAppUserId() async => _store['app_user_id'];
 
   @override
+  Future<void> saveAppUserRole(String role) async =>
+      _store['app_user_role'] = role;
+
+  @override
+  Future<String?> getAppUserRole() async => _store['app_user_role'];
+
+  @override
   Future<void> saveUserPhone(String phone) async =>
       _store['user_phone'] = phone;
 
@@ -332,5 +472,18 @@ class _InMemorySecureStorageService extends SecureStorageService {
 
   @override
   Future<void> clearAll() async => _store.clear();
-}
 
+  @override
+  Future<void> setOnboardingPlanConfirmed(bool value) async {
+    _store['onboarding_plan_confirmed'] = value ? '1' : '0';
+  }
+
+  @override
+  Future<bool> hasConfirmedOnboardingPlan() async {
+    final raw = _store['onboarding_plan_confirmed'];
+    if (raw == null) {
+      return true;
+    }
+    return raw == '1';
+  }
+}

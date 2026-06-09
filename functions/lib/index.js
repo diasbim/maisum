@@ -51,6 +51,42 @@ const pool = new pg_1.Pool({
     idleTimeoutMillis: 30000,
 });
 const ENTITY_CONFIG = {
+    customer: {
+        table: 'customers',
+        orderField: 'updated_at',
+        idField: 'id',
+        selectSql: '*',
+    },
+    sale: {
+        table: 'sales',
+        orderField: 'created_at',
+        idField: 'id',
+        selectSql: '*',
+    },
+    reward: {
+        table: 'rewards',
+        orderField: 'updated_at',
+        idField: 'id',
+        selectSql: '*',
+    },
+    redemption: {
+        table: 'redemptions',
+        orderField: 'redeemed_at',
+        idField: 'id',
+        selectSql: '*',
+    },
+    appointment: {
+        table: 'appointments',
+        orderField: 'updated_at',
+        idField: 'id',
+        selectSql: '*',
+    },
+    retention_metric: {
+        table: 'retention_metrics',
+        orderField: 'updated_at',
+        idField: 'id',
+        selectSql: '*',
+    },
     customer_risk_score: {
         table: 'customer_risk_scores',
         orderField: 'updated_at',
@@ -129,7 +165,20 @@ const ENTITY_CONFIG = {
         idField: 'id',
         selectSql: '*',
     },
+    app_user: {
+        table: 'app_users',
+        orderField: 'updated_at',
+        idField: 'id',
+        selectSql: '*',
+    },
 };
+const OWNER_ONLY_SYNC_ENTITIES = new Set([
+    'subscription_state',
+    'entitlement',
+    'feature_flag',
+    'remote_config',
+    'app_user',
+]);
 const app = (0, express_1.default)();
 app.use(express_1.default.json({ limit: '1mb' }));
 app.use(async (req, res, next) => {
@@ -138,7 +187,10 @@ app.use(async (req, res, next) => {
     if ((!authHeader || !authHeader.startsWith('Bearer ')) && allowDev) {
         const merchantHeader = req.headers['x-merchant-id'];
         if (isNonEmptyString(merchantHeader)) {
-            req.merchantId = merchantHeader.trim();
+            const authedReq = req;
+            authedReq.merchantId = merchantHeader.trim();
+            authedReq.appUserId = 'dev-user';
+            authedReq.appUserRole = 'OWNER';
             return next();
         }
     }
@@ -156,6 +208,8 @@ app.use(async (req, res, next) => {
         }
         const authedReq = req;
         authedReq.merchantId = merchantId;
+        authedReq.appUserId = resolveAppUserId(decoded);
+        authedReq.appUserRole = resolveAppUserRole(decoded);
         authedReq.auth = decoded;
         return next();
     }
@@ -343,8 +397,60 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
     if (payloadId && payloadId !== entityId) {
         return res.status(400).json({ success: false, message: 'ID mismatch' });
     }
+    if (OWNER_ONLY_SYNC_ENTITIES.has(entityType) &&
+        !isOwnerOrAdminRequest(req)) {
+        return res.status(403).json({ success: false, message: 'Owner access required' });
+    }
     try {
         switch (entityType) {
+            case 'customer':
+                if (operation === 'delete') {
+                    await deleteById('customers', entityId, merchantId);
+                }
+                else {
+                    await upsertCustomer(merchantId, payload, entityId);
+                }
+                return res.json({ success: true });
+            case 'sale':
+                if (operation === 'delete') {
+                    await deleteById('sales', entityId, merchantId);
+                }
+                else {
+                    await upsertSale(merchantId, payload, entityId);
+                }
+                return res.json({ success: true });
+            case 'reward':
+                if (operation === 'delete') {
+                    await deleteById('rewards', entityId, merchantId);
+                }
+                else {
+                    await upsertReward(merchantId, payload, entityId);
+                }
+                return res.json({ success: true });
+            case 'redemption':
+                if (operation === 'delete') {
+                    await deleteById('redemptions', entityId, merchantId);
+                }
+                else {
+                    await upsertRedemption(merchantId, payload, entityId);
+                }
+                return res.json({ success: true });
+            case 'appointment':
+                if (operation === 'delete') {
+                    await deleteById('appointments', entityId, merchantId);
+                }
+                else {
+                    await upsertAppointment(merchantId, payload, entityId);
+                }
+                return res.json({ success: true });
+            case 'retention_metric':
+                if (operation === 'delete') {
+                    await deleteById('retention_metrics', entityId, merchantId);
+                }
+                else {
+                    await upsertRetentionMetric(merchantId, payload, entityId);
+                }
+                return res.json({ success: true });
             case 'customer_risk_score':
                 if (operation === 'delete') {
                     await deleteById('customer_risk_scores', entityId, merchantId);
@@ -443,6 +549,14 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
                         .json({ success: false, message: 'usage_event is create-only' });
                 }
                 await insertUsageEvent(merchantId, payload, entityId);
+                return res.json({ success: true });
+            case 'app_user':
+                if (operation === 'delete') {
+                    await deleteById('app_users', entityId, merchantId);
+                }
+                else {
+                    await upsertAppUser(merchantId, payload, entityId);
+                }
                 return res.json({ success: true });
             default:
                 return res.status(404).json({ success: false, message: 'Unknown entity' });
@@ -544,7 +658,9 @@ app.get('/engage/recovery-queue', async (req, res) => {
     }
 });
 app.post('/engage/task', async (req, res) => {
-    const merchantId = req.merchantId;
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const actorAppUserId = authedReq.appUserId ?? null;
     const payload = req.body ?? {};
     const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
     const priority = pickString(payload, 'priority') ?? 'medium';
@@ -565,8 +681,10 @@ app.post('/engage/task', async (req, res) => {
       due_at,
       notes,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       customer_id = EXCLUDED.customer_id,
@@ -574,6 +692,8 @@ app.post('/engage/task', async (req, res) => {
       status = EXCLUDED.status,
       due_at = EXCLUDED.due_at,
       notes = EXCLUDED.notes,
+      created_by_app_user_id = COALESCE(recovery_tasks.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
+      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
       updated_at = EXCLUDED.updated_at
     RETURNING *
   `;
@@ -588,6 +708,8 @@ app.post('/engage/task', async (req, res) => {
             notes,
             now,
             now,
+            actorAppUserId,
+            actorAppUserId,
         ]);
         return res.json({ success: true, data: result.rows[0] ?? null });
     }
@@ -596,7 +718,9 @@ app.post('/engage/task', async (req, res) => {
     }
 });
 app.post('/engage/task/complete', async (req, res) => {
-    const merchantId = req.merchantId;
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const actorAppUserId = authedReq.appUserId ?? null;
     const payload = req.body ?? {};
     const taskId = pickString(payload, 'task_id') ?? pickString(payload, 'taskId');
     if (!taskId) {
@@ -605,13 +729,14 @@ app.post('/engage/task/complete', async (req, res) => {
     const sql = `
     UPDATE recovery_tasks
     SET status = 'completed',
-        updated_at = $3
+      updated_at = $3,
+      updated_by_app_user_id = $4
     WHERE id = $1 AND merchant_id = $2
     RETURNING *
   `;
     try {
         const now = Date.now();
-        const result = await pool.query(sql, [taskId, merchantId, now]);
+        const result = await pool.query(sql, [taskId, merchantId, now, actorAppUserId]);
         return res.json({ success: true, data: result.rows[0] ?? null });
     }
     catch (error) {
@@ -619,7 +744,9 @@ app.post('/engage/task/complete', async (req, res) => {
     }
 });
 app.post('/engage/action', async (req, res) => {
-    const merchantId = req.merchantId;
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const actorAppUserId = authedReq.appUserId ?? null;
     const payload = req.body ?? {};
     const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
     const actionType = pickString(payload, 'action_type') ?? pickString(payload, 'actionType');
@@ -641,8 +768,10 @@ app.post('/engage/action', async (req, res) => {
       action_type,
       payload,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     RETURNING *
   `;
     try {
@@ -655,6 +784,8 @@ app.post('/engage/action', async (req, res) => {
             details,
             now,
             now,
+            actorAppUserId,
+            actorAppUserId,
         ]);
         return res.json({ success: true, data: result.rows[0] ?? null });
     }
@@ -663,7 +794,9 @@ app.post('/engage/action', async (req, res) => {
     }
 });
 app.post('/engage/visit-report', async (req, res) => {
-    const merchantId = req.merchantId;
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const actorAppUserId = authedReq.appUserId ?? null;
     const payload = req.body ?? {};
     const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
     const resultValue = pickString(payload, 'result');
@@ -685,8 +818,10 @@ app.post('/engage/visit-report', async (req, res) => {
       notes,
       visited_at,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     RETURNING *
   `;
     try {
@@ -700,6 +835,8 @@ app.post('/engage/visit-report', async (req, res) => {
             visitedAt,
             now,
             now,
+            actorAppUserId,
+            actorAppUserId,
         ]);
         return res.json({ success: true, data: result.rows[0] ?? null });
     }
@@ -754,7 +891,9 @@ app.get('/engage/surveys', async (req, res) => {
     }
 });
 app.post('/engage/surveys', async (req, res) => {
-    const merchantId = req.merchantId;
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const actorAppUserId = authedReq.appUserId ?? null;
     const payload = req.body ?? {};
     const title = pickString(payload, 'title');
     const description = pickString(payload, 'description');
@@ -786,9 +925,9 @@ app.post('/engage/surveys', async (req, res) => {
         }
         await client.query(`
       INSERT INTO surveys (
-        id, merchant_id, title, description, is_active, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
-      `, [surveyId, merchantId, title, description, true, now, now]);
+        id, merchant_id, title, description, is_active, created_at, updated_at, created_by_app_user_id, updated_by_app_user_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `, [surveyId, merchantId, title, description, true, now, now, actorAppUserId, actorAppUserId]);
         const questionsData = [];
         for (let index = 0; index < rawQuestions.length; index += 1) {
             const item = rawQuestions[index];
@@ -815,8 +954,10 @@ app.post('/engage/surveys', async (req, res) => {
           is_required,
           options_payload,
           created_at,
-          updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          updated_at,
+          created_by_app_user_id,
+          updated_by_app_user_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
         `, [
                 questionId,
                 merchantId,
@@ -828,6 +969,8 @@ app.post('/engage/surveys', async (req, res) => {
                 optionsPayload,
                 now,
                 now,
+                actorAppUserId,
+                actorAppUserId,
             ]);
             questionsData.push({
                 id: questionId,
@@ -866,7 +1009,9 @@ app.post('/engage/surveys', async (req, res) => {
     }
 });
 app.post('/engage/survey-response', async (req, res) => {
-    const merchantId = req.merchantId;
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const actorAppUserId = authedReq.appUserId ?? null;
     const payload = req.body ?? {};
     const surveyId = pickString(payload, 'survey_id') ?? pickString(payload, 'surveyId');
     const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
@@ -892,9 +1037,22 @@ app.post('/engage/survey-response', async (req, res) => {
         submitted_at,
         channel,
         created_at,
-        updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-      `, [responseId, merchantId, surveyId, customerId, now, channel, now, now]);
+        updated_at,
+        created_by_app_user_id,
+        updated_by_app_user_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      `, [
+            responseId,
+            merchantId,
+            surveyId,
+            customerId,
+            now,
+            channel,
+            now,
+            now,
+            actorAppUserId,
+            actorAppUserId,
+        ]);
         for (const item of answers) {
             const row = item;
             const questionId = pickString(row, 'question_id') ?? pickString(row, 'questionId');
@@ -913,8 +1071,10 @@ app.post('/engage/survey-response', async (req, res) => {
           answer_numeric,
           answer_bool,
           created_at,
-          updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          updated_at,
+          created_by_app_user_id,
+          updated_by_app_user_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         `, [
                 (0, crypto_1.randomUUID)(),
                 merchantId,
@@ -925,6 +1085,8 @@ app.post('/engage/survey-response', async (req, res) => {
                 answerBool,
                 now,
                 now,
+                actorAppUserId,
+                actorAppUserId,
             ]);
         }
         await client.query('COMMIT');
@@ -1007,6 +1169,30 @@ function resolveMerchantId(decoded) {
             : null;
     return fromClaims ?? decoded.uid ?? null;
 }
+function resolveAppUserId(decoded) {
+    const claims = decoded;
+    const fromClaims = typeof claims.app_user_id === 'string'
+        ? claims.app_user_id
+        : typeof claims.appUserId === 'string'
+            ? claims.appUserId
+            : undefined;
+    return fromClaims ?? decoded.uid ?? undefined;
+}
+function resolveAppUserRole(decoded) {
+    const claims = decoded;
+    const claimRole = typeof claims.app_user_role === 'string'
+        ? claims.app_user_role
+        : typeof claims.appUserRole === 'string'
+            ? claims.appUserRole
+            : typeof claims.role === 'string'
+                ? claims.role
+                : null;
+    const normalized = claimRole?.trim().toUpperCase();
+    if (normalized === 'STAFF') {
+        return 'STAFF';
+    }
+    return 'OWNER';
+}
 function isAdminRequest(req) {
     const adminKey = process.env.ADMIN_API_KEY;
     const headerKey = pickHeaderString(req.headers['x-admin-key']);
@@ -1023,6 +1209,13 @@ function isAdminRequest(req) {
     if (claims.role === 'admin')
         return true;
     return false;
+}
+function isOwnerRequest(req) {
+    const role = req.appUserRole?.trim().toUpperCase();
+    return role == null || role.length === 0 || role === 'OWNER';
+}
+function isOwnerOrAdminRequest(req) {
+    return isAdminRequest(req) || isOwnerRequest(req);
 }
 function parseNumber(value) {
     if (typeof value === 'number' && Number.isFinite(value))
@@ -1087,6 +1280,263 @@ function pickNumber(payload, key) {
     }
     return null;
 }
+async function upsertCustomer(merchantId, payload, entityId) {
+    const id = pickString(payload, 'id') ?? entityId;
+    const name = pickString(payload, 'name');
+    const phone = pickString(payload, 'phone');
+    const totalPoints = pickNumber(payload, 'total_points') ?? pickNumber(payload, 'totalPoints') ?? 0;
+    const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+    const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? createdAt;
+    if (!name || !phone) {
+        throw new Error('Missing customer fields');
+    }
+    const sql = `
+    INSERT INTO customers (
+      id,
+      merchant_id,
+      name,
+      phone,
+      total_points,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      name = EXCLUDED.name,
+      phone = EXCLUDED.phone,
+      total_points = EXCLUDED.total_points,
+      created_at = LEAST(customers.created_at, EXCLUDED.created_at),
+      updated_at = EXCLUDED.updated_at
+  `;
+    await pool.query(sql, [id, merchantId, name, phone, totalPoints, createdAt, updatedAt]);
+}
+async function upsertSale(merchantId, payload, entityId) {
+    const id = pickString(payload, 'id') ?? entityId;
+    const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+    const amount = pickNumber(payload, 'amount');
+    const points = pickNumber(payload, 'points');
+    const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+    const deviceId = pickString(payload, 'device_id') ?? pickString(payload, 'deviceId');
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ?? pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ?? pickString(payload, 'updatedByAppUserId');
+    if (!customerId || amount == null || points == null) {
+        throw new Error('Missing sale fields');
+    }
+    const sql = `
+    INSERT INTO sales (
+      id,
+      merchant_id,
+      customer_id,
+      amount,
+      points,
+      created_at,
+      device_id,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      customer_id = EXCLUDED.customer_id,
+      amount = EXCLUDED.amount,
+      points = EXCLUDED.points,
+      created_at = EXCLUDED.created_at,
+      device_id = EXCLUDED.device_id,
+      created_by_app_user_id = COALESCE(EXCLUDED.created_by_app_user_id, sales.created_by_app_user_id),
+      updated_by_app_user_id = COALESCE(EXCLUDED.updated_by_app_user_id, sales.updated_by_app_user_id)
+  `;
+    await pool.query(sql, [
+        id,
+        merchantId,
+        customerId,
+        amount,
+        points,
+        createdAt,
+        deviceId,
+        createdByAppUserId,
+        updatedByAppUserId,
+    ]);
+}
+async function upsertReward(merchantId, payload, entityId) {
+    const id = pickString(payload, 'id') ?? entityId;
+    const name = pickString(payload, 'name');
+    const pointsRequired = pickNumber(payload, 'points_required') ?? pickNumber(payload, 'pointsRequired');
+    const description = pickString(payload, 'description');
+    const active = pickBoolean(payload, 'active') ?? true;
+    const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+    const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? createdAt;
+    if (!name || pointsRequired == null) {
+        throw new Error('Missing reward fields');
+    }
+    const sql = `
+    INSERT INTO rewards (
+      id,
+      merchant_id,
+      name,
+      points_required,
+      description,
+      active,
+      created_at,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      name = EXCLUDED.name,
+      points_required = EXCLUDED.points_required,
+      description = EXCLUDED.description,
+      active = EXCLUDED.active,
+      created_at = LEAST(rewards.created_at, EXCLUDED.created_at),
+      updated_at = EXCLUDED.updated_at
+  `;
+    await pool.query(sql, [
+        id,
+        merchantId,
+        name,
+        pointsRequired,
+        description,
+        active,
+        createdAt,
+        updatedAt,
+    ]);
+}
+async function upsertRedemption(merchantId, payload, entityId) {
+    const id = pickString(payload, 'id') ?? entityId;
+    const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+    const rewardId = pickString(payload, 'reward_id') ?? pickString(payload, 'rewardId');
+    const pointsSpent = pickNumber(payload, 'points_spent') ?? pickNumber(payload, 'pointsSpent');
+    const redeemedAt = pickNumber(payload, 'redeemed_at') ?? pickNumber(payload, 'redeemedAt') ?? Date.now();
+    if (!customerId || !rewardId || pointsSpent == null) {
+        throw new Error('Missing redemption fields');
+    }
+    const sql = `
+    INSERT INTO redemptions (
+      id,
+      merchant_id,
+      customer_id,
+      reward_id,
+      points_spent,
+      redeemed_at
+    ) VALUES ($1,$2,$3,$4,$5,$6)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      customer_id = EXCLUDED.customer_id,
+      reward_id = EXCLUDED.reward_id,
+      points_spent = EXCLUDED.points_spent,
+      redeemed_at = EXCLUDED.redeemed_at
+  `;
+    await pool.query(sql, [id, merchantId, customerId, rewardId, pointsSpent, redeemedAt]);
+}
+async function upsertAppointment(merchantId, payload, entityId) {
+    const id = pickString(payload, 'id') ?? entityId;
+    const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+    const scheduledDate = pickNumber(payload, 'scheduled_date') ?? pickNumber(payload, 'scheduledDate');
+    const status = pickString(payload, 'status') ?? 'scheduled';
+    const source = pickString(payload, 'source') ?? 'app';
+    const reminderSent = pickBoolean(payload, 'reminder_sent') ?? pickBoolean(payload, 'reminderSent') ?? false;
+    const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+    const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? createdAt;
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ?? pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ?? pickString(payload, 'updatedByAppUserId');
+    if (!customerId || scheduledDate == null) {
+        throw new Error('Missing appointment fields');
+    }
+    const sql = `
+    INSERT INTO appointments (
+      id,
+      merchant_id,
+      customer_id,
+      scheduled_date,
+      status,
+      source,
+      reminder_sent,
+      created_at,
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      customer_id = EXCLUDED.customer_id,
+      scheduled_date = EXCLUDED.scheduled_date,
+      status = EXCLUDED.status,
+      source = EXCLUDED.source,
+      reminder_sent = EXCLUDED.reminder_sent,
+      created_at = LEAST(appointments.created_at, EXCLUDED.created_at),
+      updated_at = EXCLUDED.updated_at,
+      created_by_app_user_id = COALESCE(EXCLUDED.created_by_app_user_id, appointments.created_by_app_user_id),
+      updated_by_app_user_id = COALESCE(EXCLUDED.updated_by_app_user_id, appointments.updated_by_app_user_id)
+  `;
+    await pool.query(sql, [
+        id,
+        merchantId,
+        customerId,
+        scheduledDate,
+        status,
+        source,
+        reminderSent,
+        createdAt,
+        updatedAt,
+        createdByAppUserId,
+        updatedByAppUserId,
+    ]);
+}
+async function upsertRetentionMetric(merchantId, payload, entityId) {
+    const id = pickString(payload, 'id') ?? entityId;
+    const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+    const lastVisitAt = pickNumber(payload, 'last_visit_at') ?? pickNumber(payload, 'lastVisitAt');
+    const daysInactive = pickNumber(payload, 'days_inactive') ?? pickNumber(payload, 'daysInactive') ?? 0;
+    const riskLevel = pickString(payload, 'risk_level') ?? pickString(payload, 'riskLevel') ?? 'active';
+    const totalVisits = pickNumber(payload, 'total_visits') ?? pickNumber(payload, 'totalVisits') ?? 0;
+    const averageVisitInterval = pickNumber(payload, 'average_visit_interval') ?? pickNumber(payload, 'averageVisitInterval') ?? 0;
+    const totalSpent = pickNumber(payload, 'total_spent') ?? pickNumber(payload, 'totalSpent') ?? 0;
+    const isRecurring = pickBoolean(payload, 'is_recurring') ?? pickBoolean(payload, 'isRecurring') ?? false;
+    const recovered = pickBoolean(payload, 'recovered') ?? false;
+    const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? Date.now();
+    if (!customerId) {
+        throw new Error('Missing retention metric fields');
+    }
+    const sql = `
+    INSERT INTO retention_metrics (
+      id,
+      merchant_id,
+      customer_id,
+      last_visit_at,
+      days_inactive,
+      risk_level,
+      total_visits,
+      average_visit_interval,
+      total_spent,
+      is_recurring,
+      recovered,
+      updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      customer_id = EXCLUDED.customer_id,
+      last_visit_at = EXCLUDED.last_visit_at,
+      days_inactive = EXCLUDED.days_inactive,
+      risk_level = EXCLUDED.risk_level,
+      total_visits = EXCLUDED.total_visits,
+      average_visit_interval = EXCLUDED.average_visit_interval,
+      total_spent = EXCLUDED.total_spent,
+      is_recurring = EXCLUDED.is_recurring,
+      recovered = EXCLUDED.recovered,
+      updated_at = EXCLUDED.updated_at
+  `;
+    await pool.query(sql, [
+        id,
+        merchantId,
+        customerId,
+        lastVisitAt,
+        daysInactive,
+        riskLevel,
+        totalVisits,
+        averageVisitInterval,
+        totalSpent,
+        isRecurring,
+        recovered,
+        updatedAt,
+    ]);
+}
 async function upsertSubscriptionState(merchantId, payload) {
     const planCode = pickString(payload, 'plan_code') ?? pickString(payload, 'planCode');
     const planNameInput = pickString(payload, 'plan_name') ?? pickString(payload, 'planName');
@@ -1146,6 +1596,71 @@ async function upsertSubscriptionState(merchantId, payload) {
         periodStart,
         periodEnd,
         updatedAt,
+    ]);
+}
+async function upsertAppUser(merchantId, payload, entityId) {
+    const id = pickString(payload, 'id') ?? entityId;
+    const phone = pickString(payload, 'phone');
+    if (!phone) {
+        throw new Error('Missing app user phone');
+    }
+    const roleInput = pickString(payload, 'role') ?? 'STAFF';
+    const role = roleInput.trim().toUpperCase() === 'OWNER' ? 'OWNER' : 'STAFF';
+    const statusInput = pickString(payload, 'status') ?? 'ACTIVE';
+    const statusNormalized = statusInput.trim().toUpperCase();
+    const status = statusNormalized === 'INVITED'
+        ? 'INVITED'
+        : statusNormalized === 'INACTIVE'
+            ? 'INACTIVE'
+            : 'ACTIVE';
+    const invitedAt = pickNumber(payload, 'invited_at') ?? pickNumber(payload, 'invitedAt');
+    const acceptedAt = pickNumber(payload, 'accepted_at') ?? pickNumber(payload, 'acceptedAt');
+    const invitedByAppUserId = pickString(payload, 'invited_by_app_user_id') ??
+        pickString(payload, 'invitedByAppUserId');
+    const deactivatedAt = pickNumber(payload, 'deactivated_at') ?? pickNumber(payload, 'deactivatedAt');
+    const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+    const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+    const lastLoginAt = pickNumber(payload, 'last_login_at') ?? pickNumber(payload, 'lastLoginAt');
+    const sql = `
+    INSERT INTO app_users (
+      id,
+      merchant_id,
+      phone,
+      role,
+      status,
+      invited_at,
+      accepted_at,
+      invited_by_app_user_id,
+      deactivated_at,
+      created_at,
+      updated_at,
+      last_login_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      phone = EXCLUDED.phone,
+      role = EXCLUDED.role,
+      status = EXCLUDED.status,
+      invited_at = EXCLUDED.invited_at,
+      accepted_at = EXCLUDED.accepted_at,
+      invited_by_app_user_id = EXCLUDED.invited_by_app_user_id,
+      deactivated_at = EXCLUDED.deactivated_at,
+      updated_at = EXCLUDED.updated_at,
+      last_login_at = EXCLUDED.last_login_at
+  `;
+    await pool.query(sql, [
+        id,
+        merchantId,
+        phone,
+        role,
+        status,
+        invitedAt,
+        acceptedAt,
+        invitedByAppUserId,
+        deactivatedAt,
+        createdAt,
+        updatedAt,
+        lastLoginAt,
     ]);
 }
 async function upsertCustomerRiskScore(merchantId, payload, entityId) {
@@ -1417,6 +1932,10 @@ async function upsertRecoveryTask(merchantId, payload, entityId) {
     const notes = pickString(payload, 'notes');
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ??
+        pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ??
+        pickString(payload, 'updatedByAppUserId');
     const sql = `
     INSERT INTO recovery_tasks (
       id,
@@ -1427,8 +1946,10 @@ async function upsertRecoveryTask(merchantId, payload, entityId) {
       due_at,
       notes,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       customer_id = EXCLUDED.customer_id,
@@ -1436,6 +1957,8 @@ async function upsertRecoveryTask(merchantId, payload, entityId) {
       status = EXCLUDED.status,
       due_at = EXCLUDED.due_at,
       notes = EXCLUDED.notes,
+      created_by_app_user_id = COALESCE(recovery_tasks.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
+      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
       updated_at = EXCLUDED.updated_at
   `;
     await pool.query(sql, [
@@ -1448,6 +1971,8 @@ async function upsertRecoveryTask(merchantId, payload, entityId) {
         notes,
         createdAt,
         updatedAt,
+        createdByAppUserId,
+        updatedByAppUserId,
     ]);
 }
 async function upsertRecoveryAction(merchantId, payload, entityId) {
@@ -1463,6 +1988,10 @@ async function upsertRecoveryAction(merchantId, payload, entityId) {
         : null;
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ??
+        pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ??
+        pickString(payload, 'updatedByAppUserId');
     const sql = `
     INSERT INTO recovery_actions (
       id,
@@ -1472,14 +2001,18 @@ async function upsertRecoveryAction(merchantId, payload, entityId) {
       action_type,
       payload,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       customer_id = EXCLUDED.customer_id,
       task_id = EXCLUDED.task_id,
       action_type = EXCLUDED.action_type,
       payload = EXCLUDED.payload,
+      created_by_app_user_id = COALESCE(recovery_actions.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
+      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
       updated_at = EXCLUDED.updated_at
   `;
     await pool.query(sql, [
@@ -1491,6 +2024,8 @@ async function upsertRecoveryAction(merchantId, payload, entityId) {
         payloadValue,
         createdAt,
         updatedAt,
+        createdByAppUserId,
+        updatedByAppUserId,
     ]);
 }
 async function upsertVisitReport(merchantId, payload, entityId) {
@@ -1505,6 +2040,10 @@ async function upsertVisitReport(merchantId, payload, entityId) {
     const visitedAt = pickNumber(payload, 'visited_at') ?? pickNumber(payload, 'visitedAt') ?? Date.now();
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ??
+        pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ??
+        pickString(payload, 'updatedByAppUserId');
     const sql = `
     INSERT INTO visit_reports (
       id,
@@ -1515,8 +2054,10 @@ async function upsertVisitReport(merchantId, payload, entityId) {
       notes,
       visited_at,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       task_id = EXCLUDED.task_id,
@@ -1524,6 +2065,8 @@ async function upsertVisitReport(merchantId, payload, entityId) {
       result = EXCLUDED.result,
       notes = EXCLUDED.notes,
       visited_at = EXCLUDED.visited_at,
+      created_by_app_user_id = COALESCE(visit_reports.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
+      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
       updated_at = EXCLUDED.updated_at
   `;
     await pool.query(sql, [
@@ -1536,6 +2079,8 @@ async function upsertVisitReport(merchantId, payload, entityId) {
         visitedAt,
         createdAt,
         updatedAt,
+        createdByAppUserId,
+        updatedByAppUserId,
     ]);
 }
 async function upsertSurvey(merchantId, payload, entityId) {
@@ -1548,6 +2093,10 @@ async function upsertSurvey(merchantId, payload, entityId) {
     const isActive = pickBoolean(payload, 'is_active') ?? pickBoolean(payload, 'isActive') ?? true;
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ??
+        pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ??
+        pickString(payload, 'updatedByAppUserId');
     const sql = `
     INSERT INTO surveys (
       id,
@@ -1556,13 +2105,17 @@ async function upsertSurvey(merchantId, payload, entityId) {
       description,
       is_active,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       title = EXCLUDED.title,
       description = EXCLUDED.description,
       is_active = EXCLUDED.is_active,
+      created_by_app_user_id = COALESCE(surveys.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
+      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
       updated_at = EXCLUDED.updated_at
   `;
     await pool.query(sql, [
@@ -1573,6 +2126,8 @@ async function upsertSurvey(merchantId, payload, entityId) {
         isActive,
         createdAt,
         updatedAt,
+        createdByAppUserId,
+        updatedByAppUserId,
     ]);
 }
 async function upsertSurveyQuestion(merchantId, payload, entityId) {
@@ -1592,6 +2147,10 @@ async function upsertSurveyQuestion(merchantId, payload, entityId) {
             : [];
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ??
+        pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ??
+        pickString(payload, 'updatedByAppUserId');
     const sql = `
     INSERT INTO survey_questions (
       id,
@@ -1603,8 +2162,10 @@ async function upsertSurveyQuestion(merchantId, payload, entityId) {
       is_required,
       options_payload,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       survey_id = EXCLUDED.survey_id,
@@ -1613,6 +2174,8 @@ async function upsertSurveyQuestion(merchantId, payload, entityId) {
       sort_order = EXCLUDED.sort_order,
       is_required = EXCLUDED.is_required,
       options_payload = EXCLUDED.options_payload,
+      created_by_app_user_id = COALESCE(survey_questions.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
+      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
       updated_at = EXCLUDED.updated_at
   `;
     await pool.query(sql, [
@@ -1626,6 +2189,8 @@ async function upsertSurveyQuestion(merchantId, payload, entityId) {
         optionsPayload,
         createdAt,
         updatedAt,
+        createdByAppUserId,
+        updatedByAppUserId,
     ]);
 }
 async function upsertSurveyResponse(merchantId, payload, entityId) {
@@ -1639,6 +2204,10 @@ async function upsertSurveyResponse(merchantId, payload, entityId) {
     const submittedAt = pickNumber(payload, 'submitted_at') ?? pickNumber(payload, 'submittedAt') ?? Date.now();
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ??
+        pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ??
+        pickString(payload, 'updatedByAppUserId');
     const sql = `
     INSERT INTO survey_responses (
       id,
@@ -1648,14 +2217,18 @@ async function upsertSurveyResponse(merchantId, payload, entityId) {
       submitted_at,
       channel,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       survey_id = EXCLUDED.survey_id,
       customer_id = EXCLUDED.customer_id,
       submitted_at = EXCLUDED.submitted_at,
       channel = EXCLUDED.channel,
+      created_by_app_user_id = COALESCE(survey_responses.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
+      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
       updated_at = EXCLUDED.updated_at
   `;
     await pool.query(sql, [
@@ -1667,6 +2240,8 @@ async function upsertSurveyResponse(merchantId, payload, entityId) {
         channel,
         createdAt,
         updatedAt,
+        createdByAppUserId,
+        updatedByAppUserId,
     ]);
     const answers = Array.isArray(payload.answers) ? payload.answers : [];
     for (const answer of answers) {
@@ -1689,6 +2264,10 @@ async function upsertSurveyResponseAnswer(merchantId, payload, entityId) {
     const answerBool = pickBoolean(payload, 'answer_bool') ?? pickBoolean(payload, 'answerBool');
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? Date.now();
+    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ??
+        pickString(payload, 'createdByAppUserId');
+    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ??
+        pickString(payload, 'updatedByAppUserId');
     const sql = `
     INSERT INTO survey_response_answers (
       id,
@@ -1699,8 +2278,10 @@ async function upsertSurveyResponseAnswer(merchantId, payload, entityId) {
       answer_numeric,
       answer_bool,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       response_id = EXCLUDED.response_id,
@@ -1708,6 +2289,8 @@ async function upsertSurveyResponseAnswer(merchantId, payload, entityId) {
       answer_text = EXCLUDED.answer_text,
       answer_numeric = EXCLUDED.answer_numeric,
       answer_bool = EXCLUDED.answer_bool,
+      created_by_app_user_id = COALESCE(survey_response_answers.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
+      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
       updated_at = EXCLUDED.updated_at
   `;
     await pool.query(sql, [
@@ -1720,6 +2303,8 @@ async function upsertSurveyResponseAnswer(merchantId, payload, entityId) {
         answerBool,
         createdAt,
         updatedAt,
+        createdByAppUserId,
+        updatedByAppUserId,
     ]);
 }
 async function resolvePlanAndPricing(merchantId, planCode, planNameInput, planVersionInput, pricingVersionInput) {

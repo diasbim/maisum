@@ -16,7 +16,7 @@ class AppConstants {
   static const int maxSyncRetries = 3;
   static const Duration syncRetryDelay = Duration(milliseconds: 500);
   static const String dbName = 'loyaltyos.db';
-  static const int dbVersion = 18;
+  static const int dbVersion = 20;
   static const int syncPullPageSize = 200;
   static const bool enableBackendAuth = bool.fromEnvironment(
     'ENABLE_BACKEND_AUTH',
@@ -35,6 +35,7 @@ class AppConstants {
   static const String tokenKey = 'auth_token';
   static const String userIdKey = 'user_id';
   static const String appUserIdKey = 'app_user_id';
+  static const String appUserRoleKey = 'app_user_role';
   static const String userPhoneKey = 'user_phone';
   static const String merchantIdKey = 'merchant_id';
   static const String merchantNameKey = 'merchant_name';
@@ -46,6 +47,12 @@ class AppConstants {
   static const String pinKey = 'user_pin';
   static const String pinAttemptsKey = 'pin_attempts';
   static const String smsPermissionPromptedKey = 'sms_permission_prompted';
+  static const String onboardingPlanConfirmedKey = 'onboarding_plan_confirmed';
+  static const String appUserRoleOwner = 'OWNER';
+  static const String appUserRoleStaff = 'STAFF';
+  static const String appUserStatusActive = 'ACTIVE';
+  static const String appUserStatusInvited = 'INVITED';
+  static const String appUserStatusInactive = 'INACTIVE';
   static const int maxPinAttempts = 3;
   static const int pinLength = 4;
 }

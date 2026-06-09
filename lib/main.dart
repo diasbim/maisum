@@ -17,11 +17,11 @@ const _firestoreCacheSizeBytes = 20 * 1024 * 1024;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  _configureFocusHighlightStrategy();
+
   await _configureSystemUi();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await _initializeFirebaseApp();
 
   await _configureCrashlytics();
 
@@ -35,6 +35,44 @@ void main() async {
   );
 
   runApp(const ProviderScope(child: LoyaltyApp()));
+}
+
+void _configureFocusHighlightStrategy() {
+  if (kIsWeb) return;
+  FocusManager.instance.highlightStrategy = FocusHighlightStrategy.alwaysTouch;
+}
+
+Future<FirebaseApp> _initializeFirebaseApp() async {
+  if (Firebase.apps.isNotEmpty) {
+    return Firebase.app();
+  }
+
+  if (kIsWeb) {
+    return Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
+
+  try {
+    // Prefer native config (google-services/GoogleService-Info) to avoid
+    // option mismatch with an already-created native [DEFAULT] app.
+    return Firebase.initializeApp();
+  } on FirebaseException catch (e) {
+    if (e.code == 'duplicate-app') {
+      return Firebase.app();
+    }
+    if (e.code != 'no-app') rethrow;
+    try {
+      return Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } on FirebaseException catch (fallbackError) {
+      if (fallbackError.code == 'duplicate-app') {
+        return Firebase.app();
+      }
+      rethrow;
+    }
+  }
 }
 
 Future<void> _configureCrashlytics() async {

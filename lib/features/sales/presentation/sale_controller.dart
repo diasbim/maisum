@@ -13,6 +13,77 @@ class SaleResult {
   final Customer customer;
 }
 
+enum SaleStep {
+  customer,
+  amount,
+  confirmation,
+  completed,
+}
+
+enum StepStatus {
+  pending,
+  active,
+  completed,
+}
+
+class NewSaleFlowState {
+  const NewSaleFlowState({
+    required this.selectedCustomer,
+    required this.selectedAmount,
+    this.completed = false,
+  });
+
+  final Customer? selectedCustomer;
+  final double? selectedAmount;
+  final bool completed;
+
+  SaleStep get currentStep {
+    if (completed) {
+      return SaleStep.completed;
+    }
+    if (selectedCustomer == null) {
+      return SaleStep.customer;
+    }
+    if (selectedAmount == null || selectedAmount! <= 0) {
+      return SaleStep.amount;
+    }
+    return SaleStep.confirmation;
+  }
+
+  StepStatus getCustomerStepStatus() {
+    if (completed || selectedCustomer != null) {
+      return StepStatus.completed;
+    }
+    return StepStatus.active;
+  }
+
+  StepStatus getAmountStepStatus() {
+    if (completed) {
+      return StepStatus.completed;
+    }
+    if (selectedCustomer == null) {
+      return StepStatus.pending;
+    }
+    if (selectedAmount != null && selectedAmount! > 0) {
+      return StepStatus.completed;
+    }
+    return StepStatus.active;
+  }
+
+  StepStatus getConfirmStepStatus() {
+    if (completed) {
+      return StepStatus.completed;
+    }
+    if (selectedCustomer == null) {
+      return StepStatus.pending;
+    }
+    if (selectedAmount == null || selectedAmount! <= 0) {
+      return StepStatus.pending;
+    }
+    return StepStatus.active;
+  }
+}
+
 class SaleController extends AsyncNotifier<SaleResult?> {
   @override
   Future<SaleResult?> build() async => null;
@@ -30,52 +101,43 @@ class SaleController extends AsyncNotifier<SaleResult?> {
           .createSale(customerId: customerId, amount: amount);
 
       try {
-        await ref
-            .read(usageTrackerProvider)
-            .record(
-              metricKey: UsageMetrics.salesCount,
-              quantity: 1,
-              source: 'sale',
-              metadata: {'amount': amount},
-            );
+        await ref.read(usageTrackerProvider).record(
+          metricKey: UsageMetrics.salesCount,
+          quantity: 1,
+          source: 'sale',
+          metadata: {'amount': amount},
+        );
       } catch (e, st) {
         AppErrorReporter.report(e, st, hint: 'sale_usage_metric');
       }
 
       try {
-        await ref
-            .read(analyticsServiceProvider)
-            .record(
-              eventType: 'sale_registered',
-              source: 'sale',
-              properties: {'amount': amount, 'points': sale.points},
-            );
-        await ref
-            .read(analyticsServiceProvider)
-            .record(
-              eventType: 'sale_registration_completed',
-              source: 'sale',
-              properties: {
-                'amount': amount,
-                'points': sale.points,
-                'customer_id': customerId,
-              },
-            );
+        await ref.read(analyticsServiceProvider).record(
+          eventType: 'sale_registered',
+          source: 'sale',
+          properties: {'amount': amount, 'points': sale.points},
+        );
+        await ref.read(analyticsServiceProvider).record(
+          eventType: 'sale_registration_completed',
+          source: 'sale',
+          properties: {
+            'amount': amount,
+            'points': sale.points,
+            'customer_id': customerId,
+          },
+        );
         final streak = await ref.read(streakServiceProvider).getCurrentStreak();
-        await ref
-            .read(analyticsServiceProvider)
-            .record(
-              eventType: 'streak_updated',
-              source: 'sale',
-              properties: {'days': streak.days, 'at_risk': streak.isAtRisk},
-            );
+        await ref.read(analyticsServiceProvider).record(
+          eventType: 'streak_updated',
+          source: 'sale',
+          properties: {'days': streak.days, 'at_risk': streak.isAtRisk},
+        );
       } catch (e, st) {
         AppErrorReporter.report(e, st, hint: 'sale_analytics');
       }
 
-      final customer = await ref
-          .read(customerRepositoryProvider)
-          .getById(customerId);
+      final customer =
+          await ref.read(customerRepositoryProvider).getById(customerId);
       if (customer == null) {
         throw StateError('Customer not found after sale creation');
       }

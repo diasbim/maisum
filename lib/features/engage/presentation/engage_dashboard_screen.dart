@@ -36,11 +36,12 @@ class EngageDashboardScreen extends ConsumerWidget {
         ),
         data: (access) {
           if (access.isBlocked) {
-            return const EmptyState(
+            return EmptyState(
               title: 'Engage indisponivel no seu plano',
               subtitle:
                   'Atualize para Pro ou Business para acompanhar risco e recuperar clientes.',
               actionLabel: 'Gerir plano',
+              onAction: () => context.push('/onboarding-plan'),
             );
           }
 

@@ -41,6 +41,7 @@ If this is a large feature, describe the smallest version that still fits the fr
 ## Validation
 
 - [ ] I checked this change against `docs/feature_decision_framework.md`
+- [ ] I updated `docs/app_feature_decision_register.md` for any touched feature module behavior
 - [ ] This change does not add unnecessary complexity to the barber's hot path
 - [ ] This change preserves offline-first behavior for the primary workflow
 - [ ] I ran the appropriate validation for the touched area

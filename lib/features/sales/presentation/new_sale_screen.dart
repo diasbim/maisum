@@ -13,8 +13,10 @@ import '../../../core/widgets/quick_amount_button.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/errors/app_error_mapper.dart';
+import '../../../core/utils/moz_phone_utils.dart';
 import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customers_controller.dart';
+import '../widgets/sale_progress_stepper.dart';
 import 'sale_controller.dart';
 import 'sale_success_screen.dart';
 
@@ -38,6 +40,9 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   final _amountCtrl = TextEditingController();
   Timer? _searchDebounce;
   bool _isSubmitting = false;
+  bool _isCreatingCustomer = false;
+  bool _showCompletedStepper = false;
+  int? _completedPoints;
   Customer? _selectedCustomer;
   int? _quickAmount;
   int? _lastAmount;
@@ -95,6 +100,26 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     return double.tryParse(_amountCtrl.text.replaceAll(',', '.')) ?? 0;
   }
 
+  double? get _selectedAmount => _amount > 0 ? _amount : null;
+
+  bool get _canSubmit => _selectedCustomer != null && _selectedAmount != null;
+
+  String get _buttonLabel {
+    if (_selectedCustomer == null) {
+      return 'Escolha um cliente';
+    }
+    if (_selectedAmount == null) {
+      return 'Escolha um valor';
+    }
+    return AppStrings.confirmarVenda;
+  }
+
+  NewSaleFlowState get _flowState => NewSaleFlowState(
+        selectedCustomer: _selectedCustomer,
+        selectedAmount: _selectedAmount,
+        completed: _showCompletedStepper,
+      );
+
   int get _points => (_amount / AppConstants.pointsPerMzn).floor();
 
   Future<void> _onPhoneChanged(String query) async {
@@ -123,12 +148,44 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       _selectedCustomer = c;
       _phoneCtrl.text = c.phone;
       _searchResults = [];
+      _showCompletedStepper = false;
+      _completedPoints = null;
     });
+  }
+
+  Future<bool> _ensurePinForCustomerCreation() async {
+    final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
+    if (hasPin) {
+      return true;
+    }
+
+    if (!mounted) return false;
+    AppFeedback.showMessage(
+      context,
+      message: 'Defina o PIN para criar o primeiro cliente.',
+    );
+    final nextRoute = Uri.encodeComponent('/new-sale');
+    context.go('/pin-setup?next=$nextRoute');
+    return false;
   }
 
   Future<void> _createAndSelectCustomer() async {
     final phone = _phoneCtrl.text.trim();
-    if (phone.isEmpty) return;
+    if (phone.isEmpty || _isCreatingCustomer) return;
+
+    final canCreate = await _ensurePinForCustomerCreation();
+    if (!canCreate || !mounted) return;
+
+    final phoneError = MozPhoneUtils.validatorMessage(phone);
+    if (phoneError != null) {
+      if (mounted) {
+        AppFeedback.showMessage(context, message: phoneError);
+      }
+      return;
+    }
+
+    setState(() => _isCreatingCustomer = true);
+
     try {
       final customer = await ref
           .read(customersControllerProvider.notifier)
@@ -143,12 +200,30 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     } catch (e) {
       if (!mounted) return;
       final info = AppErrorMapper.describe(e);
-      AppFeedback.showMessage(context, message: info.message);
+      if (info.message == AppStrings.customerPhoneDuplicate) {
+        final existing =
+            await ref.read(customerRepositoryProvider).findByPhone(phone);
+        if (existing != null && mounted) {
+          _selectCustomer(existing);
+          AppFeedback.showMessage(
+            context,
+            message: 'Cliente existente selecionado automaticamente.',
+          );
+          return;
+        }
+      }
+      if (mounted) {
+        AppFeedback.showMessage(context, message: info.message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCreatingCustomer = false);
+      }
     }
   }
 
   Future<void> _confirmSale() async {
-    if (_isSubmitting) return;
+    if (_isSubmitting || !_canSubmit) return;
 
     if (_selectedCustomer == null) {
       AppFeedback.showMessage(
@@ -171,6 +246,13 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         amount: _amount,
       );
 
+      if (!mounted) return;
+      setState(() {
+        _showCompletedStepper = true;
+        _completedPoints = result.sale.points;
+      });
+      await Future<void>.delayed(const Duration(milliseconds: 1000));
+
       saleCtrl.reset();
       if (!mounted) return;
       context.go('/sale-success', extra: SaleSuccessArgs(result: result));
@@ -185,26 +267,11 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     }
   }
 
-  void _resetFormForNextSale() {
-    final submittedAmount = _amount;
-    _searchDebounce?.cancel();
-    setState(() {
-      _selectedCustomer = null;
-      _searchResults = [];
-      _quickAmount = null;
-      _lastAmount = submittedAmount > 0 ? submittedAmount.toInt() : _lastAmount;
-      _phoneCtrl.clear();
-      _amountCtrl.clear();
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _phoneFocusNode.requestFocus();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final saleState = ref.watch(saleControllerProvider);
+    final flowState = _flowState;
+    final isBusy = saleState is AsyncLoading || _isSubmitting;
     final recentCustomers = ref.watch(recentCustomersProvider);
     final showRecentCustomers =
         _selectedCustomer == null && _phoneCtrl.text.trim().isEmpty;
@@ -219,86 +286,215 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
         child: _ConfirmSaleButton(
-          loading: saleState is AsyncLoading || _isSubmitting,
-          onPressed: (saleState is AsyncLoading || _isSubmitting)
-              ? null
-              : _confirmSale,
+          label: _buttonLabel,
+          loading: isBusy,
+          onPressed: (_canSubmit && !isBusy) ? _confirmSale : null,
         ),
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _SaleHeader(onBack: _handleBackPressed),
-            Transform.translate(
-              offset: const Offset(0, -26),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.08),
-                      blurRadius: 20,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _SectionHeader(
-                      title: '1. ${AppStrings.cliente}',
-                      actionText: AppStrings.verTudo,
-                      onAction: () => context.push('/customers'),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_selectedCustomer != null)
-                      _SelectedCustomerCard(
-                        customer: _selectedCustomer!,
-                        onClear: () => setState(() {
-                          _selectedCustomer = null;
-                          _phoneCtrl.clear();
-                        }),
-                      )
-                    else ...[
-                      if (showRecentCustomers)
-                        recentCustomers.when(
-                          data: (customers) {
-                            if (customers.isEmpty) {
-                              return const SizedBox.shrink();
-                            }
-                            return SizedBox(
-                              height: 156,
-                              child: ListView.separated(
-                                scrollDirection: Axis.horizontal,
-                                itemCount: customers.length,
-                                separatorBuilder: (_, __) =>
-                                    const SizedBox(width: 12),
-                                itemBuilder: (context, index) {
-                                  final customer = customers[index];
-                                  return _CustomerCard(
-                                    customer: customer,
-                                    onTap: () => _selectCustomer(customer),
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                          loading: () => const SizedBox.shrink(),
-                          error: (_, __) => const SizedBox.shrink(),
+            _SaleHeader(
+              onBack: _handleBackPressed,
+              customerStatus: flowState.getCustomerStepStatus(),
+              amountStatus: flowState.getAmountStepStatus(),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                child: _SaleCompletionHint(points: _completedPoints!),
+              ),
+              confirmStatus: flowState.getConfirmStepStatus(),
+            ),
+            if (_showCompletedStepper && _completedPoints != null)
+              Transform.translate(
+                offset: const Offset(0, -26),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.08),
+                        blurRadius: 20,
+                        offset: const Offset(0, 12),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SectionHeader(
+                        title: '1. ${AppStrings.cliente}',
+                        actionText: AppStrings.verTudo,
+                        onAction: () => context.push('/customers'),
+                      ),
+                      const SizedBox(height: 12),
+                      if (_selectedCustomer != null)
+                        _SelectedCustomerCard(
+                          customer: _selectedCustomer!,
+                          onClear: () => setState(() {
+                            _selectedCustomer = null;
+                            _phoneCtrl.clear();
+                            _showCompletedStepper = false;
+                            _completedPoints = null;
+                          }),
+                        )
+                      else ...[
+                        if (showRecentCustomers)
+                          recentCustomers.when(
+                            data: (customers) {
+                              if (customers.isEmpty) {
+                                return const SizedBox.shrink();
+                              }
+                              return SizedBox(
+                                height: 156,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: customers.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(width: 12),
+                                  itemBuilder: (context, index) {
+                                    final customer = customers[index];
+                                    return _CustomerCard(
+                                      customer: customer,
+                                      onTap: () => _selectCustomer(customer),
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                            loading: () => const SizedBox.shrink(),
+                            error: (_, __) => const SizedBox.shrink(),
+                          ),
+                        if (showRecentCustomers) const SizedBox(height: 12),
+                        TextField(
+                          controller: _phoneCtrl,
+                          focusNode: _phoneFocusNode,
+                          keyboardType: TextInputType.text,
+                          autofocus: widget.args?.preselectedCustomerId == null,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            hintText: AppStrings.nomeOuTelefoneCliente,
+                            prefixIcon: Icon(Icons.search_rounded),
+                            filled: true,
+                            fillColor: AppColors.surface,
+                            border: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(16)),
+                              borderSide: BorderSide(color: AppColors.g100),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(16)),
+                              borderSide: BorderSide(color: AppColors.g100),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(16)),
+                              borderSide: BorderSide(color: AppColors.primary),
+                            ),
+                          ),
+                          onChanged: _onPhoneChanged,
                         ),
-                      if (showRecentCustomers) const SizedBox(height: 12),
+                        if (_searchResults.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: Column(
+                              children: _searchResults
+                                  .map(
+                                    (c) => _SearchResultTile(
+                                      customer: c,
+                                      onTap: () => _selectCustomer(c),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ),
+                        if (_searchResults.isEmpty &&
+                            _phoneCtrl.text
+                                    .replaceAll(RegExp(r'\D'), '')
+                                    .length >=
+                                AppConstants.minSalePhoneDigitsForNewCustomer)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: TextButton.icon(
+                              icon: _isCreatingCustomer
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.person_add_rounded),
+                              label: Text(
+                                _isCreatingCustomer
+                                    ? 'A criar...'
+                                    : AppStrings.novoCliente,
+                              ),
+                              onPressed: _isCreatingCustomer
+                                  ? null
+                                  : _createAndSelectCustomer,
+                            ),
+                          ),
+                      ],
+                      const SizedBox(height: 20),
+                      const _SectionTitle(title: '2. ${AppStrings.valor}'),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: AppConstants.saleQuickAmounts
+                            .map(
+                              (amt) => QuickAmountButton(
+                                amount: amt,
+                                selected: _quickAmount == amt,
+                                onTap: () => setState(() {
+                                  _quickAmount =
+                                      _quickAmount == amt ? null : amt;
+                                  if (_quickAmount != null) _amountCtrl.clear();
+                                  _showCompletedStepper = false;
+                                  _completedPoints = null;
+                                }),
+                              ),
+                            )
+                            .toList()
+                          ..addAll(
+                            _lastAmount == null
+                                ? const []
+                                : [
+                                    QuickAmountButton(
+                                      amount: _lastAmount!,
+                                      label: AppStrings.ultimo,
+                                      selected: _quickAmount == _lastAmount,
+                                      onTap: () => setState(() {
+                                        _quickAmount =
+                                            _quickAmount == _lastAmount
+                                                ? null
+                                                : _lastAmount;
+                                        if (_quickAmount != null) {
+                                          _amountCtrl.clear();
+                                        }
+                                        _showCompletedStepper = false;
+                                        _completedPoints = null;
+                                      }),
+                                    ),
+                                  ],
+                          ),
+                      ),
+                      const SizedBox(height: 14),
                       TextField(
-                        controller: _phoneCtrl,
-                        focusNode: _phoneFocusNode,
-                        keyboardType: TextInputType.text,
-                        autofocus: widget.args?.preselectedCustomerId == null,
-                        textCapitalization: TextCapitalization.words,
+                        controller: _amountCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        inputFormatters: [
+                          FilteringTextInputFormatter.allow(RegExp(r'[\d,.]')),
+                        ],
                         decoration: const InputDecoration(
-                          hintText: AppStrings.nomeOuTelefoneCliente,
-                          prefixIcon: Icon(Icons.search_rounded),
+                          hintText: AppStrings.outroValor,
+                          suffixText: AppStrings.moedaMzn,
                           filled: true,
                           fillColor: AppColors.surface,
                           border: OutlineInputBorder(
@@ -314,115 +510,24 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                             borderSide: BorderSide(color: AppColors.primary),
                           ),
                         ),
-                        onChanged: _onPhoneChanged,
+                        onChanged: (_) => setState(() {
+                          _quickAmount = null;
+                          _showCompletedStepper = false;
+                          _completedPoints = null;
+                        }),
                       ),
-                      if (_searchResults.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 10),
-                          child: Column(
-                            children: _searchResults
-                                .map(
-                                  (c) => _SearchResultTile(
-                                    customer: c,
-                                    onTap: () => _selectCustomer(c),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ),
-                      if (_searchResults.isEmpty &&
-                          _phoneCtrl.text
-                                  .replaceAll(RegExp(r'\D'), '')
-                                  .length >=
-                              AppConstants.minSalePhoneDigitsForNewCustomer)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: TextButton.icon(
-                            icon: const Icon(Icons.person_add_rounded),
-                            label: const Text(AppStrings.novoCliente),
-                            onPressed: _createAndSelectCustomer,
-                          ),
-                        ),
+                      const SizedBox(height: 18),
+                      const _SectionTitle(title: '3. ${AppStrings.resumo}'),
+                      const SizedBox(height: 12),
+                      _SummaryCard(
+                        points: _points,
+                        pointsBaseMzn: pointsBaseMzn,
+                        pointsPerBaseLabel: pointsPerBaseLabel,
+                      ),
                     ],
-                    const SizedBox(height: 20),
-                    const _SectionTitle(title: '2. ${AppStrings.valor}'),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: AppConstants.saleQuickAmounts
-                          .map(
-                            (amt) => QuickAmountButton(
-                              amount: amt,
-                              selected: _quickAmount == amt,
-                              onTap: () => setState(() {
-                                _quickAmount = _quickAmount == amt ? null : amt;
-                                if (_quickAmount != null) _amountCtrl.clear();
-                              }),
-                            ),
-                          )
-                          .toList()
-                        ..addAll(
-                          _lastAmount == null
-                              ? const []
-                              : [
-                                  QuickAmountButton(
-                                    amount: _lastAmount!,
-                                    label: AppStrings.ultimo,
-                                    selected: _quickAmount == _lastAmount,
-                                    onTap: () => setState(() {
-                                      _quickAmount = _quickAmount == _lastAmount
-                                          ? null
-                                          : _lastAmount;
-                                      if (_quickAmount != null) {
-                                        _amountCtrl.clear();
-                                      }
-                                    }),
-                                  ),
-                                ],
-                        ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _amountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[\d,.]')),
-                      ],
-                      decoration: const InputDecoration(
-                        hintText: AppStrings.outroValor,
-                        suffixText: AppStrings.moedaMzn,
-                        filled: true,
-                        fillColor: AppColors.surface,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                          borderSide: BorderSide(color: AppColors.g100),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                          borderSide: BorderSide(color: AppColors.g100),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(16)),
-                          borderSide: BorderSide(color: AppColors.primary),
-                        ),
-                      ),
-                      onChanged: (_) => setState(() => _quickAmount = null),
-                    ),
-                    const SizedBox(height: 18),
-                    const _SectionTitle(title: '3. ${AppStrings.resumo}'),
-                    const SizedBox(height: 12),
-                    _SummaryCard(
-                      points: _points,
-                      pointsBaseMzn: pointsBaseMzn,
-                      pointsPerBaseLabel: pointsPerBaseLabel,
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: 12),
           ],
         ),
@@ -432,9 +537,17 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
 }
 
 class _SaleHeader extends StatelessWidget {
-  const _SaleHeader({required this.onBack});
+  const _SaleHeader({
+    required this.onBack,
+    required this.customerStatus,
+    required this.amountStatus,
+    required this.confirmStatus,
+  });
 
   final VoidCallback onBack;
+  final StepStatus customerStatus;
+  final StepStatus amountStatus;
+  final StepStatus confirmStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -476,95 +589,13 @@ class _SaleHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          const _StepIndicator(currentStep: 1),
+          SaleProgressStepper(
+            customerStatus: customerStatus,
+            amountStatus: amountStatus,
+            confirmStatus: confirmStatus,
+          ),
         ],
       ),
-    );
-  }
-}
-
-class _StepIndicator extends StatelessWidget {
-  const _StepIndicator({required this.currentStep});
-  final int currentStep;
-
-  @override
-  Widget build(BuildContext context) {
-    const steps = [
-      AppStrings.cliente,
-      AppStrings.valorStep,
-      AppStrings.confirmar,
-    ];
-    return Row(
-      children: [
-        for (var i = 0; i < steps.length; i++) ...[
-          _StepDot(index: i + 1, label: steps[i], active: currentStep == i + 1),
-          if (i < steps.length - 1)
-            Expanded(
-              child: Container(
-                height: 2,
-                margin: const EdgeInsets.symmetric(horizontal: 8),
-                color: currentStep > i + 1
-                    ? AppColors.secondary
-                    : Colors.white.withValues(alpha: 0.3),
-              ),
-            ),
-        ],
-      ],
-    );
-  }
-}
-
-class _StepDot extends StatelessWidget {
-  const _StepDot({
-    required this.index,
-    required this.label,
-    required this.active,
-  });
-
-  final int index;
-  final String label;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    final textColor =
-        active ? AppColors.secondary : Colors.white.withValues(alpha: 0.7);
-    return Column(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: active ? AppColors.secondary : Colors.white,
-            shape: BoxShape.circle,
-            border: active
-                ? null
-                : Border.all(
-                    color: Colors.white.withValues(alpha: 0.7),
-                    width: 1.5,
-                  ),
-          ),
-          child: Center(
-            child: Text(
-              '$index',
-              style: TextStyle(
-                color: active ? AppColors.primary : AppColors.primaryDarker,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: TextStyle(
-            color: textColor,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -955,15 +986,71 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
+class _SaleCompletionHint extends StatelessWidget {
+  const _SaleCompletionHint({required this.points});
+
+  final int points;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.successLight,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.celebration_rounded,
+            color: AppColors.success,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  AppStrings.vendaRegistada,
+                  style: TextStyle(
+                    color: AppColors.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  '+$points ${AppStrings.pontosAtribuidos}',
+                  style: const TextStyle(
+                    color: AppColors.success,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ConfirmSaleButton extends StatelessWidget {
-  const _ConfirmSaleButton({required this.loading, required this.onPressed});
+  const _ConfirmSaleButton({
+    required this.label,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final String label;
   final bool loading;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     return PrimaryButton(
-      label: AppStrings.confirmarVenda,
+      label: label,
       onPressed: onPressed,
       loading: loading,
       trailingIcon: Icons.arrow_forward_rounded,

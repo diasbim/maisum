@@ -15,6 +15,7 @@ class SaleRepository {
     this._saleDao, {
     this.merchantId,
     this.deviceId,
+    this.appUserId,
   });
 
   final AppDatabase _database;
@@ -22,6 +23,7 @@ class SaleRepository {
   final SaleDao _saleDao;
   final String? merchantId;
   final String? deviceId;
+  final String? appUserId;
   static const _uuid = Uuid();
   static const _points = PointsCalculator();
 
@@ -112,6 +114,8 @@ class SaleRepository {
         ...sale.toDbMap(),
         'merchant_id': merchantId,
         'device_id': deviceId,
+        'created_by_app_user_id': appUserId,
+        'updated_by_app_user_id': appUserId,
       };
 
   Map<String, dynamic> _syncQueueRow(SyncItem item) => {

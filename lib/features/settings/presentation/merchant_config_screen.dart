@@ -16,6 +16,58 @@ import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../auth/presentation/auth_controller.dart';
 
+enum BusinessType {
+  barbershop,
+  salon,
+  beauty,
+  laundry,
+  other,
+}
+
+extension BusinessTypeMapper on BusinessType {
+  String get wireValue => switch (this) {
+        BusinessType.barbershop => 'barbershop',
+        BusinessType.salon => 'salon',
+        BusinessType.beauty => 'beauty',
+        BusinessType.laundry => 'laundry',
+        BusinessType.other => 'other',
+      };
+
+  String get label => switch (this) {
+        BusinessType.barbershop => 'Barbearia',
+        BusinessType.salon => 'Salao',
+        BusinessType.beauty => 'Beleza',
+        BusinessType.laundry => 'Lavandaria',
+        BusinessType.other => 'Outro',
+      };
+
+  static BusinessType fromStorage(String? rawValue) {
+    final value = rawValue?.trim().toLowerCase() ?? '';
+    switch (value) {
+      case 'barbershop':
+      case 'barbearia':
+        return BusinessType.barbershop;
+      case 'salon':
+      case 'cabeleireiro':
+      case 'salao':
+        return BusinessType.salon;
+      case 'beauty':
+      case 'estetica':
+      case 'beleza':
+      case 'spa':
+        return BusinessType.beauty;
+      case 'laundry':
+      case 'lavandaria':
+        return BusinessType.laundry;
+      case 'other':
+      case 'outro':
+        return BusinessType.other;
+      default:
+        return BusinessType.barbershop;
+    }
+  }
+}
+
 class MerchantConfigScreen extends ConsumerStatefulWidget {
   const MerchantConfigScreen({super.key});
 
@@ -29,11 +81,16 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
 
+  static const _legacyDefaultMerchantName = 'Minha Loja';
+  static const _defaultCity = 'Maputo';
+  static const _defaultBusinessType = BusinessType.barbershop;
+
   String? _selectedCity;
-  String? _selectedBusinessType;
+  BusinessType? _selectedBusinessType;
   bool _isLoading = true;
   bool _isSaving = false;
   bool _showSuccess = false;
+  bool _wasProfileCompleteAtLoad = false;
   bool _processingPulse = false;
   int _processingStepIndex = 0;
   Timer? _processingTicker;
@@ -52,14 +109,6 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
     'Nampula',
     'Chimoio',
     'Outra',
-  ];
-
-  static const _businessTypes = [
-    'Barbearia',
-    'Cabeleireiro',
-    'Estetica',
-    'Spa',
-    'Outro',
   ];
 
   @override
@@ -96,8 +145,13 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
 
   Future<void> _primeFields() async {
     final session = ref.read(authControllerProvider).valueOrNull;
-    _nameController.text = session?.merchantName ?? '';
+    final initialMerchantName = (session?.merchantName ?? '').trim();
+    _nameController.text = initialMerchantName == _legacyDefaultMerchantName
+        ? ''
+        : initialMerchantName;
     _phoneController.text = session?.phone ?? '';
+    _selectedCity = _defaultCity;
+    _selectedBusinessType = _defaultBusinessType;
 
     final merchantId = ref.read(activeMerchantIdProvider);
     if (merchantId != null && merchantId.isNotEmpty) {
@@ -120,8 +174,10 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
           if (phone != null && phone.trim().isNotEmpty) {
             _phoneController.text = phone;
           }
-          _selectedCity = city;
-          _selectedBusinessType = businessType;
+          _selectedCity = city != null && city.trim().isNotEmpty
+              ? city.trim()
+              : _defaultCity;
+          _selectedBusinessType = BusinessTypeMapper.fromStorage(businessType);
         }
       } catch (e, st) {
         // Keep local defaults when remote data is not reachable.
@@ -130,8 +186,15 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
     }
 
     if (mounted) {
+      _wasProfileCompleteAtLoad = _isProfileComplete();
       setState(() => _isLoading = false);
     }
+  }
+
+  bool _isProfileComplete() {
+    final merchantName = _nameController.text.trim();
+    return merchantName.isNotEmpty &&
+        merchantName.toLowerCase() != _legacyDefaultMerchantName.toLowerCase();
   }
 
   Future<void> _save() async {
@@ -163,8 +226,9 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
 
     final name = _nameController.text.trim();
     final phone = _phoneController.text.trim();
-    final city = _selectedCity ?? '';
-    final businessType = _selectedBusinessType ?? '';
+    final city = _selectedCity ?? _defaultCity;
+    final businessType =
+        (_selectedBusinessType ?? _defaultBusinessType).wireValue;
 
     try {
       final session = ref.read(authControllerProvider).valueOrNull;
@@ -190,6 +254,12 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
         'updated_at': DateTime.now().millisecondsSinceEpoch,
       }, SetOptions(merge: true));
 
+      if (!_wasProfileCompleteAtLoad) {
+        await ref
+            .read(secureStorageServiceProvider)
+            .setOnboardingPlanConfirmed(false);
+      }
+
       if (!mounted) return;
       _stopProcessingTicker();
       setState(() {
@@ -200,9 +270,23 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
       if (!mounted) return;
       setState(() {
         _isSaving = false;
-        _showSuccess = true;
+        _showSuccess = false;
       });
       HapticFeedback.mediumImpact();
+
+      if (!_wasProfileCompleteAtLoad && context.mounted) {
+        context.go('/onboarding-plan');
+        return;
+      }
+
+      if (context.mounted) {
+        AppFeedback.showMessage(
+          context,
+          message: 'Configuracoes guardadas com sucesso.',
+          isError: false,
+        );
+        context.pop();
+      }
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'merchant_config_save');
       if (!mounted) return;
@@ -346,7 +430,7 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
                                         _ConfigTextField(
                                           controller: _nameController,
                                           label: 'Nome da barbearia',
-                                          hint: 'Ex.: Barbearia Top Look',
+                                          hint: 'Ex.: Barbearia Nova Era',
                                           icon: Icons.storefront_rounded,
                                           textInputAction: TextInputAction.next,
                                           validator: (value) {
@@ -363,15 +447,9 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
                                           label: 'Telefone',
                                           hint: '+258 82 326 2347',
                                           icon: Icons.phone_rounded,
+                                          readOnly: true,
                                           keyboardType: TextInputType.phone,
                                           textInputAction: TextInputAction.next,
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.trim().isEmpty) {
-                                              return 'Introduza o telefone';
-                                            }
-                                            return null;
-                                          },
                                         ),
                                         const SizedBox(height: 14),
                                         _ConfigDropdownField(
@@ -385,33 +463,18 @@ class _MerchantConfigScreenState extends ConsumerState<MerchantConfigScreen> {
                                               () => _selectedCity = value,
                                             );
                                           },
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
-                                              return 'Selecione a cidade';
-                                            }
-                                            return null;
-                                          },
                                         ),
                                         const SizedBox(height: 14),
-                                        _ConfigDropdownField(
+                                        _BusinessTypeDropdownField(
                                           label: 'Tipo de negocio',
                                           hint: 'Selecione o tipo de negocio',
                                           icon: Icons.content_cut_rounded,
                                           value: _selectedBusinessType,
-                                          items: _businessTypes,
                                           onChanged: (value) {
                                             setState(
                                               () =>
                                                   _selectedBusinessType = value,
                                             );
-                                          },
-                                          validator: (value) {
-                                            if (value == null ||
-                                                value.isEmpty) {
-                                              return 'Selecione o tipo de negocio';
-                                            }
-                                            return null;
                                           },
                                         ),
                                       ],
@@ -476,57 +539,66 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        IconButton(
-          onPressed: onBack,
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-        ),
-        const Spacer(),
-        Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final compact = constraints.maxWidth < 300;
+
+        return Row(
           children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(9),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.secondary.withValues(alpha: 0.25),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(6),
-              child: Image.asset(
-                'assets/images/logo.png',
-                fit: BoxFit.contain,
-              ),
+            IconButton(
+              onPressed: onBack,
+              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
             ),
-            const SizedBox(width: 8),
-            const Text.rich(
-              TextSpan(
-                text: 'Mais',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
+            const Spacer(),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(9),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.secondary.withValues(alpha: 0.25),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(6),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    fit: BoxFit.contain,
+                  ),
                 ),
-                children: [
-                  TextSpan(
-                    text: 'Um',
-                    style: TextStyle(color: AppColors.secondary),
+                if (!compact) ...[
+                  const SizedBox(width: 8),
+                  const Text.rich(
+                    TextSpan(
+                      text: 'Mais',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'Um',
+                          style: TextStyle(color: AppColors.secondary),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
-              ),
+              ],
             ),
+            const Spacer(),
+            const SizedBox(width: 40),
           ],
-        ),
-        const Spacer(),
-        const SizedBox(width: 40),
-      ],
+        );
+      },
     );
   }
 }
@@ -641,6 +713,7 @@ class _ConfigTextField extends StatelessWidget {
     required this.icon,
     this.keyboardType,
     this.textInputAction,
+    this.readOnly = false,
     this.validator,
   });
 
@@ -650,6 +723,7 @@ class _ConfigTextField extends StatelessWidget {
   final IconData icon;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+  final bool readOnly;
   final String? Function(String?)? validator;
 
   @override
@@ -658,6 +732,7 @@ class _ConfigTextField extends StatelessWidget {
       controller: controller,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
+      readOnly: readOnly,
       style: const TextStyle(
         color: Colors.white,
         fontWeight: FontWeight.w600,
@@ -669,6 +744,70 @@ class _ConfigTextField extends StatelessWidget {
         hint: hint,
         icon: icon,
       ),
+    );
+  }
+}
+
+class _BusinessTypeDropdownField extends StatelessWidget {
+  const _BusinessTypeDropdownField({
+    required this.label,
+    required this.hint,
+    required this.icon,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String hint;
+  final IconData icon;
+  final BusinessType? value;
+  final ValueChanged<BusinessType?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<BusinessType>(
+      initialValue: value,
+      isExpanded: true,
+      icon: Icon(
+        Icons.keyboard_arrow_down_rounded,
+        color: Colors.white.withValues(alpha: 0.7),
+      ),
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+      ),
+      dropdownColor: AppColors.primaryDark,
+      decoration: _fieldDecoration(
+        label: label,
+        hint: hint,
+        icon: icon,
+      ),
+      onChanged: onChanged,
+      selectedItemBuilder: (context) => BusinessType.values
+          .map(
+            (item) => Text(
+              item.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          )
+          .toList(),
+      items: BusinessType.values
+          .map(
+            (item) => DropdownMenuItem<BusinessType>(
+              value: item,
+              child: Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -696,6 +835,7 @@ class _ConfigDropdownField extends StatelessWidget {
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
       initialValue: value,
+      isExpanded: true,
       icon: Icon(
         Icons.keyboard_arrow_down_rounded,
         color: Colors.white.withValues(alpha: 0.7),
@@ -712,8 +852,30 @@ class _ConfigDropdownField extends StatelessWidget {
       ),
       onChanged: onChanged,
       validator: validator,
+      selectedItemBuilder: (context) => items
+          .map(
+            (item) => Text(
+              item,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          )
+          .toList(),
       items: items
-          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+          .map(
+            (item) => DropdownMenuItem(
+              value: item,
+              child: Text(
+                item,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
           .toList(),
     );
   }

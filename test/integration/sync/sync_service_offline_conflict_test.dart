@@ -24,7 +24,8 @@ class _FakeSyncTransport implements SyncTransport {
 
   @override
   Future<List<Map<String, dynamic>>> fetchCollection(String entityType) async {
-    return List<Map<String, dynamic>>.from(_collections[entityType] ?? const []);
+    return List<Map<String, dynamic>>.from(
+        _collections[entityType] ?? const []);
   }
 
   @override
@@ -41,6 +42,16 @@ class _FakeSyncTransport implements SyncTransport {
   @override
   Future<void> processSyncItem(SyncItem item) async {
     processed.add(item);
+  }
+}
+
+class _TransientFailSyncTransport extends _FakeSyncTransport {
+  @override
+  Future<void> processSyncItem(SyncItem item) async {
+    throw const SyncTransportException(
+      'Unable to resolve host firestore.googleapis.com',
+      code: 'unavailable',
+    );
   }
 }
 
@@ -143,6 +154,48 @@ void main() {
     expect(customer?.name, 'Local Name');
     expect(customer?.phone, '840000000');
     expect(customer?.totalPoints, 10);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('transient network failures keep queue pending instead of failed',
+      () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+
+    final transport = _TransientFailSyncTransport();
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await syncDao.enqueue(
+      SyncItem(
+        id: 'sync-transient-1',
+        operation: 'create',
+        entityType: 'customer',
+        entityId: 'cust-transient-1',
+        payload: '{"id":"cust-transient-1"}',
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    await service.processQueue();
+
+    final stats = await syncDao.getStats();
+    expect(stats.pendingTotal, 1);
+    expect(stats.failed, 0);
+    expect(stats.pendingReady, 0);
+    expect(service.status.phase, isNot(SyncPhase.syncFailed));
+    expect(service.status.lastError, isNull);
 
     service.dispose();
     connectivity.dispose();

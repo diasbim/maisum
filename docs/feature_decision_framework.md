@@ -194,3 +194,191 @@ LoyaltyOS is not general business software.
 It is a daily-use, low-friction, offline-first loyalty tool for fast-moving barbershops in Maputo.
 
 If a feature does not strengthen that identity, it should be rejected, delayed, or simplified.
+
+## App-Wide Implementation
+
+This framework is implemented for the entire app through a module decision register:
+
+- Canonical register: docs/app_feature_decision_register.md
+
+Operational rules:
+
+- Every module under lib/features must have one decision entry in the register.
+- Any PR that changes a module's behavior should update that module's register entry.
+- New modules must add a register entry before merge.
+
+## Applied To New Screens
+
+This section applies the framework to the new onboarding, engagement, retention, and appointment flows currently in the app.
+
+### 1) Onboarding Plan Selection Flow
+
+Feature name: Onboarding plan selection and confirmation
+Problem: New merchants need a clear and fast way to confirm pricing plan before entering daily operations.
+Target user moment: Right after auth/bootstrap, before first sale.
+
+Hard gate:
+
+- Increase daily sales registrations? Yes
+- Reduce friction? Yes
+- Improve retention? Yes
+- Improve WhatsApp engagement? Yes
+- Improve offline reliability? No
+
+Scoring:
+
+- Sales registrations (0-5): 4
+- Friction reduction (0-5): 5
+- Retention (0-5): 3
+- WhatsApp engagement (0-5): 3
+- Offline reliability (0-5): 1
+
+Weighted total:
+
+- Sales: (4/5) x 30 = 24
+- Friction: (5/5) x 25 = 25
+- Retention: (3/5) x 20 = 12
+- WhatsApp: (3/5) x 10 = 6
+- Offline: (1/5) x 15 = 3
+- Total = 70
+
+Evidence level: B
+Delivery risk: Low
+Enabler override needed? No
+Decision: Simplify, then schedule
+Simplified MVP version:
+
+- Keep only two next-step actions after confirmation: first sale and dashboard.
+- Keep pricing source in Firestore plans collection with fallback for resiliency.
+- Keep modal scroll-safe and navigation-bar-safe on low-end Android.
+
+### 2) Engage Dashboard and Actions Flow
+
+Feature name: Engage dashboard, queue, recovery actions, visits, and surveys
+Problem: Merchants need proactive recovery tools to reduce churn and reactivate customers.
+Target user moment: Daily review of risk queue and follow-up actions.
+
+Hard gate:
+
+- Increase daily sales registrations? Yes
+- Reduce friction? Yes
+- Improve retention? Yes
+- Improve WhatsApp engagement? Yes
+- Improve offline reliability? No
+
+Scoring:
+
+- Sales registrations (0-5): 3
+- Friction reduction (0-5): 3
+- Retention (0-5): 5
+- WhatsApp engagement (0-5): 4
+- Offline reliability (0-5): 2
+
+Weighted total:
+
+- Sales: (3/5) x 30 = 18
+- Friction: (3/5) x 25 = 15
+- Retention: (5/5) x 20 = 20
+- WhatsApp: (4/5) x 10 = 8
+- Offline: (2/5) x 15 = 6
+- Total = 67
+
+Evidence level: B
+Delivery risk: Medium
+Enabler override needed? No
+Decision: Simplify, then schedule
+Simplified MVP version:
+
+- Keep one primary daily path: queue -> create recovery task.
+- Keep plan gating explicit: Pro read-only, Business full actions.
+- Keep blocked state with direct upgrade CTA to plan selection.
+
+### 3) Retention Dashboard Flow
+
+Feature name: Retention dashboard with recurring and at-risk segments
+Problem: Merchants need a fast view of who is recurring and who is at risk to act before churn.
+Target user moment: Daily planning before or after service peak.
+
+Hard gate:
+
+- Increase daily sales registrations? Yes
+- Reduce friction? Yes
+- Improve retention? Yes
+- Improve WhatsApp engagement? Yes
+- Improve offline reliability? No
+
+Scoring:
+
+- Sales registrations (0-5): 3
+- Friction reduction (0-5): 4
+- Retention (0-5): 5
+- WhatsApp engagement (0-5): 3
+- Offline reliability (0-5): 2
+
+Weighted total:
+
+- Sales: (3/5) x 30 = 18
+- Friction: (4/5) x 25 = 20
+- Retention: (5/5) x 20 = 20
+- WhatsApp: (3/5) x 10 = 6
+- Offline: (2/5) x 15 = 6
+- Total = 70
+
+Evidence level: B
+Delivery risk: Medium
+Enabler override needed? No
+Decision: Simplify, then schedule
+Simplified MVP version:
+
+- Keep only two tabs: Recorrentes and Em risco.
+- Keep one primary CTA for at-risk follow-up (reminder path), avoid adding extra side actions.
+- Keep premium gating explicit with direct plan-management action.
+
+### 4) Appointments Flow
+
+Feature name: Appointments list and quick customer follow-through
+Problem: Merchants need visibility of upcoming cuts to reduce no-shows and keep daily flow predictable.
+Target user moment: At opening and between services during the day.
+
+Hard gate:
+
+- Increase daily sales registrations? Yes
+- Reduce friction? Yes
+- Improve retention? Yes
+- Improve WhatsApp engagement? No
+- Improve offline reliability? Yes
+
+Scoring:
+
+- Sales registrations (0-5): 4
+- Friction reduction (0-5): 4
+- Retention (0-5): 4
+- WhatsApp engagement (0-5): 1
+- Offline reliability (0-5): 3
+
+Weighted total:
+
+- Sales: (4/5) x 30 = 24
+- Friction: (4/5) x 25 = 20
+- Retention: (4/5) x 20 = 16
+- WhatsApp: (1/5) x 10 = 2
+- Offline: (3/5) x 15 = 9
+- Total = 71
+
+Evidence level: B
+Delivery risk: Low
+Enabler override needed? No
+Decision: Simplify, then schedule
+Simplified MVP version:
+
+- Keep one-screen agenda list with pull-to-refresh and empty-state guidance.
+- Keep one-tap navigation from appointment to customer detail.
+- Delay advanced calendar and scheduling configuration to post-MVP.
+
+### Implementation Guardrails For These Screens
+
+- Do not add new top-level navigation for onboarding or engagement variants.
+- Do not add setup-heavy configuration steps in these flows.
+- Keep key daily actions reachable within one to two taps.
+- Preserve offline-first behavior for data reads and queued writes.
+- Validate small-device layouts and Android navigation-bar safety before release.

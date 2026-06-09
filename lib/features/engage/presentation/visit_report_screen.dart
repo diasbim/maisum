@@ -84,7 +84,7 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               DropdownButtonFormField<String>(
-                value: _result,
+                initialValue: _result,
                 items: VisitResultType.values
                     .map(
                       (value) =>

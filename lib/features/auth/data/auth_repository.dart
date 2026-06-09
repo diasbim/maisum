@@ -1,11 +1,12 @@
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart'
-    show FirebaseFirestore, SetOptions;
+    show FirebaseException, FirebaseFirestore, SetOptions;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_runtime_config.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/errors/app_error_reporter.dart';
@@ -32,6 +33,7 @@ class AuthRepository {
   static const _uuid = Uuid();
   static const _defaultMerchantName = 'Minha Loja';
   static const _defaultSubscriptionStatus = 'TRIAL';
+  static const _defaultAppUserRole = AppConstants.appUserRoleOwner;
 
   final FirebaseAuthService _firebaseAuth;
   final SecureStorageService _storage;
@@ -71,6 +73,16 @@ class AuthRepository {
   }) async {
     final userCredential = await _firebaseAuth.signInWithCredential(credential);
     return _sessionFromUser(userCredential.user!, phone);
+  }
+
+  Future<AuthSession> signInWithGoogle() async {
+    final userCredential = await _firebaseAuth.signInWithGoogle();
+    final user = userCredential.user;
+    if (user == null) {
+      throw StateError('Nao foi possivel autenticar com Google.');
+    }
+    final phone = (user.phoneNumber ?? '').trim();
+    return _sessionFromUser(user, phone);
   }
 
   Future<AuthSession?> getStoredSession() async {
@@ -195,8 +207,75 @@ class AuthRepository {
 
     final updatedSession = session.copyWith(merchantName: normalizedName);
     await _persistSession(updatedSession);
-    await _syncMerchantDocument(updatedSession);
     return updatedSession;
+  }
+
+  Future<AuthSession> linkDeviceToMerchantByCode({
+    required String linkCode,
+  }) async {
+    final firestore = _firestore;
+    if (firestore == null) {
+      throw StateError('Vinculacao por codigo indisponivel neste ambiente.');
+    }
+
+    final normalizedCode = _normalizeLinkCode(linkCode);
+    if (normalizedCode.isEmpty) {
+      throw ArgumentError.value(linkCode, 'linkCode');
+    }
+
+    final currentSession =
+        await _readStoredSession() ?? await getStoredSession();
+    if (currentSession == null) {
+      throw StateError('Sessao invalida para vincular dispositivo.');
+    }
+
+    final business = await _findMerchantByLinkCode(
+      firestore,
+      normalizedCode: normalizedCode,
+      rawCode: linkCode.trim(),
+    );
+
+    if (business == null) {
+      throw StateError('Codigo da barbearia invalido ou expirado.');
+    }
+
+    final merchantId = business.key;
+    final data = business.value;
+    final merchantName = ((data['merchant_name'] as String?) ?? '').trim();
+    final ownerUserId = (data['owner_user_id'] as String?)?.trim();
+    final ownerFirebaseUid = (data['firebase_uid'] as String?)?.trim();
+    final subscriptionStatus =
+        ((data['subscription_status'] as String?) ?? '').trim();
+
+    final isOwnerSession = (ownerUserId != null &&
+            ownerUserId.isNotEmpty &&
+            ownerUserId == currentSession.resolvedAppUserId) ||
+        (ownerFirebaseUid != null &&
+            ownerFirebaseUid.isNotEmpty &&
+            currentSession.firebaseUid != null &&
+            ownerFirebaseUid == currentSession.firebaseUid);
+
+    await _storage.saveAppUserRole(
+      isOwnerSession
+          ? AppConstants.appUserRoleOwner
+          : AppConstants.appUserRoleStaff,
+    );
+
+    final linkedSession = currentSession.copyWith(
+      merchantId: merchantId,
+      merchantName:
+          merchantName.isEmpty ? currentSession.merchantName : merchantName,
+      subscriptionStatus: subscriptionStatus.isEmpty
+          ? currentSession.subscriptionStatus
+          : subscriptionStatus,
+      appUserId: isOwnerSession && ownerUserId != null && ownerUserId.isNotEmpty
+          ? ownerUserId
+          : currentSession.resolvedAppUserId,
+    );
+
+    await _persistSession(linkedSession);
+    await _storage.setOnboardingPlanConfirmed(true);
+    return linkedSession;
   }
 
   Future<AuthSession> _sessionFromUser(User user, String phone) async {
@@ -334,7 +413,37 @@ class AuthRepository {
         _storage.saveFirebaseUid(session.firebaseUid!),
     ]);
     await _ensureLocalIdentity(session);
-    await _syncMerchantDocument(session);
+    await _syncStoredAppUserRole(session);
+    final shouldSyncMerchantDocument = await _shouldSyncMerchantDocument();
+    if (!shouldSyncMerchantDocument) {
+      return;
+    }
+    try {
+      await _syncMerchantDocument(session);
+    } catch (e, st) {
+      // Firestore sync is best-effort; local session/bootstrap must remain usable.
+      AppErrorReporter.report(e, st, hint: 'auth_sync_merchant_document');
+    }
+  }
+
+  Future<void> _syncStoredAppUserRole(AuthSession session) async {
+    final db = await _database.database;
+    final rows = await db.query(
+      'app_users',
+      columns: ['role'],
+      where: 'id = ? AND merchant_id = ?',
+      whereArgs: [session.resolvedAppUserId, session.resolvedMerchantId],
+      limit: 1,
+    );
+    final role = rows.isEmpty ? null : rows.first['role'] as String?;
+    final normalized = _normalizeAppUserRole(role);
+    await _storage.saveAppUserRole(normalized ?? _defaultAppUserRole);
+  }
+
+  Future<bool> _shouldSyncMerchantDocument() async {
+    final role = _normalizeAppUserRole(await _storage.getAppUserRole());
+    // Staff users do not have permissions to update /businesses/{merchantId}.
+    return role != AppConstants.appUserRoleStaff;
   }
 
   Future<_ExistingMerchantData?> _findMerchantByPhone(String rawPhone) async {
@@ -349,33 +458,83 @@ class AuthRepository {
     }
 
     for (final candidate in candidates) {
-      final query = await firestore
+      try {
+        final query = await firestore
+            .collection('businesses')
+            .where('phone', isEqualTo: candidate)
+            .limit(1)
+            .get();
+        if (query.docs.isEmpty) {
+          continue;
+        }
+
+        final doc = query.docs.first;
+        final data = doc.data();
+        final merchantName = (data['merchant_name'] as String?)?.trim();
+        final appUserId = (data['owner_user_id'] as String?)?.trim();
+        final subscriptionStatus =
+            (data['subscription_status'] as String?)?.trim();
+
+        return _ExistingMerchantData(
+          merchantId: doc.id,
+          merchantName: (merchantName == null || merchantName.isEmpty)
+              ? _defaultMerchantName
+              : merchantName,
+          appUserId:
+              (appUserId == null || appUserId.isEmpty) ? null : appUserId,
+          subscriptionStatus:
+              (subscriptionStatus == null || subscriptionStatus.isEmpty)
+                  ? _defaultSubscriptionStatus
+                  : subscriptionStatus,
+        );
+      } on FirebaseException catch (e, st) {
+        // Discovery by phone is optional; keep auth flow running when Firestore blocks it.
+        AppErrorReporter.report(
+          e,
+          st,
+          hint: 'auth_find_merchant_by_phone:${e.code}',
+        );
+        return null;
+      } catch (e, st) {
+        AppErrorReporter.report(e, st, hint: 'auth_find_merchant_by_phone');
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  Future<MapEntry<String, Map<String, dynamic>>?> _findMerchantByLinkCode(
+    FirebaseFirestore firestore, {
+    required String normalizedCode,
+    required String rawCode,
+  }) async {
+    var query = await firestore
+        .collection('businesses')
+        .where('link_code_normalized', isEqualTo: normalizedCode)
+        .limit(1)
+        .get();
+    if (query.docs.isNotEmpty) {
+      final doc = query.docs.first;
+      return MapEntry(doc.id, doc.data());
+    }
+
+    if (rawCode.isNotEmpty) {
+      query = await firestore
           .collection('businesses')
-          .where('phone', isEqualTo: candidate)
+          .where('link_code', isEqualTo: rawCode)
           .limit(1)
           .get();
-      if (query.docs.isEmpty) {
-        continue;
+      if (query.docs.isNotEmpty) {
+        final doc = query.docs.first;
+        return MapEntry(doc.id, doc.data());
       }
 
-      final doc = query.docs.first;
-      final data = doc.data();
-      final merchantName = (data['merchant_name'] as String?)?.trim();
-      final appUserId = (data['owner_user_id'] as String?)?.trim();
-      final subscriptionStatus =
-          (data['subscription_status'] as String?)?.trim();
-
-      return _ExistingMerchantData(
-        merchantId: doc.id,
-        merchantName: (merchantName == null || merchantName.isEmpty)
-            ? _defaultMerchantName
-            : merchantName,
-        appUserId: (appUserId == null || appUserId.isEmpty) ? null : appUserId,
-        subscriptionStatus:
-            (subscriptionStatus == null || subscriptionStatus.isEmpty)
-                ? _defaultSubscriptionStatus
-                : subscriptionStatus,
-      );
+      final directDoc =
+          await firestore.collection('businesses').doc(rawCode).get();
+      if (directDoc.exists) {
+        return MapEntry(directDoc.id, directDoc.data() ?? <String, dynamic>{});
+      }
     }
 
     return null;
@@ -420,8 +579,23 @@ class AuthRepository {
     final merchantSlug = _buildMerchantSlug(merchantPhone);
     final planDefinition = PlanCatalog.fromCode('starter');
     final window = _monthlyWindow(DateTime.now());
+    final storedRole = _normalizeAppUserRole(await _storage.getAppUserRole()) ??
+        _defaultAppUserRole;
+    var resolvedRole = storedRole;
 
     await db.transaction((txn) async {
+      final existingUser = await txn.query(
+        'app_users',
+        columns: ['role'],
+        where: 'id = ? AND merchant_id = ?',
+        whereArgs: [session.resolvedAppUserId, merchantId],
+        limit: 1,
+      );
+      final existingRole = existingUser.isEmpty
+          ? null
+          : _normalizeAppUserRole(existingUser.first['role'] as String?);
+      resolvedRole = existingRole ?? storedRole;
+
       await txn.insert(
           'merchants',
           {
@@ -454,7 +628,9 @@ class AuthRepository {
             'id': session.resolvedAppUserId,
             'merchant_id': merchantId,
             'phone': merchantPhone,
-            'role': 'OWNER',
+            'role': resolvedRole,
+            'status': 'ACTIVE',
+            'accepted_at': now,
             'created_at': now,
             'updated_at': now,
             'last_login_at': now,
@@ -466,6 +642,8 @@ class AuthRepository {
         {
           'merchant_id': merchantId,
           'phone': merchantPhone,
+          'role': resolvedRole,
+          'accepted_at': now,
           'updated_at': now,
           'last_login_at': now,
         },
@@ -543,6 +721,19 @@ class AuthRepository {
         deviceId: session.deviceId,
       );
     });
+
+    await _storage.saveAppUserRole(resolvedRole);
+  }
+
+  String? _normalizeAppUserRole(String? role) {
+    final normalized = role?.trim().toUpperCase();
+    if (normalized == AppConstants.appUserRoleStaff) {
+      return AppConstants.appUserRoleStaff;
+    }
+    if (normalized == AppConstants.appUserRoleOwner) {
+      return AppConstants.appUserRoleOwner;
+    }
+    return null;
   }
 
   _UsageWindow _monthlyWindow(DateTime now) {
@@ -564,16 +755,36 @@ class AuthRepository {
         : session.merchantName.trim();
     final now = DateTime.now().millisecondsSinceEpoch;
 
-    await firestore.collection('businesses').doc(merchantId).set({
+    final businessRef = firestore.collection('businesses').doc(merchantId);
+    final existingBusiness = await businessRef.get();
+    final existingData = existingBusiness.data() ?? <String, dynamic>{};
+    final existingOwnerUserId =
+        (existingData['owner_user_id'] as String?)?.trim() ?? '';
+    final existingFirebaseUid =
+        (existingData['firebase_uid'] as String?)?.trim() ?? '';
+    final existingCreatedAt =
+        (existingData['created_at'] as num?)?.toInt() ?? now;
+    final existingLinkCode = (existingData['link_code'] as String?)?.trim();
+    final linkCode = (existingLinkCode != null && existingLinkCode.isNotEmpty)
+        ? existingLinkCode
+        : _buildDeviceLinkCode(merchantId);
+
+    await businessRef.set({
       'id': merchantId,
       'merchant_name': merchantName,
       'phone': session.phone,
       'subscription_status': session.subscriptionStatus,
-      'owner_user_id': session.resolvedAppUserId,
-      'firebase_uid': session.firebaseUid,
+      'owner_user_id': existingOwnerUserId.isNotEmpty
+          ? existingOwnerUserId
+          : session.resolvedAppUserId,
+      'firebase_uid': existingFirebaseUid.isNotEmpty
+          ? existingFirebaseUid
+          : session.firebaseUid,
       'device_id': session.deviceId,
+      'link_code': linkCode,
+      'link_code_normalized': _normalizeLinkCode(linkCode),
       'updated_at': now,
-      'created_at': now,
+      'created_at': existingCreatedAt,
     }, SetOptions(merge: true));
 
     await _seedPolicyDocuments(
@@ -582,6 +793,21 @@ class AuthRepository {
       subscriptionStatus: session.subscriptionStatus,
       now: now,
     );
+  }
+
+  String _normalizeLinkCode(String value) {
+    return value.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+  }
+
+  String _buildDeviceLinkCode(String merchantId) {
+    final cleaned =
+        merchantId.trim().toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final padded = cleaned.isEmpty
+        ? 'BARB0000'
+        : cleaned.length >= 8
+            ? cleaned.substring(cleaned.length - 8)
+            : cleaned.padLeft(8, '0');
+    return '${padded.substring(0, 4)}-${padded.substring(4, 8)}';
   }
 
   Future<void> _seedPolicyDocuments(

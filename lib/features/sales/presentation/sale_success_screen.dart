@@ -299,16 +299,15 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         featureKey: FeatureKeys.whatsappAutomation,
         metricKey: UsageMetrics.whatsappMessages,
       );
+      if (!mounted) return;
       if (!decision.allowed) {
-        if (context.mounted) {
-          AppFeedback.showMessage(
-            context,
-            message: AppStrings.funcaoIndisponivel,
-          );
-        }
+        AppFeedback.showMessage(
+          context,
+          message: AppStrings.funcaoIndisponivel,
+        );
         return;
       }
-      if (decision.softLimited && context.mounted) {
+      if (decision.softLimited) {
         AppFeedback.showMessage(context, message: AppStrings.limiteSoftAviso);
       }
 
@@ -328,9 +327,8 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
             properties: {'queued': true, 'source': 'sale_success'},
           );
         } catch (_) {}
-        if (context.mounted) {
-          AppFeedback.showMessage(context, message: AppStrings.whatsappQueued);
-        }
+        if (!mounted) return;
+        AppFeedback.showMessage(context, message: AppStrings.whatsappQueued);
         return;
       }
 
@@ -344,7 +342,8 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         url,
         mode: LaunchMode.externalApplication,
       );
-      if (!launched && context.mounted) {
+      if (!mounted) return;
+      if (!launched) {
         AppFeedback.showMessage(
           context,
           message: 'Não foi possível abrir o WhatsApp neste dispositivo.',
@@ -364,9 +363,8 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
             properties: {'queued': false, 'source': 'sale_success'},
           );
         } catch (_) {}
-        if (context.mounted) {
-          AppFeedback.showMessage(context, message: AppStrings.whatsappSent);
-        }
+        if (!mounted) return;
+        AppFeedback.showMessage(context, message: AppStrings.whatsappSent);
       }
     } finally {
       if (mounted) {

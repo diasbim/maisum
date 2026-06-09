@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -13,8 +14,44 @@ import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/pin_pad.dart';
 import '../../../core/widgets/pin_verification_feedback.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../subscription/data/firestore_plan_offers.dart';
 import '../../subscription/domain/plan.dart';
 import '../../subscription/domain/plan_catalog.dart';
+
+final businessLinkCodeProvider = FutureProvider<String?>((ref) async {
+  final session = ref.watch(authControllerProvider).valueOrNull;
+  if (session == null) {
+    return null;
+  }
+
+  try {
+    final doc = await ref
+        .read(firestoreInstanceProvider)
+        .collection('businesses')
+        .doc(session.resolvedMerchantId)
+        .get();
+    final data = doc.data() ?? <String, dynamic>{};
+
+    final rawCode = (data['link_code'] as String?)?.trim();
+    if (rawCode != null && rawCode.isNotEmpty) {
+      return rawCode;
+    }
+
+    final normalizedCode = (data['link_code_normalized'] as String?)?.trim();
+    if (normalizedCode != null && normalizedCode.isNotEmpty) {
+      final compact =
+          normalizedCode.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+      if (compact.length == 8) {
+        return '${compact.substring(0, 4)}-${compact.substring(4)}';
+      }
+      return compact;
+    }
+  } catch (_) {
+    return null;
+  }
+
+  return null;
+});
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -23,6 +60,10 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final session = ref.watch(authControllerProvider).valueOrNull;
+    final isOwner = ref.watch(isOwnerUserProvider).valueOrNull ?? true;
+    final appUserRole = ref.watch(activeAppUserRoleProvider).valueOrNull ??
+        AppConstants.appUserRoleOwner;
+    final businessLinkCode = ref.watch(businessLinkCodeProvider).valueOrNull;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
@@ -50,30 +91,88 @@ class SettingsScreen extends ConsumerWidget {
               title: AppStrings.phoneNumber,
               subtitle: session.phone,
             ),
+            if (isOwner)
+              _SettingsTile(
+                icon: Icons.groups_rounded,
+                iconColor: AppColors.secondary,
+                title: 'Gestao de Staff',
+                subtitle: 'Convidar, criar e ativar/desativar membros',
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.g300,
+                  size: 20,
+                ),
+                onTap: () => context.push('/staff-management'),
+              ),
+            if (isOwner)
+              _SettingsTile(
+                icon: Icons.qr_code_rounded,
+                iconColor: AppColors.primaryDark,
+                title: 'Codigo da barbearia',
+                subtitle: businessLinkCode ?? 'A gerar codigo...',
+                trailing: const Icon(
+                  Icons.content_copy_rounded,
+                  color: AppColors.g300,
+                  size: 18,
+                ),
+                onTap: () async {
+                  final code = businessLinkCode;
+                  if (code == null || code.trim().isEmpty) {
+                    AppFeedback.showMessage(
+                      context,
+                      message: 'Codigo indisponivel neste momento.',
+                      isError: true,
+                    );
+                    return;
+                  }
+                  await Clipboard.setData(ClipboardData(text: code));
+                  if (!context.mounted) return;
+                  AppFeedback.showMessage(
+                    context,
+                    message: 'Codigo copiado: $code',
+                  );
+                },
+              ),
+            if (!isOwner)
+              _SettingsTile(
+                icon: Icons.link_rounded,
+                iconColor: AppColors.primaryDark,
+                title: 'Vincular dispositivo',
+                subtitle: 'Entrar por codigo da barbearia',
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.g300,
+                  size: 20,
+                ),
+                onTap: () => context.push('/link-device'),
+              ),
             _SettingsTile(
               icon: Icons.verified_user_rounded,
               iconColor: AppColors.green,
               title: AppStrings.subscricao,
               subtitle: _formatSubscriptionStatus(session.subscriptionStatus),
-              trailing: const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.g300,
-                size: 20,
-              ),
-              onTap: () => _showPlanPicker(context, ref),
+              trailing: isOwner
+                  ? const Icon(
+                      Icons.chevron_right_rounded,
+                      color: AppColors.g300,
+                      size: 20,
+                    )
+                  : null,
+              onTap: isOwner ? () => context.push('/onboarding-plan') : null,
             ),
-            _SettingsTile(
-              icon: Icons.admin_panel_settings_rounded,
-              iconColor: AppColors.primaryDark,
-              title: AppStrings.subscricaoAdmin,
-              subtitle: AppStrings.subscricaoAdminDesc,
-              trailing: const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.g300,
-                size: 20,
+            if (isOwner)
+              _SettingsTile(
+                icon: Icons.admin_panel_settings_rounded,
+                iconColor: AppColors.primaryDark,
+                title: AppStrings.subscricaoAdmin,
+                subtitle: AppStrings.subscricaoAdminDesc,
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.g300,
+                  size: 20,
+                ),
+                onTap: () => context.push('/subscription-admin'),
               ),
-              onTap: () => context.push('/subscription-admin'),
-            ),
             const _Section(AppStrings.identificadores),
             _SettingsTile(
               icon: Icons.badge_outlined,
@@ -86,6 +185,12 @@ class SettingsScreen extends ConsumerWidget {
               iconColor: AppColors.secondary,
               title: AppStrings.appUserId,
               subtitle: session.resolvedAppUserId,
+            ),
+            _SettingsTile(
+              icon: Icons.security_rounded,
+              iconColor: AppColors.primaryDark,
+              title: 'Perfil',
+              subtitle: appUserRole,
             ),
             if (session.deviceId != null && session.deviceId!.isNotEmpty)
               _SettingsTile(
@@ -218,7 +323,23 @@ class SettingsScreen extends ConsumerWidget {
 
     try {
       final snapshot = await ref.read(subscriptionSnapshotProvider.future);
+      final planOffers = await _loadPlanOffers(ref);
       if (!context.mounted) return;
+      if (planOffers.isEmpty) {
+        AppFeedback.showMessage(
+          context,
+          message: 'Nenhum plano disponivel no momento.',
+          isError: true,
+        );
+        return;
+      }
+
+      final offerByPlan = <Plan, PlanOffer>{};
+      for (final offer in planOffers) {
+        offerByPlan.putIfAbsent(offer.plan, () => offer);
+      }
+
+      final currentOffer = offerByPlan[snapshot.plan];
 
       final selectedPlan = await showModalBottomSheet<Plan>(
         context: context,
@@ -227,8 +348,7 @@ class SettingsScreen extends ConsumerWidget {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         builder: (sheetContext) {
-          final plans =
-              Plan.values.where((plan) => plan != Plan.growth).toList();
+          final plans = offerByPlan.keys.toList();
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -250,24 +370,33 @@ class SettingsScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                'Plano atual: ${PlanCatalog.forPlan(snapshot.plan).displayName}',
+                'Plano atual: ${currentOffer?.displayName ?? PlanCatalog.forPlan(snapshot.plan).displayName}',
                 style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
                       color: AppColors.onSurfaceVariant,
                     ),
               ),
               const SizedBox(height: 10),
               ...plans.map(
-                (plan) => ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                  title: Text(PlanCatalog.forPlan(plan).displayName),
-                  trailing: snapshot.plan == plan
-                      ? const Icon(
-                          Icons.check_circle_rounded,
-                          color: AppColors.green,
-                        )
-                      : null,
-                  onTap: () => Navigator.of(sheetContext).pop(plan),
-                ),
+                (plan) {
+                  final offer = offerByPlan[plan];
+                  final planName = offer?.displayName ??
+                      PlanCatalog.forPlan(plan).displayName;
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                    title: Text(planName),
+                    subtitle: Text(_formatPlanPrice(
+                      offer?.priceCents,
+                      currency: offer?.currency,
+                    )),
+                    trailing: snapshot.plan == plan
+                        ? const Icon(
+                            Icons.check_circle_rounded,
+                            color: AppColors.green,
+                          )
+                        : null,
+                    onTap: () => Navigator.of(sheetContext).pop(plan),
+                  );
+                },
               ),
               const SizedBox(height: 8),
             ],
@@ -286,6 +415,7 @@ class SettingsScreen extends ConsumerWidget {
       }
 
       final session = ref.read(authControllerProvider).valueOrNull;
+      final selectedOffer = offerByPlan[selectedPlan];
       await ref.read(subscriptionRepositoryProvider).switchPlan(
             merchantId: merchantId,
             plan: selectedPlan,
@@ -297,7 +427,7 @@ class SettingsScreen extends ConsumerWidget {
       AppFeedback.showMessage(
         context,
         message:
-            'Plano alterado para ${PlanCatalog.forPlan(selectedPlan).displayName}.',
+            'Plano alterado para ${selectedOffer?.displayName ?? PlanCatalog.forPlan(selectedPlan).displayName}.',
         isError: false,
       );
     } catch (_) {
@@ -308,6 +438,36 @@ class SettingsScreen extends ConsumerWidget {
         isError: true,
       );
     }
+  }
+
+  Future<List<PlanOffer>> _loadPlanOffers(WidgetRef ref) async {
+    final firestore = ref.read(firestoreInstanceProvider);
+    final offers = await fetchActivePlanOffers(firestore);
+    if (offers.isNotEmpty) {
+      return offers;
+    }
+
+    final reader = ref.read(remoteConfigReaderProvider);
+    final fallbackPlans = Plan.values.where((plan) => plan != Plan.growth);
+    final fallbackEntries = await Future.wait(
+      fallbackPlans.map((plan) async {
+        final override = await reader.getPricingOverride(plan.code);
+        final definition = PlanCatalog.forPlan(plan);
+        return PlanOffer(
+          plan: plan,
+          code: plan.code,
+          displayName: definition.displayName,
+          priceCents: override?.priceCents,
+          currency: (override?.currency ?? 'BRL').toUpperCase(),
+          billingInterval: override?.billingInterval ?? 'monthly',
+          features: definition.features,
+          whatsappMonthlyLimit: definition.whatsappMonthlyLimit,
+          sortOrder: 999,
+        );
+      }),
+    );
+
+    return fallbackEntries;
   }
 
   Future<void> _showPinVerifySheet(BuildContext context, WidgetRef ref) async {
@@ -356,6 +516,22 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+String _formatPlanPrice(int? priceCents, {String? currency}) {
+  if (priceCents == null || priceCents < 0) {
+    return 'Preco sob consulta';
+  }
+  final symbol = (currency?.toUpperCase() ?? 'BRL') == 'BRL'
+      ? 'R\$'
+      : (currency?.toUpperCase() ?? 'R\$');
+  final major = priceCents ~/ 100;
+  final minor = (priceCents % 100).abs();
+  final majorLabel = major.toString();
+  if (minor == 0) {
+    return '$symbol $majorLabel';
+  }
+  return '$symbol $majorLabel,${minor.toString().padLeft(2, '0')}';
 }
 
 class _Section extends StatelessWidget {

@@ -38,6 +38,25 @@ class SecureStorageService {
   Future<String?> getAppUserId() =>
       _storage.read(key: AppConstants.appUserIdKey, aOptions: _androidOptions);
 
+  Future<void> saveAppUserRole(String role) => _storage.write(
+        key: AppConstants.appUserRoleKey,
+        value: role,
+        aOptions: _androidOptions,
+      );
+
+  Future<String?> getAppUserRole() => _storage.read(
+        key: AppConstants.appUserRoleKey,
+        aOptions: _androidOptions,
+      );
+
+  Future<bool> isOwnerUser() async {
+    final role = await getAppUserRole();
+    if (role == null || role.trim().isEmpty) {
+      return true;
+    }
+    return role.trim().toUpperCase() == AppConstants.appUserRoleOwner;
+  }
+
   Future<void> saveUserPhone(String phone) => _storage.write(
         key: AppConstants.userPhoneKey,
         value: phone,
@@ -186,6 +205,25 @@ class SecureStorageService {
       key: AppConstants.smsPermissionPromptedKey,
       aOptions: _androidOptions,
     );
+    return raw == '1';
+  }
+
+  // Onboarding plan selection
+  Future<void> setOnboardingPlanConfirmed(bool value) => _storage.write(
+        key: AppConstants.onboardingPlanConfirmedKey,
+        value: value ? '1' : '0',
+        aOptions: _androidOptions,
+      );
+
+  Future<bool> hasConfirmedOnboardingPlan() async {
+    final raw = await _storage.read(
+      key: AppConstants.onboardingPlanConfirmedKey,
+      aOptions: _androidOptions,
+    );
+    // Legacy users may not have this key, so treat missing state as already confirmed.
+    if (raw == null) {
+      return true;
+    }
     return raw == '1';
   }
 }

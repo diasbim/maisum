@@ -14,6 +14,7 @@ class AppointmentDao {
     required String customerId,
     required DateTime scheduledDate,
     required String source,
+    String? appUserId,
   }) async {
     final db = await _db.database;
     final now = DateTime.now();
@@ -32,6 +33,8 @@ class AppointmentDao {
     await db.insert('appointments', {
       ...appointment.toJson(),
       'merchant_id': merchantId,
+      'created_by_app_user_id': appUserId,
+      'updated_by_app_user_id': appUserId,
     });
 
     return appointment;
@@ -54,6 +57,7 @@ class AppointmentDao {
     DateTime? scheduledDate,
     String? status,
     bool? reminderSent,
+    String? appUserId,
   }) async {
     final db = await _db.database;
     final payload = <String, Object?>{
@@ -68,6 +72,9 @@ class AppointmentDao {
     }
     if (reminderSent != null) {
       payload['reminder_sent'] = reminderSent ? 1 : 0;
+    }
+    if (appUserId != null && appUserId.trim().isNotEmpty) {
+      payload['updated_by_app_user_id'] = appUserId.trim();
     }
 
     await db.update(

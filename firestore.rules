@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.is_admin == true ||
+        request.auth.token.role == 'admin'
+      );
+    }
+
+    function hasOwnerClaim() {
+      return isSignedIn() && (
+        request.auth.token.app_user_role == 'OWNER' ||
+        request.auth.token.appUserRole == 'OWNER' ||
+        request.auth.token.role == 'OWNER'
+      );
+    }
+
+    function hasStaffClaim() {
+      return isSignedIn() && (
+        request.auth.token.app_user_role == 'STAFF' ||
+        request.auth.token.appUserRole == 'STAFF' ||
+        request.auth.token.role == 'STAFF'
+      );
+    }
+
+    function businessDoc(merchantId) {
+      return get(/databases/$(database)/documents/businesses/$(merchantId));
+    }
+
+    function isBusinessOwner(merchantId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/businesses/$(merchantId)) && (
+          businessDoc(merchantId).data.owner_user_id == request.auth.uid ||
+          businessDoc(merchantId).data.firebase_uid == request.auth.uid
+        );
+    }
+
+    function canAccessBusiness(merchantId) {
+      return isAdmin() || hasOwnerClaim() || hasStaffClaim() || isBusinessOwner(merchantId);
+    }
+
+    function canBootstrapBusiness(merchantId) {
+      return isSignedIn() && (
+        merchantId == request.auth.uid ||
+        request.resource.data.owner_user_id == request.auth.uid ||
+        request.resource.data.firebase_uid == request.auth.uid
+      );
+    }
+
+    function isOwnerOnlyCollection(collectionId) {
+      return collectionId in [
+        'subscription_state',
+        'entitlements',
+        'feature_flags',
+        'remote_config',
+        'app_users'
+      ];
+    }
+
+    function isOperationalCollection(collectionId) {
+      return collectionId in [
+        'customers',
+        'sales',
+        'rewards',
+        'redemptions',
+        'appointments',
+        'retention_metrics',
+        'customer_risk_scores',
+        'recovery_tasks',
+        'recovery_actions',
+        'visit_reports',
+        'surveys',
+        'survey_questions',
+        'survey_responses',
+        'survey_response_answers',
+        'usage_balances',
+        'usage_events',
+        'notification_queue'
+      ];
+    }
+
+    match /businesses/{merchantId} {
+      // Entry flow query by phone uses limit(1); keep narrow list access.
+      allow list: if isSignedIn() && request.query.limit != null && request.query.limit <= 1;
+      allow get: if canAccessBusiness(merchantId);
+      allow create: if canBootstrapBusiness(merchantId) || canAccessBusiness(merchantId);
+      allow update, delete: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId);
+
+      // Owner-only policy/config collections.
+      match /{collectionId}/{docId} {
+        allow read: if canAccessBusiness(merchantId);
+
+        allow write: if isOwnerOnlyCollection(collectionId) &&
+          (isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId));
+
+        allow write: if isOperationalCollection(collectionId) &&
+          (canAccessBusiness(merchantId) || canBootstrapBusiness(merchantId));
+      }
+    }
+
+    // Global plan catalog used by onboarding/settings plan selectors.
+    match /plans/{planId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

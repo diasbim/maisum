@@ -6,6 +6,14 @@ Offline-first loyalty app for barbershops in Maputo, Mozambique. Barbers registe
 
 Future features are evaluated through a strict decision framework before they enter the roadmap. See `docs/feature_decision_framework.md`.
 
+App-wide module decisions are tracked in `docs/app_feature_decision_register.md`.
+
+Validate register coverage locally:
+
+```bash
+dart run tool/check_feature_decision_register.dart
+```
+
 ## GitHub Pages Deployment
 
 This repository deploys the static landing page from `docs/` to GitHub Pages via GitHub Actions.

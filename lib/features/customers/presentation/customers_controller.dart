@@ -28,17 +28,16 @@ class CustomersController extends AsyncNotifier<List<Customer>> {
     required String name,
     required String phone,
   }) async {
-    if (name.trim().isEmpty) throw ArgumentError(AppStrings.nameRequired);
-    final existing =
-        await ref.read(customerRepositoryProvider).findByPhone(phone);
-    if (existing != null) {
-      throw const DatabaseException(AppStrings.customerPhoneDuplicate);
-    }
+    final trimmedName = name.trim();
+    final trimmedPhone = phone.trim();
+    if (trimmedName.isEmpty) throw ArgumentError(AppStrings.nameRequired);
+
     try {
       final customer = await ref
           .read(customerRepositoryProvider)
-          .createCustomer(name: name, phone: phone);
+          .createCustomer(name: trimmedName, phone: trimmedPhone);
       state = await AsyncValue.guard(_load);
+      ref.read(syncServiceProvider).processQueue();
       return customer;
     } on sqflite.DatabaseException catch (e) {
       final raw = e.toString().toLowerCase();
@@ -55,16 +54,14 @@ class CustomersController extends AsyncNotifier<List<Customer>> {
     required String name,
     required String phone,
   }) async {
-    if (name.trim().isEmpty) throw ArgumentError(AppStrings.nameRequired);
-    final existing =
-        await ref.read(customerRepositoryProvider).findByPhone(phone);
-    if (existing != null && existing.id != id) {
-      throw const DatabaseException(AppStrings.customerPhoneDuplicate);
-    }
+    final trimmedName = name.trim();
+    final trimmedPhone = phone.trim();
+    if (trimmedName.isEmpty) throw ArgumentError(AppStrings.nameRequired);
+
     try {
       await ref
           .read(customerRepositoryProvider)
-          .updateCustomer(id, name: name, phone: phone);
+          .updateCustomer(id, name: trimmedName, phone: trimmedPhone);
     } on sqflite.DatabaseException catch (e) {
       final raw = e.toString().toLowerCase();
       if (raw.contains('idx_customers_scope_phone') ||

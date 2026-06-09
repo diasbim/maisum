@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -12,7 +12,9 @@ import 'post_auth_navigation.dart';
 import 'phone_auth_screen.dart';
 
 class PinSetupScreen extends ConsumerStatefulWidget {
-  const PinSetupScreen({super.key});
+  const PinSetupScreen({super.key, this.nextRoute});
+
+  final String? nextRoute;
 
   @override
   ConsumerState<PinSetupScreen> createState() => _PinSetupScreenState();
@@ -97,7 +99,13 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
       });
       await Future.delayed(const Duration(milliseconds: 700));
       if (!mounted) return;
-      final route = await resolvePostAuthRoute(ref);
+      final requestedRoute = widget.nextRoute?.trim();
+      final hasRequestedRoute =
+          requestedRoute != null && requestedRoute.startsWith('/');
+      final route =
+          hasRequestedRoute
+            ? requestedRoute
+            : await resolvePostAuthRoute(ref.read);
       if (mounted) context.go(route);
     } else {
       setState(() {

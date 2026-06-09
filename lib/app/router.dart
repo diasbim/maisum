@@ -8,8 +8,12 @@ import '../features/auth/presentation/otp_verification_screen.dart';
 import '../features/auth/presentation/phone_auth_screen.dart';
 import '../features/auth/presentation/pin_entry_screen.dart';
 import '../features/auth/presentation/pin_setup_screen.dart';
+import '../features/auth/presentation/device_link_screen.dart';
+import '../features/auth/presentation/onboarding_entry_screen.dart';
+import '../features/auth/presentation/post_auth_navigation.dart';
 import '../features/auth/presentation/splash_screen.dart';
 import '../features/customers/presentation/customer_detail_screen.dart';
+import '../features/customers/presentation/customer_create_screen.dart';
 import '../features/customers/presentation/customer_list_screen.dart';
 import '../features/dashboard/presentation/dashboard_screen.dart';
 import '../features/engage/presentation/engage_dashboard_screen.dart';
@@ -28,8 +32,10 @@ import '../features/legal/presentation/privacy_screen.dart';
 import '../features/legal/presentation/terms_screen.dart';
 import '../features/settings/presentation/merchant_config_screen.dart';
 import '../features/settings/presentation/settings_screen.dart';
+import '../features/settings/presentation/staff_management_screen.dart';
 import '../features/appointments/presentation/appointments_screen.dart';
 import '../features/subscription/presentation/subscription_admin_screen.dart';
+import '../features/subscription/presentation/onboarding_plan_selection_screen.dart';
 import '../features/sync/presentation/pending_sync_screen.dart';
 
 const _publicRoutes = {
@@ -38,6 +44,38 @@ const _publicRoutes = {
   '/otp',
   '/pin-setup',
   '/pin-entry',
+  '/terms',
+  '/privacy',
+};
+
+const _planOnboardingBypassRoutes = {
+  '/splash',
+  '/login',
+  '/otp',
+  '/pin-setup',
+  '/pin-entry',
+  '/onboarding-entry',
+  '/link-device',
+  '/merchant-config',
+  '/onboarding-plan',
+  '/terms',
+  '/privacy',
+};
+
+const _ownerOnlyRoutes = {
+  '/subscription-admin',
+  '/staff-management',
+};
+
+const _merchantOnboardingBypassRoutes = {
+  '/splash',
+  '/login',
+  '/otp',
+  '/pin-setup',
+  '/pin-entry',
+  '/onboarding-entry',
+  '/link-device',
+  '/merchant-config',
   '/terms',
   '/privacy',
 };
@@ -54,8 +92,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: authNotifier,
     redirect: (context, state) async {
-      final isPublic =
-          _publicRoutes.contains(state.matchedLocation) ||
+      final isPublic = _publicRoutes.contains(state.matchedLocation) ||
           state.matchedLocation.startsWith('/otp');
       final isAuthenticated =
           ref.read(authControllerProvider).valueOrNull != null;
@@ -63,8 +100,41 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!isAuthenticated && !isPublic) return '/login';
       if (isAuthenticated && state.matchedLocation == '/login') {
         final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
-        return hasPin ? '/pin-entry' : '/pin-setup';
+        if (hasPin) return '/pin-entry';
+        return resolvePostAuthRoute(ref.read);
       }
+
+      if (isAuthenticated) {
+        final canAccessWithoutMerchantLink =
+            _merchantOnboardingBypassRoutes.contains(state.matchedLocation) ||
+                state.matchedLocation.startsWith('/otp');
+        if (!canAccessWithoutMerchantLink) {
+          final resolvedRoute = await resolvePostAuthRoute(ref.read);
+          if (resolvedRoute == '/onboarding-entry') {
+            return '/onboarding-entry';
+          }
+        }
+
+        if (_ownerOnlyRoutes.contains(state.matchedLocation)) {
+          final isOwner =
+              await ref.read(secureStorageServiceProvider).isOwnerUser();
+          if (!isOwner) {
+            return '/dashboard';
+          }
+        }
+
+        final hasConfirmedPlan = await ref
+            .read(secureStorageServiceProvider)
+            .hasConfirmedOnboardingPlan();
+        final canAccessWithoutPlanConfirmation =
+            _planOnboardingBypassRoutes.contains(state.matchedLocation) ||
+                state.matchedLocation.startsWith('/otp');
+
+        if (!hasConfirmedPlan && !canAccessWithoutPlanConfirmation) {
+          return '/onboarding-plan';
+        }
+      }
+
       return null;
     },
     routes: [
@@ -80,8 +150,25 @@ final routerProvider = Provider<GoRouter>((ref) {
           );
         },
       ),
-      GoRoute(path: '/pin-setup', builder: (_, __) => const PinSetupScreen()),
+      GoRoute(
+        path: '/pin-setup',
+        builder: (_, state) => PinSetupScreen(
+          nextRoute: state.uri.queryParameters['next'],
+        ),
+      ),
       GoRoute(path: '/pin-entry', builder: (_, __) => const PinEntryScreen()),
+      GoRoute(
+        path: '/onboarding-entry',
+        builder: (_, __) => const OnboardingEntryScreen(),
+      ),
+      GoRoute(
+        path: '/onboarding-plan',
+        builder: (_, __) => const OnboardingPlanSelectionScreen(),
+      ),
+      GoRoute(
+        path: '/link-device',
+        builder: (_, __) => const DeviceLinkScreen(),
+      ),
       GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
       GoRoute(
         path: '/new-sale',
@@ -104,6 +191,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const CustomerListScreen(),
         routes: [
           GoRoute(
+            path: 'create',
+            builder: (_, state) => CustomerCreateScreen(
+              returnRoute: state.uri.queryParameters['returnTo'],
+              resumeSaleFlow:
+                  state.uri.queryParameters['resumeSaleFlow'] == '1',
+            ),
+          ),
+          GoRoute(
             path: ':id',
             builder: (_, state) =>
                 CustomerDetailScreen(id: state.pathParameters['id']!),
@@ -114,7 +209,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/rewards',
         builder: (_, __) => const RewardsScreen(),
         routes: [
-          GoRoute(path: 'new', builder: (_, __) => const CreateRewardScreen()),
+          GoRoute(
+            path: 'new',
+            builder: (_, state) => CreateRewardScreen(
+              initialTemplateCode: state.uri.queryParameters['template'],
+            ),
+          ),
         ],
       ),
       GoRoute(path: '/sales', builder: (_, __) => const SalesHistoryScreen()),
@@ -155,6 +255,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const PendingSyncScreen(),
       ),
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
+      GoRoute(
+        path: '/staff-management',
+        builder: (_, __) => const StaffManagementScreen(),
+      ),
       GoRoute(
         path: '/subscription-admin',
         builder: (_, __) => const SubscriptionAdminScreen(),

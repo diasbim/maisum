@@ -27,8 +27,8 @@ class AppStrings {
   static const String novaVenda = 'Nova Venda';
   static const String clientes = 'Clientes';
   static const String recompensas = 'Recompensas';
-  static const String vendasHoje = 'Vendas hoje';
-  static const String pontosHoje = 'Pontos hoje';
+  static const String vendasHoje = 'Vendas Hoje';
+  static const String pontosHoje = 'Pontos Hoje';
   static const String pendentes = 'Pendentes';
   static const String dashboardGreetingPrefix = 'Olá,';
   static const String dashboardGreetingFallback = 'Vendedor';
@@ -56,8 +56,8 @@ class AppStrings {
   static const String dashboardStreakStatusRisk = 'Em risco';
   static const String dashboardStreakStatusStable = 'Estável';
   static const String dashboardSaleCardSubtitle =
-      'Registe uma venda e atribua pontos em segundos.';
-  static const String dashboardSaleCta = 'Registar venda';
+      'Registrar venda em menos de 5 segundos';
+  static const String dashboardSaleCta = 'Registrar Venda';
   static const String subscriptionNoStatus = 'Sem estado';
   static const String syncRetrying = 'A tentar novamente';
 

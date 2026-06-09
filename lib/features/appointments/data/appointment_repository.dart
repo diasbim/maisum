@@ -8,10 +8,11 @@ import '../domain/appointment.dart';
 import 'appointment_dao.dart';
 
 class AppointmentRepository {
-  AppointmentRepository(this._dao, this._syncDao);
+  AppointmentRepository(this._dao, this._syncDao, {this.appUserId});
 
   final AppointmentDao _dao;
   final SyncDao _syncDao;
+  final String? appUserId;
   static const _uuid = Uuid();
 
   Future<Appointment> createAppointment({
@@ -23,6 +24,7 @@ class AppointmentRepository {
       customerId: customerId,
       scheduledDate: scheduledDate,
       source: source,
+      appUserId: appUserId,
     );
 
     await _syncDao.enqueue(
@@ -50,6 +52,7 @@ class AppointmentRepository {
       scheduledDate: scheduledDate,
       status: status,
       reminderSent: reminderSent,
+      appUserId: appUserId,
     );
 
     final updated = await _dao.getById(id);
@@ -89,5 +92,7 @@ class AppointmentRepository {
   Map<String, dynamic> _payload(Appointment appointment) => {
         ...appointment.toJson(),
         'merchant_id': _dao.merchantId,
+        'created_by_app_user_id': appUserId,
+        'updated_by_app_user_id': appUserId,
       };
 }

@@ -84,7 +84,7 @@ class _RecoveryActionsScreenState extends ConsumerState<RecoveryActionsScreen> {
               ),
               const SizedBox(height: AppSpacing.md),
               DropdownButtonFormField<String>(
-                value: _actionType,
+                initialValue: _actionType,
                 items: RecoveryActionType.values
                     .map(
                       (value) =>

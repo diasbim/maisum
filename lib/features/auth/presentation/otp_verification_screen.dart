@@ -10,6 +10,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_feedback.dart';
 import 'auth_controller.dart';
+import 'post_auth_navigation.dart';
 import 'phone_auth_screen.dart';
 
 class OtpScreenArgs {
@@ -121,7 +122,13 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
           );
       if (!mounted) return;
       final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
-      if (mounted) context.go(hasPin ? '/pin-entry' : '/pin-setup');
+      if (!mounted) return;
+      if (hasPin) {
+        context.go('/pin-entry');
+        return;
+      }
+      final route = await resolvePostAuthRoute(ref.read);
+      if (mounted) context.go(route);
     } catch (e) {
       _submitInFlight = false;
       setState(() => _isVerifying = false);
@@ -315,12 +322,16 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                     const Spacer(),
                     const SizedBox(height: 16),
                     Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
                         children: [
-                          const Icon(Icons.lock_rounded,
-                              size: 13, color: AppColors.secondary),
-                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.lock_rounded,
+                            size: 13,
+                            color: AppColors.secondary,
+                          ),
                           Text(
                             'Código válido por 10 minutos',
                             style: theme.textTheme.labelSmall?.copyWith(
@@ -351,8 +362,10 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
 
   Widget _buildResendRow(ThemeData theme) {
     if (_resendTimer > 0) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
+      return Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 10,
         children: [
           SizedBox(
             width: 36,
@@ -377,7 +390,6 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
               ],
             ),
           ),
-          const SizedBox(width: 10),
           Text(
             'Reenviar código',
             style: theme.textTheme.bodySmall?.copyWith(

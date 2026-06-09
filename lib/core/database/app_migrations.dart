@@ -92,6 +92,16 @@ class AppMigrations {
       name: 'engage foundation tables',
       up: _createV18Schema,
     ),
+    const MigrationStep(
+      version: 19,
+      name: 'staff lifecycle fields',
+      up: _createV19Schema,
+    ),
+    const MigrationStep(
+      version: 20,
+      name: 'record authorship fields',
+      up: _createV20Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -123,13 +133,12 @@ class _MigrationRunner {
     required int fromVersion,
     required int toVersion,
   }) async {
-    final pending =
-        steps
-            .where(
-              (step) => step.version > fromVersion && step.version <= toVersion,
-            )
-            .toList()
-          ..sort((a, b) => a.version.compareTo(b.version));
+    final pending = steps
+        .where(
+          (step) => step.version > fromVersion && step.version <= toVersion,
+        )
+        .toList()
+      ..sort((a, b) => a.version.compareTo(b.version));
 
     if (pending.isEmpty) return;
 
@@ -170,11 +179,14 @@ class _MigrationRunner {
   }
 
   Future<void> _recordApplied(DatabaseExecutor db, MigrationStep step) async {
-    await db.insert('migration_log', {
-      'version': step.version,
-      'name': step.name,
-      'applied_at': DateTime.now().millisecondsSinceEpoch,
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await db.insert(
+        'migration_log',
+        {
+          'version': step.version,
+          'name': step.name,
+          'applied_at': DateTime.now().millisecondsSinceEpoch,
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 }
 
@@ -391,6 +403,8 @@ class _SchemaVerifier {
       await _createV16Schema(txn);
       await _createV17Schema(txn);
       await _createV18Schema(txn);
+      await _createV19Schema(txn);
+      await _createV20Schema(txn);
     });
   }
 
@@ -1117,6 +1131,48 @@ Future<void> _createV18Schema(DatabaseExecutor db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_survey_response_answers_synced ON survey_response_answers(merchant_id, synced)',
   );
+}
+
+Future<void> _createV19Schema(DatabaseExecutor db) async {
+  await _addColumnIfMissing(
+    db,
+    'app_users',
+    "status TEXT NOT NULL DEFAULT 'ACTIVE'",
+  );
+  await _addColumnIfMissing(db, 'app_users', 'invited_at INTEGER');
+  await _addColumnIfMissing(db, 'app_users', 'accepted_at INTEGER');
+  await _addColumnIfMissing(db, 'app_users', 'invited_by_app_user_id TEXT');
+  await _addColumnIfMissing(db, 'app_users', 'deactivated_at INTEGER');
+
+  await db.execute(
+    "UPDATE app_users SET status = 'ACTIVE' WHERE status IS NULL OR status = ''",
+  );
+  await db.execute(
+    'UPDATE app_users SET accepted_at = COALESCE(accepted_at, last_login_at, created_at)',
+  );
+
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_app_users_merchant_status ON app_users(merchant_id, status)',
+  );
+}
+
+Future<void> _createV20Schema(DatabaseExecutor db) async {
+  const tables = [
+    'sales',
+    'appointments',
+    'recovery_tasks',
+    'recovery_actions',
+    'visit_reports',
+    'surveys',
+    'survey_questions',
+    'survey_responses',
+    'survey_response_answers',
+  ];
+
+  for (final table in tables) {
+    await _addColumnIfMissing(db, table, 'created_by_app_user_id TEXT');
+    await _addColumnIfMissing(db, table, 'updated_by_app_user_id TEXT');
+  }
 }
 
 Future<void> _addColumnIfMissing(

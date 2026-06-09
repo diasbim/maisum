@@ -31,7 +31,8 @@ void main() {
 
     test('throws on duplicate phone (UNIQUE constraint)', () async {
       await dao.create(name: 'A', phone: '840000003');
-      expect(() => dao.create(name: 'B', phone: '840000003'), throwsA(anything));
+      expect(
+          () => dao.create(name: 'B', phone: '840000003'), throwsA(anything));
     });
   });
 
@@ -124,6 +125,24 @@ void main() {
     });
   });
 
+  group('getCount', () {
+    test('returns zero when there are no customers', () async {
+      expect(await dao.getCount(), 0);
+    });
+
+    test('returns one when there is one customer', () async {
+      await dao.create(name: 'Marta', phone: '841999001');
+      expect(await dao.getCount(), 1);
+    });
+
+    test('returns many when multiple customers exist', () async {
+      await dao.create(name: 'Marta', phone: '841999001');
+      await dao.create(name: 'Noe', phone: '841999002');
+      await dao.create(name: 'Paulo', phone: '841999003');
+      expect(await dao.getCount(), 3);
+    });
+  });
+
   group('updatePoints', () {
     test('sets new totalPoints value', () async {
       final c = await dao.create(name: 'Edna', phone: '849000001');
@@ -162,4 +181,3 @@ void main() {
     });
   });
 }
-

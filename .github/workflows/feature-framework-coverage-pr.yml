@@ -1,0 +1,25 @@
+name: Feature Framework Coverage (PR)
+
+on:
+  pull_request:
+    paths:
+      - "lib/features/**"
+      - "docs/app_feature_decision_register.md"
+      - "docs/feature_decision_framework.md"
+      - "tool/check_feature_decision_register.dart"
+      - ".github/workflows/feature-framework-coverage-pr.yml"
+
+jobs:
+  validate-feature-framework-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Dart
+        uses: dart-lang/setup-dart@v1
+
+      - name: Validate app feature decision register coverage
+        run: dart run tool/check_feature_decision_register.dart

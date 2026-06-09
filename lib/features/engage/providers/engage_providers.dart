@@ -19,6 +19,7 @@ final engageDaoProvider = Provider<EngageDao>(
   (ref) => EngageDao(
     ref.read(app_providers.appDatabaseProvider),
     merchantId: ref.watch(auth_providers.activeMerchantIdProvider),
+    appUserId: ref.watch(auth_providers.activeAppUserIdProvider),
   ),
 );
 
@@ -68,6 +69,7 @@ final engageRepositoryProvider = Provider<EngageRepository>(
   (ref) => EngageRepository(
     ref.read(engageDaoProvider),
     ref.read(app_providers.syncDaoProvider),
+    appUserId: ref.watch(auth_providers.activeAppUserIdProvider),
     api: ref.read(engageApiProvider),
     useRemote: ref.watch(engageRemoteModeProvider),
   ),

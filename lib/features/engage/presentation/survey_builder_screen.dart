@@ -291,7 +291,7 @@ class _QuestionCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.sm),
             DropdownButtonFormField<String>(
-              value: value.questionType,
+              initialValue: value.questionType,
               decoration: const InputDecoration(labelText: 'Tipo'),
               items: SurveyQuestionType.values
                   .map(

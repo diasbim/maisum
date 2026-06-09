@@ -12,6 +12,7 @@ class EngageRepository {
   EngageRepository(
     this._dao,
     this._syncDao, {
+    this.appUserId,
     EngageApi? api,
     bool useRemote = false,
   })  : _api = api,
@@ -19,9 +20,21 @@ class EngageRepository {
 
   final EngageDao _dao;
   final SyncDao _syncDao;
+  final String? appUserId;
   final EngageApi? _api;
   final bool _useRemote;
   static const _uuid = Uuid();
+
+  Map<String, dynamic> _actorFields({bool includeCreated = true}) {
+    final actor = appUserId?.trim();
+    if (actor == null || actor.isEmpty) {
+      return const {};
+    }
+    return {
+      if (includeCreated) 'created_by_app_user_id': actor,
+      'updated_by_app_user_id': actor,
+    };
+  }
 
   Future<EngageDashboardData> loadDashboard({
     bool refreshRiskScores = true,
@@ -70,6 +83,7 @@ class EngageRepository {
           payload: jsonEncode({
             ...score.toJson(),
             'merchant_id': _dao.merchantId,
+            ..._actorFields(),
           }),
           createdAt: DateTime.now(),
         ),
@@ -124,7 +138,11 @@ class EngageRepository {
         operation: 'create',
         entityType: 'recovery_task',
         entityId: task.id,
-        payload: jsonEncode({...task.toJson(), 'merchant_id': _dao.merchantId}),
+        payload: jsonEncode({
+          ...task.toJson(),
+          'merchant_id': _dao.merchantId,
+          ..._actorFields(),
+        }),
         createdAt: DateTime.now(),
       ),
     );
@@ -165,7 +183,11 @@ class EngageRepository {
         operation: 'update',
         entityType: 'recovery_task',
         entityId: task.id,
-        payload: jsonEncode({...task.toJson(), 'merchant_id': _dao.merchantId}),
+        payload: jsonEncode({
+          ...task.toJson(),
+          'merchant_id': _dao.merchantId,
+          ..._actorFields(includeCreated: false),
+        }),
         createdAt: DateTime.now(),
       ),
     );
@@ -222,6 +244,7 @@ class EngageRepository {
         payload: jsonEncode({
           ...action.toJson(),
           'merchant_id': _dao.merchantId,
+          ..._actorFields(),
         }),
         createdAt: DateTime.now(),
       ),
@@ -283,6 +306,7 @@ class EngageRepository {
         payload: jsonEncode({
           ...report.toJson(),
           'merchant_id': _dao.merchantId,
+          ..._actorFields(),
         }),
         createdAt: DateTime.now(),
       ),
@@ -363,6 +387,7 @@ class EngageRepository {
         payload: jsonEncode({
           ...survey.toJson(),
           'merchant_id': _dao.merchantId,
+          ..._actorFields(),
           'questions': null,
         }),
         createdAt: DateTime.now(),
@@ -379,6 +404,7 @@ class EngageRepository {
           payload: jsonEncode({
             ...question.toJson(),
             'merchant_id': _dao.merchantId,
+            ..._actorFields(),
           }),
           createdAt: DateTime.now(),
         ),
@@ -420,6 +446,7 @@ class EngageRepository {
           ...submission.toJson(),
           'id': responseId,
           'merchant_id': _dao.merchantId,
+          ..._actorFields(),
         }),
         createdAt: DateTime.now(),
       ),

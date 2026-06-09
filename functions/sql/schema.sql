@@ -14,12 +14,19 @@ CREATE TABLE IF NOT EXISTS app_users (
   merchant_id TEXT NOT NULL REFERENCES merchants(id),
   phone TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'OWNER',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  invited_at BIGINT,
+  accepted_at BIGINT,
+  invited_by_app_user_id TEXT,
+  deactivated_at BIGINT,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL,
   last_login_at BIGINT
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_app_users_merchant_phone
   ON app_users(merchant_id, phone);
+CREATE INDEX IF NOT EXISTS idx_app_users_merchant_status
+  ON app_users(merchant_id, status);
 
 CREATE TABLE IF NOT EXISTS subscription_state (
   merchant_id TEXT PRIMARY KEY REFERENCES merchants(id),
@@ -157,7 +164,9 @@ CREATE TABLE IF NOT EXISTS recovery_tasks (
   due_at BIGINT,
   notes TEXT,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_tasks_merchant_status_due
   ON recovery_tasks(merchant_id, status, due_at);
@@ -172,7 +181,9 @@ CREATE TABLE IF NOT EXISTS recovery_actions (
   action_type TEXT NOT NULL,
   payload JSONB,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_actions_merchant_customer
   ON recovery_actions(merchant_id, customer_id, created_at);
@@ -188,7 +199,9 @@ CREATE TABLE IF NOT EXISTS visit_reports (
   notes TEXT,
   visited_at BIGINT NOT NULL,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_visit_reports_merchant_visited_at
   ON visit_reports(merchant_id, visited_at);
@@ -202,7 +215,9 @@ CREATE TABLE IF NOT EXISTS surveys (
   description TEXT,
   is_active BOOLEAN NOT NULL DEFAULT true,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_surveys_merchant_active
   ON surveys(merchant_id, is_active, updated_at);
@@ -217,7 +232,9 @@ CREATE TABLE IF NOT EXISTS survey_questions (
   is_required BOOLEAN NOT NULL DEFAULT false,
   options_payload JSONB,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_survey_questions_survey_order
   ON survey_questions(survey_id, sort_order);
@@ -230,7 +247,9 @@ CREATE TABLE IF NOT EXISTS survey_responses (
   submitted_at BIGINT NOT NULL,
   channel TEXT,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_survey_responses_merchant_survey
   ON survey_responses(merchant_id, survey_id, submitted_at);
@@ -244,7 +263,9 @@ CREATE TABLE IF NOT EXISTS survey_response_answers (
   answer_numeric DOUBLE PRECISION,
   answer_bool BOOLEAN,
   created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_survey_response_answers_response
   ON survey_response_answers(response_id, question_id);

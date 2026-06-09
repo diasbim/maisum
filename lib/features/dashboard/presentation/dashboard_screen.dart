@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,40 +10,14 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/moz_phone_utils.dart';
-import '../../../core/widgets/app_feedback.dart';
-import '../../../core/widgets/brand_mark.dart';
-import '../../../core/widgets/contextual_error_state.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/sync_status_bar.dart';
 import '../../auth/presentation/auth_controller.dart';
-import '../../subscription/domain/feature_keys.dart';
 import '../../sync/sync_controller.dart';
 import '../../sync/sync_service.dart';
 import '../../../app/providers.dart' as app_providers;
 import 'dashboard_controller.dart';
 import 'widgets/customer_conversion_widgets.dart';
-
-class _DashboardPremiumAccess {
-  const _DashboardPremiumAccess({
-    required this.canUseEngage,
-    required this.canUseRetention,
-  });
-
-  final bool canUseEngage;
-  final bool canUseRetention;
-}
-
-final dashboardPremiumAccessProvider =
-    FutureProvider<_DashboardPremiumAccess>((ref) async {
-  final gate = ref.read(app_providers.featureGateProvider);
-  final engageDecision = await gate.check(
-    featureKey: FeatureKeys.engageViewRisk,
-  );
-  return _DashboardPremiumAccess(
-    canUseEngage: engageDecision.allowed,
-    canUseRetention: engageDecision.allowed,
-  );
-});
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -107,17 +83,7 @@ class DashboardScreen extends ConsumerWidget {
                     onRetrySync: () =>
                         ref.read(syncControllerProvider.notifier).sync(),
                     onNewSale: () async {
-                      await ref
-                          .read(app_providers.analyticsServiceProvider)
-                          .record(
-                        eventType: 'sale_registration_started',
-                        source: 'dashboard',
-                        properties: {'entry_point': 'primary_sale_card'},
-                      );
-                      if (!context.mounted) return;
-                      await context.push('/new-sale');
-                      if (!context.mounted) return;
-                      ref.read(dashboardControllerProvider.notifier).refresh();
+                      await _handleNewSaleEntry(context, ref);
                     },
                   ),
                   loading: () => const _DashboardBodySkeleton(),
@@ -159,6 +125,7 @@ class _DashboardHeader extends StatelessWidget {
     final greetingName = merchantName == null || merchantName.isEmpty
         ? AppStrings.dashboardGreetingFallback
         : merchantName;
+    final salesToday = stats?.todaySaleCount ?? 0;
     final pointsToday = stats?.todayPoints ?? 0;
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -244,10 +211,9 @@ class _DashboardHeader extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
-                  _HeaderMetricCard(
-                    label: AppStrings.pontosHoje,
-                    value: '$pointsToday ${AppStrings.pontosAbrev}',
-                    icon: Icons.stars_rounded,
+                  _HeaderTodaySummaryCard(
+                    salesToday: salesToday,
+                    pointsToday: pointsToday,
                   ),
                 ],
               ),
@@ -292,13 +258,6 @@ class _DashboardBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final showEmpty = stats.totalCustomers == 0 &&
-        stats.todaySaleCount == 0 &&
-        stats.todayPoints == 0;
-    final premiumAccess = ref.watch(dashboardPremiumAccessProvider);
-    final canUseEngage = premiumAccess.valueOrNull?.canUseEngage ?? false;
-    final canUseRetention = premiumAccess.valueOrNull?.canUseRetention ?? false;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -312,176 +271,111 @@ class _DashboardBody extends ConsumerWidget {
             onTap: onRetrySync,
           ),
         ],
-        const SizedBox(height: AppSpacing.xxl),
-        if (showEmpty)
-          EmptyState(
-            title: AppStrings.dashboardEmptyTitle,
-            subtitle: AppStrings.dashboardEmptySubtitle,
-            actionLabel: AppStrings.adicionarCliente,
-            onAction: () => context.push('/customers'),
-          )
-        else ...[
-          const _SectionLabel(AppStrings.dashboardSectionToday),
-          const SizedBox(height: AppSpacing.md),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 360;
-              final cardWidth = isNarrow
-                  ? constraints.maxWidth
-                  : (constraints.maxWidth - AppSpacing.md) / 2;
-              return Wrap(
-                spacing: AppSpacing.md,
-                runSpacing: AppSpacing.md,
-                children: [
-                  SizedBox(
-                    width: cardWidth,
-                    child: _DailySalesCard(
-                      saleCount: stats.todaySaleCount,
-                      points: stats.todayPoints,
-                    ),
+        const SizedBox(height: AppSpacing.xl),
+        const _SectionLabel('Atalhos'),
+        const SizedBox(height: AppSpacing.md),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 360;
+            final tileWidth = isNarrow
+                ? constraints.maxWidth
+                : (constraints.maxWidth - AppSpacing.md) / 2;
+            return Wrap(
+              spacing: AppSpacing.md,
+              runSpacing: AppSpacing.md,
+              children: [
+                SizedBox(
+                  width: tileWidth,
+                  child: _MiniActionTile(
+                    label: AppStrings.clientes,
+                    subtitle: AppStrings.dashboardQuickClientsSubtitle,
+                    icon: Icons.people_alt_rounded,
+                    onTap: () => context.push('/customers'),
                   ),
-                  SizedBox(
-                    width: cardWidth,
-                    child: _PointsTodayCard(points: stats.todayPoints),
+                ),
+                SizedBox(
+                  width: tileWidth,
+                  child: _MiniActionTile(
+                    label: AppStrings.recompensas,
+                    subtitle: AppStrings.dashboardQuickRewardsSubtitle,
+                    icon: Icons.card_giftcard_rounded,
+                    onTap: () => context.push('/rewards'),
                   ),
-                  SizedBox(
-                    width: cardWidth,
-                    child: _TotalCustomersCard(count: stats.totalCustomers),
-                  ),
-                  SizedBox(
-                    width: cardWidth,
-                    child: _ReturningCustomersCard(
-                      count: stats.returningCustomers,
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _StreakBanner(
-            streakDays: stats.streakDays,
-            atRisk: stats.streakAtRisk,
-          ),
-          const SizedBox(height: AppSpacing.xxl),
-          const _SectionLabel(AppStrings.dashboardSectionQuick),
-          const SizedBox(height: AppSpacing.md),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isNarrow = constraints.maxWidth < 360;
-              final tileWidth = isNarrow
-                  ? constraints.maxWidth
-                  : (constraints.maxWidth - AppSpacing.md) / 2;
-              return Wrap(
-                spacing: AppSpacing.md,
-                runSpacing: AppSpacing.md,
-                children: [
-                  SizedBox(
-                    width: tileWidth,
-                    child: _MiniActionTile(
-                      label: AppStrings.clientes,
-                      subtitle: AppStrings.dashboardQuickClientsSubtitle,
-                      icon: Icons.people_alt_rounded,
-                      onTap: () => context.push('/customers'),
-                    ),
-                  ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _MiniActionTile(
-                      label: AppStrings.historicoVendas,
-                      subtitle: AppStrings.dashboardQuickSalesSubtitle,
-                      icon: Icons.receipt_long_rounded,
-                      onTap: () => context.push('/sales'),
-                    ),
-                  ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _MiniActionTile(
-                      label: AppStrings.recompensas,
-                      subtitle: AppStrings.dashboardQuickRewardsSubtitle,
-                      icon: Icons.card_giftcard_rounded,
-                      onTap: () => context.push('/rewards'),
-                    ),
-                  ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _MiniActionTile(
-                      label: 'Retenção',
-                      subtitle: canUseRetention
-                          ? 'Recorrentes e clientes em risco'
-                          : 'Funcionalidade premium. Atualize o plano.',
-                      icon: Icons.insights_rounded,
-                      onTap: () => _openPremiumModule(
-                        context,
-                        allowed: canUseRetention,
-                        moduleName: 'Retenção',
-                        route: '/retention',
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _MiniActionTile(
-                      label: 'Engage',
-                      subtitle: canUseEngage
-                          ? 'Recuperação de clientes em risco'
-                          : 'Funcionalidade premium. Atualize o plano.',
-                      icon: Icons.auto_graph_rounded,
-                      onTap: () => _openPremiumModule(
-                        context,
-                        allowed: canUseEngage,
-                        moduleName: 'Engage',
-                        route: '/engage',
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _MiniActionTile(
-                      label: AppStrings.pendentes,
-                      subtitle: syncStatus.lastError != null
-                          ? AppStrings.syncInterrompida
-                          : syncStatus.pendingCount > 0
-                              ? '${syncStatus.pendingCount} ${AppStrings.syncPendingToSend}'
-                              : AppStrings.dashboardQuickSyncOk,
-                      icon: syncStatus.lastError != null
-                          ? Icons.sync_problem_rounded
-                          : syncStatus.pendingCount > 0
-                              ? Icons.cloud_upload_rounded
-                              : Icons.cloud_done_rounded,
-                      onTap: () => context.push('/pending-sync'),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
+                ),
+              ],
+            );
+          },
+        ),
       ],
     );
   }
+}
 
-  void _openPremiumModule(
-    BuildContext context, {
-    required bool allowed,
-    required String moduleName,
-    required String route,
-  }) {
-    if (allowed) {
-      context.push(route);
-      return;
+Future<void> _handleNewSaleEntry(BuildContext context, WidgetRef ref) async {
+  final customersCount =
+      await ref.read(app_providers.customerRepositoryProvider).count();
+
+  if (customersCount == 0) {
+    try {
+      unawaited(
+        ref
+            .read(app_providers.analyticsServiceProvider)
+            .record(
+              eventType: 'customer_required_modal_shown',
+              source: 'dashboard',
+            )
+            .catchError((_) {}),
+      );
+    } catch (_) {
+      // Keep modal flow working even if analytics is unavailable.
     }
 
-    AppFeedback.showMessage(
-      context,
-      message:
-          '$moduleName é uma funcionalidade premium. Atualize o plano para desbloquear.',
-      action: SnackBarAction(
-        label: 'Gerir plano',
-        onPressed: () => context.push('/subscription-admin'),
+    if (!context.mounted) return;
+    final shouldCreateCustomer = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Nenhum cliente registado'),
+        content: const Text(
+          'Para registrar uma venda,\nprimeiro precisa adicionar um cliente.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Adicionar Cliente'),
+          ),
+        ],
       ),
     );
+
+    if (shouldCreateCustomer == true && context.mounted) {
+      final targetRoute = Uri.encodeComponent('/new-sale');
+      await context.push(
+        '/customers/create?resumeSaleFlow=1&returnTo=$targetRoute',
+      );
+      if (context.mounted) {
+        ref.read(dashboardControllerProvider.notifier).refresh();
+      }
+    }
+    return;
   }
+
+  try {
+    await ref.read(app_providers.analyticsServiceProvider).record(
+      eventType: 'sale_registration_started',
+      source: 'dashboard',
+      properties: {'entry_point': 'primary_sale_card'},
+    );
+  } catch (_) {
+    // Do not block the sale flow if analytics fails.
+  }
+  if (!context.mounted) return;
+  await context.push('/new-sale');
+  if (!context.mounted) return;
+  ref.read(dashboardControllerProvider.notifier).refresh();
 }
 
 String _formatSubscriptionStatus(String status) {
@@ -568,16 +462,14 @@ class _HeaderMetaChip extends StatelessWidget {
   }
 }
 
-class _HeaderMetricCard extends StatelessWidget {
-  const _HeaderMetricCard({
-    required this.label,
-    required this.value,
-    required this.icon,
+class _HeaderTodaySummaryCard extends StatelessWidget {
+  const _HeaderTodaySummaryCard({
+    required this.salesToday,
+    required this.pointsToday,
   });
 
-  final String label;
-  final String value;
-  final IconData icon;
+  final int salesToday;
+  final int pointsToday;
 
   @override
   Widget build(BuildContext context) {
@@ -599,11 +491,15 @@ class _HeaderMetricCard extends StatelessWidget {
               color: AppColors.secondary,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 16, color: AppColors.primary),
+            child: const Icon(
+              Icons.query_stats_rounded,
+              size: 16,
+              color: AppColors.primary,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
-            label,
+            AppStrings.vendasHoje,
             style: theme.textTheme.labelSmall?.copyWith(
               color: Colors.white.withValues(alpha: 0.75),
               fontWeight: FontWeight.w600,
@@ -611,7 +507,23 @@ class _HeaderMetricCard extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            value,
+            '$salesToday vendas',
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            AppStrings.pontosHoje,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: Colors.white.withValues(alpha: 0.75),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '$pointsToday ${AppStrings.pontosAbrev}',
             style: theme.textTheme.titleSmall?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w800,
@@ -651,29 +563,6 @@ class _OfflineStatusBanner extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DashboardSyncErrorBanner extends StatelessWidget {
-  const _DashboardSyncErrorBanner({
-    required this.status,
-    required this.onRetry,
-  });
-
-  final SyncStatus status;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    if (status.viewState != SyncViewState.failed) {
-      return const SizedBox.shrink();
-    }
-    return ContextualErrorState(
-      title: AppStrings.syncInterrompida,
-      message: status.lastError ?? AppStrings.syncFailedActionable,
-      onRetry: onRetry,
-      compact: true,
     );
   }
 }
@@ -752,6 +641,7 @@ class _PrimarySaleCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(24),
             child: Container(
               width: double.infinity,
+              constraints: const BoxConstraints(minHeight: 280),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(24),
                 gradient: const LinearGradient(
@@ -974,74 +864,6 @@ class _TotalCustomersCard extends StatelessWidget {
       value: '$count',
       label: AppStrings.totalClientes,
       helper: AppStrings.dashboardRegistered,
-    );
-  }
-}
-
-class _MerchantStreakCard extends StatelessWidget {
-  const _MerchantStreakCard({required this.streakDays, required this.atRisk});
-
-  final int streakDays;
-  final bool atRisk;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final status = atRisk
-        ? AppStrings.dashboardStreakStatusRisk
-        : AppStrings.dashboardStreakStatusStable;
-    final statusColor = atRisk ? AppColors.amber : AppColors.green;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.secondary,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
-        boxShadow: AppTheme.shadowMd,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.local_fire_department_rounded,
-              color: AppColors.primary,
-              size: 18,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '$streakDays',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _formatStreakLabel(streakDays),
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.primary.withValues(alpha: 0.7),
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            status,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: statusColor,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1346,75 +1168,6 @@ class _StreakBanner extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.accent,
-    this.dark = false,
-  });
-
-  final String label;
-  final String value;
-  final Color accent;
-  final bool dark;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final bg = dark ? AppColors.secondary : AppColors.white;
-    final valueColor = dark ? AppColors.primary : AppColors.onSurface;
-    final labelColor = dark
-        ? AppColors.primary.withValues(alpha: 0.62)
-        : AppColors.onSurfaceVariant;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: dark
-              ? AppColors.secondary.withValues(alpha: 0.2)
-              : AppColors.g100,
-        ),
-        boxShadow: dark ? AppTheme.shadowMd : AppTheme.shadowSm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: dark ? 0.16 : 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const BrandMark(size: 18, padding: EdgeInsets.all(8)),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: TextStyle(
-              color: valueColor,
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: labelColor,
-              fontWeight: FontWeight.w600,
             ),
           ),
         ],

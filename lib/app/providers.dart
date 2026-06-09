@@ -32,6 +32,8 @@ import '../features/retention/data/retention_dao.dart';
 import '../features/retention/data/retention_repository.dart';
 import '../features/sales/data/sale_dao.dart';
 import '../features/sales/data/sale_repository.dart';
+import '../features/settings/data/staff_management_repository.dart';
+import '../features/settings/domain/staff_member.dart';
 import '../features/sync/data/backend_sync_transport.dart';
 import '../features/sync/data/sync_dao.dart';
 import '../features/sync/data/sync_transport.dart';
@@ -278,6 +280,7 @@ final saleRepositoryProvider = Provider<SaleRepository>(
     ref.read(saleDaoProvider),
     merchantId: ref.watch(activeMerchantIdProvider),
     deviceId: ref.watch(activeDeviceIdProvider),
+    appUserId: ref.watch(activeAppUserIdProvider),
   ),
 );
 
@@ -305,6 +308,7 @@ final appointmentRepositoryProvider = Provider<AppointmentRepository>(
   (ref) => AppointmentRepository(
     ref.read(appointmentDaoProvider),
     ref.read(syncDaoProvider),
+    appUserId: ref.watch(activeAppUserIdProvider),
   ),
 );
 
@@ -313,6 +317,19 @@ final retentionRepositoryProvider = Provider<RetentionRepository>(
     ref.read(retentionDaoProvider),
     ref.read(syncDaoProvider),
   ),
+);
+
+final staffManagementRepositoryProvider = Provider<StaffManagementRepository>(
+  (ref) => StaffManagementRepository(
+    ref.read(appDatabaseProvider),
+    ref.read(syncDaoProvider),
+    merchantId: ref.watch(activeMerchantIdProvider),
+    currentAppUserId: ref.watch(activeAppUserIdProvider),
+  ),
+);
+
+final staffMembersProvider = FutureProvider<List<StaffMember>>(
+  (ref) => ref.read(staffManagementRepositoryProvider).listMembers(),
 );
 
 final subscriptionStateProvider = FutureProvider<SubscriptionState?>(
