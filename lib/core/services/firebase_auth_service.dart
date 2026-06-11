@@ -31,7 +31,7 @@ class FirebaseAuthService {
             StackTrace.current,
             hint: 'auth_phone_verification_failed:${e.code}',
           );
-          onError(_mapAuthError(e.code));
+          onError(_mapAuthException(e));
         },
         codeSent: (String verificationId, int? resendToken) {
           _resendToken = resendToken;
@@ -46,7 +46,7 @@ class FirebaseAuthService {
         StackTrace.current,
         hint: 'auth_verify_phone_number:${e.code}',
       );
-      onError(_mapAuthError(e.code));
+      onError(_mapAuthException(e));
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'auth_verify_phone_number_unknown');
       onError('Erro ao enviar código. Tente novamente.');
@@ -56,16 +56,35 @@ class FirebaseAuthService {
   Future<UserCredential> verifyOtp({
     required String verificationId,
     required String smsCode,
-  }) {
-    final credential = PhoneAuthProvider.credential(
-      verificationId: verificationId,
-      smsCode: smsCode,
-    );
-    return _auth.signInWithCredential(credential);
+  }) async {
+    try {
+      final credential = PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      AppErrorReporter.report(
+        e,
+        StackTrace.current,
+        hint: 'auth_verify_otp:${e.code}',
+      );
+      throw Exception(_mapAuthException(e));
+    }
   }
 
-  Future<UserCredential> signInWithCredential(AuthCredential credential) =>
-      _auth.signInWithCredential(credential);
+  Future<UserCredential> signInWithCredential(AuthCredential credential) async {
+    try {
+      return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      AppErrorReporter.report(
+        e,
+        StackTrace.current,
+        hint: 'auth_sign_in_with_credential:${e.code}',
+      );
+      throw Exception(_mapAuthException(e));
+    }
+  }
 
   Future<UserCredential> signInWithGoogle() async {
     try {
@@ -91,18 +110,36 @@ class FirebaseAuthService {
         'invalid-phone-number' => 'Número de telemóvel inválido.',
         'too-many-requests' => 'Demasiadas tentativas. Tente mais tarde.',
         'quota-exceeded' => 'Quota de SMS excedida.',
+        'network-request-failed' =>
+          'Sem internet. Verifique a ligação e tente novamente.',
         'operation-not-allowed' =>
           'O login por telemóvel não está ativado no Firebase.',
         'app-not-authorized' =>
           'Esta app Android não está autorizada no Firebase.',
+        'missing-client-identifier' =>
+          'A configuração Android do Firebase está incompleta para autenticação por telefone.',
         'invalid-app-credential' =>
           'A verificação da app falhou. Confirme a configuração do Android no Firebase.',
         'captcha-check-failed' =>
-          'Falha na verificação reCAPTCHA. Em debug, reinstale a app; em produção, confirme a configuração do Firebase Phone Auth.',
+          'Falha na verificação reCAPTCHA. Complete o desafio no Chrome e volte para a app.',
         'invalid-verification-code' => 'Código de verificação inválido.',
         'session-expired' => 'Código expirado. Solicite um novo.',
         _ => 'Erro de autenticação. Tente novamente.',
       };
+
+  String _mapAuthException(FirebaseAuthException e) {
+    final mapped = _mapAuthError(e.code);
+    if (mapped != 'Erro de autenticação. Tente novamente.') {
+      return mapped;
+    }
+
+    final detail = (e.message ?? '').trim();
+    if (detail.isNotEmpty) {
+      return detail;
+    }
+
+    return 'Erro de autenticação (${e.code}). Tente novamente.';
+  }
 
   String _mapGoogleAuthError(String code) => switch (code) {
         'account-exists-with-different-credential' =>

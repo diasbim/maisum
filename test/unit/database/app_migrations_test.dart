@@ -58,5 +58,8 @@ void main() {
 
     final cols = await _columns(db, 'customers');
     expect(cols.contains('device_id'), isTrue);
+
+    final syncQueueCols = await _columns(db, 'sync_queue');
+    expect(syncQueueCols.contains('last_error'), isTrue);
   });
 }

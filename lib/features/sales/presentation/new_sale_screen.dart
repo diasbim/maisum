@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -13,9 +11,7 @@ import '../../../core/widgets/quick_amount_button.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/errors/app_error_mapper.dart';
-import '../../../core/utils/moz_phone_utils.dart';
 import '../../customers/domain/customer.dart';
-import '../../customers/presentation/customers_controller.dart';
 import '../widgets/sale_progress_stepper.dart';
 import 'sale_controller.dart';
 import 'sale_success_screen.dart';
@@ -34,19 +30,23 @@ class NewSaleScreen extends ConsumerStatefulWidget {
   ConsumerState<NewSaleScreen> createState() => _NewSaleScreenState();
 }
 
+enum _SaleInitializationState {
+  loading,
+  ready,
+  noCustomers,
+}
+
 class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
-  final _phoneCtrl = TextEditingController();
-  final _phoneFocusNode = FocusNode();
   final _amountCtrl = TextEditingController();
-  Timer? _searchDebounce;
   bool _isSubmitting = false;
-  bool _isCreatingCustomer = false;
+  bool _isSelectingCustomer = false;
   bool _showCompletedStepper = false;
   int? _completedPoints;
   Customer? _selectedCustomer;
   int? _quickAmount;
   int? _lastAmount;
-  List<Customer> _searchResults = [];
+  _SaleInitializationState _initializationState =
+      _SaleInitializationState.loading;
 
   void _handleBackPressed() {
     if (context.canPop()) {
@@ -59,25 +59,14 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   @override
   void initState() {
     super.initState();
-    final preselectedId = widget.args?.preselectedCustomerId;
-    if (preselectedId != null) {
-      _loadPreselectedCustomer(preselectedId);
-    }
     final prefilledAmount = widget.args?.prefilledAmount;
     if (prefilledAmount != null && prefilledAmount > 0) {
       _amountCtrl.text = prefilledAmount.toStringAsFixed(0);
     }
     _loadLastAmount();
-  }
-
-  Future<void> _loadPreselectedCustomer(String id) async {
-    final customer = await ref.read(customerDaoProvider).getById(id);
-    if (customer != null && mounted) {
-      setState(() {
-        _selectedCustomer = customer;
-        _phoneCtrl.text = customer.phone;
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeSaleFlow();
+    });
   }
 
   Future<void> _loadLastAmount() async {
@@ -86,11 +75,95 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     setState(() => _lastAmount = lastAmount);
   }
 
+  Future<void> _initializeSaleFlow() async {
+    final preselectedId = widget.args?.preselectedCustomerId;
+    if (preselectedId != null) {
+      final preselected =
+          await ref.read(customerRepositoryProvider).getById(preselectedId);
+      if (!mounted) return;
+      if (preselected != null) {
+        setState(() {
+          _selectedCustomer = preselected;
+          _initializationState = _SaleInitializationState.ready;
+        });
+        return;
+      }
+    }
+
+    final customers = await ref.read(customerRepositoryProvider).getAll();
+    if (!mounted) return;
+
+    if (customers.isEmpty) {
+      setState(() {
+        _selectedCustomer = null;
+        _initializationState = _SaleInitializationState.noCustomers;
+      });
+      return;
+    }
+
+    final lastCustomer = await _getLastUsedCustomer();
+    if (!mounted) return;
+
+    if (lastCustomer != null) {
+      setState(() {
+        _selectedCustomer = lastCustomer;
+        _initializationState = _SaleInitializationState.ready;
+      });
+      return;
+    }
+
+    setState(() {
+      _initializationState = _SaleInitializationState.ready;
+    });
+
+    await _openCustomerSelector(customers: customers);
+  }
+
+  Future<Customer?> _getLastUsedCustomer() async {
+    final latestSale = await ref.read(saleDaoProvider).getLatestWithCustomer();
+    final customerId = latestSale?['customer_id'] as String?;
+    if (customerId == null || customerId.isEmpty) {
+      return null;
+    }
+    return ref.read(customerRepositoryProvider).getById(customerId);
+  }
+
+  Future<void> _openCustomerSelector({List<Customer>? customers}) async {
+    if (_isSelectingCustomer) return;
+
+    final sourceCustomers =
+        customers ?? await ref.read(customerRepositoryProvider).getAll();
+    if (!mounted || sourceCustomers.isEmpty) {
+      return;
+    }
+
+    setState(() => _isSelectingCustomer = true);
+
+    final selected = await showModalBottomSheet<Customer>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _CustomerSelectionSheet(customers: sourceCustomers),
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isSelectingCustomer = false);
+    if (selected != null) {
+      _selectCustomer(selected);
+    }
+  }
+
+  Future<void> _openCreateCustomerFlow() async {
+    if (_isSubmitting) return;
+    await context.push('/customers/create?resumeSaleFlow=1');
+  }
+
   @override
   void dispose() {
-    _searchDebounce?.cancel();
-    _phoneCtrl.dispose();
-    _phoneFocusNode.dispose();
     _amountCtrl.dispose();
     super.dispose();
   }
@@ -105,8 +178,11 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   bool get _canSubmit => _selectedCustomer != null && _selectedAmount != null;
 
   String get _buttonLabel {
+    if (_initializationState == _SaleInitializationState.noCustomers) {
+      return 'Adicionar Cliente';
+    }
     if (_selectedCustomer == null) {
-      return 'Escolha um cliente';
+      return AppStrings.selecionarCliente;
     }
     if (_selectedAmount == null) {
       return 'Escolha um valor';
@@ -122,104 +198,22 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
 
   int get _points => (_amount / AppConstants.pointsPerMzn).floor();
 
-  Future<void> _onPhoneChanged(String query) async {
-    final trimmed = query.trim();
-    _searchDebounce?.cancel();
-
-    if (trimmed.length < 2) {
-      setState(() => _searchResults = []);
-      return;
-    }
-
-    _searchDebounce = Timer(const Duration(milliseconds: 250), () async {
-      final results =
-          await ref.read(customerRepositoryProvider).searchForSale(trimmed);
-      if (!mounted || _phoneCtrl.text.trim() != trimmed) {
-        return;
-      }
-      setState(() {
-        _searchResults = results;
-      });
-    });
-  }
-
   void _selectCustomer(Customer c) {
     setState(() {
       _selectedCustomer = c;
-      _phoneCtrl.text = c.phone;
-      _searchResults = [];
       _showCompletedStepper = false;
       _completedPoints = null;
+      _initializationState = _SaleInitializationState.ready;
     });
   }
 
-  Future<bool> _ensurePinForCustomerCreation() async {
-    final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
-    if (hasPin) {
-      return true;
-    }
-
-    if (!mounted) return false;
-    AppFeedback.showMessage(
-      context,
-      message: 'Defina o PIN para criar o primeiro cliente.',
-    );
-    final nextRoute = Uri.encodeComponent('/new-sale');
-    context.go('/pin-setup?next=$nextRoute');
-    return false;
-  }
-
-  Future<void> _createAndSelectCustomer() async {
-    final phone = _phoneCtrl.text.trim();
-    if (phone.isEmpty || _isCreatingCustomer) return;
-
-    final canCreate = await _ensurePinForCustomerCreation();
-    if (!canCreate || !mounted) return;
-
-    final phoneError = MozPhoneUtils.validatorMessage(phone);
-    if (phoneError != null) {
-      if (mounted) {
-        AppFeedback.showMessage(context, message: phoneError);
-      }
-      return;
-    }
-
-    setState(() => _isCreatingCustomer = true);
-
-    try {
-      final customer = await ref
-          .read(customersControllerProvider.notifier)
-          .createCustomer(name: phone, phone: phone);
-      _selectCustomer(customer);
-      if (mounted) {
-        AppFeedback.showMessage(
-          context,
-          message: AppStrings.customerCreatedSuccess,
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      final info = AppErrorMapper.describe(e);
-      if (info.message == AppStrings.customerPhoneDuplicate) {
-        final existing =
-            await ref.read(customerRepositoryProvider).findByPhone(phone);
-        if (existing != null && mounted) {
-          _selectCustomer(existing);
-          AppFeedback.showMessage(
-            context,
-            message: 'Cliente existente selecionado automaticamente.',
-          );
-          return;
-        }
-      }
-      if (mounted) {
-        AppFeedback.showMessage(context, message: info.message);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isCreatingCustomer = false);
-      }
-    }
+  void _changeCustomer() {
+    setState(() {
+      _selectedCustomer = null;
+      _showCompletedStepper = false;
+      _completedPoints = null;
+    });
+    _openCustomerSelector();
   }
 
   Future<void> _confirmSale() async {
@@ -272,14 +266,24 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     final saleState = ref.watch(saleControllerProvider);
     final flowState = _flowState;
     final isBusy = saleState is AsyncLoading || _isSubmitting;
-    final recentCustomers = ref.watch(recentCustomersProvider);
-    final showRecentCustomers =
-        _selectedCustomer == null && _phoneCtrl.text.trim().isEmpty;
+    final noCustomers =
+        _initializationState == _SaleInitializationState.noCustomers;
+    final isInitializing =
+        _initializationState == _SaleInitializationState.loading;
     const pointsBaseMzn = AppConstants.salePointsBaseMzn;
     final pointsPerBase = (pointsBaseMzn / AppConstants.pointsPerMzn).floor();
     final pointsPerBaseLabel = pointsPerBase == 1
         ? '1 ${AppStrings.pontosAbrev}'
         : '$pointsPerBase ${AppStrings.pontosAbrev}';
+    final canOpenSelector =
+        !isBusy && !isInitializing && !noCustomers && !_isSelectingCustomer;
+    final action = _canSubmit
+        ? _confirmSale
+        : noCustomers
+            ? _openCreateCustomerFlow
+            : _selectedCustomer == null
+                ? (canOpenSelector ? _openCustomerSelector : null)
+                : null;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -288,7 +292,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         child: _ConfirmSaleButton(
           label: _buttonLabel,
           loading: isBusy,
-          onPressed: (_canSubmit && !isBusy) ? _confirmSale : null,
+          onPressed: action,
         ),
       ),
       body: SingleChildScrollView(
@@ -298,239 +302,323 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
               onBack: _handleBackPressed,
               customerStatus: flowState.getCustomerStepStatus(),
               amountStatus: flowState.getAmountStepStatus(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: _SaleCompletionHint(points: _completedPoints!),
-              ),
               confirmStatus: flowState.getConfirmStepStatus(),
             ),
-            if (_showCompletedStepper && _completedPoints != null)
-              Transform.translate(
-                offset: const Offset(0, -26),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-                  decoration: BoxDecoration(
-                    color: AppColors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 12),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _SectionHeader(
-                        title: '1. ${AppStrings.cliente}',
-                        actionText: AppStrings.verTudo,
-                        onAction: () => context.push('/customers'),
-                      ),
-                      const SizedBox(height: 12),
-                      if (_selectedCustomer != null)
-                        _SelectedCustomerCard(
-                          customer: _selectedCustomer!,
-                          onClear: () => setState(() {
-                            _selectedCustomer = null;
-                            _phoneCtrl.clear();
-                            _showCompletedStepper = false;
-                            _completedPoints = null;
-                          }),
-                        )
-                      else ...[
-                        if (showRecentCustomers)
-                          recentCustomers.when(
-                            data: (customers) {
-                              if (customers.isEmpty) {
-                                return const SizedBox.shrink();
-                              }
-                              return SizedBox(
-                                height: 156,
-                                child: ListView.separated(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: customers.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(width: 12),
-                                  itemBuilder: (context, index) {
-                                    final customer = customers[index];
-                                    return _CustomerCard(
-                                      customer: customer,
-                                      onTap: () => _selectCustomer(customer),
-                                    );
-                                  },
-                                ),
-                              );
-                            },
-                            loading: () => const SizedBox.shrink(),
-                            error: (_, __) => const SizedBox.shrink(),
-                          ),
-                        if (showRecentCustomers) const SizedBox(height: 12),
-                        TextField(
-                          controller: _phoneCtrl,
-                          focusNode: _phoneFocusNode,
-                          keyboardType: TextInputType.text,
-                          autofocus: widget.args?.preselectedCustomerId == null,
-                          textCapitalization: TextCapitalization.words,
-                          decoration: const InputDecoration(
-                            hintText: AppStrings.nomeOuTelefoneCliente,
-                            prefixIcon: Icon(Icons.search_rounded),
-                            filled: true,
-                            fillColor: AppColors.surface,
-                            border: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(16)),
-                              borderSide: BorderSide(color: AppColors.g100),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(16)),
-                              borderSide: BorderSide(color: AppColors.g100),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius:
-                                  BorderRadius.all(Radius.circular(16)),
-                              borderSide: BorderSide(color: AppColors.primary),
-                            ),
-                          ),
-                          onChanged: _onPhoneChanged,
+            Transform.translate(
+              offset: const Offset(0, -26),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      blurRadius: 20,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: Builder(
+                  builder: (context) {
+                    if (isInitializing) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+
+                    if (noCustomers) {
+                      return _NoCustomersState(
+                        onAddCustomer: _openCreateCustomerFlow,
+                      );
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SectionHeader(
+                          title: '1. ${AppStrings.cliente}',
+                          actionText: AppStrings.verTudo,
+                          onAction: () => context.push('/customers'),
                         ),
-                        if (_searchResults.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: Column(
-                              children: _searchResults
-                                  .map(
-                                    (c) => _SearchResultTile(
-                                      customer: c,
-                                      onTap: () => _selectCustomer(c),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
+                        const SizedBox(height: 12),
+                        if (_selectedCustomer != null)
+                          _SelectedCustomerCard(
+                            customer: _selectedCustomer!,
+                            onChange: _changeCustomer,
+                          )
+                        else
+                          _AwaitingCustomerSelectionCard(
+                            selecting: _isSelectingCustomer,
+                            onSelectCustomer:
+                                canOpenSelector ? _openCustomerSelector : null,
                           ),
-                        if (_searchResults.isEmpty &&
-                            _phoneCtrl.text
-                                    .replaceAll(RegExp(r'\D'), '')
-                                    .length >=
-                                AppConstants.minSalePhoneDigitsForNewCustomer)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: TextButton.icon(
-                              icon: _isCreatingCustomer
-                                  ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.person_add_rounded),
-                              label: Text(
-                                _isCreatingCustomer
-                                    ? 'A criar...'
-                                    : AppStrings.novoCliente,
-                              ),
-                              onPressed: _isCreatingCustomer
-                                  ? null
-                                  : _createAndSelectCustomer,
-                            ),
-                          ),
-                      ],
-                      const SizedBox(height: 20),
-                      const _SectionTitle(title: '2. ${AppStrings.valor}'),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: AppConstants.saleQuickAmounts
-                            .map(
-                              (amt) => QuickAmountButton(
-                                amount: amt,
-                                selected: _quickAmount == amt,
-                                onTap: () => setState(() {
-                                  _quickAmount =
-                                      _quickAmount == amt ? null : amt;
-                                  if (_quickAmount != null) _amountCtrl.clear();
-                                  _showCompletedStepper = false;
-                                  _completedPoints = null;
-                                }),
-                              ),
-                            )
-                            .toList()
-                          ..addAll(
-                            _lastAmount == null
-                                ? const []
-                                : [
-                                    QuickAmountButton(
-                                      amount: _lastAmount!,
-                                      label: AppStrings.ultimo,
-                                      selected: _quickAmount == _lastAmount,
-                                      onTap: () => setState(() {
-                                        _quickAmount =
-                                            _quickAmount == _lastAmount
-                                                ? null
-                                                : _lastAmount;
-                                        if (_quickAmount != null) {
-                                          _amountCtrl.clear();
-                                        }
-                                        _showCompletedStepper = false;
-                                        _completedPoints = null;
-                                      }),
-                                    ),
-                                  ],
-                          ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _amountCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        inputFormatters: [
-                          FilteringTextInputFormatter.allow(RegExp(r'[\d,.]')),
+                        if (_showCompletedStepper &&
+                            _completedPoints != null) ...[
+                          const SizedBox(height: 12),
+                          _SaleCompletionHint(points: _completedPoints!),
                         ],
-                        decoration: const InputDecoration(
-                          hintText: AppStrings.outroValor,
-                          suffixText: AppStrings.moedaMzn,
-                          filled: true,
-                          fillColor: AppColors.surface,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(16)),
-                            borderSide: BorderSide(color: AppColors.g100),
+                        if (_selectedCustomer != null) ...[
+                          const SizedBox(height: 20),
+                          const _SectionTitle(title: '2. ${AppStrings.valor}'),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: AppConstants.saleQuickAmounts
+                                .map(
+                                  (amt) => QuickAmountButton(
+                                    amount: amt,
+                                    selected: _quickAmount == amt,
+                                    onTap: () => setState(() {
+                                      _quickAmount =
+                                          _quickAmount == amt ? null : amt;
+                                      if (_quickAmount != null) {
+                                        _amountCtrl.clear();
+                                      }
+                                      _showCompletedStepper = false;
+                                      _completedPoints = null;
+                                    }),
+                                  ),
+                                )
+                                .toList()
+                              ..addAll(
+                                _lastAmount == null
+                                    ? const []
+                                    : [
+                                        QuickAmountButton(
+                                          amount: _lastAmount!,
+                                          label: AppStrings.ultimo,
+                                          selected: _quickAmount == _lastAmount,
+                                          onTap: () => setState(() {
+                                            _quickAmount =
+                                                _quickAmount == _lastAmount
+                                                    ? null
+                                                    : _lastAmount;
+                                            if (_quickAmount != null) {
+                                              _amountCtrl.clear();
+                                            }
+                                            _showCompletedStepper = false;
+                                            _completedPoints = null;
+                                          }),
+                                        ),
+                                      ],
+                              ),
                           ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(16)),
-                            borderSide: BorderSide(color: AppColors.g100),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _amountCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[\d,.]'),
+                              ),
+                            ],
+                            decoration: const InputDecoration(
+                              hintText: AppStrings.outroValor,
+                              suffixText: AppStrings.moedaMzn,
+                              filled: true,
+                              fillColor: AppColors.surface,
+                              border: OutlineInputBorder(
+                                borderRadius:
+                                    BorderRadius.all(Radius.circular(16)),
+                                borderSide: BorderSide(color: AppColors.g100),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius:
+                                    BorderRadius.all(Radius.circular(16)),
+                                borderSide: BorderSide(color: AppColors.g100),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius:
+                                    BorderRadius.all(Radius.circular(16)),
+                                borderSide:
+                                    BorderSide(color: AppColors.primary),
+                              ),
+                            ),
+                            onChanged: (_) => setState(() {
+                              _quickAmount = null;
+                              _showCompletedStepper = false;
+                              _completedPoints = null;
+                            }),
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(16)),
-                            borderSide: BorderSide(color: AppColors.primary),
+                          const SizedBox(height: 18),
+                          const _SectionTitle(title: '3. ${AppStrings.resumo}'),
+                          const SizedBox(height: 12),
+                          _SummaryCard(
+                            points: _points,
+                            pointsBaseMzn: pointsBaseMzn,
+                            pointsPerBaseLabel: pointsPerBaseLabel,
                           ),
-                        ),
-                        onChanged: (_) => setState(() {
-                          _quickAmount = null;
-                          _showCompletedStepper = false;
-                          _completedPoints = null;
-                        }),
-                      ),
-                      const SizedBox(height: 18),
-                      const _SectionTitle(title: '3. ${AppStrings.resumo}'),
-                      const SizedBox(height: 12),
-                      _SummaryCard(
-                        points: _points,
-                        pointsBaseMzn: pointsBaseMzn,
-                        pointsPerBaseLabel: pointsPerBaseLabel,
-                      ),
-                    ],
-                  ),
+                        ],
+                      ],
+                    );
+                  },
                 ),
               ),
+            ),
             const SizedBox(height: 12),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _NoCustomersState extends StatelessWidget {
+  const _NoCustomersState({required this.onAddCustomer});
+
+  final VoidCallback onAddCustomer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            Icon(Icons.person_off_rounded, color: AppColors.onSurfaceVariant),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Nenhum cliente registado',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        const Text(
+          'Para registrar uma venda, adicione primeiro um cliente.',
+          style: TextStyle(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 14,
+          ),
+        ),
+        const SizedBox(height: 18),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: onAddCustomer,
+            icon: const Icon(Icons.person_add_alt_1_rounded),
+            label: const Text('Adicionar Cliente'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AwaitingCustomerSelectionCard extends StatelessWidget {
+  const _AwaitingCustomerSelectionCard({
+    required this.selecting,
+    required this.onSelectCustomer,
+  });
+
+  final bool selecting;
+  final VoidCallback? onSelectCustomer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.g100),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.person_search_rounded, color: AppColors.primary),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'Selecione um cliente para continuar.',
+              style: TextStyle(color: AppColors.onSurfaceVariant),
+            ),
+          ),
+          TextButton(
+            onPressed: onSelectCustomer,
+            child: selecting
+                ? const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Selecionar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomerSelectionSheet extends StatelessWidget {
+  const _CustomerSelectionSheet({required this.customers});
+
+  final List<Customer> customers;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Selecionar cliente',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.onSurface,
+                ),
+          ),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.65,
+            ),
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemBuilder: (context, index) {
+                final customer = customers[index];
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  leading: _CustomerAvatar(name: customer.name),
+                  title: Text(
+                    customer.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  subtitle: Text(
+                    customer.phone,
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                  trailing: _PointsPill(points: customer.totalPoints),
+                  onTap: () => Navigator.of(context).pop(customer),
+                );
+              },
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemCount: customers.length,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -650,9 +738,9 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _SelectedCustomerCard extends StatelessWidget {
-  const _SelectedCustomerCard({required this.customer, required this.onClear});
+  const _SelectedCustomerCard({required this.customer, required this.onChange});
   final Customer customer;
-  final VoidCallback onClear;
+  final VoidCallback onChange;
 
   @override
   Widget build(BuildContext context) {
@@ -663,42 +751,53 @@ class _SelectedCustomerCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: AppColors.g100),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _CustomerAvatar(name: customer.name),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  customer.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.onSurface,
-                  ),
-                ),
-                Text(
-                  customer.phone,
-                  style: const TextStyle(
-                    color: AppColors.onSurfaceVariant,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
+          const Text(
+            'Cliente Selecionado',
+            style: TextStyle(
+              color: AppColors.onSurfaceVariant,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          _PointsPill(points: customer.totalPoints),
-          const SizedBox(width: 4),
-          IconButton(
-            icon: const Icon(
-              Icons.close_rounded,
-              size: 18,
-              color: AppColors.onSurfaceVariant,
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _CustomerAvatar(name: customer.name),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      customer.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    Text(
+                      customer.phone,
+                      style: const TextStyle(
+                        color: AppColors.onSurfaceVariant,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _PointsPill(points: customer.totalPoints),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: onChange,
+              child: const Text('Alterar'),
             ),
-            onPressed: onClear,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
       ),
@@ -706,124 +805,8 @@ class _SelectedCustomerCard extends StatelessWidget {
   }
 }
 
-class _CustomerCard extends StatelessWidget {
-  const _CustomerCard({required this.customer, required this.onTap});
-
-  final Customer customer;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 170,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.g100),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0A000000),
-              blurRadius: 10,
-              offset: Offset(0, 6),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _CustomerAvatar(name: customer.name, radius: 16),
-            const SizedBox(height: 6),
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.start,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    customer.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
-                        ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    customer.phone,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 6),
-            _PointsPill(points: customer.totalPoints),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SearchResultTile extends StatelessWidget {
-  const _SearchResultTile({required this.customer, required this.onTap});
-  final Customer customer;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.g100),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        child: Row(
-          children: [
-            _CustomerAvatar(name: customer.name),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    customer.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    customer.phone,
-                    style: const TextStyle(
-                      color: AppColors.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            _PointsPill(points: customer.totalPoints),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _CustomerAvatar extends StatelessWidget {
-  const _CustomerAvatar({required this.name, this.radius = 18});
+  const _CustomerAvatar({required this.name});
   final String name;
   final double radius;
 

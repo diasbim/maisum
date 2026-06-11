@@ -102,6 +102,11 @@ class AppMigrations {
       name: 'record authorship fields',
       up: _createV20Schema,
     ),
+    const MigrationStep(
+      version: 21,
+      name: 'sync queue last_error',
+      up: _createV21Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -245,6 +250,7 @@ class _SchemaVerifier {
       'merchant_id',
       'device_id',
       'next_attempt_at',
+      'last_error',
     },
     'sync_state': {'entity_type', 'last_value', 'last_doc_id'},
     'appointments': {
@@ -405,6 +411,7 @@ class _SchemaVerifier {
       await _createV18Schema(txn);
       await _createV19Schema(txn);
       await _createV20Schema(txn);
+      await _createV21Schema(txn);
     });
   }
 
@@ -483,7 +490,8 @@ Future<void> _createV2Schema(DatabaseExecutor db) async {
       payload TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       retry_count INTEGER NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'pending'
+      status TEXT NOT NULL DEFAULT 'pending',
+      last_error TEXT
     )
   ''');
   await db.execute(
@@ -1173,6 +1181,10 @@ Future<void> _createV20Schema(DatabaseExecutor db) async {
     await _addColumnIfMissing(db, table, 'created_by_app_user_id TEXT');
     await _addColumnIfMissing(db, table, 'updated_by_app_user_id TEXT');
   }
+}
+
+Future<void> _createV21Schema(DatabaseExecutor db) async {
+  await _addColumnIfMissing(db, 'sync_queue', 'last_error TEXT');
 }
 
 Future<void> _addColumnIfMissing(

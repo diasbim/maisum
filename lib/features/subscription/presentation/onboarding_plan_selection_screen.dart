@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_feedback.dart';
@@ -16,34 +17,39 @@ import '../domain/subscription_snapshot.dart';
 
 final onboardingPlanOffersProvider =
     FutureProvider.autoDispose<List<PlanOffer>>((ref) async {
-  final firestore = ref.read(firestoreInstanceProvider);
-  final offers = await fetchActivePlanOffers(firestore);
-  if (offers.isNotEmpty) {
-    return offers;
+  try {
+    final firestore = ref.read(firestoreInstanceProvider);
+    final offers = await fetchActivePlanOffers(firestore);
+    if (offers.isNotEmpty) {
+      return offers;
+    }
+
+    // Keep onboarding functional if the Firestore catalog is empty.
+    final reader = ref.read(remoteConfigReaderProvider);
+    final fallbackPlans = Plan.values.where((plan) => plan != Plan.growth);
+    final fallbackEntries = await Future.wait(
+      fallbackPlans.map((plan) async {
+        final override = await reader.getPricingOverride(plan.code);
+        final definition = PlanCatalog.forPlan(plan);
+        return PlanOffer(
+          plan: plan,
+          code: plan.code,
+          displayName: definition.displayName,
+          priceCents: override?.priceCents,
+          currency: (override?.currency ?? 'BRL').toUpperCase(),
+          billingInterval: override?.billingInterval ?? 'monthly',
+          features: definition.features,
+          whatsappMonthlyLimit: definition.whatsappMonthlyLimit,
+          sortOrder: 999,
+        );
+      }),
+    );
+
+    return fallbackEntries;
+  } catch (e, st) {
+    AppErrorReporter.report(e, st, hint: 'onboarding_plan_offers');
+    rethrow;
   }
-
-  // Keep onboarding functional if the Firestore catalog is empty.
-  final reader = ref.read(remoteConfigReaderProvider);
-  final fallbackPlans = Plan.values.where((plan) => plan != Plan.growth);
-  final fallbackEntries = await Future.wait(
-    fallbackPlans.map((plan) async {
-      final override = await reader.getPricingOverride(plan.code);
-      final definition = PlanCatalog.forPlan(plan);
-      return PlanOffer(
-        plan: plan,
-        code: plan.code,
-        displayName: definition.displayName,
-        priceCents: override?.priceCents,
-        currency: (override?.currency ?? 'BRL').toUpperCase(),
-        billingInterval: override?.billingInterval ?? 'monthly',
-        features: definition.features,
-        whatsappMonthlyLimit: definition.whatsappMonthlyLimit,
-        sortOrder: 999,
-      );
-    }),
-  );
-
-  return fallbackEntries;
 });
 
 class OnboardingPlanSelectionScreen extends ConsumerStatefulWidget {
@@ -170,7 +176,8 @@ class _OnboardingPlanSelectionScreenState
       if (destination != null && mounted) {
         context.go(destination);
       }
-    } catch (_) {
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'onboarding_plan_confirm');
       if (!mounted) {
         return;
       }

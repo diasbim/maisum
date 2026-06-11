@@ -16,7 +16,7 @@ class AppConstants {
   static const int maxSyncRetries = 3;
   static const Duration syncRetryDelay = Duration(milliseconds: 500);
   static const String dbName = 'loyaltyos.db';
-  static const int dbVersion = 20;
+  static const int dbVersion = 21;
   static const int syncPullPageSize = 200;
   static const bool enableBackendAuth = bool.fromEnvironment(
     'ENABLE_BACKEND_AUTH',

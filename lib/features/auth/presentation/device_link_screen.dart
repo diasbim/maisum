@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/widgets/app_feedback.dart';
 import 'auth_controller.dart';
 import 'post_auth_navigation.dart';
@@ -113,7 +114,8 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
       final route = await resolvePostAuthRoute(ref.read);
       if (!mounted) return;
       context.go(route);
-    } catch (e) {
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'device_link_submit');
       if (!mounted) return;
       final raw = e.toString().trim();
       final message = raw.startsWith('Exception: ')

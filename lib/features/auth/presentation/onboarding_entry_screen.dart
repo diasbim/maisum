@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/errors/app_error_reporter.dart';
+
 class OnboardingEntryScreen extends StatefulWidget {
   const OnboardingEntryScreen({super.key});
 
@@ -31,7 +33,14 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
     final route = _selectedIntent == _OnboardingIntent.joinExisting
         ? '/link-device'
         : '/merchant-config';
-    context.go(route);
+    try {
+      context.go(route);
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'onboarding_entry_continue');
+      const message = 'Nao foi possivel continuar. Tente novamente.';
+      setState(() => _errorMessage = message);
+      SemanticsService.announce(message, Directionality.of(context));
+    }
   }
 
   @override

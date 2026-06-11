@@ -6,6 +6,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/constants/app_strings.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/database/app_database.dart';
+import '../../core/errors/app_error_reporter.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/sync/sync_retry_policy.dart';
 import '../../core/utils/app_logger.dart';
@@ -238,8 +239,12 @@ class SyncService {
       Log.i(_tag, 'Queue processed successfully');
     } catch (e, st) {
       Log.e(_tag, 'processQueue failed', e, st);
+      if (!_isTransientSyncError(e)) {
+        AppErrorReporter.report(e, st, hint: 'sync_process_queue');
+      }
       if (_isTransientSyncError(e)) {
-        Log.w(_tag, 'Transient network issue while processing queue; will retry');
+        Log.w(
+            _tag, 'Transient network issue while processing queue; will retry');
         unawaited(
           _logSyncEvent('sync_deferred', {
             'reason': 'transient_network',
@@ -285,23 +290,36 @@ class SyncService {
       return null;
     } catch (e, st) {
       Log.e(_tag, '✗ ${item.entityType}/${item.entityId}', e, st);
+      final errorReason = _formatSyncError(e);
       final transportError = e is SyncTransportException ? e : null;
       final isPermanent = transportError != null &&
           (transportError.code == 'failed-precondition' ||
               transportError.code == 'permission-denied' ||
               transportError.code == 'unauthenticated');
 
+      if (!_isTransientSyncError(e)) {
+        AppErrorReporter.report(
+          e,
+          st,
+          hint: 'sync_process_item:${item.entityType}:${item.operation}',
+        );
+      }
+
       if (isPermanent) {
-        await _syncDao.markFailed(item.id);
+        await _syncDao.markFailed(item.id, lastError: errorReason);
         Log.w(_tag, 'Item ${item.id} marked failed (non-retryable)');
-        return _formatSyncError(e);
+        return errorReason;
       }
 
       if (_isTransientSyncError(e)) {
         final retryCountForDelay = item.retryCount <= 0 ? 1 : item.retryCount;
         final nextAttemptAt =
             _retryPolicy.nextAttempt(retryCount: retryCountForDelay);
-        await _syncDao.scheduleRetry(item.id, nextAttemptAt);
+        await _syncDao.scheduleRetry(
+          item.id,
+          nextAttemptAt,
+          lastError: errorReason,
+        );
         Log.d(
           _tag,
           'Item ${item.id} deferred due to transient network issue',
@@ -309,23 +327,27 @@ class SyncService {
         return null;
       }
 
-      await _syncDao.incrementRetry(item.id);
+      await _syncDao.incrementRetry(item.id, lastError: errorReason);
       final retryCount = item.retryCount + 1;
       if (retryCount >= AppConstants.maxSyncRetries) {
-        await _syncDao.markFailed(item.id);
+        await _syncDao.markFailed(item.id, lastError: errorReason);
         Log.w(
           _tag,
           'Item ${item.id} marked failed after $retryCount attempt(s)',
         );
       } else {
         final nextAttemptAt = _retryPolicy.nextAttempt(retryCount: retryCount);
-        await _syncDao.scheduleRetry(item.id, nextAttemptAt);
+        await _syncDao.scheduleRetry(
+          item.id,
+          nextAttemptAt,
+          lastError: errorReason,
+        );
         Log.d(
           _tag,
           'Item ${item.id} will retry (attempt $retryCount/${AppConstants.maxSyncRetries})',
         );
       }
-      return _formatSyncError(e);
+      return errorReason;
     }
   }
 

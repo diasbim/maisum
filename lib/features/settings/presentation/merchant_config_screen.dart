@@ -820,7 +820,6 @@ class _ConfigDropdownField extends StatelessWidget {
     required this.value,
     required this.items,
     required this.onChanged,
-    this.validator,
   });
 
   final String label;

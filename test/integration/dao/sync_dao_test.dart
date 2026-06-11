@@ -134,6 +134,35 @@ void main() {
       await dao.markSynced('gone');
       expect((await dao.getPending()).map((i) => i.id), contains('keep'));
     });
+
+    test('markFailed persists last_error', () async {
+      await dao.enqueue(_item('mf-error'));
+      await dao.markFailed('mf-error', lastError: 'permission-denied');
+
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        'sync_queue',
+        where: 'id = ?',
+        whereArgs: ['mf-error'],
+        limit: 1,
+      );
+      expect(rows.single['last_error'], 'permission-denied');
+    });
+
+    test('markSynced clears last_error', () async {
+      await dao.enqueue(_item('ms-error'));
+      await dao.markFailed('ms-error', lastError: 'timeout');
+      await dao.markSynced('ms-error');
+
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        'sync_queue',
+        where: 'id = ?',
+        whereArgs: ['ms-error'],
+        limit: 1,
+      );
+      expect(rows.single['last_error'], isNull);
+    });
   });
 
   group('incrementRetry', () {
@@ -152,6 +181,20 @@ void main() {
         expect(await dao.getPending(), isEmpty);
       },
     );
+
+    test('stores last_error when incrementing retry', () async {
+      await dao.enqueue(_item('ir-error'));
+      await dao.incrementRetry('ir-error', lastError: 'http 500');
+
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        'sync_queue',
+        where: 'id = ?',
+        whereArgs: ['ir-error'],
+        limit: 1,
+      );
+      expect(rows.single['last_error'], 'http 500');
+    });
   });
 
   group('scheduleRetry', () {
@@ -167,6 +210,24 @@ void main() {
       final nextAttempt = DateTime.now().subtract(const Duration(minutes: 5));
       await dao.scheduleRetry('past', nextAttempt);
       expect(await dao.getPending(), hasLength(1));
+    });
+
+    test('stores last_error when scheduling retry', () async {
+      await dao.enqueue(_item('sched-error'));
+      await dao.scheduleRetry(
+        'sched-error',
+        DateTime.now().add(const Duration(minutes: 1)),
+        lastError: 'network unavailable',
+      );
+
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        'sync_queue',
+        where: 'id = ?',
+        whereArgs: ['sched-error'],
+        limit: 1,
+      );
+      expect(rows.single['last_error'], 'network unavailable');
     });
   });
 
@@ -203,6 +264,25 @@ void main() {
       await dao.enqueue(_item('keep'));
       await dao.clearSynced();
       expect(await dao.getPendingCount(), 1);
+    });
+  });
+
+  group('retryFailed', () {
+    test('resets last_error when requeueing failed item', () async {
+      await dao.enqueue(_item('rf1'));
+      await dao.markFailed('rf1', lastError: 'permission-denied');
+
+      await dao.retryFailed(id: 'rf1');
+
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        'sync_queue',
+        where: 'id = ?',
+        whereArgs: ['rf1'],
+        limit: 1,
+      );
+      expect(rows.single['status'], 'pending');
+      expect(rows.single['last_error'], isNull);
     });
   });
 }

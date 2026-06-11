@@ -147,6 +147,18 @@ class SettingsScreen extends ConsumerWidget {
                 onTap: () => context.push('/link-device'),
               ),
             _SettingsTile(
+              icon: Icons.calendar_month_rounded,
+              iconColor: AppColors.primaryDark,
+              title: 'Agenda de clientes',
+              subtitle: 'Ver agendamentos em lista e abrir cliente',
+              trailing: const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.g300,
+                size: 20,
+              ),
+              onTap: () => context.push('/appointments'),
+            ),
+            _SettingsTile(
               icon: Icons.verified_user_rounded,
               iconColor: AppColors.green,
               title: AppStrings.subscricao,
