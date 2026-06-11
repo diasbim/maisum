@@ -116,6 +116,9 @@ class AppStrings {
   static const String verHistorico = 'Ver histórico';
   static const String historicoCompras = 'Histórico de compras';
   static const String verTudo = 'Ver tudo';
+  static const String agendarCorte = 'Agendar corte';
+  static const String escolherDataProximoCorte =
+      'Escolher data do próximo corte';
   static const String progressoProximaRecompensa =
       'Progresso para próxima recompensa';
   static const String semRecompensasAtivas = 'Sem recompensas activas';

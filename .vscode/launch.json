@@ -4,7 +4,23 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-        
+        {
+            "name": "Flutter Auto Debug (TECNO BG6)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "deviceId": "11003373BU046483",
+            "toolArgs": [
+                "--host-vmservice-port",
+                "56000"
+            ],
+            "env": {
+                "HTTP_PROXY": "http://10.160.13.66:8080",
+                "HTTPS_PROXY": "http://10.160.13.66:8080",
+                "NO_PROXY": "127.0.0.1,localhost",
+                "no_proxy": "127.0.0.1,localhost"
+            }
+        },
         {
             "type": "chrome",
             "request": "launch",

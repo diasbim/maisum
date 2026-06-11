@@ -21,6 +21,7 @@ import '../../rewards/presentation/rewards_controller.dart';
 import '../../rewards/domain/reward.dart';
 import '../../rewards/domain/reward_progress.dart';
 import '../../rewards/presentation/reward_progress_provider.dart';
+import '../../appointments/providers/appointments_providers.dart';
 import '../../sales/domain/sale.dart';
 import '../../sales/presentation/new_sale_screen.dart';
 import '../../subscription/domain/feature_keys.dart';
@@ -333,6 +334,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                   onTap: () =>
                                       _showRedeemSheet(context, ref, customer),
                                 ),
+                                _ActionShortcut(
+                                  icon: Icons.calendar_month_rounded,
+                                  label: AppStrings.agendarCorte,
+                                  expand: false,
+                                  width: itemWidth,
+                                  onTap: () => _scheduleNextHaircut(
+                                      context, ref, customer),
+                                ),
                               ],
                             );
                           },
@@ -484,6 +493,51 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     });
   }
 
+  Future<void> _scheduleNextHaircut(
+    BuildContext context,
+    WidgetRef ref,
+    Customer customer,
+  ) async {
+    final now = DateUtils.dateOnly(DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 14)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+      locale: const Locale('pt', 'PT'),
+      helpText: AppStrings.escolherDataProximoCorte,
+      cancelText: 'Cancelar',
+      confirmText: 'Guardar',
+    );
+
+    if (picked == null || !context.mounted) {
+      return;
+    }
+
+    final scheduledDate = DateTime(picked.year, picked.month, picked.day, 10);
+    try {
+      await ref.read(createAppointmentProvider.notifier).createAppointment(
+            customerId: customer.id,
+            scheduledDate: scheduledDate,
+            source: 'customer_detail',
+          );
+      if (!context.mounted) {
+        return;
+      }
+      AppFeedback.showSuccessToast(
+        context,
+        message:
+            'Próximo corte agendado para ${_formatDateShort(scheduledDate)}.',
+      );
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'customer_detail_schedule_haircut');
+      if (!context.mounted) {
+        return;
+      }
+      AppFeedback.showMessage(context, message: AppStrings.erroGenericoAcao);
+    }
+  }
+
   Future<void> _openWhatsApp(
     BuildContext context,
     WidgetRef ref,
@@ -632,6 +686,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     ];
     final day = value.day.toString().padLeft(2, '0');
     return '$day ${monthNames[value.month - 1]} ${value.year}';
+  }
+
+  String _formatDateShort(DateTime value) {
+    final day = value.day.toString().padLeft(2, '0');
+    final month = value.month.toString().padLeft(2, '0');
+    return '$day/$month/${value.year}';
   }
 }
 

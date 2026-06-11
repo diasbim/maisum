@@ -31,7 +31,7 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final appointmentsAsync = ref.watch(appointmentsWithCustomerProvider);
 
     return Scaffold(
@@ -122,19 +122,23 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
               lastDate,
             );
 
-            final appointmentsByDay = <DateTime, List<AppointmentWithCustomer>>{};
+            final appointmentsByDay =
+                <DateTime, List<AppointmentWithCustomer>>{};
             for (final item in items) {
               final dayKey = _normalizeDay(item.appointment.scheduledDate);
-              appointmentsByDay.putIfAbsent(dayKey, () => <AppointmentWithCustomer>[]).add(item);
+              appointmentsByDay
+                  .putIfAbsent(dayKey, () => <AppointmentWithCustomer>[])
+                  .add(item);
             }
             for (final dayItems in appointmentsByDay.values) {
               dayItems.sort(
-                (a, b) => a.appointment.scheduledDate.compareTo(b.appointment.scheduledDate),
+                (a, b) => a.appointment.scheduledDate
+                    .compareTo(b.appointment.scheduledDate),
               );
             }
 
-            final selectedItems =
-                appointmentsByDay[effectiveSelectedDay] ?? const <AppointmentWithCustomer>[];
+            final selectedItems = appointmentsByDay[effectiveSelectedDay] ??
+                const <AppointmentWithCustomer>[];
 
             return ListView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -159,7 +163,8 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
                     selectedDayPredicate: (day) =>
                         _isSameCalendarDay(day, effectiveSelectedDay),
                     eventLoader: (day) =>
-                        appointmentsByDay[_normalizeDay(day)] ?? const <AppointmentWithCustomer>[],
+                        appointmentsByDay[_normalizeDay(day)] ??
+                        const <AppointmentWithCustomer>[],
                     onDaySelected: (selectedDay, focusedDay) {
                       setState(() {
                         _selectedDay = _normalizeDay(selectedDay);
@@ -206,7 +211,8 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
                                 (index) => Container(
                                   width: 5,
                                   height: 5,
-                                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                                  margin:
+                                      const EdgeInsets.symmetric(horizontal: 1),
                                   decoration: const BoxDecoration(
                                     color: AppColors.secondaryDark,
                                     shape: BoxShape.circle,
@@ -220,14 +226,18 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
                         return Positioned(
                           bottom: 2,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
                             decoration: BoxDecoration(
                               color: AppColors.secondaryDark,
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
                               '${events.length}',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -477,7 +487,7 @@ class _SwitcherButton extends StatelessWidget {
               Icon(
                 icon,
                 size: 18,
-                color: isActive ? AppColors.secondaryDark : AppColors.g700,
+                color: isActive ? AppColors.secondaryDark : AppColors.g500,
               ),
               const SizedBox(width: 6),
               Text(
@@ -485,7 +495,7 @@ class _SwitcherButton extends StatelessWidget {
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                       color:
-                          isActive ? AppColors.secondaryDark : AppColors.g700,
+                          isActive ? AppColors.secondaryDark : AppColors.g500,
                     ),
               ),
             ],
