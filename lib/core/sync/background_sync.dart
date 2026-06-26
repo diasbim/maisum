@@ -4,12 +4,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:workmanager/workmanager.dart';
 
-import '../constants/app_runtime_config.dart';
 import '../database/app_database.dart';
-import '../network/json_api_client.dart';
 import '../services/connectivity_service.dart';
 import '../storage/secure_storage.dart';
-import '../../features/sync/data/backend_sync_transport.dart';
 import '../../features/sync/data/sync_dao.dart';
 import '../../features/sync/data/sync_transport.dart';
 import '../../features/sync/sync_service.dart';
@@ -34,37 +31,19 @@ void callbackDispatcher() {
     final connectivity = ConnectivityService();
     await connectivity.check();
 
-    const config = AppRuntimeConfig();
     SyncTransport? transport;
 
-    if (config.usesBackendSync) {
-      final token = await storage.getToken();
-      if (token != null && token.isNotEmpty) {
-        final baseUrl = config.cloudFunctionsApiBaseUrl.isNotEmpty
-            ? config.cloudFunctionsApiBaseUrl
-            : config.apiBaseUrl;
-        transport = BackendSyncTransport(
-          JsonApiClient(baseUrl: baseUrl),
-          () async => token,
-        );
-      }
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
     }
-
-    // Background isolates may not always have a backend token available.
-    // Fall back to Firestore transport when possible to avoid no-op success.
-    if (transport == null) {
-      if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      }
-      final businessId = await storage.getFirebaseUid() ?? merchantId;
-      if (businessId != null && businessId.isNotEmpty) {
-        transport = FirestoreSyncService(
-          FirebaseFirestore.instance,
-          businessId,
-        );
-      }
+    final businessId = await storage.getFirebaseUid() ?? merchantId;
+    if (businessId != null && businessId.isNotEmpty) {
+      transport = FirestoreSyncService(
+        FirebaseFirestore.instance,
+        businessId,
+      );
     }
 
     final dao = SyncDao(

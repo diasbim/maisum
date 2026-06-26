@@ -20,12 +20,21 @@ class FirestoreSyncService implements SyncTransport {
     'redemption': 'redemptions',
     'appointment': 'appointments',
     'retention_metric': 'retention_metrics',
+    'customer_risk_score': 'customer_risk_scores',
+    'recovery_task': 'recovery_tasks',
+    'recovery_action': 'recovery_actions',
+    'visit_report': 'visit_reports',
+    'survey': 'surveys',
+    'survey_question': 'survey_questions',
+    'survey_response': 'survey_responses',
+    'survey_response_answer': 'survey_response_answers',
     'subscription_state': 'subscription_state',
     'entitlement': 'entitlements',
     'feature_flag': 'feature_flags',
     'remote_config': 'remote_config',
     'usage_balance': 'usage_balances',
     'usage_event': 'usage_events',
+    'app_user': 'app_users',
   };
 
   @override

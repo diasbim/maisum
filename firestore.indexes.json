@@ -9,24 +9,15 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "sales",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "created_at",
+          "fieldPath": "id",
           "order": "ASCENDING"
         },
         {
           "fieldPath": "__name__",
           "order": "ASCENDING"
         }
-      ]
+      ],
+      "density": "SPARSE_ALL"
     },
     {
       "collectionGroup": "rewards",
@@ -37,94 +28,34 @@
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "redemptions",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "redeemed_at",
+          "fieldPath": "id",
           "order": "ASCENDING"
         },
         {
           "fieldPath": "__name__",
           "order": "ASCENDING"
         }
-      ]
+      ],
+      "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "subscription_state",
+      "collectionGroup": "sales",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "updated_at",
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "id",
           "order": "ASCENDING"
         },
         {
           "fieldPath": "__name__",
           "order": "ASCENDING"
         }
-      ]
-    },
-    {
-      "collectionGroup": "entitlements",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "updated_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "feature_flags",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "updated_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "remote_config",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "updated_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "usage_balances",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "updated_at",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ]
+      ],
+      "density": "SPARSE_ALL"
     },
     {
       "collectionGroup": "appointments",

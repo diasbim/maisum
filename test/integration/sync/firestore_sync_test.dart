@@ -160,6 +160,50 @@ void main() {
       expect(doc.data()!['name'], 'Corte grátis');
     });
 
+    test('sync entity types map to Firestore collection names', () async {
+      const mappings = {
+        'customer_risk_score': 'customer_risk_scores',
+        'recovery_task': 'recovery_tasks',
+        'recovery_action': 'recovery_actions',
+        'visit_report': 'visit_reports',
+        'survey': 'surveys',
+        'survey_question': 'survey_questions',
+        'survey_response': 'survey_responses',
+        'survey_response_answer': 'survey_response_answers',
+        'app_user': 'app_users',
+      };
+
+      for (final entry in mappings.entries) {
+        final entityId = '${entry.key}-1';
+        final item = SyncItem(
+          id: 'sync-${entry.key}',
+          operation: 'create',
+          entityType: entry.key,
+          entityId: entityId,
+          payload: '{"id":"$entityId","updated_at":1234}',
+          createdAt: DateTime.now(),
+        );
+        await service.processSyncItem(item);
+
+        final mappedDoc = await fakeFirestore
+            .collection('businesses')
+            .doc(businessUid)
+            .collection(entry.value)
+            .doc(entityId)
+            .get();
+        expect(mappedDoc.exists, true, reason: entry.key);
+        expect(mappedDoc.data()!['id'], entityId);
+
+        final fallbackDoc = await fakeFirestore
+            .collection('businesses')
+            .doc(businessUid)
+            .collection(entry.key)
+            .doc(entityId)
+            .get();
+        expect(fallbackDoc.exists, false, reason: entry.key);
+      }
+    });
+
     test(
       'fetchCollectionSince returns only documents after the saved cursor',
       () async {

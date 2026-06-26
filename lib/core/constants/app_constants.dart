@@ -26,12 +26,11 @@ class AppConstants {
     'ALLOW_TEST_PHONE_AUTH_BYPASS',
     defaultValue: false,
   );
-  static const String syncTransport = String.fromEnvironment(
-    'SYNC_TRANSPORT',
-    defaultValue: syncTransportBackend,
+  static const bool enableCrashlyticsInDebug = bool.fromEnvironment(
+    'ENABLE_CRASHLYTICS_IN_DEBUG',
+    defaultValue: false,
   );
   static const String syncTransportFirestore = 'firestore';
-  static const String syncTransportBackend = 'backend';
   static const String tokenKey = 'auth_token';
   static const String userIdKey = 'user_id';
   static const String appUserIdKey = 'app_user_id';

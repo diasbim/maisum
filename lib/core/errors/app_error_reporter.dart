@@ -12,6 +12,10 @@ class AppErrorReporter {
     Log.e('Error', hint ?? 'App error', error, stackTrace);
     if (kIsWeb) return;
     try {
+      if (hint != null && hint.isNotEmpty) {
+        FirebaseCrashlytics.instance.setCustomKey('last_error_hint', hint);
+        FirebaseCrashlytics.instance.log('reason=$hint');
+      }
       FirebaseCrashlytics.instance.recordError(
         error,
         stackTrace ?? StackTrace.current,

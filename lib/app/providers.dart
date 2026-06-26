@@ -34,7 +34,6 @@ import '../features/sales/data/sale_dao.dart';
 import '../features/sales/data/sale_repository.dart';
 import '../features/settings/data/staff_management_repository.dart';
 import '../features/settings/domain/staff_member.dart';
-import '../features/sync/data/backend_sync_transport.dart';
 import '../features/sync/data/sync_dao.dart';
 import '../features/sync/data/sync_transport.dart';
 import '../features/sync/domain/sync_item.dart';
@@ -110,25 +109,7 @@ final backendAuthApiProvider = Provider<BackendAuthApi>(
   (ref) => BackendAuthApi(ref.read(jsonApiClientProvider)),
 );
 
-final backendSyncTransportProvider = Provider<BackendSyncTransport?>((ref) {
-  return BackendSyncTransport(
-    ref.read(cloudFunctionsApiClientProvider),
-    () async {
-      final backendToken = ref.read(authControllerProvider).valueOrNull?.token;
-      if (backendToken != null && backendToken.isNotEmpty) {
-        return backendToken;
-      }
-      final currentUser = ref.read(firebaseAuthInstanceProvider).currentUser;
-      return currentUser?.getIdToken();
-    },
-  );
-});
-
 final syncTransportProvider = Provider<SyncTransport?>((ref) {
-  final config = ref.watch(appRuntimeConfigProvider);
-  if (config.usesBackendSync) {
-    return ref.watch(backendSyncTransportProvider);
-  }
   return ref.watch(firestoreSyncServiceProvider);
 });
 

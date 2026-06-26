@@ -30,14 +30,6 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run -d android --dart-define=API_BASE_URL=https://your-api.example.com
 ```
 
-Temporary Cloud Functions mode (sync + notifications):
-
-```bash
-flutter run -d android \
-  --dart-define=SYNC_TRANSPORT=backend \
-  --dart-define=CLOUD_FUNCTIONS_API_BASE_URL=https://us-central1-loyaltyos-fc4dd.cloudfunctions.net/api
-```
-
 ## Stack
 
 | Layer | Package |
@@ -76,8 +68,7 @@ Pass at build time via `--dart-define`:
 | Variable | Default | Description |
 |---|---|---|
 | `API_BASE_URL` | `http://10.0.2.2:3000` | Backend base URL |
-| `CLOUD_FUNCTIONS_API_BASE_URL` | `https://us-central1-loyaltyos-fc4dd.cloudfunctions.net/api` | Cloud Functions HTTP API base URL for sync/notifications |
-| `SYNC_TRANSPORT` | `backend` | Sync transport (`backend` for Cloud Functions API, `firestore` for direct Firestore sync) |
+| `CLOUD_FUNCTIONS_API_BASE_URL` | `https://us-central1-loyaltyos-fc4dd.cloudfunctions.net/api` | Cloud Functions HTTP API base URL for non-sync endpoints (for example engage/notifications) |
 
 Read in `AppConstants`:
 ```dart
@@ -120,15 +111,9 @@ POST /auth/otp/verify    { phone, code } → { token, userId }
 
 ### Sync
 
-```
-POST /sync
-{
-  id, operation, entityType, entityId, payload, createdAt
-}
-→ { success: true }
-```
-
-The backend is responsible for idempotent upserts using `entityId`.
+Sync writes are enqueued locally and then applied as direct Firestore upserts
+under `businesses/{businessUid}/{collection}/{entityId}` using merge semantics.
+Deletes are mapped to Firestore document deletes.
 
 ## Android Build
 

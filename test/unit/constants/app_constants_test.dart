@@ -11,10 +11,10 @@ void main() {
       () => expect(AppConstants.enableBackendAuth, false),
     );
     test(
-      'sync transport defaults to backend',
+      'sync transport identifier is firestore',
       () => expect(
-        AppConstants.syncTransport,
-        AppConstants.syncTransportBackend,
+        AppConstants.syncTransportFirestore,
+        'firestore',
       ),
     );
     test(

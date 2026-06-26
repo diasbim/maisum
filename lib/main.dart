@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -9,32 +11,41 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'app/app.dart';
 import 'core/constants/app_constants.dart';
+import 'core/errors/crash_logging_bridge.dart';
+import 'core/errors/app_error_reporter.dart';
 import 'core/sync/background_sync.dart';
 import 'firebase_options.dart';
 
 const _firestoreCacheSizeBytes = 20 * 1024 * 1024;
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-  _configureFocusHighlightStrategy();
+      _configureFocusHighlightStrategy();
 
-  await _configureSystemUi();
+      await _configureSystemUi();
 
-  await _initializeFirebaseApp();
+      await _initializeFirebaseApp();
 
-  await _configureCrashlytics();
+      await _configureCrashlytics();
 
-  await registerBackgroundSync(debug: kDebugMode);
+      await registerBackgroundSync(debug: kDebugMode);
 
-  await _configureFirebaseAuth();
+      await _configureFirebaseAuth();
 
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: _firestoreCacheSizeBytes,
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: _firestoreCacheSizeBytes,
+      );
+
+      runApp(const ProviderScope(child: LoyaltyApp()));
+    },
+    (error, stack) {
+      AppErrorReporter.report(error, stack, hint: 'run_zoned_guarded_uncaught');
+    },
   );
-
-  runApp(const ProviderScope(child: LoyaltyApp()));
 }
 
 void _configureFocusHighlightStrategy() {
@@ -76,12 +87,26 @@ Future<FirebaseApp> _initializeFirebaseApp() async {
 }
 
 Future<void> _configureCrashlytics() async {
-  if (kIsWeb) return;
-  await FirebaseCrashlytics.instance
-      .setCrashlyticsCollectionEnabled(!kDebugMode);
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  const crashlyticsEnabled =
+      !kDebugMode || AppConstants.enableCrashlyticsInDebug;
+
+  if (kIsWeb) {
+    await CrashLoggingBridge.configure(enabled: false);
+    return;
+  }
+
+  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+    crashlyticsEnabled,
+  );
+
+  await CrashLoggingBridge.configure(enabled: crashlyticsEnabled);
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+  };
+
   PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    AppErrorReporter.report(error, stack, hint: 'platform_dispatcher_uncaught');
     return true;
   };
 }

@@ -806,7 +806,7 @@ class _SelectedCustomerCard extends StatelessWidget {
 }
 
 class _CustomerAvatar extends StatelessWidget {
-  const _CustomerAvatar({required this.name, this.radius = 18});
+  const _CustomerAvatar({required this.name, this.radius = 20});
   final String name;
   final double radius;
 

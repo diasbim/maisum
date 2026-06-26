@@ -62,7 +62,7 @@ final engageApiProvider = Provider<EngageApi>(
 );
 
 final engageRemoteModeProvider = Provider<bool>(
-  (ref) => ref.watch(app_providers.appRuntimeConfigProvider).usesBackendSync,
+  (ref) => ref.watch(app_providers.appRuntimeConfigProvider).enableBackendAuth,
 );
 
 final engageRepositoryProvider = Provider<EngageRepository>(
