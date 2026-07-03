@@ -1,17 +1,13 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-
 import '../constants/app_constants.dart';
-import '../errors/app_exception.dart';
 import 'api_response.dart';
+import 'json_api_transport.dart';
 
 class JsonApiClient {
-  JsonApiClient({HttpClient? httpClient, String? baseUrl})
-    : _httpClient = httpClient ?? HttpClient(),
-      _baseUrl = baseUrl ?? AppConstants.apiBaseUrl;
+  JsonApiClient({Object? httpClient, String? baseUrl})
+      : _transport = createJsonApiTransport(httpClient: httpClient),
+        _baseUrl = baseUrl ?? AppConstants.apiBaseUrl;
 
-  final HttpClient _httpClient;
+  final JsonApiTransport _transport;
   final String _baseUrl;
 
   String get baseUrl => _baseUrl;
@@ -56,59 +52,13 @@ class JsonApiClient {
     Object? body,
     String? bearerToken,
   }) async {
-    final uri = _buildUri(path, queryParameters);
-
-    try {
-      final request = await _httpClient
-          .openUrl(method, uri)
-          .timeout(AppConstants.connectTimeout);
-
-      request.headers.contentType = ContentType.json;
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      if (bearerToken != null && bearerToken.isNotEmpty) {
-        request.headers.set(
-          HttpHeaders.authorizationHeader,
-          'Bearer $bearerToken',
-        );
-      }
-      headers?.forEach(request.headers.set);
-
-      if (body != null) {
-        request.write(jsonEncode(body));
-      }
-
-      final response = await request.close().timeout(
-        AppConstants.receiveTimeout,
-      );
-      final responseText = await response.transform(utf8.decoder).join();
-      final decoded = responseText.isEmpty
-          ? <String, dynamic>{'success': response.statusCode < 400}
-          : jsonDecode(responseText);
-
-      if (response.statusCode >= 400) {
-        final message = decoded is Map<String, dynamic>
-            ? decoded['message'] as String?
-            : null;
-        throw ServerException(
-          statusCode: response.statusCode,
-          message: message ?? 'Erro no servidor.',
-        );
-      }
-
-      if (decoded is! Map<String, dynamic>) {
-        return ApiResponse<dynamic>(success: true, data: decoded);
-      }
-
-      return ApiResponse<dynamic>.fromJson(decoded, (data) => data);
-    } on SocketException {
-      throw const NetworkException();
-    } on TimeoutException {
-      throw const NetworkException('Tempo de ligação excedido.');
-    } on AppException {
-      rethrow;
-    } catch (_) {
-      throw const UnknownException();
-    }
+    return _transport.send(
+      method,
+      _buildUri(path, queryParameters),
+      headers: headers,
+      body: body,
+      bearerToken: bearerToken,
+    );
   }
 
   Uri _buildUri(String path, Map<String, Object?>? queryParameters) {

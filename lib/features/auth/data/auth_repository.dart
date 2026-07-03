@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart'
-    show FirebaseException, FirebaseFirestore, SetOptions;
+    show DocumentReference, FirebaseException, FirebaseFirestore, SetOptions;
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
@@ -12,6 +13,7 @@ import '../../../core/database/app_database.dart';
 import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/services/firebase_auth_service.dart';
 import '../../../core/storage/secure_storage.dart';
+import '../../../core/utils/app_logger.dart';
 import '../../../core/utils/moz_phone_utils.dart';
 import 'backend_auth_api.dart';
 import '../domain/auth_session.dart';
@@ -31,6 +33,7 @@ class AuthRepository {
         _firestore = firestore;
 
   static const _uuid = Uuid();
+  static const _tag = 'AuthRepository';
   static const _defaultMerchantName = 'Minha Loja';
   static const _defaultSubscriptionStatus = 'TRIAL';
   static const _defaultAppUserRole = AppConstants.appUserRoleOwner;
@@ -111,7 +114,10 @@ class AuthRepository {
       final storedFirebaseUid = storedSession?.firebaseUid;
       final phone =
           await _storage.getUserPhone() ?? firebaseUser.phoneNumber ?? '';
-      final existingMerchant = await _findMerchantByPhone(phone);
+      final existingMerchant = await _findMerchantByPhone(
+        phone,
+        firebaseUid: firebaseUser.uid,
+      );
       final deviceId = await _getOrCreateDeviceId();
 
       String token;
@@ -255,11 +261,10 @@ class AuthRepository {
             currentSession.firebaseUid != null &&
             ownerFirebaseUid == currentSession.firebaseUid);
 
-    await _storage.saveAppUserRole(
-      isOwnerSession
-          ? AppConstants.appUserRoleOwner
-          : AppConstants.appUserRoleStaff,
-    );
+    final resolvedRole = isOwnerSession
+        ? AppConstants.appUserRoleOwner
+        : AppConstants.appUserRoleStaff;
+    await _storage.saveAppUserRole(resolvedRole);
 
     final linkedSession = currentSession.copyWith(
       merchantId: merchantId,
@@ -274,13 +279,22 @@ class AuthRepository {
     );
 
     await _persistSession(linkedSession);
-    await _storage.setOnboardingPlanConfirmed(true);
+    await _storage.setOnboardingPlanConfirmed(
+      true,
+      merchantId: merchantId,
+      role: resolvedRole,
+    );
     return linkedSession;
   }
 
   Future<AuthSession> _sessionFromUser(User user, String phone) async {
     final deviceId = await _getOrCreateDeviceId();
+    _debugLog('sessionFromUser:start uid=${_redact(user.uid)} phone=$phone');
     final idToken = await user.getIdToken() ?? '';
+    _debugLog(
+      'sessionFromUser:idToken uid=${_redact(user.uid)} '
+      'hasToken=${idToken.isNotEmpty} tokenLength=${idToken.length}',
+    );
     final backendAuthApi = _backendAuthApi;
     if (config.enableBackendAuth && backendAuthApi != null) {
       try {
@@ -301,7 +315,14 @@ class AuthRepository {
       }
     }
 
-    final existingMerchant = await _findMerchantByPhone(phone);
+    final existingMerchant = await _findMerchantByPhone(
+      phone,
+      firebaseUid: user.uid,
+    );
+    _debugLog(
+      'sessionFromUser:merchantLookup phone=$phone '
+      'merchantId=${existingMerchant?.merchantId ?? ''}',
+    );
 
     final session = AuthSession(
       userId: user.uid,
@@ -317,6 +338,10 @@ class AuthRepository {
       expiresAt: DateTime.now().add(const Duration(days: 30)),
     );
     await _persistSession(session);
+    _debugLog(
+      'sessionFromUser:persisted uid=${_redact(user.uid)} '
+      'merchantId=${session.resolvedMerchantId} appUserId=${session.resolvedAppUserId}',
+    );
     return session;
   }
 
@@ -446,7 +471,10 @@ class AuthRepository {
     return role != AppConstants.appUserRoleStaff;
   }
 
-  Future<_ExistingMerchantData?> _findMerchantByPhone(String rawPhone) async {
+  Future<_ExistingMerchantData?> _findMerchantByPhone(
+    String rawPhone, {
+    required String firebaseUid,
+  }) async {
     final firestore = _firestore;
     if (firestore == null) {
       return null;
@@ -472,8 +500,23 @@ class AuthRepository {
         final data = doc.data();
         final merchantName = (data['merchant_name'] as String?)?.trim();
         final appUserId = (data['owner_user_id'] as String?)?.trim();
+        final ownerFirebaseUid = (data['firebase_uid'] as String?)?.trim();
         final subscriptionStatus =
             (data['subscription_status'] as String?)?.trim();
+
+        if (!_canUseExistingMerchant(
+          merchantId: doc.id,
+          data: data,
+          firebaseUid: firebaseUid,
+          rawPhone: rawPhone,
+        )) {
+          _debugLog(
+            'findMerchantByPhone:skip inaccessible merchant=${doc.id} '
+            'uid=${_redact(firebaseUid)} owner=${_redact(appUserId)} '
+            'firebaseUid=${_redact(ownerFirebaseUid)}',
+          );
+          continue;
+        }
 
         return _ExistingMerchantData(
           merchantId: doc.id,
@@ -502,6 +545,41 @@ class AuthRepository {
     }
 
     return null;
+  }
+
+  bool _canUseExistingMerchant({
+    required String merchantId,
+    required Map<String, dynamic> data,
+    required String firebaseUid,
+    required String rawPhone,
+  }) {
+    final ownerUserId = (data['owner_user_id'] as String?)?.trim() ?? '';
+    final ownerFirebaseUid = (data['firebase_uid'] as String?)?.trim() ?? '';
+    if (ownerUserId == firebaseUid || ownerFirebaseUid == firebaseUid) {
+      return true;
+    }
+
+    final hasOwnerFields = ownerUserId.isNotEmpty || ownerFirebaseUid.isNotEmpty;
+    if (hasOwnerFields) {
+      return false;
+    }
+
+    if (merchantId == firebaseUid) {
+      return true;
+    }
+
+    final businessPhone = (data['phone'] as String?)?.trim() ?? '';
+    return businessPhone.isNotEmpty &&
+        businessPhone == _phoneForAuthRules(rawPhone);
+  }
+
+  String _phoneForAuthRules(String rawPhone) {
+    try {
+      return MozPhoneUtils.normalizeToE164(rawPhone);
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'auth_phone_rules_normalize');
+      return rawPhone.trim();
+    }
   }
 
   Future<MapEntry<String, Map<String, dynamic>>?> _findMerchantByLinkCode(
@@ -551,8 +629,9 @@ class AuthRepository {
       final e164 = MozPhoneUtils.normalizeToE164(input);
       candidates.add(e164);
       candidates.add(MozPhoneUtils.normalizeToLocal(input));
-    } catch (_) {
+    } catch (e, st) {
       // Keep raw input as fallback candidate when normalization fails.
+      AppErrorReporter.report(e, st, hint: 'auth_phone_candidate_normalize');
     }
     return candidates.toList(growable: false);
   }
@@ -756,8 +835,7 @@ class AuthRepository {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     final businessRef = firestore.collection('businesses').doc(merchantId);
-    final existingBusiness = await businessRef.get();
-    final existingData = existingBusiness.data() ?? <String, dynamic>{};
+    final existingData = await _tryReadBusinessData(businessRef);
     final existingOwnerUserId =
         (existingData['owner_user_id'] as String?)?.trim() ?? '';
     final existingFirebaseUid =
@@ -768,6 +846,12 @@ class AuthRepository {
     final linkCode = (existingLinkCode != null && existingLinkCode.isNotEmpty)
         ? existingLinkCode
         : _buildDeviceLinkCode(merchantId);
+
+    _debugLog(
+      'syncMerchantDocument:set path=businesses/$merchantId '
+      'uid=${_redact(session.firebaseUid ?? session.userId)} '
+      'appUserId=${session.resolvedAppUserId} phone=${session.phone}',
+    );
 
     await businessRef.set({
       'id': merchantId,
@@ -793,6 +877,29 @@ class AuthRepository {
       subscriptionStatus: session.subscriptionStatus,
       now: now,
     );
+  }
+
+  Future<Map<String, dynamic>> _tryReadBusinessData(
+    DocumentReference<Map<String, dynamic>> businessRef,
+  ) async {
+    try {
+      final existingBusiness = await businessRef.get();
+      return existingBusiness.data() ?? <String, dynamic>{};
+    } on FirebaseException catch (e, st) {
+      if (e.code == 'permission-denied') {
+        _debugLog(
+          'syncMerchantDocument:readDenied path=${businessRef.path}; '
+          'continuing with bootstrap set',
+        );
+        AppErrorReporter.report(
+          e,
+          st,
+          hint: 'auth_sync_merchant_document_read_denied:${businessRef.path}',
+        );
+        return <String, dynamic>{};
+      }
+      rethrow;
+    }
   }
 
   String _normalizeLinkCode(String value) {
@@ -974,6 +1081,17 @@ class AuthRepository {
       return 'merchant_unknown';
     }
     return 'merchant_$digits';
+  }
+
+  String _redact(String? value) {
+    if (value == null || value.isEmpty) return '';
+    if (value.length <= 8) return '***';
+    return '${value.substring(0, 4)}...${value.substring(value.length - 4)}';
+  }
+
+  void _debugLog(String message) {
+    if (!kDebugMode) return;
+    Log.d(_tag, message);
   }
 }
 

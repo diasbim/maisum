@@ -6,9 +6,11 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pinput/pinput.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
+import '../../../design_system/design_system.dart';
 import 'auth_controller.dart';
 import 'post_auth_navigation.dart';
 import 'phone_auth_screen.dart';
@@ -129,7 +131,8 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       }
       final route = await resolvePostAuthRoute(ref.read);
       if (mounted) context.go(route);
-    } catch (e) {
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'auth_otp_verify_button');
       _submitInFlight = false;
       setState(() => _isVerifying = false);
       _pinController.clear();
@@ -219,40 +222,33 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
             SliverFillRemaining(
               hasScrollBody: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const AuthStepProgress(currentStep: 1),
-                    const SizedBox(height: 36),
-                    Container(
+                    const SizedBox(height: AppSpacing.xxxl),
+                    MaisUmSurface(
                       width: 56,
                       height: 56,
-                      decoration: BoxDecoration(
-                        gradient: AppTheme.primaryGradient,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.25),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
+                      radius: AppRadius.lg,
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      backgroundColor: AppColors.primaryDarker,
+                      borderColor: AppColors.primaryDarker,
                       child: Padding(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(AppSpacing.xs),
                         child: Image.asset(
                           'assets/images/logo.png',
                           fit: BoxFit.contain,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppSpacing.xl),
                     Text(
                       'Introduza o código\nde verificação',
                       style: theme.textTheme.displaySmall,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: AppSpacing.md),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -277,28 +273,19 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: AppSpacing.sm),
                         if (Navigator.of(context).canPop())
-                          TextButton(
+                          MaisUmButton(
                             onPressed: () => Navigator.of(context).pop(),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.secondary,
-                              minimumSize: Size.zero,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: Text(
-                              'Editar',
-                              style: theme.textTheme.labelMedium?.copyWith(
-                                color: AppColors.secondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                            label: 'Editar',
+                            variant: MaisUmButtonVariant.ghost,
+                            height: 36,
+                            radius: AppRadius.md,
+                            fullWidth: false,
                           ),
                       ],
                     ),
-                    const SizedBox(height: 36),
+                    const SizedBox(height: AppSpacing.xxxl),
                     Center(
                       child: Pinput(
                         key: const Key('otp_input'),
@@ -317,10 +304,10 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                         enabled: !_isVerifying,
                       ),
                     ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: AppSpacing.xxl),
                     Center(child: _buildResendRow(theme)),
                     const Spacer(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     Center(
                       child: Wrap(
                         alignment: WrapAlignment.center,
@@ -341,7 +328,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     AuthGradientButton(
                       key: const Key('verify_button'),
                       onPressed: _isVerifying ? null : _verifyOTP,
@@ -349,7 +336,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                       label: 'Verificar',
                       icon: Icons.check_rounded,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: AppSpacing.xl),
                   ],
                 ),
               ),
@@ -400,16 +387,14 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       );
     }
 
-    return TextButton.icon(
+    return MaisUmButton(
       onPressed: _resendCode,
-      icon: const Icon(Icons.refresh_rounded, size: 16),
-      label: const Text('Reenviar código'),
-      style: TextButton.styleFrom(
-        foregroundColor: AppColors.secondary,
-        textStyle: theme.textTheme.labelMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      label: 'Reenviar código',
+      leadingIcon: Icons.refresh_rounded,
+      variant: MaisUmButtonVariant.ghost,
+      foregroundColor: AppColors.secondary,
+      fullWidth: false,
+      height: 40,
     );
   }
 }

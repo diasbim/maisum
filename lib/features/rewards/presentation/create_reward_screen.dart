@@ -5,7 +5,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../design_system/components/loading_button.dart';
+import '../../../design_system/components/maisum_surface.dart';
 import '../../../design_system/components/maisum_text_field.dart';
 import '../../../design_system/components/maisum_toast.dart';
 import '../../../design_system/components/validation_state.dart';
@@ -95,7 +97,8 @@ class _CreateRewardScreenState extends ConsumerState<CreateRewardScreen> {
         return;
       }
 
-      _pointsState = hasPoints ? ValidationState.valid : ValidationState.invalid;
+      _pointsState =
+          hasPoints ? ValidationState.valid : ValidationState.invalid;
     });
     if (!_pointsFocusNode.hasFocus) {
       _formKey.currentState?.validate();
@@ -205,124 +208,166 @@ class _CreateRewardScreenState extends ConsumerState<CreateRewardScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + keyboardInset),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Crie uma recompensa em segundos',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.onSurface,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Escolha um template rapido ou personalize os campos.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final template in rewardTemplatePresets)
-                      ChoiceChip(
-                        key: Key('reward_template_${template.code}'),
-                        avatar: Icon(
-                          template.icon,
-                          size: 16,
-                          color: _selectedTemplateCode == template.code
-                              ? AppColors.primary
-                              : AppColors.onSurfaceVariant,
+          child: MaisUmSurface(
+            radius: AppRadius.xl,
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Crie uma recompensa em segundos',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.onSurface,
                         ),
-                        label: Text(template.label),
-                        selected: _selectedTemplateCode == template.code,
-                        onSelected: (_) => _applyTemplate(template),
-                        selectedColor: AppColors.secondaryLight,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                MaisUmTextField(
-                  label: AppStrings.nome,
-                  controller: _nameCtrl,
-                  focusNode: _nameFocusNode,
-                  enabled: !_isSaving,
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.next,
-                  hintText: AppStrings.nomeRecompensa,
-                  validator: _validateName,
-                  validationState: _nameState,
-                  showValidIcon: true,
-                  onChanged: (_) {
-                    if (_hasSubmitted && !_nameFocusNode.hasFocus) {
-                      setState(() {
-                        _nameState = _nameCtrl.text.trim().isEmpty
-                            ? ValidationState.invalid
-                            : ValidationState.valid;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 14),
-                MaisUmTextField(
-                  label: AppStrings.pontosNecessarios,
-                  controller: _pointsCtrl,
-                  focusNode: _pointsFocusNode,
-                  enabled: !_isSaving,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  hintText: AppStrings.pontosNecessarios,
-                  validator: _validatePoints,
-                  validationState: _pointsState,
-                  showValidIcon: true,
-                  onChanged: (_) {
-                    if (_hasSubmitted && !_pointsFocusNode.hasFocus) {
-                      setState(() {
-                        _pointsState = _hasValidPoints(_pointsCtrl.text)
-                            ? ValidationState.valid
-                            : ValidationState.invalid;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 14),
-                MaisUmTextField(
-                  label: AppStrings.descricao,
-                  controller: _descCtrl,
-                  enabled: !_isSaving,
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: TextInputAction.done,
-                  maxLines: 3,
-                  hintText: 'Detalhe opcional para a equipa e cliente',
-                  onFieldSubmitted: (_) => _submit(),
-                ),
-                const SizedBox(height: 24),
-                LoadingButton(
-                  label: AppStrings.guardar,
-                  loadingLabel: 'A guardar recompensa...',
-                  onPressed: _submit,
-                  enabled: !_isSaving,
-                  isLoading: _isSaving,
-                  height: 56,
-                  radius: 18,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Dica: mantenha 2-4 recompensas simples para facilitar o resgate.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Escolha um template rapido ou personalize os campos.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final template in rewardTemplatePresets)
+                        _RewardTemplateOption(
+                          key: Key('reward_template_${template.code}'),
+                          selected: _selectedTemplateCode == template.code,
+                          icon: template.icon,
+                          label: template.label,
+                          onTap: () => _applyTemplate(template),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  MaisUmTextField(
+                    label: AppStrings.nome,
+                    controller: _nameCtrl,
+                    focusNode: _nameFocusNode,
+                    enabled: !_isSaving,
+                    textCapitalization: TextCapitalization.sentences,
+                    textInputAction: TextInputAction.next,
+                    hintText: AppStrings.nomeRecompensa,
+                    validator: _validateName,
+                    validationState: _nameState,
+                    showValidIcon: true,
+                    onChanged: (_) {
+                      if (_hasSubmitted && !_nameFocusNode.hasFocus) {
+                        setState(() {
+                          _nameState = _nameCtrl.text.trim().isEmpty
+                              ? ValidationState.invalid
+                              : ValidationState.valid;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  MaisUmTextField(
+                    label: AppStrings.pontosNecessarios,
+                    controller: _pointsCtrl,
+                    focusNode: _pointsFocusNode,
+                    enabled: !_isSaving,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    hintText: AppStrings.pontosNecessarios,
+                    validator: _validatePoints,
+                    validationState: _pointsState,
+                    showValidIcon: true,
+                    onChanged: (_) {
+                      if (_hasSubmitted && !_pointsFocusNode.hasFocus) {
+                        setState(() {
+                          _pointsState = _hasValidPoints(_pointsCtrl.text)
+                              ? ValidationState.valid
+                              : ValidationState.invalid;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  MaisUmTextField(
+                    label: AppStrings.descricao,
+                    controller: _descCtrl,
+                    enabled: !_isSaving,
+                    textCapitalization: TextCapitalization.sentences,
+                    textInputAction: TextInputAction.done,
+                    maxLines: 3,
+                    hintText: 'Detalhe opcional para a equipa e cliente',
+                    onFieldSubmitted: (_) => _submit(),
+                  ),
+                  const SizedBox(height: 24),
+                  LoadingButton(
+                    label: AppStrings.guardar,
+                    loadingLabel: 'A guardar recompensa...',
+                    onPressed: _submit,
+                    enabled: !_isSaving,
+                    isLoading: _isSaving,
+                    height: 56,
+                    radius: 18,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Dica: mantenha 2-4 recompensas simples para facilitar o resgate.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _RewardTemplateOption extends StatelessWidget {
+  const _RewardTemplateOption({
+    super.key,
+    required this.selected,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? AppColors.primary : AppColors.onSurface;
+
+    return MaisUmSurface(
+      selected: selected,
+      semanticButton: true,
+      onTap: onTap,
+      radius: AppRadius.pill,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      backgroundColor: selected ? AppColors.secondaryLight : AppColors.white,
+      borderColor: selected ? AppColors.secondary : AppColors.g100,
+      borderWidth: selected ? 1.8 : 1.2,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: foreground),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: foreground,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
       ),
     );
   }

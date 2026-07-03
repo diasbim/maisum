@@ -9,9 +9,11 @@ import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/errors/app_error_mapper.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/moz_phone_input_formatter.dart';
 import '../../../core/utils/moz_phone_validator.dart';
 import '../../../design_system/components/loading_button.dart';
+import '../../../design_system/components/maisum_surface.dart';
 import '../../../design_system/components/maisum_modal.dart';
 import '../../../design_system/components/maisum_text_field.dart';
 import '../../../design_system/components/maisum_toast.dart';
@@ -249,79 +251,83 @@ class _CustomerCreateScreenState extends ConsumerState<CustomerCreateScreen> {
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Preencha os dados para criar o cliente.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                MaisUmTextField(
-                  label: AppStrings.nome,
-                  controller: _nameController,
-                  focusNode: _nameFocusNode,
-                  enabled: !_isSaving,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  hintText: AppStrings.nomeHint,
-                  validator: _nameValidator,
-                  validationState: _nameState,
-                  showValidIcon: true,
-                  onChanged: (_) {
-                    if (_hasSubmitted && !_nameFocusNode.hasFocus) {
-                      setState(() {
-                        _nameState = _nameController.text.trim().isEmpty
-                            ? ValidationState.invalid
-                            : ValidationState.valid;
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 12),
-                MaisUmTextField(
-                  label: AppStrings.phoneNumber,
-                  controller: _phoneController,
-                  focusNode: _phoneFocusNode,
-                  enabled: !_isSaving,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.done,
-                  hintText: '84 000 0000',
-                  validator: _phoneValidator,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(9),
-                    MozPhoneFormatter(),
-                  ],
-                  validationState: _phoneState,
-                  showValidIcon: true,
-                  onChanged: (_) {
-                    if (_hasSubmitted && !_phoneFocusNode.hasFocus) {
-                      setState(() {
-                        _phoneState = MozPhoneValidator.isValidLocalPhone(
-                                _phoneController.text)
-                            ? ValidationState.valid
-                            : ValidationState.invalid;
-                      });
-                    }
-                  },
-                  onFieldSubmitted: (_) => _save(),
-                ),
-                const SizedBox(height: 20),
-                LoadingButton(
-                  label: AppStrings.criarCliente,
-                  loadingLabel: 'A criar cliente...',
-                  onPressed: _save,
-                  enabled: !_isSaving,
-                  isLoading: _isSaving,
-                  height: 56,
-                  radius: 18,
-                ),
-              ],
+          child: MaisUmSurface(
+            radius: AppRadius.xl,
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Preencha os dados para criar o cliente.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: 16),
+                  MaisUmTextField(
+                    label: AppStrings.nome,
+                    controller: _nameController,
+                    focusNode: _nameFocusNode,
+                    enabled: !_isSaving,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    hintText: AppStrings.nomeHint,
+                    validator: _nameValidator,
+                    validationState: _nameState,
+                    showValidIcon: true,
+                    onChanged: (_) {
+                      if (_hasSubmitted && !_nameFocusNode.hasFocus) {
+                        setState(() {
+                          _nameState = _nameController.text.trim().isEmpty
+                              ? ValidationState.invalid
+                              : ValidationState.valid;
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  MaisUmTextField(
+                    label: AppStrings.phoneNumber,
+                    controller: _phoneController,
+                    focusNode: _phoneFocusNode,
+                    enabled: !_isSaving,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.done,
+                    hintText: '84 000 0000',
+                    validator: _phoneValidator,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(9),
+                      MozPhoneFormatter(),
+                    ],
+                    validationState: _phoneState,
+                    showValidIcon: true,
+                    onChanged: (_) {
+                      if (_hasSubmitted && !_phoneFocusNode.hasFocus) {
+                        setState(() {
+                          _phoneState = MozPhoneValidator.isValidLocalPhone(
+                                  _phoneController.text)
+                              ? ValidationState.valid
+                              : ValidationState.invalid;
+                        });
+                      }
+                    },
+                    onFieldSubmitted: (_) => _save(),
+                  ),
+                  const SizedBox(height: 20),
+                  LoadingButton(
+                    label: AppStrings.criarCliente,
+                    loadingLabel: 'A criar cliente...',
+                    onPressed: _save,
+                    enabled: !_isSaving,
+                    isLoading: _isSaving,
+                    height: 56,
+                    radius: 18,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

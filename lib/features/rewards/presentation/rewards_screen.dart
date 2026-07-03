@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../design_system/design_system.dart';
 import '../domain/reward.dart';
 import 'reward_templates.dart';
 import 'rewards_controller.dart';
@@ -71,7 +73,7 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> {
                                   fontWeight: FontWeight.w700,
                                 ),
                           );
-                          final action = TextButton.icon(
+                          final action = MaisUmButton(
                             onPressed: list.isEmpty
                                 ? null
                                 : () {
@@ -79,15 +81,14 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> {
                                       _ascendingSort = !_ascendingSort;
                                     });
                                   },
-                            icon: const Icon(Icons.sort_rounded, size: 18),
-                            label: Text(
-                              _ascendingSort
-                                  ? '${AppStrings.recompensasOrdenar} ↑'
-                                  : '${AppStrings.recompensasOrdenar} ↓',
-                            ),
-                            style: TextButton.styleFrom(
-                              foregroundColor: AppColors.secondaryDark,
-                            ),
+                            label: _ascendingSort
+                                ? '${AppStrings.recompensasOrdenar} ↑'
+                                : '${AppStrings.recompensasOrdenar} ↓',
+                            leadingIcon: Icons.sort_rounded,
+                            variant: MaisUmButtonVariant.ghost,
+                            foregroundColor: AppColors.secondaryDark,
+                            fullWidth: false,
+                            height: 40,
                           );
                           if (isNarrow) {
                             return Column(
@@ -176,11 +177,15 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> {
           child: CircularProgressIndicator(color: AppColors.secondary),
         ),
         error: (e, _) => Center(
-          child: TextButton.icon(
-            icon: const Icon(Icons.refresh),
-            label: const Text(AppStrings.tentar),
-            onPressed: () =>
-                ref.read(rewardsControllerProvider.notifier).refresh(),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: MaisUmButton(
+              label: AppStrings.tentar,
+              leadingIcon: Icons.refresh_rounded,
+              variant: MaisUmButtonVariant.outlined,
+              onPressed: () =>
+                  ref.read(rewardsControllerProvider.notifier).refresh(),
+            ),
           ),
         ),
       ),
@@ -264,13 +269,12 @@ class _HeroBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-      decoration: BoxDecoration(
-        color: AppColors.primaryDark.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
+      radius: 20,
+      backgroundColor: AppColors.primaryDark.withValues(alpha: 0.6),
+      borderColor: Colors.white.withValues(alpha: 0.08),
+      shadows: const [],
       child: Row(
         children: [
           Container(
@@ -337,20 +341,18 @@ class _RewardTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = _rewardIcon(reward.name);
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.g100, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+      radius: 18,
+      borderColor: AppColors.g100,
+      borderWidth: 1.2,
+      shadows: [
+        BoxShadow(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          blurRadius: 16,
+          offset: const Offset(0, 10),
+        ),
+      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -451,19 +453,18 @@ class _InsightBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.25),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
+      radius: 18,
+      backgroundColor: AppColors.primary,
+      borderColor: AppColors.primary,
+      shadows: [
+        BoxShadow(
+          color: AppColors.primary.withValues(alpha: 0.25),
+          blurRadius: 24,
+          offset: const Offset(0, 12),
+        ),
+      ],
       child: Row(
         children: [
           Container(

@@ -9,7 +9,7 @@ import 'package:maisum/features/auth/presentation/otp_verification_screen.dart';
 import 'package:maisum/features/auth/presentation/phone_auth_screen.dart';
 import 'package:maisum/features/auth/presentation/pin_entry_screen.dart';
 import 'package:maisum/features/auth/presentation/pin_setup_screen.dart';
-import 'package:maisum/features/settings/presentation/merchant_config_screen.dart';
+import 'package:maisum/features/merchant_onboarding/presentation/pages/business_type_page.dart';
 import 'package:maisum/features/subscription/domain/plan.dart';
 import 'package:maisum/features/subscription/domain/subscription_snapshot.dart';
 import 'package:maisum/features/subscription/domain/subscription_status.dart';
@@ -57,12 +57,20 @@ class _InMemorySecureStorageService extends FakeSecureStorageService {
   }
 
   @override
-  Future<void> setOnboardingPlanConfirmed(bool value) async {
+  Future<void> setOnboardingPlanConfirmed(
+    bool value, {
+    String? merchantId,
+    String? role,
+  }) async {
     _confirmed = value;
   }
 
   @override
-  Future<bool> hasConfirmedOnboardingPlan() async => _confirmed;
+  Future<bool> hasConfirmedOnboardingPlan({
+    String? merchantId,
+    String? role,
+  }) async =>
+      _confirmed;
 }
 
 Future<int> _pumpSmallDevice(
@@ -94,6 +102,17 @@ Future<int> _pumpSmallDevice(
   return settleFrames;
 }
 
+Future<void> _pumpUntilFound(
+  WidgetTester tester,
+  Finder finder, {
+  int maxFrames = 20,
+}) async {
+  for (var frame = 0; frame < maxFrames; frame += 1) {
+    if (finder.evaluate().isNotEmpty) return;
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
 void main() {
   group('Onboarding small-device layout', () {
     testWidgets('phone auth renders and key actions stay reachable',
@@ -104,6 +123,9 @@ void main() {
           child: MaterialApp(home: PhoneAuthScreen()),
         ),
       );
+
+      await tester.tap(find.byKey(const Key('welcome_start_button')));
+      await tester.pumpAndSettle();
 
       await tester.ensureVisible(find.byKey(const Key('send_code_button')));
       await tester.ensureVisible(find.byKey(const Key('google_auth_button')));
@@ -186,8 +208,14 @@ void main() {
       await firestore.collection('businesses').doc('merchant-1').set({
         'merchant_name': 'Minha Loja',
         'phone': '+258841234567',
-        'city': 'Maputo',
-        'business_type': 'Barbearia',
+      });
+      await firestore
+          .collection('merchant_onboarding_config')
+          .doc('default')
+          .set({
+        'business_types': [
+          {'id': 'barber_from_firestore', 'label': 'Barbearia Firestore'},
+        ],
       });
 
       final merchantFrames = await _pumpSmallDevice(
@@ -199,12 +227,15 @@ void main() {
             firestoreInstanceProvider.overrideWithValue(firestore),
             secureStorageServiceProvider.overrideWithValue(storage),
           ],
-          child: const MaterialApp(home: MerchantConfigScreen()),
+          child: const MaterialApp(home: BusinessTypePage()),
         ),
+        settle: false,
       );
+      await _pumpUntilFound(tester, find.text('Barbearia Firestore'));
 
       await tester.ensureVisible(find.text('Continuar'));
       expect(merchantFrames, lessThan(160));
+      expect(find.text('Barbearia Firestore'), findsOneWidget);
       expect(find.text('Continuar'), findsOneWidget);
 
       final snapshot = SubscriptionSnapshot(

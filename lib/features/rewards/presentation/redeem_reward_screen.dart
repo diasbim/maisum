@@ -7,7 +7,7 @@ import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_feedback.dart';
-import '../../../core/widgets/primary_button.dart';
+import '../../../design_system/design_system.dart';
 import '../../customers/domain/customer.dart';
 import '../domain/reward.dart';
 import 'rewards_controller.dart';
@@ -140,15 +140,12 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
             ),
           ),
           const SizedBox(height: 8),
-          Container(
+          MaisUmSurface(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: AppColors.secondaryLight,
-              borderRadius: BorderRadius.circular(14),
-              border:
-                  Border.all(color: AppColors.secondary.withValues(alpha: 0.4)),
-            ),
+            radius: 14,
+            backgroundColor: AppColors.secondaryLight,
+            borderColor: AppColors.secondary.withValues(alpha: 0.4),
             child: Text(
               _redemptionCode,
               style: theme.textTheme.headlineMedium?.copyWith(
@@ -160,20 +157,17 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
             ),
           ),
           const SizedBox(height: 20),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.send_rounded, size: 16),
-            label: const Text(AppStrings.notificarWhatsApp),
+          MaisUmButton(
+            label: AppStrings.notificarWhatsApp,
+            leadingIcon: Icons.send_rounded,
             onPressed: _openWhatsApp,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            ),
+            variant: MaisUmButtonVariant.outlined,
+            foregroundColor: AppColors.primary,
+            fullWidth: false,
+            radius: 12,
           ),
           const SizedBox(height: 12),
-          PrimaryButton(
+          MaisUmButton(
             label: AppStrings.concluir,
             onPressed: () => Navigator.of(context).pop(true),
           ),
@@ -272,10 +266,10 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
             error: (_, __) => const SizedBox.shrink(),
           ),
           const SizedBox(height: 20),
-          PrimaryButton(
+          MaisUmButton(
             label: AppStrings.confirmarResgate,
             onPressed: _selected != null ? _confirm : null,
-            loading: _loading,
+            isLoading: _loading,
           ),
         ],
       ),
@@ -318,53 +312,49 @@ class _RewardOption extends StatelessWidget {
   Widget build(BuildContext context) {
     return Opacity(
       opacity: eligible ? 1.0 : 0.45,
-      child: GestureDetector(
+      child: MaisUmSurface(
         onTap: onTap,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.secondaryLight : AppColors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: selected ? AppColors.secondary : AppColors.g100,
-              width: selected ? 2 : 1.5,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+        selected: selected,
+        semanticButton: onTap != null,
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        radius: 14,
+        backgroundColor: selected ? AppColors.secondaryLight : AppColors.white,
+        borderColor: selected ? AppColors.secondary : AppColors.g100,
+        borderWidth: selected ? 2 : 1.5,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    reward.name,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.onSurface,
+                        ),
+                  ),
+                  if (reward.description != null &&
+                      reward.description!.isNotEmpty)
                     Text(
-                      reward.name,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.onSurface,
-                          ),
+                      reward.description!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    if (reward.description != null &&
-                        reward.description!.isNotEmpty)
-                      Text(
-                        reward.description!,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                  ],
-                ),
+                ],
               ),
-              Text(
-                '${reward.pointsRequired} pts',
-                style: const TextStyle(
-                  color: AppColors.secondaryDark,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 14,
-                ),
+            ),
+            Text(
+              '${reward.pointsRequired} pts',
+              style: const TextStyle(
+                color: AppColors.secondaryDark,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

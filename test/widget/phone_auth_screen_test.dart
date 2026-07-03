@@ -32,6 +32,17 @@ void main() {
     expect(tester.takeException(), isNull);
   }
 
+  Future<void> openPhoneForm(WidgetTester tester) async {
+    if (find.byKey(const Key('send_code_button')).evaluate().isNotEmpty) {
+      return;
+    }
+
+    expect(find.byKey(const Key('welcome_start_button')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('welcome_start_button')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  }
+
   ElevatedButton continueButton(WidgetTester tester) {
     return tester.widget<ElevatedButton>(
       find.descendant(
@@ -44,6 +55,7 @@ void main() {
   testWidgets('shows otp-first layout with secondary google action',
       (tester) async {
     await pumpScreen(tester);
+    await openPhoneForm(tester);
 
     expect(find.byKey(const Key('default_country_code')), findsOneWidget);
     expect(find.text('+258'), findsOneWidget);
@@ -54,8 +66,25 @@ void main() {
     expect(find.byKey(const Key('terms_section')), findsOneWidget);
   });
 
+  testWidgets('welcome screen fits on small phones without scrolling',
+      (tester) async {
+    await pumpScreen(tester, physicalSize: const Size(320, 568));
+    final assetNames = tester.widgetList<Image>(find.byType(Image)).map(
+          (image) => (image.image as AssetImage).assetName,
+        );
+
+    expect(find.byKey(const Key('welcome_start_button')), findsOneWidget);
+    expect(assetNames, contains('assets/images/welcomebg.png'));
+    expect(assetNames, contains('assets/images/welcome.png'));
+    expect(assetNames, isNot(contains('assets/images/welcome_background.png')));
+    expect(assetNames, isNot(contains('assets/images/welcome_barber.png')));
+    expect(find.byType(SingleChildScrollView), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('hides google and terms while keyboard is open', (tester) async {
     await pumpScreen(tester, keyboardInset: 280);
+    await openPhoneForm(tester);
 
     expect(find.text('CONTINUAR'), findsOneWidget);
     expect(find.byKey(const Key('google_auth_button')), findsNothing);
@@ -65,6 +94,7 @@ void main() {
   testWidgets('keeps validation hidden while typing and shows on submit',
       (tester) async {
     await pumpScreen(tester);
+    await openPhoneForm(tester);
 
     await tester.enterText(find.byKey(const Key('phone_input')), '84 32');
     await tester.pump();
@@ -89,6 +119,7 @@ void main() {
 
   testWidgets('enables continue button only at 9 digits', (tester) async {
     await pumpScreen(tester);
+    await openPhoneForm(tester);
 
     expect(continueButton(tester).onPressed, isNull);
 
@@ -108,6 +139,7 @@ void main() {
       physicalSize: const Size(320, 568),
       keyboardInset: 260,
     );
+    await openPhoneForm(tester);
 
     expect(find.byKey(const Key('send_code_button')), findsOneWidget);
     expect(find.byKey(const Key('google_auth_button')), findsNothing);
@@ -123,6 +155,7 @@ void main() {
     });
 
     await pumpScreen(tester);
+    await openPhoneForm(tester);
 
     tester.view.physicalSize = const Size(568, 320);
     await tester.pumpAndSettle();
@@ -137,6 +170,7 @@ void main() {
       physicalSize: const Size(320, 568),
       keyboardInset: 260,
     );
+    await openPhoneForm(tester);
 
     await tester.enterText(find.byKey(const Key('phone_input')), '843262347');
     await tester.pumpAndSettle();
@@ -155,6 +189,7 @@ void main() {
         physicalSize: Size(360, height),
         keyboardInset: 280,
       );
+      await openPhoneForm(tester);
 
       expect(find.byKey(const Key('send_code_button')), findsOneWidget);
       expect(find.byKey(const Key('google_auth_button')), findsNothing);

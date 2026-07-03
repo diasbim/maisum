@@ -5,9 +5,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/pin_pad.dart';
 import '../../../core/widgets/pin_verification_feedback.dart';
+import '../../../design_system/design_system.dart';
 import 'post_auth_navigation.dart';
 import 'phone_auth_screen.dart';
 
@@ -102,10 +103,9 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
       final requestedRoute = widget.nextRoute?.trim();
       final hasRequestedRoute =
           requestedRoute != null && requestedRoute.startsWith('/');
-      final route =
-          hasRequestedRoute
-            ? requestedRoute
-            : await resolvePostAuthRoute(ref.read);
+      final route = hasRequestedRoute
+          ? requestedRoute
+          : await resolvePostAuthRoute(ref.read);
       if (mounted) context.go(route);
     } else {
       setState(() {
@@ -144,46 +144,46 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
                       children: [
-                        const SizedBox(height: 48),
+                        const SizedBox(height: AppSpacing.xxxxl),
                         AuthStepProgress(currentStep: _isSuccess ? 3 : 2),
-                        const SizedBox(height: 40),
-                        // Icon
-                        Container(
+                        const SizedBox(height: AppSpacing.xxxl),
+                        MaisUmSurface(
                           width: 72,
                           height: 72,
-                          decoration: BoxDecoration(
-                            gradient: _isSuccess
-                                ? AppTheme.goldGradient
-                                : AppTheme.primaryGradient,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: AppTheme.shadowMd,
-                          ),
+                          radius: AppRadius.xl,
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          backgroundColor: _isSuccess
+                              ? AppColors.secondaryLight
+                              : AppColors.primaryDarker,
+                          borderColor: _isSuccess
+                              ? AppColors.secondary
+                              : AppColors.primaryDarker,
                           child: Padding(
-                            padding: const EdgeInsets.all(14),
+                            padding: const EdgeInsets.all(AppSpacing.xs),
                             child: Image.asset(
                               'assets/images/logo.png',
                               fit: BoxFit.contain,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: AppSpacing.xxl),
                         Text(title,
                             style: theme.textTheme.headlineLarge,
                             textAlign: TextAlign.center),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: AppSpacing.sm),
                         Text(
                           subtitle,
                           style: theme.textTheme.bodyMedium
                               ?.copyWith(color: AppColors.onSurfaceVariant),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 48),
+                        const SizedBox(height: AppSpacing.xxxxl),
                         PinVerificationFeedback(
                           shakeAnimation: pinShakeAnimation,
                           inputLength: currentLen,
@@ -198,7 +198,7 @@ class _PinSetupScreenState extends ConsumerState<PinSetupScreen>
                       ],
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 28),
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
                       child: PinPad(
                           onDigit: _handleDigit, onDelete: _handleDelete),
                     ),

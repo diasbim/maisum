@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/moz_phone_utils.dart';
 import '../../../core/widgets/app_feedback.dart';
+import '../../../design_system/design_system.dart';
 import '../domain/staff_member.dart';
 
 class StaffManagementScreen extends ConsumerStatefulWidget {
@@ -41,9 +42,10 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
               const SizedBox(height: 8),
               Text(error.toString()),
               const SizedBox(height: 16),
-              FilledButton(
+              MaisUmButton(
                 onPressed: _refresh,
-                child: const Text('Tentar novamente'),
+                label: 'Tentar novamente',
+                fullWidth: false,
               ),
             ],
           ),
@@ -63,15 +65,18 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  OutlinedButton.icon(
+                  MaisUmButton(
                     onPressed: _actionInProgress ? null : _inviteStaff,
-                    icon: const Icon(Icons.mark_email_unread_rounded),
-                    label: const Text('Convidar por telefone'),
+                    label: 'Convidar por telefone',
+                    leadingIcon: Icons.mark_email_unread_rounded,
+                    variant: MaisUmButtonVariant.outlined,
+                    fullWidth: false,
                   ),
-                  FilledButton.icon(
+                  MaisUmButton(
                     onPressed: _actionInProgress ? null : _createStaff,
-                    icon: const Icon(Icons.person_add_alt_1_rounded),
-                    label: const Text('Criar manualmente'),
+                    label: 'Criar manualmente',
+                    leadingIcon: Icons.person_add_alt_1_rounded,
+                    fullWidth: false,
                   ),
                 ],
               ),
@@ -100,51 +105,49 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
       _ => AppColors.error,
     };
 
-    return Card(
+    return MaisUmSurface(
       margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: statusColor.withValues(alpha: 0.15),
-              child: Icon(
-                member.isOwner
-                    ? Icons.workspace_premium_rounded
-                    : Icons.person_outline_rounded,
-                color: statusColor,
-              ),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: statusColor.withValues(alpha: 0.15),
+            child: Icon(
+              member.isOwner
+                  ? Icons.workspace_premium_rounded
+                  : Icons.person_outline_rounded,
+              color: statusColor,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    member.phone,
-                    style: theme.textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      _InfoChip(label: member.role, color: AppColors.primary),
-                      _InfoChip(label: member.status, color: statusColor),
-                    ],
-                  ),
-                ],
-              ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  member.phone,
+                  style: theme.textTheme.titleSmall,
+                ),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _InfoChip(label: member.role, color: AppColors.primary),
+                    _InfoChip(label: member.status, color: statusColor),
+                  ],
+                ),
+              ],
             ),
-            if (!member.isOwner)
-              Switch(
-                value: member.isActive,
-                onChanged: _actionInProgress
-                    ? null
-                    : (isActive) => _toggleStaff(member, isActive),
-              ),
-          ],
-        ),
+          ),
+          if (!member.isOwner)
+            Switch(
+              value: member.isActive,
+              onChanged: _actionInProgress
+                  ? null
+                  : (isActive) => _toggleStaff(member, isActive),
+            ),
+        ],
       ),
     );
   }
@@ -258,11 +261,14 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
             ),
           ),
           actions: [
-            TextButton(
+            MaisUmButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancelar'),
+              label: 'Cancelar',
+              variant: MaisUmButtonVariant.ghost,
+              fullWidth: false,
+              height: 40,
             ),
-            FilledButton(
+            MaisUmButton(
               onPressed: () {
                 final raw = controller.text.trim();
                 if (raw.isEmpty) {
@@ -276,7 +282,9 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                   Navigator.of(ctx).pop(raw);
                 }
               },
-              child: Text(confirmLabel),
+              label: confirmLabel,
+              fullWidth: false,
+              height: 40,
             ),
           ],
         ),

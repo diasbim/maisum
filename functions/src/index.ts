@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import express from 'express';
 import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 
 admin.initializeApp();
 
@@ -26,6 +26,14 @@ type AuthedRequest = express.Request & {
   appUserId?: string;
   appUserRole?: string;
   auth?: admin.auth.DecodedIdToken;
+};
+
+type AdminAuditEventInput = {
+  action: string;
+  targetType: string;
+  targetId?: string | null;
+  merchantId?: string | null;
+  details?: Record<string, unknown> | null;
 };
 
 const ENTITY_CONFIG: Record<string, EntityConfig> = {
@@ -166,6 +174,16 @@ app.use(async (req, res, next) => {
   const allowDev = process.env.ALLOW_DEV_AUTH === 'true';
   const authHeader = req.headers.authorization;
 
+  if ((!authHeader || !authHeader.startsWith('Bearer ')) &&
+      isAdminPath(req) &&
+      hasValidAdminApiKey(req)) {
+    const authedReq = req as AuthedRequest;
+    authedReq.merchantId = '';
+    authedReq.appUserId = 'admin-key';
+    authedReq.appUserRole = 'ADMIN';
+    return next();
+  }
+
   if ((!authHeader || !authHeader.startsWith('Bearer ')) && allowDev) {
     const merchantHeader = req.headers['x-merchant-id'];
     if (isNonEmptyString(merchantHeader)) {
@@ -185,13 +203,14 @@ app.use(async (req, res, next) => {
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     const merchantId = resolveMerchantId(decoded);
-    if (!merchantId) {
+    const adminAccess = isAdminPath(req) && hasAdminClaims(decoded);
+    if (!merchantId && !adminAccess) {
       return res
         .status(403)
         .json({ success: false, message: 'Missing merchant scope' });
     }
     const authedReq = req as AuthedRequest;
-    authedReq.merchantId = merchantId;
+    authedReq.merchantId = merchantId ?? '';
     authedReq.appUserId = resolveAppUserId(decoded);
     authedReq.appUserRole = resolveAppUserRole(decoded);
     authedReq.auth = decoded;
@@ -207,6 +226,400 @@ adminRouter.use((req, res, next) => {
     return res.status(403).json({ success: false, message: 'Forbidden' });
   }
   return next();
+});
+
+adminRouter.get('/merchants', async (req, res) => {
+  const limit = clampLimit(req.query.limit, 50, 100);
+  const offset = Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0));
+  const search = typeof req.query.search === 'string'
+    ? req.query.search.trim()
+    : '';
+  const params: unknown[] = [];
+  const where: string[] = [];
+
+  if (search.length > 0) {
+    params.push(`%${search}%`);
+    where.push(`(
+      m.id ILIKE $${params.length}
+      OR m.name ILIKE $${params.length}
+      OR m.phone ILIKE $${params.length}
+    )`);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  params.push(limit);
+  const limitParam = params.length;
+  params.push(offset);
+  const offsetParam = params.length;
+
+  const sql = `
+    SELECT
+      m.id,
+      m.name,
+      m.phone,
+      m.created_at,
+      m.updated_at,
+      ss.plan_code,
+      ss.plan_name,
+      ss.status AS subscription_status,
+      COUNT(DISTINCT au.id)::int AS staff_count,
+      COUNT(DISTINCT au.id) FILTER (WHERE au.status = 'ACTIVE')::int AS active_staff_count,
+      COUNT(DISTINCT ub.id)::int AS usage_balance_count,
+      MAX(GREATEST(
+        m.updated_at,
+        COALESCE(ss.updated_at, 0),
+        COALESCE(au.updated_at, 0),
+        COALESCE(ub.updated_at, 0)
+      )) AS last_operational_update_at
+    FROM merchants m
+    LEFT JOIN subscription_state ss ON ss.merchant_id = m.id
+    LEFT JOIN app_users au ON au.merchant_id = m.id
+    LEFT JOIN usage_balances ub ON ub.merchant_id = m.id
+    ${whereSql}
+    GROUP BY
+      m.id,
+      m.name,
+      m.phone,
+      m.created_at,
+      m.updated_at,
+      ss.plan_code,
+      ss.plan_name,
+      ss.status
+    ORDER BY m.updated_at DESC, m.id ASC
+    LIMIT $${limitParam} OFFSET $${offsetParam}
+  `;
+
+  try {
+    const result = await pool.query(sql, params);
+    return res.json({
+      success: true,
+      data: result.rows,
+      paging: {
+        limit,
+        offset,
+        has_more: result.rows.length === limit,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+adminRouter.get('/audit-events', async (req, res) => {
+  const limit = clampLimit(req.query.limit, 50, 100);
+  const offset = Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0));
+  const targetType = pickQueryString(req.query.target_type) ??
+    pickQueryString(req.query.targetType);
+  const targetId = pickQueryString(req.query.target_id) ??
+    pickQueryString(req.query.targetId);
+  const merchantId = pickQueryString(req.query.merchant_id) ??
+    pickQueryString(req.query.merchantId);
+  const params: unknown[] = [];
+  const where: string[] = [];
+
+  if (targetType) {
+    params.push(targetType);
+    where.push(`target_type = $${params.length}`);
+  }
+
+  if (targetId) {
+    params.push(targetId);
+    where.push(`target_id = $${params.length}`);
+  }
+
+  if (merchantId) {
+    params.push(merchantId);
+    where.push(`merchant_id = $${params.length}`);
+  }
+
+  const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+  params.push(limit);
+  const limitParam = params.length;
+  params.push(offset);
+  const offsetParam = params.length;
+
+  const sql = `
+    SELECT
+      id,
+      actor_app_user_id,
+      actor_firebase_uid,
+      actor_role,
+      action,
+      target_type,
+      target_id,
+      merchant_id,
+      details,
+      created_at
+    FROM admin_audit_events
+    ${whereSql}
+    ORDER BY created_at DESC, id DESC
+    LIMIT $${limitParam} OFFSET $${offsetParam}
+  `;
+
+  try {
+    const result = await pool.query(sql, params);
+    return res.json({
+      success: true,
+      data: result.rows,
+      paging: {
+        limit,
+        offset,
+        has_more: result.rows.length === limit,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+adminRouter.get('/operations/summary', async (_req, res) => {
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const sql = `
+    SELECT
+      (SELECT COUNT(*)::int FROM merchants) AS merchant_count,
+      (SELECT COUNT(*)::int FROM subscription_state WHERE status = 'ACTIVE') AS active_subscription_count,
+      (SELECT COUNT(*)::int FROM subscription_state WHERE status = 'TRIAL') AS trial_subscription_count,
+      (SELECT COUNT(*)::int FROM subscription_state WHERE status IN ('PAST_DUE', 'CANCELLED', 'CANCELED')) AS attention_subscription_count,
+      (SELECT COUNT(*)::int FROM app_users WHERE status = 'ACTIVE') AS active_staff_count,
+      (SELECT COUNT(*)::int FROM usage_events WHERE created_at >= $1) AS usage_events_24h,
+      (SELECT COUNT(*)::int FROM recovery_tasks WHERE status NOT IN ('DONE', 'COMPLETED', 'CANCELLED', 'CANCELED')) AS open_recovery_task_count,
+      (SELECT COUNT(*)::int FROM visit_reports WHERE created_at >= $1) AS visit_reports_24h,
+      (SELECT COUNT(*)::int FROM survey_responses WHERE created_at >= $1) AS survey_responses_24h,
+      (SELECT COUNT(*)::int FROM admin_audit_events WHERE created_at >= $1) AS admin_audit_events_24h,
+      (SELECT MAX(created_at) FROM admin_audit_events) AS last_admin_audit_at,
+      (SELECT MAX(created_at) FROM usage_events) AS last_usage_event_at
+  `;
+
+  try {
+    const result = await pool.query(sql, [dayAgo]);
+    return res.json({ success: true, data: result.rows[0] ?? {} });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+adminRouter.get('/merchants/:merchantId', async (req, res) => {
+  const merchantId = isNonEmptyString(req.params.merchantId)
+    ? req.params.merchantId.trim()
+    : null;
+
+  if (!merchantId) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Missing merchant id' });
+  }
+
+  const sql = `
+    SELECT
+      m.id,
+      m.name,
+      m.phone,
+      m.created_at,
+      m.updated_at,
+      ss.plan_code,
+      ss.plan_name,
+      ss.plan_version,
+      ss.pricing_version,
+      ss.status AS subscription_status,
+      ss.trial_ends_at,
+      ss.grace_ends_at,
+      ss.period_start,
+      ss.period_end,
+      ss.updated_at AS subscription_updated_at,
+      (SELECT COUNT(*)::int FROM app_users au WHERE au.merchant_id = m.id) AS staff_count,
+      (SELECT COUNT(*)::int FROM app_users au WHERE au.merchant_id = m.id AND au.status = 'ACTIVE') AS active_staff_count,
+      (SELECT MAX(au.last_login_at) FROM app_users au WHERE au.merchant_id = m.id) AS last_staff_login_at,
+      (SELECT COUNT(*)::int FROM usage_balances ub WHERE ub.merchant_id = m.id) AS usage_balance_count,
+      (SELECT COALESCE(SUM(ub.used), 0)::int FROM usage_balances ub WHERE ub.merchant_id = m.id) AS usage_used_total,
+      (SELECT MAX(ub.updated_at) FROM usage_balances ub WHERE ub.merchant_id = m.id) AS usage_updated_at,
+      (SELECT COUNT(*)::int FROM usage_events ue WHERE ue.merchant_id = m.id) AS usage_event_count,
+      (SELECT MAX(ue.created_at) FROM usage_events ue WHERE ue.merchant_id = m.id) AS last_usage_event_at,
+      (SELECT COUNT(*)::int FROM entitlements e WHERE e.merchant_id = m.id) AS entitlement_count,
+      (SELECT COUNT(*)::int FROM feature_flags ff WHERE ff.merchant_id = m.id) AS feature_flag_count,
+      (SELECT COUNT(*)::int FROM remote_config rc WHERE rc.merchant_id = m.id) AS remote_config_count,
+      GREATEST(
+        m.updated_at,
+        COALESCE(ss.updated_at, 0),
+        COALESCE((SELECT MAX(au.updated_at) FROM app_users au WHERE au.merchant_id = m.id), 0),
+        COALESCE((SELECT MAX(ub.updated_at) FROM usage_balances ub WHERE ub.merchant_id = m.id), 0)
+      ) AS last_operational_update_at
+    FROM merchants m
+    LEFT JOIN subscription_state ss ON ss.merchant_id = m.id
+    WHERE m.id = $1
+  `;
+
+  try {
+    const result = await pool.query(sql, [merchantId]);
+    if (result.rowCount === 0) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Merchant not found' });
+    }
+    return res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+adminRouter.get('/plans', async (_req, res) => {
+  const sql = `
+    SELECT
+      p.plan_code,
+      p.version,
+      p.name,
+      p.is_active,
+      p.created_at,
+      p.updated_at,
+      COALESCE(
+        jsonb_agg(
+          DISTINCT jsonb_build_object(
+            'pricing_version', pp.pricing_version,
+            'currency', pp.currency,
+            'amount', pp.amount,
+            'billing_period', pp.billing_period,
+            'is_active', pp.is_active,
+            'created_at', pp.created_at,
+            'updated_at', pp.updated_at
+          )
+        ) FILTER (WHERE pp.plan_code IS NOT NULL),
+        '[]'::jsonb
+      ) AS prices,
+      COALESCE(
+        jsonb_agg(
+          DISTINCT jsonb_build_object(
+            'feature_key', pf.feature_key,
+            'is_enabled', pf.is_enabled,
+            'limit_value', pf.limit_value,
+            'unit', pf.unit,
+            'updated_at', pf.updated_at
+          )
+        ) FILTER (WHERE pf.plan_code IS NOT NULL),
+        '[]'::jsonb
+      ) AS features
+    FROM plans p
+    LEFT JOIN plan_prices pp ON pp.plan_code = p.plan_code
+    LEFT JOIN plan_features pf
+      ON pf.plan_code = p.plan_code AND pf.plan_version = p.version
+    GROUP BY
+      p.plan_code,
+      p.version,
+      p.name,
+      p.is_active,
+      p.created_at,
+      p.updated_at
+    ORDER BY p.is_active DESC, p.plan_code ASC, p.version DESC
+  `;
+
+  try {
+    const result = await pool.query(sql);
+    return res.json({ success: true, data: result.rows });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+adminRouter.post('/merchants/:merchantId/entitlements', async (req, res) => {
+  const merchantId = isNonEmptyString(req.params.merchantId)
+    ? req.params.merchantId.trim()
+    : null;
+  const payload = req.body ?? {};
+  const featureKey =
+    pickString(payload, 'feature_key') ?? pickString(payload, 'featureKey');
+  const isEnabled =
+    pickBoolean(payload, 'is_enabled') ?? pickBoolean(payload, 'isEnabled');
+  const limitValue =
+    pickNumber(payload, 'limit_value') ?? pickNumber(payload, 'limitValue');
+  const unit = pickString(payload, 'unit');
+
+  if (!merchantId) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Missing merchant id' });
+  }
+
+  if (!featureKey || isEnabled == null) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Missing entitlement override data' });
+  }
+
+  const client = await pool.connect();
+  const now = Date.now();
+  const entitlementId = `${merchantId}_${featureKey}`;
+
+  try {
+    await client.query('BEGIN');
+
+    const merchantResult = await client.query(
+      'SELECT id FROM merchants WHERE id = $1',
+      [merchantId],
+    );
+    if (merchantResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res
+        .status(404)
+        .json({ success: false, message: 'Merchant not found' });
+    }
+
+    const beforeResult = await client.query(
+      `
+        SELECT id, feature_key, is_enabled, limit_value, unit, updated_at
+        FROM entitlements
+        WHERE merchant_id = $1 AND feature_key = $2
+      `,
+      [merchantId, featureKey],
+    );
+    const before = beforeResult.rows[0] ?? null;
+
+    const upsertSql = `
+      INSERT INTO entitlements (
+        id,
+        merchant_id,
+        feature_key,
+        is_enabled,
+        limit_value,
+        unit,
+        updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (merchant_id, feature_key) DO UPDATE SET
+        id = EXCLUDED.id,
+        is_enabled = EXCLUDED.is_enabled,
+        limit_value = EXCLUDED.limit_value,
+        unit = EXCLUDED.unit,
+        updated_at = EXCLUDED.updated_at
+      RETURNING id, feature_key, is_enabled, limit_value, unit, updated_at
+    `;
+    const upsertResult = await client.query(upsertSql, [
+      entitlementId,
+      merchantId,
+      featureKey,
+      isEnabled,
+      limitValue,
+      unit,
+      now,
+    ]);
+    const after = upsertResult.rows[0] ?? null;
+
+    await recordAdminAuditEvent(client, req as unknown as AuthedRequest, {
+      action: 'entitlement.override',
+      targetType: 'entitlement',
+      targetId: entitlementId,
+      merchantId,
+      details: {
+        feature_key: featureKey,
+        before,
+        after,
+      },
+    });
+
+    await client.query('COMMIT');
+    return res.json({ success: true, data: after });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ success: false, message: 'Server error' });
+  } finally {
+    client.release();
+  }
 });
 
 adminRouter.post('/plans', async (req, res) => {
@@ -249,6 +662,17 @@ adminRouter.post('/plans', async (req, res) => {
     `;
 
     await client.query(sql, [planCode, version, name, isActive, now, now]);
+    await recordAdminAuditEvent(client, req as unknown as AuthedRequest, {
+      action: 'plan.upsert',
+      targetType: 'plan',
+      targetId: `${planCode}@${version}`,
+      details: {
+        plan_code: planCode,
+        version,
+        name,
+        is_active: isActive,
+      },
+    });
     await client.query('COMMIT');
     return res.json({ success: true });
   } catch (error) {
@@ -315,8 +739,111 @@ adminRouter.post('/prices', async (req, res) => {
       now,
     ]);
 
+    await recordAdminAuditEvent(client, req as AuthedRequest, {
+      action: 'price.upsert',
+      targetType: 'plan_price',
+      targetId: `${planCode}@${pricingVersion}:${currency}`,
+      details: {
+        plan_code: planCode,
+        pricing_version: pricingVersion,
+        currency,
+        amount,
+        billing_period: billingPeriod,
+        is_active: isActive,
+      },
+    });
+
     await client.query('COMMIT');
     return res.json({ success: true });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    return res.status(500).json({ success: false, message: 'Server error' });
+  } finally {
+    client.release();
+  }
+});
+
+adminRouter.post('/plans/:planCode/features', async (req, res) => {
+  const planCode = isNonEmptyString(req.params.planCode)
+    ? req.params.planCode.trim()
+    : null;
+  const payload = req.body ?? {};
+  const planVersion =
+    pickNumber(payload, 'plan_version') ?? pickNumber(payload, 'planVersion');
+  const featureKey =
+    pickString(payload, 'feature_key') ?? pickString(payload, 'featureKey');
+  const isEnabled =
+    pickBoolean(payload, 'is_enabled') ?? pickBoolean(payload, 'isEnabled');
+  const limitValue =
+    pickNumber(payload, 'limit_value') ?? pickNumber(payload, 'limitValue');
+  const unit = pickString(payload, 'unit');
+
+  if (!planCode || planVersion == null || !featureKey || isEnabled == null) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Missing plan feature data' });
+  }
+
+  const now = Date.now();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const planResult = await client.query(
+      'SELECT plan_code, version FROM plans WHERE plan_code = $1 AND version = $2',
+      [planCode, planVersion],
+    );
+    if (planResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res
+        .status(404)
+        .json({ success: false, message: 'Plan version not found' });
+    }
+
+    const sql = `
+      INSERT INTO plan_features (
+        plan_code,
+        plan_version,
+        feature_key,
+        is_enabled,
+        limit_value,
+        unit,
+        updated_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT (plan_code, plan_version, feature_key) DO UPDATE SET
+        is_enabled = EXCLUDED.is_enabled,
+        limit_value = EXCLUDED.limit_value,
+        unit = EXCLUDED.unit,
+        updated_at = EXCLUDED.updated_at
+      RETURNING feature_key, is_enabled, limit_value, unit, updated_at
+    `;
+
+    const result = await client.query(sql, [
+      planCode,
+      planVersion,
+      featureKey,
+      isEnabled,
+      limitValue,
+      unit,
+      now,
+    ]);
+
+    await recordAdminAuditEvent(client, req as unknown as AuthedRequest, {
+      action: 'plan_feature.upsert',
+      targetType: 'plan_feature',
+      targetId: `${planCode}@${planVersion}:${featureKey}`,
+      details: {
+        plan_code: planCode,
+        plan_version: planVersion,
+        feature_key: featureKey,
+        is_enabled: isEnabled,
+        limit_value: limitValue,
+        unit,
+      },
+    });
+
+    await client.query('COMMIT');
+    return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     await client.query('ROLLBACK');
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -1275,18 +1802,31 @@ function resolveAppUserRole(decoded: admin.auth.DecodedIdToken): string {
 }
 
 function isAdminRequest(req: AuthedRequest): boolean {
-  const adminKey = process.env.ADMIN_API_KEY;
-  const headerKey = pickHeaderString(req.headers['x-admin-key']);
-  if (adminKey && headerKey && adminKey === headerKey) {
-    return true;
-  }
+  if (hasValidAdminApiKey(req)) return true;
+  return hasAdminClaims(req.auth as Record<string, unknown> | undefined);
+}
 
-  const claims = req.auth as Record<string, unknown> | undefined;
+function hasAdminClaims(claims: Record<string, unknown> | undefined): boolean {
   if (!claims) return false;
   if (claims.admin === true) return true;
   if (claims.is_admin === true) return true;
-  if (claims.role === 'admin') return true;
+  if (claims.internal_admin === true) return true;
+  const role = typeof claims.role === 'string'
+    ? claims.role.trim().toLowerCase()
+    : null;
+  if (role === 'admin') return true;
+  if (role === 'internal_admin') return true;
   return false;
+}
+
+function hasValidAdminApiKey(req: express.Request): boolean {
+  const adminKey = process.env.ADMIN_API_KEY;
+  const headerKey = pickHeaderString(req.headers['x-admin-key']);
+  return Boolean(adminKey && headerKey && adminKey === headerKey);
+}
+
+function isAdminPath(req: express.Request): boolean {
+  return req.path === '/admin' || req.path.startsWith('/admin/');
 }
 
 function isOwnerRequest(req: AuthedRequest): boolean {
@@ -1346,6 +1886,53 @@ function pickHeaderString(value: string | string[] | undefined): string | null {
       : null;
   }
   return null;
+}
+
+function pickQueryString(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim().length > 0) {
+    return value.trim();
+  }
+  if (Array.isArray(value)) {
+    const first = value.find(
+      (item) => typeof item === 'string' && item.trim().length > 0,
+    );
+    return typeof first === 'string' ? first.trim() : null;
+  }
+  return null;
+}
+
+async function recordAdminAuditEvent(
+  client: PoolClient,
+  req: AuthedRequest,
+  event: AdminAuditEventInput,
+): Promise<void> {
+  const sql = `
+    INSERT INTO admin_audit_events (
+      id,
+      actor_app_user_id,
+      actor_firebase_uid,
+      actor_role,
+      action,
+      target_type,
+      target_id,
+      merchant_id,
+      details,
+      created_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+  `;
+
+  await client.query(sql, [
+    randomUUID(),
+    req.appUserId ?? null,
+    req.auth?.uid ?? null,
+    req.appUserRole ?? null,
+    event.action,
+    event.targetType,
+    event.targetId ?? null,
+    event.merchantId ?? null,
+    event.details ?? null,
+    Date.now(),
+  ]);
 }
 
 function pickNumber(payload: Record<string, unknown>, key: string): number | null {

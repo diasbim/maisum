@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -7,10 +9,11 @@ import '../../../app/providers.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/quick_amount_button.dart';
 import '../../../core/widgets/app_feedback.dart';
-import '../../../core/widgets/primary_button.dart';
 import '../../../core/errors/app_error_mapper.dart';
+import '../../../design_system/design_system.dart';
 import '../../customers/domain/customer.dart';
 import '../widgets/sale_progress_stepper.dart';
 import 'sale_controller.dart';
@@ -63,16 +66,9 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     if (prefilledAmount != null && prefilledAmount > 0) {
       _amountCtrl.text = prefilledAmount.toStringAsFixed(0);
     }
-    _loadLastAmount();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeSaleFlow();
     });
-  }
-
-  Future<void> _loadLastAmount() async {
-    final lastAmount = await ref.read(saleDaoProvider).getLastSaleAmount();
-    if (!mounted) return;
-    setState(() => _lastAmount = lastAmount);
   }
 
   Future<void> _initializeSaleFlow() async {
@@ -82,7 +78,11 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
           await ref.read(customerRepositoryProvider).getById(preselectedId);
       if (!mounted) return;
       if (preselected != null) {
+        final latestSale =
+            await ref.read(saleDaoProvider).getLatestWithCustomer();
+        if (!mounted) return;
         setState(() {
+          _lastAmount = _amountFromLatestSale(latestSale);
           _selectedCustomer = preselected;
           _initializationState = _SaleInitializationState.ready;
         });
@@ -101,11 +101,15 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       return;
     }
 
-    final lastCustomer = await _getLastUsedCustomer();
+    final latestSale = await ref.read(saleDaoProvider).getLatestWithCustomer();
+    if (!mounted) return;
+    final lastAmount = _amountFromLatestSale(latestSale);
+    final lastCustomer = await _getLastUsedCustomer(latestSale);
     if (!mounted) return;
 
     if (lastCustomer != null) {
       setState(() {
+        _lastAmount = lastAmount;
         _selectedCustomer = lastCustomer;
         _initializationState = _SaleInitializationState.ready;
       });
@@ -113,14 +117,20 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     }
 
     setState(() {
+      _lastAmount = lastAmount;
       _initializationState = _SaleInitializationState.ready;
     });
 
-    await _openCustomerSelector(customers: customers);
+    unawaited(_openCustomerSelector(customers: customers));
   }
 
-  Future<Customer?> _getLastUsedCustomer() async {
-    final latestSale = await ref.read(saleDaoProvider).getLatestWithCustomer();
+  int? _amountFromLatestSale(Map<String, dynamic>? latestSale) {
+    final amount = latestSale?['amount'] as num?;
+    return amount?.round();
+  }
+
+  Future<Customer?> _getLastUsedCustomer(
+      Map<String, dynamic>? latestSale) async {
     final customerId = latestSale?['customer_id'] as String?;
     if (customerId == null || customerId.isEmpty) {
       return null;
@@ -306,20 +316,11 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
             ),
             Transform.translate(
               offset: const Offset(0, -26),
-              child: Container(
+              child: MaisUmSurface(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(24),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.08),
-                      blurRadius: 20,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
-                ),
+                radius: AppRadius.xl,
+                animationDuration: Duration.zero,
                 child: Builder(
                   builder: (context) {
                     if (isInitializing) {
@@ -504,13 +505,12 @@ class _NoCustomersState extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 18),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: onAddCustomer,
-            icon: const Icon(Icons.person_add_alt_1_rounded),
-            label: const Text('Adicionar Cliente'),
-          ),
+        MaisUmButton(
+          onPressed: onAddCustomer,
+          label: 'Adicionar Cliente',
+          variant: MaisUmButtonVariant.outlined,
+          leadingIcon: Icons.person_add_alt_1_rounded,
+          animationDuration: Duration.zero,
         ),
       ],
     );
@@ -528,14 +528,12 @@ class _AwaitingCustomerSelectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.g100),
-      ),
+      variant: MaisUmSurfaceVariant.muted,
+      radius: AppRadius.lg,
+      animationDuration: Duration.zero,
       child: Row(
         children: [
           const Icon(Icons.person_search_rounded, color: AppColors.primary),
@@ -546,15 +544,14 @@ class _AwaitingCustomerSelectionCard extends StatelessWidget {
               style: TextStyle(color: AppColors.onSurfaceVariant),
             ),
           ),
-          TextButton(
+          MaisUmButton(
             onPressed: onSelectCustomer,
-            child: selecting
-                ? const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Selecionar'),
+            label: 'Selecionar',
+            isLoading: selecting,
+            variant: MaisUmButtonVariant.ghost,
+            fullWidth: false,
+            height: 36,
+            radius: AppRadius.md,
           ),
         ],
       ),
@@ -591,30 +588,46 @@ class _CustomerSelectionSheet extends StatelessWidget {
               shrinkWrap: true,
               itemBuilder: (context, index) {
                 final customer = customers[index];
-                return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 4,
-                  ),
-                  leading: _CustomerAvatar(name: customer.name),
-                  title: Text(
-                    customer.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  subtitle: Text(
-                    customer.phone,
-                    style: const TextStyle(
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                  trailing: _PointsPill(points: customer.totalPoints),
+                return MaisUmSurface(
                   onTap: () => Navigator.of(context).pop(customer),
+                  semanticButton: true,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  radius: AppRadius.lg,
+                  animationDuration: Duration.zero,
+                  child: Row(
+                    children: [
+                      _CustomerAvatar(name: customer.name),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              customer.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.onSurface,
+                              ),
+                            ),
+                            Text(
+                              customer.phone,
+                              style: const TextStyle(
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _PointsPill(points: customer.totalPoints),
+                    ],
+                  ),
                 );
               },
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemCount: customers.length,
             ),
           ),
@@ -711,10 +724,13 @@ class _SectionHeader extends StatelessWidget {
                 color: AppColors.onSurface,
               ),
         ),
-        TextButton(
+        MaisUmButton(
           onPressed: onAction,
-          style: TextButton.styleFrom(foregroundColor: AppColors.primaryLight),
-          child: Text(actionText),
+          label: actionText,
+          variant: MaisUmButtonVariant.ghost,
+          foregroundColor: AppColors.primaryLight,
+          fullWidth: false,
+          height: 36,
         ),
       ],
     );
@@ -744,13 +760,11 @@ class _SelectedCustomerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.g100),
-      ),
+      variant: MaisUmSurfaceVariant.muted,
+      radius: AppRadius.lg,
+      animationDuration: Duration.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -794,9 +808,12 @@ class _SelectedCustomerCard extends StatelessWidget {
           const SizedBox(height: 10),
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton(
+            child: MaisUmButton(
               onPressed: onChange,
-              child: const Text('Alterar'),
+              label: 'Alterar',
+              variant: MaisUmButtonVariant.ghost,
+              fullWidth: false,
+              height: 36,
             ),
           ),
         ],
@@ -806,14 +823,13 @@ class _SelectedCustomerCard extends StatelessWidget {
 }
 
 class _CustomerAvatar extends StatelessWidget {
-  const _CustomerAvatar({required this.name, this.radius = 20});
+  const _CustomerAvatar({required this.name});
   final String name;
-  final double radius;
 
   @override
   Widget build(BuildContext context) {
     return CircleAvatar(
-      radius: radius,
+      radius: 20,
       backgroundColor: AppColors.primary,
       child: Text(
         name.isNotEmpty ? name[0].toUpperCase() : '?',
@@ -870,13 +886,12 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.greenLight,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.green.withValues(alpha: 0.2)),
-      ),
+      variant: MaisUmSurfaceVariant.success,
+      radius: AppRadius.lg,
+      borderColor: AppColors.green.withValues(alpha: 0.2),
+      animationDuration: Duration.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -976,14 +991,13 @@ class _SaleCompletionHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.successLight,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.success.withValues(alpha: 0.22)),
-      ),
+      variant: MaisUmSurfaceVariant.success,
+      radius: AppRadius.md,
+      borderColor: AppColors.success.withValues(alpha: 0.22),
+      animationDuration: Duration.zero,
       child: Row(
         children: [
           const Icon(
@@ -1032,12 +1046,13 @@ class _ConfirmSaleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PrimaryButton(
+    return MaisUmButton(
       label: label,
       onPressed: onPressed,
-      loading: loading,
+      isLoading: loading,
       trailingIcon: Icons.arrow_forward_rounded,
       height: 58,
+      animationDuration: Duration.zero,
     );
   }
 }

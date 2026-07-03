@@ -81,6 +81,25 @@ CREATE TABLE IF NOT EXISTS plan_prices (
 CREATE INDEX IF NOT EXISTS idx_plan_prices_active
   ON plan_prices(plan_code, is_active, pricing_version);
 
+CREATE TABLE IF NOT EXISTS admin_audit_events (
+  id TEXT PRIMARY KEY,
+  actor_app_user_id TEXT,
+  actor_firebase_uid TEXT,
+  actor_role TEXT,
+  action TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT,
+  merchant_id TEXT,
+  details JSONB,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_events_created
+  ON admin_audit_events(created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_events_target
+  ON admin_audit_events(target_type, target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_events_merchant
+  ON admin_audit_events(merchant_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS entitlements (
   id TEXT PRIMARY KEY,
   merchant_id TEXT NOT NULL REFERENCES merchants(id),

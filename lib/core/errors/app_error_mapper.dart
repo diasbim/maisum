@@ -18,35 +18,37 @@ class AppErrorMapper {
     }
 
     if (error is FirebaseAuthException) {
-      return const AppErrorInfo(
+      final detail = _firebaseDetail(error);
+      return AppErrorInfo(
         title: 'Sessao expirada',
-        message: AppStrings.erroAuth,
+        message: detail ?? AppStrings.erroAuth,
       );
     }
 
     if (error is FirebaseException) {
+      final detail = _firebaseDetail(error);
       switch (error.code) {
         case 'failed-precondition':
-          return const AppErrorInfo(
+          return AppErrorInfo(
             title: 'Sincronizacao pendente',
-            message: AppStrings.syncIndiceFaltando,
+            message: detail ?? AppStrings.syncIndiceFaltando,
           );
         case 'permission-denied':
-          return const AppErrorInfo(
+          return AppErrorInfo(
             title: 'Sem permissao',
-            message: AppStrings.syncPermissaoNegada,
+            message: detail ?? 'Permissao negada no Firebase (${error.code}).',
           );
         case 'unavailable':
         case 'deadline-exceeded':
         case 'resource-exhausted':
-          return const AppErrorInfo(
+          return AppErrorInfo(
             title: 'Sem ligacao',
-            message: AppStrings.erroRede,
+            message: detail ?? AppStrings.erroRede,
           );
         default:
-          return const AppErrorInfo(
+          return AppErrorInfo(
             title: 'Erro',
-            message: AppStrings.erroGenerico,
+            message: detail ?? AppStrings.erroGenerico,
           );
       }
     }
@@ -78,5 +80,13 @@ class AppErrorMapper {
       title: 'Erro',
       message: AppStrings.erroGenerico,
     );
+  }
+
+  static String? _firebaseDetail(FirebaseException error) {
+    final message = error.message?.trim();
+    if (message == null || message.isEmpty) {
+      return 'Firebase ${error.plugin}/${error.code}';
+    }
+    return 'Firebase ${error.plugin}/${error.code}: $message';
   }
 }

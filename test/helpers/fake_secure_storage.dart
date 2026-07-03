@@ -29,7 +29,8 @@ class FakeSecureStorageService extends SecureStorageService {
 
   // Firebase UID
   @override
-  Future<void> saveFirebaseUid(String uid) async => _store['firebase_uid'] = uid;
+  Future<void> saveFirebaseUid(String uid) async =>
+      _store['firebase_uid'] = uid;
   @override
   Future<String?> getFirebaseUid() async => _store['firebase_uid'];
 
@@ -43,6 +44,11 @@ class FakeSecureStorageService extends SecureStorageService {
   @override
   Future<String?> getUserId() async => null;
   @override
+  Future<void> saveAppUserRole(String role) async =>
+      _store['app_user_role'] = role;
+  @override
+  Future<String?> getAppUserRole() async => _store['app_user_role'];
+  @override
   Future<void> saveUserPhone(String phone) async => _store['phone'] = phone;
   @override
   Future<String?> getUserPhone() async => _store['phone'];
@@ -54,5 +60,31 @@ class FakeSecureStorageService extends SecureStorageService {
   Future<bool> hasValidToken() async => false;
   @override
   Future<void> clearAll() async => _store.clear();
-}
 
+  // Merchant onboarding draft
+  @override
+  Future<void> saveMerchantOnboardingDraft(
+    String value, {
+    String? merchantId,
+    String? role,
+  }) async =>
+      _store[_draftKey(merchantId: merchantId, role: role)] = value;
+
+  @override
+  Future<String?> getMerchantOnboardingDraft({
+    String? merchantId,
+    String? role,
+  }) async =>
+      _store[_draftKey(merchantId: merchantId, role: role)];
+
+  @override
+  Future<void> clearMerchantOnboardingDraft({
+    String? merchantId,
+    String? role,
+  }) async =>
+      _store.remove(_draftKey(merchantId: merchantId, role: role));
+
+  String _draftKey({String? merchantId, String? role}) {
+    return 'merchant_onboarding_draft_${merchantId ?? ''}_${role ?? ''}';
+  }
+}

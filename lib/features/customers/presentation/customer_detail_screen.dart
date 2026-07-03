@@ -14,6 +14,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/primary_button.dart';
 import '../../../core/errors/app_error_reporter.dart';
+import '../../../design_system/design_system.dart';
 import '../domain/customer.dart';
 import '../domain/customer_whatsapp_message.dart';
 import '../../rewards/presentation/redeem_reward_screen.dart';
@@ -376,9 +377,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                             ),
                       ),
                       const Spacer(),
-                      TextButton(
+                      MaisUmButton(
                         onPressed: _scrollToHistory,
-                        child: const Text(AppStrings.verTudo),
+                        label: AppStrings.verTudo,
+                        variant: MaisUmButtonVariant.ghost,
+                        foregroundColor: AppColors.primary,
+                        fullWidth: false,
+                        height: 36,
                       ),
                     ],
                   ),
@@ -740,14 +745,13 @@ class _PointsSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(
-        color: AppColors.primaryDark.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
+      radius: 16,
+      backgroundColor: AppColors.primaryDark.withValues(alpha: 0.75),
+      borderColor: Colors.white.withValues(alpha: 0.08),
+      shadows: const [],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -810,13 +814,12 @@ class _HeroMetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-      decoration: BoxDecoration(
-        color: AppColors.primaryDark.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-      ),
+      radius: 14,
+      backgroundColor: AppColors.primaryDark.withValues(alpha: 0.55),
+      borderColor: Colors.white.withValues(alpha: 0.07),
+      shadows: const [],
       child: Row(
         children: [
           Container(
@@ -887,67 +890,57 @@ class _ActionShortcut extends StatelessWidget {
           fontWeight: FontWeight.w700,
         );
 
-    final shortcut = Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: isPrimary
-                ? const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [AppColors.primary, AppColors.primaryDark],
-                  )
-                : null,
-            color: isPrimary ? null : Colors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isPrimary ? Colors.transparent : AppColors.g100,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: isPrimary
-                    ? AppColors.primary.withValues(alpha: 0.24)
-                    : AppColors.primary.withValues(alpha: 0.08),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: isPrimary
-                      ? AppColors.secondary.withValues(alpha: 0.18)
-                      : AppColors.secondaryLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  icon,
-                  color: iconColor ??
-                      (isPrimary
-                          ? AppColors.secondary
-                          : AppColors.secondaryDark),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: textStyle,
-              ),
-            ],
-          ),
+    final shortcut = MaisUmSurface(
+      onTap: onTap,
+      semanticButton: true,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      radius: 18,
+      backgroundColor: isPrimary ? null : Colors.white,
+      backgroundGradient: isPrimary
+          ? const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.primary, AppColors.primaryDark],
+            )
+          : null,
+      borderColor: isPrimary ? Colors.transparent : AppColors.g100,
+      borderWidth: 1,
+      shadows: [
+        BoxShadow(
+          color: isPrimary
+              ? AppColors.primary.withValues(alpha: 0.24)
+              : AppColors.primary.withValues(alpha: 0.08),
+          blurRadius: 10,
+          offset: const Offset(0, 4),
         ),
+      ],
+      child: Column(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: isPrimary
+                  ? AppColors.secondary.withValues(alpha: 0.18)
+                  : AppColors.secondaryLight,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: iconColor ??
+                  (isPrimary ? AppColors.secondary : AppColors.secondaryDark),
+              size: 20,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: textStyle,
+          ),
+        ],
       ),
     );
 
@@ -969,45 +962,13 @@ class _BottomCtaButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(20),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppColors.secondary, AppColors.secondaryDark],
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.secondary.withValues(alpha: 0.35),
-                blurRadius: 18,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Icon(Icons.arrow_forward_rounded, color: AppColors.primary),
-            ],
-          ),
-        ),
-      ),
+    return MaisUmButton(
+      label: label,
+      onPressed: onPressed,
+      trailingIcon: Icons.arrow_forward_rounded,
+      backgroundColor: AppColors.secondary,
+      foregroundColor: AppColors.primary,
+      radius: 20,
     );
   }
 }
@@ -1022,13 +983,10 @@ class _RewardProgressPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     if (progress.targetPoints == null) {
-      return Container(
+      return MaisUmSurface(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.g100),
-        ),
+        radius: 18,
+        borderColor: AppColors.g100,
         child: Row(
           children: [
             const Icon(Icons.card_giftcard_rounded, color: AppColors.primary),
@@ -1064,20 +1022,17 @@ class _RewardProgressPanel extends StatelessWidget {
         : '${AppStrings.recompensaPronta} $rewardName';
     final progressValue = progress.progressFraction.clamp(0.0, 1.0).toDouble();
 
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.g100),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
+      radius: 18,
+      borderColor: AppColors.g100,
+      shadows: [
+        BoxShadow(
+          color: AppColors.primary.withValues(alpha: 0.08),
+          blurRadius: 16,
+          offset: const Offset(0, 10),
+        ),
+      ],
       child: Row(
         children: [
           Container(
@@ -1139,12 +1094,13 @@ class _RewardProgressPanel extends StatelessWidget {
                     ),
                     const Spacer(),
                     if (onRedeem != null)
-                      TextButton(
+                      MaisUmButton(
                         onPressed: onRedeem,
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                        ),
-                        child: const Text(AppStrings.resgatarRecompensa),
+                        label: AppStrings.resgatarRecompensa,
+                        variant: MaisUmButtonVariant.ghost,
+                        foregroundColor: AppColors.primary,
+                        fullWidth: false,
+                        height: 36,
                       ),
                   ],
                 ),
@@ -1207,13 +1163,9 @@ class _SaleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.g100, width: 1.5),
-      ),
+      radius: 16,
       child: Row(
         children: [
           Container(

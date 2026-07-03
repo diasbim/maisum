@@ -3,7 +3,10 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/errors/app_error_reporter.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
+import '../../../design_system/design_system.dart';
+import '../../merchant_onboarding/presentation/controllers/merchant_onboarding_controller.dart';
 import 'auth_controller.dart';
 import 'post_auth_navigation.dart';
 
@@ -31,7 +34,12 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Vincular dispositivo')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xxxl,
+        ),
         children: [
           Text(
             'Entrar em uma barbearia existente',
@@ -39,47 +47,43 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
               fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             'Insira o codigo da barbearia para conectar este dispositivo a conta existente. Este fluxo tambem funciona para contas staff.',
             style: theme.textTheme.bodyMedium,
           ),
-          const SizedBox(height: 20),
-          TextField(
+          const SizedBox(height: AppSpacing.xl),
+          MaisUmTextField(
             controller: _codeController,
             enabled: !_isSubmitting,
+            label: 'Codigo da barbearia',
+            hintText: 'ABCD-1234',
+            prefixIcon: const Icon(Icons.link_rounded),
             textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              labelText: 'Codigo da barbearia',
-              hintText: 'ABCD-1234',
-              prefixIcon: Icon(Icons.link_rounded),
-            ),
+            useFloatingLabel: true,
           ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _isSubmitting ? null : _submit,
-              icon: const Icon(Icons.sync_rounded),
-              label: Text(
-                  _isSubmitting ? 'A vincular...' : 'Vincular dispositivo'),
-            ),
+          const SizedBox(height: AppSpacing.lg),
+          MaisUmButton(
+            onPressed: _isSubmitting ? null : _submit,
+            isLoading: _isSubmitting,
+            label: 'Vincular dispositivo',
+            loadingLabel: 'A vincular...',
+            leadingIcon: Icons.sync_rounded,
           ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed:
-                _isSubmitting ? null : () => context.go('/merchant-config'),
-            icon: const Icon(Icons.storefront_rounded),
-            label: const Text('Criar nova barbearia'),
+          const SizedBox(height: AppSpacing.md),
+          MaisUmButton(
+            onPressed: _isSubmitting
+                ? null
+                : () => context.go(merchantOnboardingStartRoute),
+            label: 'Criar nova barbearia',
+            variant: MaisUmButtonVariant.outlined,
+            leadingIcon: Icons.storefront_rounded,
           ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              color: theme.colorScheme.surfaceContainerLowest,
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
+          const SizedBox(height: AppSpacing.lg),
+          MaisUmSurface(
+            variant: MaisUmSurfaceVariant.muted,
+            radius: AppRadius.md,
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Text(
               'Dica: o owner encontra este codigo em Definicoes > Codigo da barbearia.',
               style: theme.textTheme.bodySmall,

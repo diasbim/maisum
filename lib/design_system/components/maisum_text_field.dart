@@ -28,6 +28,8 @@ class MaisUmTextField extends StatelessWidget {
     this.autovalidateMode,
     this.validationState = ValidationState.neutral,
     this.showValidIcon = false,
+    this.useFloatingLabel = false,
+    this.autofillHints,
   });
 
   final String? label;
@@ -51,12 +53,15 @@ class MaisUmTextField extends StatelessWidget {
   final AutovalidateMode? autovalidateMode;
   final ValidationState validationState;
   final bool showValidIcon;
+  final bool useFloatingLabel;
+  final Iterable<String>? autofillHints;
 
   @override
   Widget build(BuildContext context) {
     final borderColor = _borderColor(validationState);
     final borderWidth = validationState == ValidationState.focused ? 2.0 : 1.0;
     final decoration = InputDecoration(
+      labelText: useFloatingLabel ? label : null,
       hintText: hintText,
       prefix: prefix,
       prefixIcon: prefixIcon,
@@ -90,10 +95,11 @@ class MaisUmTextField extends StatelessWidget {
       maxLines: maxLines,
       textCapitalization: textCapitalization,
       autovalidateMode: autovalidateMode,
+      autofillHints: autofillHints,
       decoration: decoration,
     );
 
-    if (label == null) {
+    if (label == null || useFloatingLabel) {
       return field;
     }
 

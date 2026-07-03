@@ -209,21 +209,92 @@ class SecureStorageService {
   }
 
   // Onboarding plan selection
-  Future<void> setOnboardingPlanConfirmed(bool value) => _storage.write(
-        key: AppConstants.onboardingPlanConfirmedKey,
+  Future<void> saveMerchantOnboardingDraft(
+    String value, {
+    String? merchantId,
+    String? role,
+  }) =>
+      _storage.write(
+        key: _merchantOnboardingDraftKey(merchantId: merchantId, role: role),
+        value: value,
+        aOptions: _androidOptions,
+      );
+
+  Future<String?> getMerchantOnboardingDraft({
+    String? merchantId,
+    String? role,
+  }) =>
+      _storage.read(
+        key: _merchantOnboardingDraftKey(merchantId: merchantId, role: role),
+        aOptions: _androidOptions,
+      );
+
+  Future<void> clearMerchantOnboardingDraft({
+    String? merchantId,
+    String? role,
+  }) =>
+      _storage.delete(
+        key: _merchantOnboardingDraftKey(merchantId: merchantId, role: role),
+        aOptions: _androidOptions,
+      );
+
+  Future<void> setOnboardingPlanConfirmed(
+    bool value, {
+    String? merchantId,
+    String? role,
+  }) =>
+      _storage.write(
+        key: _onboardingPlanConfirmedKey(merchantId: merchantId, role: role),
         value: value ? '1' : '0',
         aOptions: _androidOptions,
       );
 
-  Future<bool> hasConfirmedOnboardingPlan() async {
+  Future<bool> hasConfirmedOnboardingPlan({
+    String? merchantId,
+    String? role,
+  }) async {
+    final key = _onboardingPlanConfirmedKey(merchantId: merchantId, role: role);
     final raw = await _storage.read(
-      key: AppConstants.onboardingPlanConfirmedKey,
+      key: key,
       aOptions: _androidOptions,
     );
-    // Legacy users may not have this key, so treat missing state as already confirmed.
-    if (raw == null) {
-      return true;
+    if (raw != null) {
+      return raw == '1';
     }
-    return raw == '1';
+    if (key != AppConstants.onboardingPlanConfirmedKey) {
+      final legacyRaw = await _storage.read(
+        key: AppConstants.onboardingPlanConfirmedKey,
+        aOptions: _androidOptions,
+      );
+      if (legacyRaw != null) {
+        return legacyRaw == '1';
+      }
+    }
+    // Legacy users may not have this key, so treat missing state as already confirmed.
+    return true;
+  }
+
+  String _onboardingPlanConfirmedKey({String? merchantId, String? role}) {
+    final normalizedMerchantId = _normalizeKeySegment(merchantId);
+    final normalizedRole = _normalizeKeySegment(role?.toUpperCase());
+    if (normalizedMerchantId.isEmpty || normalizedRole.isEmpty) {
+      return AppConstants.onboardingPlanConfirmedKey;
+    }
+    return '${AppConstants.onboardingPlanConfirmedKey}_${normalizedMerchantId}_$normalizedRole';
+  }
+
+  String _merchantOnboardingDraftKey({String? merchantId, String? role}) {
+    final normalizedMerchantId = _normalizeKeySegment(merchantId);
+    final normalizedRole = _normalizeKeySegment(role?.toUpperCase());
+    if (normalizedMerchantId.isEmpty || normalizedRole.isEmpty) {
+      return 'merchant_onboarding_draft';
+    }
+    return 'merchant_onboarding_draft_${normalizedMerchantId}_$normalizedRole';
+  }
+
+  String _normalizeKeySegment(String? value) {
+    final trimmed = value?.trim() ?? '';
+    if (trimmed.isEmpty) return '';
+    return trimmed.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
   }
 }

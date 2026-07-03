@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -12,6 +13,7 @@ import '../features/auth/presentation/device_link_screen.dart';
 import '../features/auth/presentation/onboarding_entry_screen.dart';
 import '../features/auth/presentation/post_auth_navigation.dart';
 import '../features/auth/presentation/splash_screen.dart';
+import '../features/admin_portal/presentation/admin_portal_shell.dart';
 import '../features/customers/presentation/customer_detail_screen.dart';
 import '../features/customers/presentation/customer_create_screen.dart';
 import '../features/customers/presentation/customer_list_screen.dart';
@@ -30,7 +32,13 @@ import '../features/sales/presentation/sales_history_screen.dart';
 import '../features/sales/presentation/sale_success_screen.dart';
 import '../features/legal/presentation/privacy_screen.dart';
 import '../features/legal/presentation/terms_screen.dart';
-import '../features/settings/presentation/merchant_config_screen.dart';
+import '../features/merchant_onboarding/presentation/controllers/merchant_onboarding_controller.dart';
+import '../features/merchant_onboarding/presentation/pages/business_info_page.dart';
+import '../features/merchant_onboarding/presentation/pages/business_location_page.dart';
+import '../features/merchant_onboarding/presentation/pages/business_type_page.dart';
+import '../features/merchant_onboarding/presentation/pages/review_page.dart';
+import '../features/merchant_onboarding/presentation/pages/services_page.dart';
+import '../features/merchant_onboarding/presentation/pages/working_hours_page.dart';
 import '../features/settings/presentation/settings_screen.dart';
 import '../features/settings/presentation/staff_management_screen.dart';
 import '../features/appointments/presentation/appointments_screen.dart';
@@ -57,14 +65,37 @@ const _planOnboardingBypassRoutes = {
   '/onboarding-entry',
   '/link-device',
   '/merchant-config',
+  '/merchant-onboarding/type',
+  '/merchant-onboarding/info',
+  '/merchant-onboarding/location',
+  '/merchant-onboarding/hours',
+  '/merchant-onboarding/services',
+  '/merchant-onboarding/review',
   '/onboarding-plan',
   '/terms',
   '/privacy',
 };
 
 const _ownerOnlyRoutes = {
+  '/onboarding-plan',
+  '/merchant-onboarding/type',
+  '/merchant-onboarding/info',
+  '/merchant-onboarding/location',
+  '/merchant-onboarding/hours',
+  '/merchant-onboarding/services',
+  '/merchant-onboarding/review',
   '/subscription-admin',
   '/staff-management',
+};
+
+const _pinSetupBypassRoutes = {
+  '/splash',
+  '/login',
+  '/otp',
+  '/pin-setup',
+  '/pin-entry',
+  '/terms',
+  '/privacy',
 };
 
 const _merchantOnboardingBypassRoutes = {
@@ -76,9 +107,36 @@ const _merchantOnboardingBypassRoutes = {
   '/onboarding-entry',
   '/link-device',
   '/merchant-config',
+  '/merchant-onboarding/type',
+  '/merchant-onboarding/info',
+  '/merchant-onboarding/location',
+  '/merchant-onboarding/hours',
+  '/merchant-onboarding/services',
+  '/merchant-onboarding/review',
   '/terms',
   '/privacy',
 };
+
+bool _isAdminPortalRoute(String location) {
+  return location == '/admin' || location.startsWith('/admin/');
+}
+
+bool _isAdminSelfServiceRoute(String location) {
+  return location == '/admin/self-service';
+}
+
+String? resolveAdminPortalRedirect({
+  required bool isWeb,
+  required bool isSelfServiceRoute,
+  required bool isInternalAdmin,
+  required bool isOwner,
+}) {
+  if (!isWeb) return '/dashboard';
+  if (isSelfServiceRoute) return isOwner ? null : '/dashboard';
+  if (isInternalAdmin) return null;
+  if (isOwner) return '/admin/self-service';
+  return '/dashboard';
+}
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authNotifier = ValueNotifier<bool>(false);
@@ -92,6 +150,7 @@ final routerProvider = Provider<GoRouter>((ref) {
     initialLocation: '/splash',
     refreshListenable: authNotifier,
     redirect: (context, state) async {
+      final isAdminPortalRoute = _isAdminPortalRoute(state.matchedLocation);
       final isPublic = _publicRoutes.contains(state.matchedLocation) ||
           state.matchedLocation.startsWith('/otp');
       final isAuthenticated =
@@ -104,34 +163,65 @@ final routerProvider = Provider<GoRouter>((ref) {
         return resolvePostAuthRoute(ref.read);
       }
 
+      if (isAuthenticated && isAdminPortalRoute) {
+        final isSelfServiceRoute =
+            _isAdminSelfServiceRoute(state.matchedLocation);
+        final isOwner = await ref.read(isOwnerUserProvider.future);
+        final isInternalAdmin = isSelfServiceRoute
+            ? false
+            : await ref.read(isInternalAdminProvider.future);
+        return resolveAdminPortalRedirect(
+          isWeb: kIsWeb,
+          isSelfServiceRoute: isSelfServiceRoute,
+          isInternalAdmin: isInternalAdmin,
+          isOwner: isOwner,
+        );
+      }
+
       if (isAuthenticated) {
+        final storage = ref.read(secureStorageServiceProvider);
+        final canAccessWithoutPinSetup =
+            _pinSetupBypassRoutes.contains(state.matchedLocation) ||
+                state.matchedLocation.startsWith('/otp');
+        if (!canAccessWithoutPinSetup) {
+          final hasPin = await storage.hasPin();
+          if (!hasPin) {
+            final nextRoute = Uri.encodeComponent(state.uri.toString());
+            return '/pin-setup?next=$nextRoute';
+          }
+        }
+
         final canAccessWithoutMerchantLink =
             _merchantOnboardingBypassRoutes.contains(state.matchedLocation) ||
                 state.matchedLocation.startsWith('/otp');
         if (!canAccessWithoutMerchantLink) {
           final resolvedRoute = await resolvePostAuthRoute(ref.read);
-          if (resolvedRoute == '/onboarding-entry') {
-            return '/onboarding-entry';
+          if (resolvedRoute == '/onboarding-entry' ||
+              isMerchantOnboardingRoute(resolvedRoute)) {
+            return resolvedRoute;
           }
         }
 
+        final appUserRole = await storage.getAppUserRole();
+        final isOwner = await storage.isOwnerUser();
         if (_ownerOnlyRoutes.contains(state.matchedLocation)) {
-          final isOwner =
-              await ref.read(secureStorageServiceProvider).isOwnerUser();
           if (!isOwner) {
             return '/dashboard';
           }
         }
 
-        final hasConfirmedPlan = await ref
-            .read(secureStorageServiceProvider)
-            .hasConfirmedOnboardingPlan();
-        final canAccessWithoutPlanConfirmation =
-            _planOnboardingBypassRoutes.contains(state.matchedLocation) ||
-                state.matchedLocation.startsWith('/otp');
+        if (isOwner) {
+          final hasConfirmedPlan = await storage.hasConfirmedOnboardingPlan(
+            merchantId: ref.read(activeMerchantIdProvider),
+            role: appUserRole,
+          );
+          final canAccessWithoutPlanConfirmation =
+              _planOnboardingBypassRoutes.contains(state.matchedLocation) ||
+                  state.matchedLocation.startsWith('/otp');
 
-        if (!hasConfirmedPlan && !canAccessWithoutPlanConfirmation) {
-          return '/onboarding-plan';
+          if (!hasConfirmedPlan && !canAccessWithoutPlanConfirmation) {
+            return '/onboarding-plan';
+          }
         }
       }
 
@@ -140,6 +230,45 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
       GoRoute(path: '/login', builder: (_, __) => const PhoneAuthScreen()),
+      GoRoute(
+        path: '/admin',
+        builder: (_, __) => const AdminPortalShell(
+          section: AdminPortalSection.overview,
+        ),
+        routes: [
+          GoRoute(
+            path: 'merchants',
+            builder: (_, __) => const AdminPortalShell(
+              section: AdminPortalSection.merchants,
+            ),
+          ),
+          GoRoute(
+            path: 'merchants/:merchantId',
+            builder: (_, state) => AdminPortalShell(
+              section: AdminPortalSection.merchants,
+              merchantId: state.pathParameters['merchantId'] ?? '',
+            ),
+          ),
+          GoRoute(
+            path: 'plans',
+            builder: (_, __) => const AdminPortalShell(
+              section: AdminPortalSection.plans,
+            ),
+          ),
+          GoRoute(
+            path: 'operations',
+            builder: (_, __) => const AdminPortalShell(
+              section: AdminPortalSection.operations,
+            ),
+          ),
+          GoRoute(
+            path: 'self-service',
+            builder: (_, __) => const AdminPortalShell(
+              section: AdminPortalSection.selfService,
+            ),
+          ),
+        ],
+      ),
       GoRoute(
         path: '/otp',
         builder: (_, state) {
@@ -168,6 +297,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/link-device',
         builder: (_, __) => const DeviceLinkScreen(),
+      ),
+      GoRoute(
+        path: '/merchant-onboarding/type',
+        builder: (_, __) => const BusinessTypePage(),
+      ),
+      GoRoute(
+        path: '/merchant-onboarding/info',
+        builder: (_, __) => const BusinessInfoPage(),
+      ),
+      GoRoute(
+        path: '/merchant-onboarding/location',
+        builder: (_, __) => const BusinessLocationPage(),
+      ),
+      GoRoute(
+        path: '/merchant-onboarding/hours',
+        builder: (_, __) => const WorkingHoursPage(),
+      ),
+      GoRoute(
+        path: '/merchant-onboarding/services',
+        builder: (_, __) => const ServicesPage(),
+      ),
+      GoRoute(
+        path: '/merchant-onboarding/review',
+        builder: (_, __) => const ReviewPage(),
       ),
       GoRoute(path: '/dashboard', builder: (_, __) => const DashboardScreen()),
       GoRoute(
@@ -265,7 +418,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/merchant-config',
-        builder: (_, __) => const MerchantConfigScreen(),
+        redirect: (_, __) => merchantOnboardingStartRoute,
       ),
       GoRoute(path: '/terms', builder: (_, __) => const TermsScreen()),
       GoRoute(path: '/privacy', builder: (_, __) => const PrivacyScreen()),

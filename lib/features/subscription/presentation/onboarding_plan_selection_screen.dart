@@ -9,7 +9,9 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/error_state.dart';
+import '../../../design_system/design_system.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../merchant_onboarding/presentation/controllers/merchant_onboarding_controller.dart';
 import '../data/firestore_plan_offers.dart';
 import '../domain/plan.dart';
 import '../domain/plan_catalog.dart';
@@ -87,7 +89,7 @@ class _OnboardingPlanSelectionScreenState
           ),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded),
-            onPressed: () => context.go('/merchant-config'),
+            onPressed: () => context.go(merchantOnboardingStartRoute),
           ),
           title: const Text(
             'Escolha o seu plano',
@@ -163,9 +165,11 @@ class _OnboardingPlanSelectionScreenState
         properties: {'plan': selectedPlan.code},
       );
 
-      await ref
-          .read(secureStorageServiceProvider)
-          .setOnboardingPlanConfirmed(true);
+      await ref.read(secureStorageServiceProvider).setOnboardingPlanConfirmed(
+            true,
+            merchantId: merchantId,
+            role: await ref.read(secureStorageServiceProvider).getAppUserRole(),
+          );
       await ref.read(subscriptionSnapshotProvider.notifier).refresh();
 
       if (!mounted) {
@@ -229,23 +233,22 @@ class _OnboardingPlanSelectionScreenState
                         ),
                   ),
                   const SizedBox(height: 14),
-                  ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    tileColor: Theme.of(ctx).colorScheme.secondaryContainer,
-                    leading: const Icon(Icons.point_of_sale_rounded),
-                    title: const Text('Registar primeira venda'),
+                  _NextStepOption(
+                    icon: Icons.groups_rounded,
+                    label: 'Convidar staff agora',
+                    highlighted: true,
+                    onTap: () => Navigator.of(ctx).pop('/staff-management'),
+                  ),
+                  const SizedBox(height: 8),
+                  _NextStepOption(
+                    icon: Icons.point_of_sale_rounded,
+                    label: 'Registar primeira venda',
                     onTap: () => Navigator.of(ctx).pop('/new-sale'),
                   ),
                   const SizedBox(height: 8),
-                  ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    tileColor: Theme.of(ctx).colorScheme.surfaceContainerLowest,
-                    leading: const Icon(Icons.dashboard_rounded),
-                    title: const Text('Ir para dashboard'),
+                  _NextStepOption(
+                    icon: Icons.dashboard_rounded,
+                    label: 'Ir para dashboard',
                     onTap: () => Navigator.of(ctx).pop('/dashboard'),
                   ),
                 ],
@@ -254,6 +257,53 @@ class _OnboardingPlanSelectionScreenState
           ),
         );
       },
+    );
+  }
+}
+
+class _NextStepOption extends StatelessWidget {
+  const _NextStepOption({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return MaisUmSurface(
+      onTap: onTap,
+      semanticButton: true,
+      radius: 14,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      backgroundColor: highlighted
+          ? colorScheme.secondaryContainer
+          : colorScheme.surfaceContainerLowest,
+      borderColor: highlighted
+          ? colorScheme.secondary.withValues(alpha: 0.3)
+          : colorScheme.outlineVariant,
+      shadows: const [],
+      child: Row(
+        children: [
+          Icon(icon, color: colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: colorScheme.onSurface,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -415,156 +465,125 @@ class _PlanCard extends StatelessWidget {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: onTap,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-              decoration: BoxDecoration(
-                color: isStarter
-                    ? colorScheme.secondaryContainer.withValues(alpha: 0.25)
-                    : isSelected
-                        ? colorScheme.secondaryContainer.withValues(alpha: 0.14)
-                        : colorScheme.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isStarter
-                      ? colorScheme.primary
-                      : isSelected
-                          ? colorScheme.secondary
-                          : colorScheme.outlineVariant,
-                  width: isStarter ? 2 : 1,
-                ),
-              ),
-              child: Column(
+        MaisUmSurface(
+          onTap: onTap,
+          semanticButton: true,
+          selected: isSelected,
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+          radius: 14,
+          backgroundColor: isStarter
+              ? colorScheme.secondaryContainer.withValues(alpha: 0.25)
+              : isSelected
+                  ? colorScheme.secondaryContainer.withValues(alpha: 0.14)
+                  : colorScheme.surfaceContainerLowest,
+          borderColor: isStarter
+              ? colorScheme.primary
+              : isSelected
+                  ? colorScheme.secondary
+                  : colorScheme.outlineVariant,
+          borderWidth: isStarter ? 2 : 1,
+          shadows: const [],
+          animationDuration: const Duration(milliseconds: 200),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w800,
                                   ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              subtitle,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitle,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: colorScheme.onSurfaceVariant,
                                   ),
-                            ),
-                          ],
                         ),
-                      ),
-                      if (isSelected)
-                        Icon(
-                          Icons.check_circle_rounded,
-                          key: ValueKey('plan_selected_${plan.name}'),
-                          size: 16,
-                          color: colorScheme.primary,
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  hasPrice
-                      ? RichText(
-                          text: TextSpan(
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(
+                  if (isSelected)
+                    Icon(
+                      Icons.check_circle_rounded,
+                      key: ValueKey('plan_selected_${plan.name}'),
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              hasPrice
+                  ? RichText(
+                      text: TextSpan(
+                        style:
+                            Theme.of(context).textTheme.headlineSmall?.copyWith(
                                   fontWeight: FontWeight.w800,
                                   color: colorScheme.primary,
                                 ),
-                            children: [
-                              TextSpan(text: '$priceLabel '),
-                              TextSpan(
-                                text: billingSuffix,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
+                        children: [
+                          TextSpan(text: '$priceLabel '),
+                          TextSpan(
+                            text: billingSuffix,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: colorScheme.onSurfaceVariant,
                                     ),
-                              ),
-                            ],
                           ),
-                        )
-                      : Text(
-                          priceLabel,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                        ),
-                  const SizedBox(height: 10),
-                  for (final benefit in benefits)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: _BenefitRow(benefit: benefit),
+                        ],
+                      ),
+                    )
+                  : Text(
+                      priceLabel,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: switch (plan) {
-                      Plan.starter => FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: colorScheme.primary,
-                            foregroundColor: colorScheme.onPrimary,
-                            minimumSize: const Size.fromHeight(40),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          onPressed: onPrimaryAction,
-                          child: Text(buttonLabel),
-                        ),
-                      Plan.business => OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size.fromHeight(40),
-                            side: BorderSide(color: colorScheme.primary),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            foregroundColor: colorScheme.primary,
-                          ),
-                          onPressed: onPrimaryAction,
-                          child: Text(buttonLabel),
-                        ),
-                      _ => TextButton(
-                          style: TextButton.styleFrom(
-                            minimumSize: const Size.fromHeight(40),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            foregroundColor: colorScheme.onSurface,
-                          ),
-                          onPressed: onPrimaryAction,
-                          child: Text(buttonLabel),
-                        ),
-                    },
+              const SizedBox(height: 10),
+              for (final benefit in benefits)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: _BenefitRow(benefit: benefit),
+                ),
+              const SizedBox(height: 8),
+              switch (plan) {
+                Plan.starter => MaisUmButton(
+                    label: buttonLabel,
+                    onPressed: onPrimaryAction,
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    height: 40,
+                    radius: 8,
                   ),
-                ],
-              ),
-            ),
+                Plan.business => MaisUmButton(
+                    label: buttonLabel,
+                    onPressed: onPrimaryAction,
+                    variant: MaisUmButtonVariant.outlined,
+                    foregroundColor: colorScheme.primary,
+                    height: 40,
+                    radius: 8,
+                  ),
+                _ => MaisUmButton(
+                    label: buttonLabel,
+                    onPressed: onPrimaryAction,
+                    variant: MaisUmButtonVariant.ghost,
+                    foregroundColor: colorScheme.onSurface,
+                    height: 40,
+                    radius: 8,
+                  ),
+              },
+            ],
           ),
         ),
         if (isStarter)

@@ -8,6 +8,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/error_state.dart';
 import '../../../core/widgets/sync_status_bar.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../design_system/design_system.dart';
 import '../../../app/providers.dart';
 import '../domain/sync_item.dart';
 import '../sync_controller.dart';
@@ -163,18 +164,12 @@ class _SyncItemTile extends StatelessWidget {
     final showNextAttempt =
         nextAttempt != null && isPending && item.retryCount > 0;
 
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isFailed
-              ? AppColors.error.withValues(alpha: 0.35)
-              : AppColors.g100,
-          width: 1.5,
-        ),
-      ),
+      radius: 16,
+      borderColor:
+          isFailed ? AppColors.error.withValues(alpha: 0.35) : AppColors.g100,
+      borderWidth: 1.5,
       child: Row(
         children: [
           Container(
@@ -239,13 +234,12 @@ class _SyncItemTile extends StatelessWidget {
               ),
               if (isFailed && onRetry != null) ...[
                 const SizedBox(height: 6),
-                TextButton(
+                MaisUmButton(
                   onPressed: onRetry,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  child: const Text('Tentar agora'),
+                  label: 'Tentar agora',
+                  variant: MaisUmButtonVariant.ghost,
+                  fullWidth: false,
+                  height: 34,
                 ),
               ],
             ],

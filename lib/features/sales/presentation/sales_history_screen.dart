@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../design_system/design_system.dart';
 import '../../../app/providers.dart';
 
 class SalesHistoryScreen extends ConsumerWidget {
@@ -50,10 +52,14 @@ class SalesHistoryScreen extends ConsumerWidget {
           child: CircularProgressIndicator(color: AppColors.secondary),
         ),
         error: (e, _) => Center(
-          child: TextButton.icon(
-            icon: const Icon(Icons.refresh),
-            label: const Text('Tentar novamente'),
-            onPressed: () => ref.invalidate(allSalesWithCustomerProvider),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: MaisUmButton(
+              label: 'Tentar novamente',
+              leadingIcon: Icons.refresh_rounded,
+              variant: MaisUmButtonVariant.outlined,
+              onPressed: () => ref.invalidate(allSalesWithCustomerProvider),
+            ),
           ),
         ),
       ),
@@ -69,13 +75,9 @@ class _HistorySummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.g100, width: 1.5),
-      ),
+      radius: AppRadius.lg,
       child: Row(
         children: [
           Container(
@@ -133,13 +135,9 @@ class _SaleHistoryTile extends StatelessWidget {
     final customerName = data['customer_name'] as String? ?? 'Cliente';
     final synced = (data['synced'] as int? ?? 0) == 1;
 
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.g100, width: 1.5),
-      ),
+      radius: AppRadius.lg,
       child: Row(
         children: [
           Container(

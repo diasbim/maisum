@@ -110,6 +110,43 @@ service cloud.firestore {
     );
 
     test(
+      'does not reuse phone-matched merchant owned by another Firebase uid',
+      () async {
+        final firestore = FakeFirebaseFirestore();
+        await firestore.collection('businesses').doc('merchant-other').set({
+          'merchant_name': 'Outra Barbearia',
+          'phone': '+258840000999',
+          'owner_user_id': 'other-user',
+          'firebase_uid': 'firebase-other',
+          'subscription_status': 'ACTIVE_PAID',
+        });
+
+        final mockAuth = MockFirebaseAuth(
+          signedIn: true,
+          mockUser: MockUser(
+            uid: 'firebase-current',
+            phoneNumber: '+258840000999',
+          ),
+        );
+
+        final repository = AuthRepository(
+          FirebaseAuthService(mockAuth),
+          storage,
+          AppDatabase.instance,
+          config: const AppRuntimeConfig(enableBackendAuth: false),
+          firestore: firestore,
+        );
+
+        final session = await repository.getStoredSession();
+
+        expect(session, isNotNull);
+        expect(session!.merchantId, 'firebase-current');
+        expect(session.merchantName, 'Minha Loja');
+        expect(await storage.getMerchantId(), 'firebase-current');
+      },
+    );
+
+    test(
       'restores backend session when runtime config enables backend auth',
       () async {
         await storage.seedSession(
@@ -474,12 +511,19 @@ class _InMemorySecureStorageService extends SecureStorageService {
   Future<void> clearAll() async => _store.clear();
 
   @override
-  Future<void> setOnboardingPlanConfirmed(bool value) async {
+  Future<void> setOnboardingPlanConfirmed(
+    bool value, {
+    String? merchantId,
+    String? role,
+  }) async {
     _store['onboarding_plan_confirmed'] = value ? '1' : '0';
   }
 
   @override
-  Future<bool> hasConfirmedOnboardingPlan() async {
+  Future<bool> hasConfirmedOnboardingPlan({
+    String? merchantId,
+    String? role,
+  }) async {
     final raw = _store['onboarding_plan_confirmed'];
     if (raw == null) {
       return true;

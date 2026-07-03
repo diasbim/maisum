@@ -13,7 +13,9 @@ import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/widgets/pin_pad.dart';
 import '../../../core/widgets/pin_verification_feedback.dart';
+import '../../../design_system/design_system.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../merchant_onboarding/presentation/controllers/merchant_onboarding_controller.dart';
 import '../../subscription/data/firestore_plan_offers.dart';
 import '../../subscription/domain/plan.dart';
 import '../../subscription/domain/plan_catalog.dart';
@@ -60,7 +62,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final session = ref.watch(authControllerProvider).valueOrNull;
-    final isOwner = ref.watch(isOwnerUserProvider).valueOrNull ?? true;
+    final isOwner = ref.watch(isOwnerUserProvider).valueOrNull == true;
     final appUserRole = ref.watch(activeAppUserRoleProvider).valueOrNull ??
         AppConstants.appUserRoleOwner;
     final businessLinkCode = ref.watch(businessLinkCodeProvider).valueOrNull;
@@ -83,7 +85,7 @@ class SettingsScreen extends ConsumerWidget {
                 color: AppColors.g300,
                 size: 20,
               ),
-              onTap: () => context.push('/merchant-config'),
+              onTap: () => context.push(merchantOnboardingStartRoute),
             ),
             _SettingsTile(
               icon: Icons.phone_rounded,
@@ -170,7 +172,7 @@ class SettingsScreen extends ConsumerWidget {
                       size: 20,
                     )
                   : null,
-              onTap: isOwner ? () => context.push('/onboarding-plan') : null,
+              onTap: isOwner ? () => _showPlanPicker(context, ref) : null,
             ),
             if (isOwner)
               _SettingsTile(
@@ -247,49 +249,41 @@ class SettingsScreen extends ConsumerWidget {
             ),
             onTap: () {
               ref.read(appLockedProvider.notifier).state = true;
-              context.pop();
+              context.go('/dashboard');
             },
           ),
 
           const SizedBox(height: 8),
           const _Section('Sessao'),
-          Material(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(16),
-            child: InkWell(
-              onTap: () => _confirmLogout(context, ref),
-              borderRadius: BorderRadius.circular(16),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
+          MaisUmSurface(
+            onTap: () => _confirmLogout(context, ref),
+            semanticButton: true,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            radius: 16,
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: AppColors.errorContainer,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: const Icon(
+                    Icons.logout_rounded,
+                    color: AppColors.error,
+                    size: 20,
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: AppColors.errorContainer,
-                        borderRadius: BorderRadius.circular(11),
-                      ),
-                      child: const Icon(
-                        Icons.logout_rounded,
-                        color: AppColors.error,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Text(
-                      AppStrings.logout,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: AppColors.error,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 14),
+                Text(
+                  AppStrings.logout,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           const SizedBox(height: 40),
@@ -393,20 +387,52 @@ class SettingsScreen extends ConsumerWidget {
                   final offer = offerByPlan[plan];
                   final planName = offer?.displayName ??
                       PlanCatalog.forPlan(plan).displayName;
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                    title: Text(planName),
-                    subtitle: Text(_formatPlanPrice(
-                      offer?.priceCents,
-                      currency: offer?.currency,
-                    )),
-                    trailing: snapshot.plan == plan
-                        ? const Icon(
+                  final selected = snapshot.plan == plan;
+                  return MaisUmSurface(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    radius: 14,
+                    selected: selected,
+                    semanticButton: true,
+                    backgroundColor:
+                        selected ? AppColors.secondaryLight : AppColors.white,
+                    borderColor:
+                        selected ? AppColors.secondary : AppColors.g100,
+                    shadows: const [],
+                    onTap: () => Navigator.of(sheetContext).pop(plan),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(planName),
+                              const SizedBox(height: 2),
+                              Text(
+                                _formatPlanPrice(
+                                  offer?.priceCents,
+                                  currency: offer?.currency,
+                                ),
+                                style: Theme.of(sheetContext)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppColors.onSurfaceVariant,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (selected)
+                          const Icon(
                             Icons.check_circle_rounded,
                             color: AppColors.green,
-                          )
-                        : null,
-                    onTap: () => Navigator.of(sheetContext).pop(plan),
+                          ),
+                      ],
+                    ),
                   );
                 },
               ),
@@ -511,18 +537,23 @@ class SettingsScreen extends ConsumerWidget {
         title: const Text(AppStrings.confirmarLogout),
         content: const Text(AppStrings.confirmarLogoutMsg),
         actions: [
-          TextButton(
+          MaisUmButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(AppStrings.cancelar),
+            label: AppStrings.cancelar,
+            variant: MaisUmButtonVariant.ghost,
+            fullWidth: false,
+            height: 40,
           ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+          MaisUmButton(
             onPressed: () async {
               Navigator.pop(ctx);
               await ref.read(authControllerProvider.notifier).logout();
               if (context.mounted) context.go('/login');
             },
-            child: const Text(AppStrings.logout),
+            label: AppStrings.logout,
+            variant: MaisUmButtonVariant.danger,
+            fullWidth: false,
+            height: 40,
           ),
         ],
       ),
@@ -780,33 +811,13 @@ class _SettingsTile extends StatelessWidget {
       ],
     );
 
-    return Container(
+    return MaisUmSurface(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.g100, width: 1.5),
-      ),
-      child: onTap != null
-          ? Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  child: content,
-                ),
-              ),
-            )
-          : Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: content,
-            ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      radius: 16,
+      onTap: onTap,
+      semanticButton: onTap != null,
+      child: content,
     );
   }
 }

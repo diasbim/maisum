@@ -7,11 +7,12 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/services/pin_verification_service.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/app_logger.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/pin_verification_feedback.dart';
 import '../../../core/widgets/pin_pad.dart';
+import '../../../design_system/design_system.dart';
 import 'auth_controller.dart';
 import 'post_auth_navigation.dart';
 
@@ -133,14 +134,19 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
         content: const Text(
             'Isto irá apagar o PIN e terminar a sessão. Terá de fazer login novamente.'),
         actions: [
-          TextButton(
+          MaisUmButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(AppStrings.cancelar),
+            label: AppStrings.cancelar,
+            variant: MaisUmButtonVariant.ghost,
+            fullWidth: false,
+            height: 40,
           ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+          MaisUmButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Repor'),
+            label: 'Repor',
+            variant: MaisUmButtonVariant.danger,
+            fullWidth: false,
+            height: 40,
           ),
         ],
       ),
@@ -163,43 +169,42 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
             child: ConstrainedBox(
               constraints: BoxConstraints(minHeight: constraints.maxHeight),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
                       children: [
-                        const SizedBox(height: 60),
-                        Container(
+                        const SizedBox(height: AppSpacing.xxxxxl),
+                        MaisUmSurface(
                           width: 80,
                           height: 80,
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.primaryGradient,
-                            borderRadius: BorderRadius.circular(22),
-                            boxShadow: AppTheme.shadowMd,
-                          ),
+                          radius: AppRadius.xl,
+                          padding: const EdgeInsets.all(AppSpacing.lg),
+                          backgroundColor: AppColors.primaryDarker,
+                          borderColor: AppColors.primaryDarker,
                           child: Padding(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(AppSpacing.xs),
                             child: Image.asset(
                               'assets/images/logo.png',
                               fit: BoxFit.contain,
                             ),
                           ),
                         ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: AppSpacing.xxl),
                         Text(
                           AppStrings.pinEntryTitle,
                           style: theme.textTheme.headlineLarge,
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: AppSpacing.sm),
                         Text(
                           AppStrings.pinEntrySubtitle,
                           style: theme.textTheme.bodyMedium
                               ?.copyWith(color: AppColors.onSurfaceVariant),
                           textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 52),
+                        const SizedBox(height: AppSpacing.xxxxl),
                         PinVerificationFeedback(
                           shakeAnimation: pinShakeAnimation,
                           inputLength: _input.length,
@@ -210,21 +215,21 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
                       ],
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 20),
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
                       child: Column(
                         children: [
                           PinPad(
                             onDigit: _handleDigit,
                             onDelete: _handleDelete,
                           ),
-                          const SizedBox(height: 8),
-                          TextButton(
+                          const SizedBox(height: AppSpacing.sm),
+                          MaisUmButton(
                             onPressed: _isLoading ? null : _forgotPin,
-                            child: Text(
-                              AppStrings.pinForgot,
-                              style: theme.textTheme.labelMedium
-                                  ?.copyWith(color: AppColors.onSurfaceVariant),
-                            ),
+                            label: AppStrings.pinForgot,
+                            variant: MaisUmButtonVariant.ghost,
+                            foregroundColor: AppColors.onSurfaceVariant,
+                            fullWidth: false,
+                            height: 40,
                           ),
                         ],
                       ),

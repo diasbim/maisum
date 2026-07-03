@@ -1,9 +1,13 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import '../errors/app_error_reporter.dart';
+import '../utils/app_logger.dart';
 
 class FirebaseAuthService {
   FirebaseAuthService(this._auth);
+
+  static const _tag = 'FirebaseAuthService';
 
   final FirebaseAuth _auth;
   int? _resendToken;
@@ -19,13 +23,22 @@ class FirebaseAuthService {
     void Function(PhoneAuthCredential credential)? onAutoVerify,
   }) async {
     try {
+      _debugLog('verifyPhoneNumber:start phone=$phoneNumber');
       await _auth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
         timeout: const Duration(seconds: 60),
         verificationCompleted: (PhoneAuthCredential credential) {
+          _debugLog(
+            'verifyPhoneNumber:autoCompleted provider=${credential.providerId} '
+            'hasSmsCode=${credential.smsCode != null} '
+            'verificationId=${_redact(credential.verificationId)}',
+          );
           onAutoVerify?.call(credential);
         },
         verificationFailed: (FirebaseAuthException e) {
+          _debugLog(
+            'verifyPhoneNumber:failed code=${e.code} message=${e.message}',
+          );
           AppErrorReporter.report(
             e,
             StackTrace.current,
@@ -35,12 +48,23 @@ class FirebaseAuthService {
         },
         codeSent: (String verificationId, int? resendToken) {
           _resendToken = resendToken;
+          _debugLog(
+            'verifyPhoneNumber:codeSent verificationId=${_redact(verificationId)} '
+            'hasResendToken=${resendToken != null}',
+          );
           onCodeSent(verificationId);
         },
-        codeAutoRetrievalTimeout: (_) {},
+        codeAutoRetrievalTimeout: (verificationId) {
+          _debugLog(
+            'verifyPhoneNumber:autoRetrievalTimeout '
+            'verificationId=${_redact(verificationId)}',
+          );
+        },
         forceResendingToken: _resendToken,
       );
     } on FirebaseAuthException catch (e) {
+      _debugLog(
+          'verifyPhoneNumber:exception code=${e.code} message=${e.message}');
       AppErrorReporter.report(
         e,
         StackTrace.current,
@@ -58,31 +82,47 @@ class FirebaseAuthService {
     required String smsCode,
   }) async {
     try {
+      _debugLog(
+        'verifyOtp:start verificationId=${_redact(verificationId)} '
+        'smsCodeLength=${smsCode.length}',
+      );
       final credential = PhoneAuthProvider.credential(
         verificationId: verificationId,
         smsCode: smsCode,
       );
-      return await _auth.signInWithCredential(credential);
+      final result = await _auth.signInWithCredential(credential);
+      _debugLog(_describeUser('verifyOtp:success', result.user));
+      return result;
     } on FirebaseAuthException catch (e) {
+      _debugLog('verifyOtp:failed code=${e.code} message=${e.message}');
       AppErrorReporter.report(
         e,
         StackTrace.current,
         hint: 'auth_verify_otp:${e.code}',
       );
-      throw Exception(_mapAuthException(e));
+      throw _AuthUiException(e, _mapAuthException(e));
     }
   }
 
   Future<UserCredential> signInWithCredential(AuthCredential credential) async {
     try {
-      return await _auth.signInWithCredential(credential);
+      _debugLog(
+        'signInWithCredential:start provider=${credential.providerId} '
+        'signInMethod=${credential.signInMethod}',
+      );
+      final result = await _auth.signInWithCredential(credential);
+      _debugLog(_describeUser('signInWithCredential:success', result.user));
+      return result;
     } on FirebaseAuthException catch (e) {
+      _debugLog(
+        'signInWithCredential:failed code=${e.code} message=${e.message}',
+      );
       AppErrorReporter.report(
         e,
         StackTrace.current,
         hint: 'auth_sign_in_with_credential:${e.code}',
       );
-      throw Exception(_mapAuthException(e));
+      throw _AuthUiException(e, _mapAuthException(e));
     }
   }
 
@@ -97,7 +137,7 @@ class FirebaseAuthService {
         StackTrace.current,
         hint: 'auth_sign_in_with_google:${e.code}',
       );
-      throw Exception(_mapGoogleAuthError(e.code));
+      throw _AuthUiException(e, _mapGoogleAuthError(e.code));
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'auth_sign_in_with_google_unknown');
       throw Exception('Nao foi possivel autenticar com Google.');
@@ -152,4 +192,30 @@ class FirebaseAuthService {
         'web-context-cancelled' => 'Login cancelado.',
         _ => 'Nao foi possivel autenticar com Google.',
       };
+
+  String _describeUser(String prefix, User? user) {
+    return '$prefix uid=${_redact(user?.uid)} phone=${user?.phoneNumber ?? ''} '
+        'isAnonymous=${user?.isAnonymous} currentUser=${_redact(_auth.currentUser?.uid)}';
+  }
+
+  String _redact(String? value) {
+    if (value == null || value.isEmpty) return '';
+    if (value.length <= 8) return '***';
+    return '${value.substring(0, 4)}...${value.substring(value.length - 4)}';
+  }
+
+  void _debugLog(String message) {
+    if (!kDebugMode) return;
+    Log.d(_tag, message);
+  }
+}
+
+class _AuthUiException implements Exception {
+  const _AuthUiException(this.cause, this.message);
+
+  final FirebaseAuthException cause;
+  final String message;
+
+  @override
+  String toString() => message;
 }

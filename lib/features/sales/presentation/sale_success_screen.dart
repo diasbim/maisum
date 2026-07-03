@@ -10,6 +10,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../core/errors/app_error_reporter.dart';
+import '../../../design_system/design_system.dart';
 import '../../customers/domain/customer.dart';
 import '../../rewards/domain/reward.dart';
 import '../../rewards/domain/reward_progress.dart';
@@ -199,27 +200,21 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                           onViewAll: () => context.push('/appointments'),
                         ),
                         const SizedBox(height: 18),
-                        _PrimaryCtaButton(
+                        MaisUmButton(
                           label: AppStrings.novaVenda,
+                          leadingIcon: Icons.add_rounded,
+                          trailingIcon: Icons.arrow_forward_rounded,
+                          backgroundColor: AppColors.secondary,
+                          foregroundColor: AppColors.primary,
                           onPressed: () => context.go('/new-sale'),
                         ),
                         const SizedBox(height: 10),
-                        OutlinedButton(
+                        MaisUmButton(
+                          label: AppStrings.voltarAoInicio,
+                          variant: MaisUmButtonVariant.outlined,
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.white.withValues(alpha: 0.04),
                           onPressed: () => context.go('/dashboard'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.18),
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 18,
-                              vertical: 14,
-                            ),
-                          ),
-                          child: const Text(AppStrings.voltarAoInicio),
                         ),
                       ],
                     ),
@@ -622,16 +617,13 @@ class _RewardProgressCard extends StatelessWidget {
                 : 'Recompensa disponível')
         : 'Crie uma recompensa para continuar';
 
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primaryDark.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1.2,
-        ),
-      ),
+      radius: 18,
+      backgroundColor: AppColors.primaryDark.withValues(alpha: 0.7),
+      borderColor: Colors.white.withValues(alpha: 0.08),
+      borderWidth: 1.2,
+      shadows: const [],
       child: Row(
         children: [
           Expanded(
@@ -730,16 +722,13 @@ class _MessagePreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primaryDark.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1.2,
-        ),
-      ),
+      radius: 18,
+      backgroundColor: AppColors.primaryDark.withValues(alpha: 0.7),
+      borderColor: Colors.white.withValues(alpha: 0.08),
+      borderWidth: 1.2,
+      shadows: const [],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -788,96 +777,33 @@ class _MessagePreviewCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
+                child: MaisUmButton(
                   onPressed: onSendSms,
-                  icon: const Icon(Icons.sms_rounded, size: 16),
-                  label: const Text(AppStrings.enviarSms),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.white.withValues(alpha: 0.06),
-                    side: BorderSide(
-                      color: Colors.white.withValues(alpha: 0.16),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  label: AppStrings.enviarSms,
+                  variant: MaisUmButtonVariant.outlined,
+                  leadingIcon: Icons.sms_rounded,
+                  foregroundColor: Colors.white,
+                  backgroundColor: Colors.white.withValues(alpha: 0.06),
+                  height: 44,
+                  radius: 12,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: ElevatedButton.icon(
+                child: MaisUmButton(
                   onPressed: isSendingWhatsApp ? null : onSendWhatsApp,
-                  icon: isSendingWhatsApp
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.send_rounded, size: 16),
-                  label: Text(
-                    isSendingWhatsApp
-                        ? 'A enviar...'
-                        : AppStrings.enviarWhatsApp,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                  label: AppStrings.enviarWhatsApp,
+                  loadingLabel: 'A enviar...',
+                  isLoading: isSendingWhatsApp,
+                  leadingIcon: Icons.send_rounded,
+                  backgroundColor: AppColors.green,
+                  foregroundColor: Colors.white,
+                  height: 44,
+                  radius: 12,
                 ),
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PrimaryCtaButton extends StatelessWidget {
-  const _PrimaryCtaButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.secondary,
-        foregroundColor: AppColors.primary,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.25),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.add_rounded, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-          ),
-          const Icon(Icons.arrow_forward_rounded),
         ],
       ),
     );
@@ -905,16 +831,13 @@ class _ScheduleNextVisitCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.primaryDark.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.08),
-          width: 1.2,
-        ),
-      ),
+      radius: 18,
+      backgroundColor: AppColors.primaryDark.withValues(alpha: 0.7),
+      borderColor: Colors.white.withValues(alpha: 0.08),
+      borderWidth: 1.2,
+      shadows: const [],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -929,14 +852,15 @@ class _ScheduleNextVisitCard extends StatelessWidget {
                   ),
                 ),
               ),
-              TextButton.icon(
+              MaisUmButton(
                 onPressed: onViewAll,
-                style: TextButton.styleFrom(
-                  foregroundColor: AppColors.secondary,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                ),
-                icon: const Icon(Icons.calendar_month_rounded, size: 16),
-                label: const Text('Ver agenda'),
+                label: 'Ver agenda',
+                leadingIcon: Icons.calendar_month_rounded,
+                variant: MaisUmButtonVariant.ghost,
+                foregroundColor: AppColors.secondary,
+                fullWidth: false,
+                height: 36,
+                radius: 10,
               ),
             ],
           ),
@@ -969,19 +893,15 @@ class _ScheduleNextVisitCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          OutlinedButton.icon(
+          MaisUmButton(
             onPressed: isSaving ? null : onPickDate,
-            icon: const Icon(Icons.calendar_month_rounded, size: 18),
-            label: const Text('Escolher no calendário'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
-              backgroundColor: Colors.white.withValues(alpha: 0.05),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
+            label: 'Escolher no calendário',
+            variant: MaisUmButtonVariant.outlined,
+            leadingIcon: Icons.calendar_month_rounded,
+            foregroundColor: Colors.white,
+            backgroundColor: Colors.white.withValues(alpha: 0.05),
+            height: 44,
+            radius: 12,
           ),
           if (isSaving) ...[
             const SizedBox(height: 10),
@@ -1026,14 +946,14 @@ class _QuickDayActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FilledButton(
+    return MaisUmButton(
       onPressed: isSaving ? null : onTap,
-      style: FilledButton.styleFrom(
-        backgroundColor: AppColors.secondary,
-        foregroundColor: AppColors.primary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-      child: Text('+$days'),
+      label: '+$days',
+      backgroundColor: AppColors.secondary,
+      foregroundColor: AppColors.primary,
+      fullWidth: false,
+      height: 40,
+      radius: 10,
     );
   }
 }

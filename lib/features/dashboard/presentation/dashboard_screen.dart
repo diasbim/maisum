@@ -8,10 +8,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/moz_phone_utils.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/sync_status_bar.dart';
+import '../../../design_system/design_system.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../sync/sync_controller.dart';
 import '../../sync/sync_service.dart';
@@ -339,13 +339,18 @@ Future<void> _handleNewSaleEntry(BuildContext context, WidgetRef ref) async {
           'Para registrar uma venda,\nprimeiro precisa adicionar um cliente.',
         ),
         actions: [
-          TextButton(
+          MaisUmButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancelar'),
+            label: 'Cancelar',
+            variant: MaisUmButtonVariant.ghost,
+            fullWidth: false,
+            height: 40,
           ),
-          FilledButton(
+          MaisUmButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Adicionar Cliente'),
+            label: 'Adicionar Cliente',
+            fullWidth: false,
+            height: 40,
           ),
         ],
       ),
@@ -391,13 +396,6 @@ String _formatSubscriptionStatus(String status) {
       .join(' ');
 }
 
-String _formatStreakLabel(int days) {
-  final suffix = days == 1
-      ? AppStrings.dashboardStreakDaySingular
-      : AppStrings.dashboardStreakDayPlural;
-  return '$days $suffix';
-}
-
 class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
   final String text;
@@ -420,13 +418,12 @@ class _SubscriptionChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-      ),
+      radius: AppRadius.pill,
+      backgroundColor: Colors.white.withValues(alpha: 0.14),
+      borderColor: Colors.white.withValues(alpha: 0.2),
+      shadows: const [],
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -445,12 +442,13 @@ class _HeaderMetaChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
+      radius: AppRadius.pill,
+      backgroundColor: Colors.white.withValues(alpha: 0.1),
+      borderColor: Colors.transparent,
+      borderWidth: 0,
+      shadows: const [],
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -474,13 +472,12 @@ class _HeaderTodaySummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-      ),
+      radius: AppRadius.md,
+      backgroundColor: Colors.white.withValues(alpha: 0.12),
+      borderColor: Colors.white.withValues(alpha: 0.2),
+      shadows: const [],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -541,13 +538,11 @@ class _OfflineStatusBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
+    return MaisUmSurface(
+      variant: MaisUmSurfaceVariant.warning,
+      radius: AppRadius.md,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.secondaryLight,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.secondary.withValues(alpha: 0.4)),
-      ),
+      borderColor: AppColors.secondary.withValues(alpha: 0.4),
       child: Row(
         children: [
           const Icon(Icons.cloud_off_rounded, color: AppColors.primary),
@@ -605,12 +600,13 @@ class _SyncStatusChip extends StatelessWidget {
       fg = Colors.white;
     }
 
-    return Container(
+    return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
+      radius: AppRadius.pill,
+      backgroundColor: bg,
+      borderColor: Colors.transparent,
+      borderWidth: 0,
+      shadows: const [],
       child: Text(
         label,
         style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -633,113 +629,96 @@ class _PrimarySaleCard extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final artWidth = constraints.maxWidth < 360 ? 110.0 : 140.0;
-        return Material(
-          color: AppColors.primary,
-          borderRadius: BorderRadius.circular(24),
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(24),
-            child: Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(minHeight: 280),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [AppColors.primary, AppColors.primaryDark],
-                ),
-                boxShadow: AppTheme.shadowMd,
+        return MaisUmSurface(
+          onTap: onTap,
+          semanticLabel: AppStrings.novaVenda,
+          radius: AppRadius.xl,
+          width: double.infinity,
+          padding: EdgeInsets.zero,
+          backgroundColor: AppColors.primary,
+          borderColor: AppColors.primary,
+          shadows: const [],
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 280),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.xl),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColors.primary, AppColors.primaryDark],
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Stack(
-                  children: [
-                    Positioned(
-                      right: -28,
-                      top: -36,
-                      child: Container(
-                        width: 160,
-                        height: 160,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.06),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.xl),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -28,
+                    top: -36,
+                    child: Container(
+                      width: 160,
+                      height: 160,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.06),
+                      ),
+                    ),
+                  ),
+                  const Positioned(
+                    right: 14,
+                    bottom: 16,
+                    child: _SaleIllustrationBadge(),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(22, 22, artWidth, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary,
+                            borderRadius: BorderRadius.circular(15),
+                          ),
+                          child: const Icon(
+                            Icons.add_shopping_cart_rounded,
+                            color: AppColors.primary,
+                            size: 26,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 18),
+                        Text(
+                          AppStrings.novaVenda,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          AppStrings.dashboardSaleCardSubtitle,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.72),
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        MaisUmButton(
+                          label: AppStrings.dashboardSaleCta,
+                          onPressed: onTap,
+                          variant: MaisUmButtonVariant.secondary,
+                          trailingIcon: Icons.arrow_forward_rounded,
+                          height: 44,
+                          radius: AppRadius.md,
+                          fullWidth: false,
+                          backgroundColor: AppColors.secondary,
+                          foregroundColor: AppColors.primary,
+                        ),
+                      ],
                     ),
-                    const Positioned(
-                      right: 14,
-                      bottom: 16,
-                      child: _SaleIllustrationBadge(),
-                    ),
-                    Padding(
-                      padding: EdgeInsets.fromLTRB(22, 22, artWidth, 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: AppColors.secondary,
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            child: const Icon(
-                              Icons.add_shopping_cart_rounded,
-                              color: AppColors.primary,
-                              size: 26,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          Text(
-                            AppStrings.novaVenda,
-                            style: theme.textTheme.headlineSmall?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            AppStrings.dashboardSaleCardSubtitle,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.72),
-                              height: 1.5,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.secondary,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  AppStrings.dashboardSaleCta,
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    color: AppColors.primary,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Icon(
-                                  Icons.arrow_forward_rounded,
-                                  color: AppColors.primary,
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -809,160 +788,6 @@ class _SaleIllustrationBadge extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _DailySalesCard extends StatelessWidget {
-  const _DailySalesCard({required this.saleCount, required this.points});
-
-  final int saleCount;
-  final int points;
-
-  @override
-  Widget build(BuildContext context) {
-    return _MetricCard(
-      icon: Icons.bar_chart_rounded,
-      iconBg: AppColors.primary.withValues(alpha: 0.12),
-      iconColor: AppColors.primary,
-      value: '$saleCount',
-      label: AppStrings.vendasHoje,
-      helper: '+$points ${AppStrings.pontosAbrev}',
-      helperColor: AppColors.secondaryDark,
-    );
-  }
-}
-
-class _PointsTodayCard extends StatelessWidget {
-  const _PointsTodayCard({required this.points});
-
-  final int points;
-
-  @override
-  Widget build(BuildContext context) {
-    return _MetricCard(
-      icon: Icons.stars_rounded,
-      iconBg: AppColors.secondaryLight,
-      iconColor: AppColors.secondaryDark,
-      value: '$points',
-      label: AppStrings.pontosHoje,
-    );
-  }
-}
-
-class _TotalCustomersCard extends StatelessWidget {
-  const _TotalCustomersCard({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return _MetricCard(
-      icon: Icons.people_alt_rounded,
-      iconBg: AppColors.primary.withValues(alpha: 0.1),
-      iconColor: AppColors.primary,
-      value: '$count',
-      label: AppStrings.totalClientes,
-      helper: AppStrings.dashboardRegistered,
-    );
-  }
-}
-
-class _ReturningCustomersCard extends StatelessWidget {
-  const _ReturningCustomersCard({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return _MetricCard(
-      icon: Icons.repeat_rounded,
-      iconBg: AppColors.secondary.withValues(alpha: 0.15),
-      iconColor: AppColors.secondaryDark,
-      value: '$count',
-      label: AppStrings.dashboardReturningCustomers,
-    );
-  }
-}
-
-class _MetricCard extends StatelessWidget {
-  const _MetricCard({
-    required this.icon,
-    required this.iconBg,
-    required this.iconColor,
-    required this.value,
-    required this.label,
-    this.helper,
-    this.helperColor,
-  });
-
-  final IconData icon;
-  final Color iconBg;
-  final Color iconColor;
-  final String value;
-  final String label;
-  final String? helper;
-  final Color? helperColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      constraints: const BoxConstraints(minHeight: 152),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.g100, width: 1.2),
-        boxShadow: AppTheme.shadowSm,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: iconBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: iconColor, size: 18),
-          ),
-          const SizedBox(height: 12),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 180),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            child: Text(
-              value,
-              key: ValueKey<String>(value),
-              style: theme.textTheme.headlineSmall?.copyWith(
-                color: AppColors.onSurface,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: AppColors.onSurfaceVariant,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          if (helper != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              helper!,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: helperColor ?? AppColors.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ] else
-            const SizedBox(height: 22),
-        ],
-      ),
     );
   }
 }
@@ -1087,95 +912,6 @@ class _SkeletonBlock extends StatelessWidget {
   }
 }
 
-class _StreakBanner extends StatelessWidget {
-  const _StreakBanner({required this.streakDays, required this.atRisk});
-
-  final int streakDays;
-  final bool atRisk;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final statusLabel = atRisk
-        ? AppStrings.dashboardStreakStatusRisk
-        : AppStrings.dashboardStreakStatusStable;
-    final statusColor = atRisk ? AppColors.amber : AppColors.green;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [AppColors.primary, AppColors.primaryDark],
-        ),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: AppTheme.shadowMd,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.local_fire_department_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  AppStrings.dashboardStreakTitle,
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.72),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatStreakLabel(streakDays),
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.circle, size: 6, color: statusColor),
-                const SizedBox(width: 6),
-                Text(
-                  statusLabel,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MiniActionTile extends StatelessWidget {
   const _MiniActionTile({
     required this.label,
@@ -1193,65 +929,55 @@ class _MiniActionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.g100, width: 1.5),
-            boxShadow: AppTheme.shadowSm,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return MaisUmSurface(
+      onTap: onTap,
+      semanticLabel: label,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      radius: AppRadius.lg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, color: AppColors.primary, size: 20),
-                  ),
-                  const Spacer(),
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: AppColors.g300,
-                    size: 20,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: AppColors.onSurface,
-                  fontWeight: FontWeight.w700,
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                child: Icon(icon, color: AppColors.primary, size: 20),
               ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: AppColors.onSurfaceVariant,
-                  fontSize: 12,
-                  height: 1.3,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+              const Spacer(),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.g300,
+                size: 20,
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: AppColors.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppColors.onSurfaceVariant,
+              fontSize: 12,
+              height: 1.3,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }

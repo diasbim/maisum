@@ -207,3 +207,24 @@ final isOwnerUserProvider = FutureProvider<bool>((ref) async {
   final role = await ref.watch(activeAppUserRoleProvider.future);
   return role == AppConstants.appUserRoleOwner;
 });
+
+bool hasInternalAdminClaim(Map<String, dynamic> claims) {
+  final role = claims['role']?.toString().trim().toLowerCase();
+  return claims['admin'] == true ||
+      claims['is_admin'] == true ||
+      claims['internal_admin'] == true ||
+      role == 'admin' ||
+      role == 'internal_admin';
+}
+
+final isInternalAdminProvider = FutureProvider<bool>((ref) async {
+  final session = ref.watch(authControllerProvider).valueOrNull;
+  if (session == null) return false;
+
+  final user = ref.read(firebaseAuthInstanceProvider).currentUser;
+  if (user == null) return false;
+
+  final tokenResult = await user.getIdTokenResult();
+  final claims = tokenResult.claims ?? const <String, dynamic>{};
+  return hasInternalAdminClaim(claims);
+});

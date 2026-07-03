@@ -13,6 +13,7 @@ import '../../../core/widgets/customer_card.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/errors/app_error_mapper.dart';
+import '../../../design_system/design_system.dart';
 import '../domain/customer.dart';
 import 'customers_controller.dart';
 
@@ -162,9 +163,10 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 12),
-                  TextButton.icon(
-                    icon: const Icon(Icons.refresh),
-                    label: const Text(AppStrings.tentar),
+                  MaisUmButton(
+                    label: AppStrings.tentar,
+                    leadingIcon: Icons.refresh_rounded,
+                    variant: MaisUmButtonVariant.outlined,
                     onPressed: () => ref
                         .read(customersControllerProvider.notifier)
                         .refresh(),
@@ -435,56 +437,47 @@ class _FilterChip extends StatelessWidget {
     final background = active ? null : Colors.white.withValues(alpha: 0.14);
     final borderColor =
         active ? AppColors.secondaryDark : Colors.white.withValues(alpha: 0.35);
-    final overlay = active
-        ? AppColors.secondary.withValues(alpha: 0.16)
-        : Colors.white.withValues(alpha: 0.12);
-
-    return InkWell(
+    return MaisUmSurface(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      overlayColor: WidgetStatePropertyAll(overlay),
-      child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: background,
-          gradient: active ? AppTheme.goldGradient : null,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: borderColor,
-          ),
-          boxShadow: active
-              ? [
-                  BoxShadow(
-                    color: AppColors.secondary.withValues(alpha: 0.35),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.16),
-                    blurRadius: 14,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 16, color: foreground),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: foreground,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
+      selected: active,
+      semanticButton: true,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      radius: 18,
+      backgroundColor: background,
+      backgroundGradient: active ? AppTheme.goldGradient : null,
+      borderColor: borderColor,
+      borderWidth: 1,
+      shadows: active
+          ? [
+              BoxShadow(
+                color: AppColors.secondary.withValues(alpha: 0.35),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
               ),
+            ]
+          : [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.16),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 16, color: foreground),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: foreground,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

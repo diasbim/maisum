@@ -53,6 +53,40 @@ service cloud.firestore {
       );
     }
 
+    function canBootstrapBusinessRead(merchantId) {
+      return isSignedIn() && merchantId == request.auth.uid;
+    }
+
+    function hasBusinessOwnerFields(merchantId) {
+      return exists(/databases/$(database)/documents/businesses/$(merchantId)) && (
+        (businessDoc(merchantId).data.owner_user_id is string &&
+          businessDoc(merchantId).data.owner_user_id != '') ||
+        (businessDoc(merchantId).data.firebase_uid is string &&
+          businessDoc(merchantId).data.firebase_uid != '')
+      );
+    }
+
+    function authPhoneMatchesBusiness(merchantId) {
+      return request.auth.token.phone_number is string &&
+        businessDoc(merchantId).data.phone == request.auth.token.phone_number;
+    }
+
+    function canClaimLegacyBusiness(merchantId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/businesses/$(merchantId)) &&
+        !hasBusinessOwnerFields(merchantId) &&
+        (merchantId == request.auth.uid || authPhoneMatchesBusiness(merchantId)) &&
+        request.resource.data.owner_user_id == request.auth.uid &&
+        request.resource.data.firebase_uid == request.auth.uid;
+    }
+
+    function canReadLegacyBusiness(merchantId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/businesses/$(merchantId)) &&
+        !hasBusinessOwnerFields(merchantId) &&
+        (merchantId == request.auth.uid || authPhoneMatchesBusiness(merchantId));
+    }
+
     function isOwnerOnlyCollection(collectionId) {
       return collectionId in [
         'subscription_state',
@@ -88,9 +122,10 @@ service cloud.firestore {
     match /businesses/{merchantId} {
       // Entry flow query by phone uses limit(1); keep narrow list access.
       allow list: if isSignedIn() && request.query.limit != null && request.query.limit <= 1;
-      allow get: if canAccessBusiness(merchantId);
+      allow get: if canAccessBusiness(merchantId) || canBootstrapBusinessRead(merchantId) || canReadLegacyBusiness(merchantId);
       allow create: if canBootstrapBusiness(merchantId) || canAccessBusiness(merchantId);
-      allow update, delete: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId);
+      allow update: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId) || canClaimLegacyBusiness(merchantId);
+      allow delete: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId);
 
       // Owner-only policy/config collections.
       match /{collectionId}/{docId} {
@@ -106,6 +141,12 @@ service cloud.firestore {
 
     // Global plan catalog used by onboarding/settings plan selectors.
     match /plans/{planId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Global onboarding catalog/defaults used by merchant setup screens.
+    match /merchant_onboarding_config/{configId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }

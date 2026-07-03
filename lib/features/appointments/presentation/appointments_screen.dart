@@ -6,6 +6,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../design_system/design_system.dart';
 import '../domain/appointment.dart';
 import '../providers/appointments_providers.dart';
 
@@ -149,12 +150,9 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
                   onModeChanged: _changeMode,
                 ),
                 const SizedBox(height: 12),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.g100),
-                  ),
+                MaisUmSurface(
+                  padding: EdgeInsets.zero,
+                  radius: 16,
                   child: TableCalendar<AppointmentWithCustomer>(
                     locale: 'pt_PT',
                     firstDay: firstDate,
@@ -258,13 +256,9 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
                 ),
                 const SizedBox(height: 8),
                 if (selectedItems.isEmpty)
-                  Container(
+                  MaisUmSurface(
                     padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: AppColors.g100),
-                    ),
+                    radius: 14,
                     child: Text(
                       'Sem agendamentos para este dia.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -303,10 +297,13 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 10),
-                    OutlinedButton(
+                    MaisUmButton(
                       onPressed: () =>
                           ref.invalidate(appointmentsWithCustomerProvider),
-                      child: const Text(AppStrings.tentar),
+                      label: AppStrings.tentar,
+                      leadingIcon: Icons.refresh_rounded,
+                      variant: MaisUmButtonVariant.outlined,
+                      fullWidth: false,
                     ),
                   ],
                 ),
@@ -422,12 +419,9 @@ class _AppointmentsViewSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.g100),
-      ),
+    return MaisUmSurface(
+      padding: EdgeInsets.zero,
+      radius: 14,
       child: Row(
         children: [
           Expanded(
@@ -467,40 +461,35 @@ class _SwitcherButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          decoration: BoxDecoration(
-            color: isActive
-                ? AppColors.secondary.withValues(alpha: 0.14)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
+    return MaisUmSurface(
+      onTap: onTap,
+      selected: isActive,
+      semanticButton: true,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      radius: 12,
+      backgroundColor: isActive
+          ? AppColors.secondary.withValues(alpha: 0.14)
+          : Colors.transparent,
+      borderColor: Colors.transparent,
+      borderWidth: 0,
+      shadows: const [],
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            size: 18,
+            color: isActive ? AppColors.secondaryDark : AppColors.g500,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: isActive ? AppColors.secondaryDark : AppColors.g500,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color:
-                          isActive ? AppColors.secondaryDark : AppColors.g500,
-                    ),
-              ),
-            ],
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: isActive ? AppColors.secondaryDark : AppColors.g500,
+                ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -553,89 +542,82 @@ class _AppointmentTile extends StatelessWidget {
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
 
-    return InkWell(
+    return MaisUmSurface(
       onTap: () => context.push('/customers/${item.appointment.customerId}'),
-      borderRadius: BorderRadius.circular(16),
-      child: Ink(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.g100),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.06),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+      semanticButton: true,
+      padding: const EdgeInsets.all(14),
+      radius: 16,
+      shadows: [
+        BoxShadow(
+          color: AppColors.primary.withValues(alpha: 0.06),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: AppColors.secondaryLight,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              alignment: Alignment.center,
-              child: const Icon(
-                Icons.content_cut_rounded,
-                color: AppColors.secondaryDark,
-                size: 22,
-              ),
+      ],
+      child: Row(
+        children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.secondaryLight,
+              borderRadius: BorderRadius.circular(14),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.customerName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onSurface,
-                        ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    item.customerPhone,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.event_rounded,
-                        size: 14,
-                        color: AppColors.primary,
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.content_cut_rounded,
+              color: AppColors.secondaryDark,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.customerName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$day/$month/${date.year} - $hour:$minute',
-                        style:
-                            Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  color: AppColors.primary,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  item.customerPhone,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.onSurfaceVariant,
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.event_rounded,
+                      size: 14,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$day/$month/${date.year} - $hour:$minute',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppColors.g500,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.g500,
+          ),
+        ],
       ),
     );
   }

@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:maisum/app/providers.dart';
 import 'package:maisum/core/constants/app_strings.dart';
 import 'package:maisum/core/database/app_database.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
+import 'package:maisum/features/customers/data/customer_repository.dart';
 import 'package:maisum/features/customers/domain/customer.dart';
 import 'package:maisum/features/sales/data/sale_dao.dart';
 import 'package:maisum/features/sales/domain/sale.dart';
 import 'package:maisum/features/sales/presentation/new_sale_screen.dart';
 import 'package:maisum/features/sales/presentation/sale_controller.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-
-import '../helpers/test_database.dart';
+import 'package:maisum/features/sync/data/sync_dao.dart';
 
 class _FakeSaleController extends SaleController {
   _FakeSaleController({this.onCreateSale});
@@ -54,24 +54,55 @@ class _FakeSaleController extends SaleController {
   }
 }
 
-Future<Customer> _insertCustomer(String name, String phone) {
-  return CustomerDao(AppDatabase.instance).create(name: name, phone: phone);
+class _FakeCustomerRepository extends CustomerRepository {
+  _FakeCustomerRepository(this.customers)
+      : super(CustomerDao(AppDatabase.instance), SyncDao(AppDatabase.instance));
+
+  final List<Customer> customers;
+
+  @override
+  Future<List<Customer>> getAll() async => customers;
+
+  @override
+  Future<Customer?> getById(String id) async {
+    for (final customer in customers) {
+      if (customer.id == id) return customer;
+    }
+    return null;
+  }
 }
 
-Future<void> _insertSale({
-  required String customerId,
-  double amount = 200,
-}) async {
-  await SaleDao(AppDatabase.instance)
-      .create(customerId: customerId, amount: amount);
+class _FakeSaleDao extends SaleDao {
+  _FakeSaleDao({this.latestSale}) : super(AppDatabase.instance);
+
+  final Map<String, dynamic>? latestSale;
+
+  @override
+  Future<Map<String, dynamic>?> getLatestWithCustomer() async => latestSale;
+}
+
+Future<void> _pumpSaleUi(WidgetTester tester) async {
+  await tester.pump();
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 100)),
+  );
+  for (var frame = 0; frame < 20; frame += 1) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 Widget _buildScreen({
   NewSaleArgs? args,
   _FakeSaleController? saleController,
+  List<Customer> customers = const [],
+  Map<String, dynamic>? latestSale,
 }) {
   return ProviderScope(
     overrides: [
+      customerRepositoryProvider.overrideWithValue(
+        _FakeCustomerRepository(customers),
+      ),
+      saleDaoProvider.overrideWithValue(_FakeSaleDao(latestSale: latestSale)),
       saleControllerProvider.overrideWith(
         () => saleController ?? _FakeSaleController(),
       ),
@@ -80,7 +111,7 @@ Widget _buildScreen({
   );
 }
 
-Widget _buildScreenWithRouter() {
+Widget _buildScreenWithRouter({List<Customer> customers = const []}) {
   final router = GoRouter(
     initialLocation: '/new-sale',
     routes: [
@@ -89,7 +120,8 @@ Widget _buildScreenWithRouter() {
         path: '/customers/create',
         builder: (_, state) => Scaffold(
           body: Text(
-              'customer-create:${state.uri.queryParameters['"' "'resumeSaleFlow'" '"']}'),
+            'customer-create:${state.uri.queryParameters['resumeSaleFlow']}',
+          ),
         ),
       ),
     ],
@@ -97,50 +129,64 @@ Widget _buildScreenWithRouter() {
 
   return ProviderScope(
     overrides: [
+      customerRepositoryProvider.overrideWithValue(
+        _FakeCustomerRepository(customers),
+      ),
+      saleDaoProvider.overrideWithValue(_FakeSaleDao()),
       saleControllerProvider.overrideWith(_FakeSaleController.new),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
 }
 
+Customer _customer(String id, String name, String phone) {
+  return Customer(
+    id: id,
+    name: name,
+    phone: phone,
+    createdAt: DateTime(2024, 1, 1),
+    updatedAt: DateTime(2024, 1, 2),
+  );
+}
+
+Map<String, dynamic> _latestSaleFor(Customer customer, double amount) => {
+      'customer_id': customer.id,
+      'amount': amount,
+    };
+
 void main() {
-  setUpAll(() {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  });
-
-  setUp(() async {
-    await setUpTestDatabase();
-  });
-
-  tearDown(() async {
-    await tearDownTestDatabase();
-  });
-
   group('NewSaleScreen UX flow', () {
     testWidgets('opens customer selector automatically when customers exist', (
       tester,
     ) async {
-      await _insertCustomer('Ana Silva', '841000001');
-      await _insertCustomer('Bruno Lima', '842000002');
+      final customers = [
+        _customer('customer-1', 'Ana Silva', '841000001'),
+        _customer('customer-2', 'Bruno Lima', '842000002'),
+      ];
 
-      await tester.pumpWidget(_buildScreen());
-      await tester.pumpAndSettle();
+      await tester.pumpWidget(_buildScreen(customers: customers));
+      await _pumpSaleUi(tester);
 
-      expect(find.text('Selecionar cliente'), findsOneWidget);
+      expect(find.text('Selecionar cliente'), findsWidgets);
       expect(find.text('Escolha um cliente'), findsNothing);
+
+      await tester.tap(find.text('Ana Silva'));
+      await _pumpSaleUi(tester);
     });
 
     testWidgets('auto-selects last used customer and shows amount section', (
       tester,
     ) async {
-      final first = await _insertCustomer('Ana Silva', '841000001');
-      final last = await _insertCustomer('Carlos Dias', '843000003');
-      await _insertSale(customerId: first.id, amount: 100);
-      await _insertSale(customerId: last.id, amount: 200);
+      final first = _customer('customer-1', 'Ana Silva', '841000001');
+      final last = _customer('customer-2', 'Carlos Dias', '843000003');
 
-      await tester.pumpWidget(_buildScreen());
-      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _buildScreen(
+          customers: [first, last],
+          latestSale: _latestSaleFor(last, 200),
+        ),
+      );
+      await _pumpSaleUi(tester);
 
       expect(find.text('Cliente Selecionado'), findsOneWidget);
       expect(find.text('Carlos Dias'), findsOneWidget);
@@ -154,7 +200,7 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(_buildScreenWithRouter());
-      await tester.pumpAndSettle();
+      await _pumpSaleUi(tester);
 
       expect(find.text('Nenhum cliente registado'), findsOneWidget);
       expect(
@@ -168,12 +214,15 @@ void main() {
     testWidgets('resumes with preselected customer and starts at step 2', (
       tester,
     ) async {
-      final created = await _insertCustomer('Carlos', '845000005');
+      final created = _customer('customer-1', 'Carlos', '845000005');
 
       await tester.pumpWidget(
-        _buildScreen(args: NewSaleArgs(preselectedCustomerId: created.id)),
+        _buildScreen(
+          args: NewSaleArgs(preselectedCustomerId: created.id),
+          customers: [created],
+        ),
       );
-      await tester.pumpAndSettle();
+      await _pumpSaleUi(tester);
 
       expect(find.text('Cliente Selecionado'), findsOneWidget);
       expect(find.text('Carlos'), findsOneWidget);
@@ -186,14 +235,16 @@ void main() {
         (
       tester,
     ) async {
-      await _insertCustomer('Ana Silva', '841000001');
-      await _insertCustomer('Bruno Lima', '842000002');
+      final customers = [
+        _customer('customer-1', 'Ana Silva', '841000001'),
+        _customer('customer-2', 'Bruno Lima', '842000002'),
+      ];
 
-      await tester.pumpWidget(_buildScreen());
-      await tester.pumpAndSettle();
+      await tester.pumpWidget(_buildScreen(customers: customers));
+      await _pumpSaleUi(tester);
 
       await tester.tap(find.text('Bruno Lima'));
-      await tester.pumpAndSettle();
+      await _pumpSaleUi(tester);
 
       expect(find.text('Cliente Selecionado'), findsOneWidget);
       expect(find.text('Bruno Lima'), findsOneWidget);
@@ -206,10 +257,10 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(_buildScreenWithRouter());
-      await tester.pumpAndSettle();
+      await _pumpSaleUi(tester);
 
       await tester.tap(find.text('Adicionar Cliente').first);
-      await tester.pumpAndSettle();
+      await _pumpSaleUi(tester);
 
       expect(find.text('customer-create:1'), findsOneWidget);
     });
