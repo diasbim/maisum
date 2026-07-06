@@ -409,6 +409,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/settings', builder: (_, __) => const SettingsScreen()),
       GoRoute(
+        path: '/settings/support-diagnostics',
+        builder: (_, __) => const SupportDiagnosticsScreen(),
+      ),
+      GoRoute(
         path: '/staff-management',
         builder: (_, __) => const StaffManagementScreen(),
       ),
