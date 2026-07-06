@@ -1,6 +1,7 @@
 class RemoteConfigKeys {
   static const trialsEnabled = 'billing.trials.enabled';
   static const trialDays = 'billing.trials.days';
+  static const upsellWhatsApp = 'billing.upsell.whatsapp';
   static const promotionBanner = 'billing.promotions.banner';
 
   static const _pricingPrefix = 'pricing.plan.';

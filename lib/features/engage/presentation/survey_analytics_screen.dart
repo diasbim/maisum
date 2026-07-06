@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../providers/engage_providers.dart';
 
 class SurveyAnalyticsScreen extends ConsumerWidget {
@@ -31,10 +34,18 @@ class SurveyAnalyticsScreen extends ConsumerWidget {
         ),
         data: (access) {
           if (!access.canManageSurveys) {
-            return const EmptyState(
+            return EmptyState(
               title: 'Analytics indisponivel no seu plano',
               subtitle:
                   'Visualizacao completa de surveys e exclusiva do Business.',
+              actionLabel: 'Falar no WhatsApp',
+              onAction: () => context.push(
+                featureUpsellLocation(
+                  featureKey: FeatureKeys.engageManageSurveys,
+                  featureName: 'Analytics de surveys',
+                  reason: 'plan_restricted',
+                ),
+              ),
             );
           }
 

@@ -65,7 +65,7 @@ class SyncStatusBar extends StatelessWidget {
               children: [
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 220),
-                  child: status.isSyncing
+                  child: status.viewState == SyncViewState.syncing
                       ? SizedBox(
                           key: const ValueKey('syncing'),
                           width: 18,

@@ -296,6 +296,15 @@ class _DashboardBody extends ConsumerWidget {
                 SizedBox(
                   width: tileWidth,
                   child: _MiniActionTile(
+                    label: 'Produtos e Servicos',
+                    subtitle: 'Catalogo para enriquecer vendas',
+                    icon: Icons.inventory_2_rounded,
+                    onTap: () => context.push('/catalog'),
+                  ),
+                ),
+                SizedBox(
+                  width: tileWidth,
+                  child: _MiniActionTile(
                     label: AppStrings.recompensas,
                     subtitle: AppStrings.dashboardQuickRewardsSubtitle,
                     icon: Icons.card_giftcard_rounded,
@@ -578,15 +587,16 @@ class _SyncStatusChip extends StatelessWidget {
       label = AppStrings.offline;
       bg = Colors.white.withValues(alpha: 0.12);
       fg = Colors.white;
-    } else if (status.lastError != null) {
+    } else if (status.viewState == SyncViewState.failed) {
       label = AppStrings.syncInterrompida;
       bg = AppColors.errorContainer.withValues(alpha: 0.9);
       fg = AppColors.error;
-    } else if (status.phase == SyncPhase.retrying) {
+    } else if (status.viewState == SyncViewState.syncing &&
+        status.phase == SyncPhase.retrying) {
       label = AppStrings.syncRetrying;
       bg = Colors.white.withValues(alpha: 0.18);
       fg = Colors.white;
-    } else if (status.isSyncing) {
+    } else if (status.viewState == SyncViewState.syncing) {
       label = AppStrings.sincronizando;
       bg = Colors.white.withValues(alpha: 0.2);
       fg = Colors.white;

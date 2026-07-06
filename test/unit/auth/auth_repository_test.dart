@@ -10,6 +10,9 @@ import 'package:maisum/core/storage/secure_storage.dart';
 import 'package:maisum/features/auth/data/auth_repository.dart';
 import 'package:maisum/features/auth/data/backend_auth_api.dart';
 import 'package:maisum/features/auth/domain/backend_bootstrap_session.dart';
+import 'package:maisum/features/subscription/domain/feature_keys.dart';
+import 'package:maisum/features/subscription/domain/plan.dart';
+import 'package:maisum/features/subscription/domain/usage_metrics.dart';
 import 'package:sqflite/sqflite.dart';
 
 import '../../helpers/test_database.dart';
@@ -110,14 +113,14 @@ service cloud.firestore {
     );
 
     test(
-      'does not reuse phone-matched merchant owned by another Firebase uid',
+      'reuses phone-matched merchant after Firebase phone verification',
       () async {
         final firestore = FakeFirebaseFirestore();
-        await firestore.collection('businesses').doc('merchant-other').set({
-          'merchant_name': 'Outra Barbearia',
+        await firestore.collection('businesses').doc('merchant-existing').set({
+          'merchant_name': 'Barbearia Existente',
           'phone': '+258840000999',
-          'owner_user_id': 'other-user',
-          'firebase_uid': 'firebase-other',
+          'owner_user_id': 'previous-owner',
+          'firebase_uid': 'previous-firebase-uid',
           'subscription_status': 'ACTIVE_PAID',
         });
 
@@ -140,11 +143,63 @@ service cloud.firestore {
         final session = await repository.getStoredSession();
 
         expect(session, isNotNull);
-        expect(session!.merchantId, 'firebase-current');
-        expect(session.merchantName, 'Minha Loja');
-        expect(await storage.getMerchantId(), 'firebase-current');
+        expect(session!.merchantId, 'merchant-existing');
+        expect(session.merchantName, 'Barbearia Existente');
+        expect(session.subscriptionStatus, 'ACTIVE_PAID');
+        expect(await storage.getMerchantId(), 'merchant-existing');
+
+        final business = await firestore
+            .collection('businesses')
+            .doc('merchant-existing')
+            .get();
+        expect(business.data()?['firebase_uid'], 'firebase-current');
       },
     );
+
+    test('seeds free subscription baseline for a stored session', () async {
+      await storage.seedSession(
+        userId: 'user-1',
+        appUserId: 'app-user-1',
+        merchantId: 'merchant-1',
+        merchantName: 'Minha Loja',
+        subscriptionStatus: 'TRIAL',
+        phone: '+258840000000',
+        token: 'stored-token',
+        refreshToken: 'refresh-token',
+        deviceId: 'device-1',
+        firebaseUid: 'firebase-1',
+        expiresAt: DateTime.now().add(const Duration(days: 1)),
+      );
+
+      final session = await repository.getStoredSession();
+
+      expect(session, isNotNull);
+
+      final subscriptionRows = await db.query(
+        'subscription_state',
+        where: 'merchant_id = ?',
+        whereArgs: ['merchant-1'],
+      );
+      expect(subscriptionRows.single['plan_code'], Plan.free.code);
+
+      final entitlementRows = await db.query(
+        'entitlements',
+        where: 'merchant_id = ?',
+        whereArgs: ['merchant-1'],
+      );
+      final enabledFeatures = entitlementRows
+          .where((row) => row['is_enabled'] == 1)
+          .map((row) => row['feature_key'])
+          .toSet();
+      expect(enabledFeatures, {FeatureKeys.whatsappAutomation});
+
+      final quotaRows = await db.query(
+        'usage_balances',
+        where: 'merchant_id = ? AND metric_key = ?',
+        whereArgs: ['merchant-1', UsageMetrics.whatsappMessages],
+      );
+      expect(quotaRows.single['limit_value'], 150);
+    });
 
     test(
       'restores backend session when runtime config enables backend auth',
@@ -280,8 +335,16 @@ service cloud.firestore {
         'link_code_normalized': 'ABCD1234',
       });
 
+      final mockAuth = MockFirebaseAuth(
+        signedIn: true,
+        mockUser: MockUser(
+          uid: 'firebase-staff-1',
+          phoneNumber: '+258841111111',
+        ),
+      );
+
       final repository = AuthRepository(
-        FirebaseAuthService(MockFirebaseAuth()),
+        FirebaseAuthService(mockAuth),
         storage,
         AppDatabase.instance,
         config: const AppRuntimeConfig(enableBackendAuth: false),
@@ -326,8 +389,16 @@ service cloud.firestore {
         'link_code_normalized': 'WXYZ5678',
       });
 
+      final mockAuth = MockFirebaseAuth(
+        signedIn: true,
+        mockUser: MockUser(
+          uid: 'firebase-user-2',
+          phoneNumber: '+258843333333',
+        ),
+      );
+
       final repository = AuthRepository(
-        FirebaseAuthService(MockFirebaseAuth()),
+        FirebaseAuthService(mockAuth),
         storage,
         AppDatabase.instance,
         config: const AppRuntimeConfig(enableBackendAuth: false),

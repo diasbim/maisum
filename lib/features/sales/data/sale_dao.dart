@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/utils/points_calculator.dart';
 import '../domain/sale.dart';
+import '../domain/sale_item.dart';
 
 class SaleDao {
   SaleDao(this._db, {this.merchantId});
@@ -38,7 +39,8 @@ class SaleDao {
       whereArgs: _withMerchantArgs([customerId]),
       orderBy: 'created_at DESC',
     );
-    return rows.map(saleFromMap).toList();
+    final sales = rows.map(saleFromMap).toList();
+    return _attachItemsToSales(sales);
   }
 
   Future<List<Sale>> getUnsynced() async {
@@ -79,7 +81,8 @@ class SaleDao {
               'ORDER BY s.created_at DESC',
       merchantId == null ? const [] : [merchantId],
     );
-    return rows.map((r) => Map<String, dynamic>.from(r)).toList();
+    return _attachItemsToRows(
+        rows.map((r) => Map<String, dynamic>.from(r)).toList());
   }
 
   Future<Map<String, dynamic>?> getLatestWithCustomer() async {
@@ -186,6 +189,50 @@ class SaleDao {
     final amount = rows.first['amount'] as num?;
     if (amount == null) return null;
     return amount.round();
+  }
+
+  Future<List<Sale>> _attachItemsToSales(List<Sale> sales) async {
+    if (sales.isEmpty) return sales;
+    final grouped =
+        await _itemsBySaleIds(sales.map((sale) => sale.id).toList());
+    return sales
+        .map((sale) => sale.copyWith(items: grouped[sale.id] ?? const []))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> _attachItemsToRows(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    if (rows.isEmpty) return rows;
+    final saleIds = rows.map((row) => row['id'] as String).toList();
+    final grouped = await _itemsBySaleIds(saleIds);
+    return rows.map((row) {
+      final saleItems = grouped[row['id']] ?? const <SaleItem>[];
+      return {
+        ...row,
+        'items': saleItems.map((item) => item.toDbMap()).toList(),
+      };
+    }).toList();
+  }
+
+  Future<Map<String, List<SaleItem>>> _itemsBySaleIds(
+    List<String> saleIds,
+  ) async {
+    if (saleIds.isEmpty) return const <String, List<SaleItem>>{};
+    final db = await _db.database;
+    final placeholders = List.filled(saleIds.length, '?').join(',');
+    final rows = await db.query(
+      'sale_items',
+      where: _withMerchantScope('sale_id IN ($placeholders)'),
+      whereArgs: _withMerchantArgs(saleIds),
+      orderBy: 'created_at ASC, name_snapshot COLLATE NOCASE ASC',
+    );
+    final grouped = <String, List<SaleItem>>{};
+    for (final row in rows) {
+      final item = saleItemFromMap(row);
+      grouped.putIfAbsent(item.saleId, () => <SaleItem>[]).add(item);
+    }
+    return grouped;
   }
 
   String _withMerchantScope(String clause) {

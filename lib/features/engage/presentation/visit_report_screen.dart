@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -52,10 +55,18 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
         ),
         data: (access) {
           if (!access.canManageVisits) {
-            return const EmptyState(
+            return EmptyState(
               title: 'Visitas indisponíveis no seu plano',
               subtitle:
                   'Relatórios de visita são exclusivos do plano Business.',
+              actionLabel: 'Falar no WhatsApp',
+              onAction: () => context.push(
+                featureUpsellLocation(
+                  featureKey: FeatureKeys.engageManageVisits,
+                  featureName: 'Relatorios de visitas',
+                  reason: 'plan_restricted',
+                ),
+              ),
             );
           }
 
@@ -145,9 +156,7 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref
-          .read(engageRepositoryProvider)
-          .submitVisitReport(
+      await ref.read(engageRepositoryProvider).submitVisitReport(
             customerId: customerId,
             result: _result,
             visitedAt: DateTime.now(),

@@ -17,6 +17,7 @@ import '../../rewards/domain/reward_progress.dart';
 import '../../rewards/presentation/rewards_controller.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/domain/usage_metrics.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../../appointments/providers/appointments_providers.dart';
 import 'sale_controller.dart';
 
@@ -296,9 +297,12 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
       );
       if (!mounted) return;
       if (!decision.allowed) {
-        AppFeedback.showMessage(
-          context,
-          message: AppStrings.funcaoIndisponivel,
+        context.push(
+          featureUpsellLocation(
+            featureKey: FeatureKeys.whatsappAutomation,
+            featureName: AppStrings.enviarWhatsApp,
+            reason: decision.reason,
+          ),
         );
         return;
       }
@@ -830,6 +834,9 @@ class _ScheduleNextVisitCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final today = DateUtils.dateOnly(DateTime.now());
+    final selectedDay =
+        selectedDate == null ? null : DateUtils.dateOnly(selectedDate!);
 
     return MaisUmSurface(
       padding: const EdgeInsets.all(16),
@@ -887,6 +894,11 @@ class _ScheduleNextVisitCard extends StatelessWidget {
               for (final days in const [7, 14, 21, 30])
                 _QuickDayActionButton(
                   days: days,
+                  isSelected: selectedDay != null &&
+                      DateUtils.isSameDay(
+                        selectedDay,
+                        today.add(Duration(days: days)),
+                      ),
                   isSaving: isSaving,
                   onTap: () => onQuickSelect(days),
                 ),
@@ -936,11 +948,13 @@ class _ScheduleNextVisitCard extends StatelessWidget {
 class _QuickDayActionButton extends StatelessWidget {
   const _QuickDayActionButton({
     required this.days,
+    required this.isSelected,
     required this.isSaving,
     required this.onTap,
   });
 
   final int days;
+  final bool isSelected;
   final bool isSaving;
   final VoidCallback onTap;
 
@@ -949,7 +963,8 @@ class _QuickDayActionButton extends StatelessWidget {
     return MaisUmButton(
       onPressed: isSaving ? null : onTap,
       label: '+$days',
-      backgroundColor: AppColors.secondary,
+      leadingIcon: isSelected ? Icons.check_circle_rounded : null,
+      backgroundColor: isSelected ? Colors.white : AppColors.secondary,
       foregroundColor: AppColors.primary,
       fullWidth: false,
       height: 40,

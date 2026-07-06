@@ -10,6 +10,7 @@ import 'package:maisum/features/customers/data/customer_repository.dart';
 import 'package:maisum/features/customers/domain/customer.dart';
 import 'package:maisum/features/sales/data/sale_dao.dart';
 import 'package:maisum/features/sales/domain/sale.dart';
+import 'package:maisum/features/sales/domain/sale_item.dart';
 import 'package:maisum/features/sales/presentation/new_sale_screen.dart';
 import 'package:maisum/features/sales/presentation/sale_controller.dart';
 import 'package:maisum/features/sync/data/sync_dao.dart';
@@ -29,6 +30,7 @@ class _FakeSaleController extends SaleController {
   Future<SaleResult> createSale({
     required String customerId,
     required double amount,
+    List<SaleItemInput> items = const <SaleItemInput>[],
   }) async {
     final handler = onCreateSale;
     if (handler != null) {

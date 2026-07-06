@@ -10,6 +10,7 @@ import 'package:maisum/features/customers/domain/customer.dart';
 import 'package:maisum/features/sales/data/sale_dao.dart';
 import 'package:maisum/features/sales/data/sale_repository.dart';
 import 'package:maisum/features/sales/domain/sale.dart';
+import 'package:maisum/features/sales/domain/sale_item.dart';
 import 'package:maisum/features/sales/presentation/sale_controller.dart';
 import 'package:maisum/features/sync/data/sync_dao.dart';
 
@@ -31,6 +32,7 @@ class _FakeSaleRepository extends SaleRepository {
   Future<Sale> createSale({
     required String customerId,
     required double amount,
+    List<SaleItemInput> items = const <SaleItemInput>[],
   }) {
     return onCreateSale(customerId: customerId, amount: amount);
   }

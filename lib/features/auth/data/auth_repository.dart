@@ -112,8 +112,11 @@ class AuthRepository {
       final storedRefreshToken = storedSession?.refreshToken;
       final storedDeviceId = storedSession?.deviceId;
       final storedFirebaseUid = storedSession?.firebaseUid;
-      final phone =
-          await _storage.getUserPhone() ?? firebaseUser.phoneNumber ?? '';
+      final firebasePhone = firebaseUser.phoneNumber?.trim();
+      final storedPhone = await _storage.getUserPhone();
+      final phone = firebasePhone != null && firebasePhone.isNotEmpty
+          ? firebasePhone
+          : storedPhone ?? '';
       final existingMerchant = await _findMerchantByPhone(
         phone,
         firebaseUid: firebaseUser.uid,
@@ -222,6 +225,11 @@ class AuthRepository {
     final firestore = _firestore;
     if (firestore == null) {
       throw StateError('Vinculacao por codigo indisponivel neste ambiente.');
+    }
+
+    final firebaseUser = _firebaseAuth.currentUser;
+    if (firebaseUser == null) {
+      throw StateError('É necessário iniciar sessão.');
     }
 
     final normalizedCode = _normalizeLinkCode(linkCode);
@@ -553,13 +561,19 @@ class AuthRepository {
     required String firebaseUid,
     required String rawPhone,
   }) {
+    final businessPhone = (data['phone'] as String?)?.trim() ?? '';
+    if (_phoneMatchesVerifiedAuthPhone(businessPhone, rawPhone)) {
+      return true;
+    }
+
     final ownerUserId = (data['owner_user_id'] as String?)?.trim() ?? '';
     final ownerFirebaseUid = (data['firebase_uid'] as String?)?.trim() ?? '';
     if (ownerUserId == firebaseUid || ownerFirebaseUid == firebaseUid) {
       return true;
     }
 
-    final hasOwnerFields = ownerUserId.isNotEmpty || ownerFirebaseUid.isNotEmpty;
+    final hasOwnerFields =
+        ownerUserId.isNotEmpty || ownerFirebaseUid.isNotEmpty;
     if (hasOwnerFields) {
       return false;
     }
@@ -568,9 +582,24 @@ class AuthRepository {
       return true;
     }
 
-    final businessPhone = (data['phone'] as String?)?.trim() ?? '';
-    return businessPhone.isNotEmpty &&
-        businessPhone == _phoneForAuthRules(rawPhone);
+    return false;
+  }
+
+  bool _phoneMatchesVerifiedAuthPhone(String businessPhone, String rawPhone) {
+    final storedPhone = businessPhone.trim();
+    final verifiedPhone = rawPhone.trim();
+    if (storedPhone.isEmpty || verifiedPhone.isEmpty) {
+      return false;
+    }
+
+    try {
+      return MozPhoneUtils.normalizeToE164(storedPhone) ==
+          MozPhoneUtils.normalizeToE164(verifiedPhone);
+    } catch (e, st) {
+      AppErrorReporter.report(e, st, hint: 'auth_phone_match_normalize');
+      return storedPhone == verifiedPhone ||
+          storedPhone == _phoneForAuthRules(verifiedPhone);
+    }
   }
 
   String _phoneForAuthRules(String rawPhone) {
@@ -608,10 +637,22 @@ class AuthRepository {
         return MapEntry(doc.id, doc.data());
       }
 
-      final directDoc =
-          await firestore.collection('businesses').doc(rawCode).get();
-      if (directDoc.exists) {
-        return MapEntry(directDoc.id, directDoc.data() ?? <String, dynamic>{});
+      try {
+        final directDoc =
+            await firestore.collection('businesses').doc(rawCode).get();
+        if (directDoc.exists) {
+          return MapEntry(
+            directDoc.id,
+            directDoc.data() ?? <String, dynamic>{},
+          );
+        }
+      } on FirebaseException catch (e) {
+        if (e.code != 'permission-denied') {
+          rethrow;
+        }
+        _debugLog(
+          'findMerchantByLinkCode:directDocDenied rawCode=${_redact(rawCode)}',
+        );
       }
     }
 
@@ -656,7 +697,7 @@ class AuthRepository {
         : session.merchantName.trim();
     final merchantPhone = session.phone.trim();
     final merchantSlug = _buildMerchantSlug(merchantPhone);
-    final planDefinition = PlanCatalog.fromCode('starter');
+    final planDefinition = PlanCatalog.fromCode('free');
     final window = _monthlyWindow(DateTime.now());
     final storedRole = _normalizeAppUserRole(await _storage.getAppUserRole()) ??
         _defaultAppUserRole;
@@ -840,6 +881,10 @@ class AuthRepository {
         (existingData['owner_user_id'] as String?)?.trim() ?? '';
     final existingFirebaseUid =
         (existingData['firebase_uid'] as String?)?.trim() ?? '';
+    final existingPhone = (existingData['phone'] as String?)?.trim() ?? '';
+    final shouldAttachVerifiedPhoneOwner =
+        _phoneMatchesVerifiedAuthPhone(existingPhone, session.phone);
+    final sessionFirebaseUid = session.firebaseUid ?? session.userId;
     final existingCreatedAt =
         (existingData['created_at'] as num?)?.toInt() ?? now;
     final existingLinkCode = (existingData['link_code'] as String?)?.trim();
@@ -861,9 +906,10 @@ class AuthRepository {
       'owner_user_id': existingOwnerUserId.isNotEmpty
           ? existingOwnerUserId
           : session.resolvedAppUserId,
-      'firebase_uid': existingFirebaseUid.isNotEmpty
-          ? existingFirebaseUid
-          : session.firebaseUid,
+      'firebase_uid':
+          shouldAttachVerifiedPhoneOwner || existingFirebaseUid.isEmpty
+              ? sessionFirebaseUid
+              : existingFirebaseUid,
       'device_id': session.deviceId,
       'link_code': linkCode,
       'link_code_normalized': _normalizeLinkCode(linkCode),
@@ -924,7 +970,7 @@ class AuthRepository {
     required int now,
   }) async {
     final businessRef = firestore.collection('businesses').doc(merchantId);
-    final planDefinition = PlanCatalog.fromCode('starter');
+    final planDefinition = PlanCatalog.fromCode('free');
     final window = _monthlyWindow(DateTime.now());
 
     final subscriptionRef =

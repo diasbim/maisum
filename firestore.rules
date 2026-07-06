@@ -42,7 +42,8 @@ service cloud.firestore {
     }
 
     function canAccessBusiness(merchantId) {
-      return isAdmin() || hasOwnerClaim() || hasStaffClaim() || isBusinessOwner(merchantId);
+      return isAdmin() || hasOwnerClaim() || hasStaffClaim() ||
+        isBusinessOwner(merchantId) || authPhoneMatchesBusiness(merchantId);
     }
 
     function canBootstrapBusiness(merchantId) {
@@ -80,6 +81,25 @@ service cloud.firestore {
         request.resource.data.firebase_uid == request.auth.uid;
     }
 
+    function canClaimPhoneMatchedBusiness(merchantId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/businesses/$(merchantId)) &&
+        authPhoneMatchesBusiness(merchantId) &&
+        request.resource.data.phone == businessDoc(merchantId).data.phone &&
+        request.resource.data.owner_user_id == businessDoc(merchantId).data.owner_user_id &&
+        request.resource.data.firebase_uid == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'created_at',
+          'device_id',
+          'firebase_uid',
+          'id',
+          'link_code',
+          'link_code_normalized',
+          'subscription_status',
+          'updated_at'
+        ]);
+    }
+
     function canReadLegacyBusiness(merchantId) {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/businesses/$(merchantId)) &&
@@ -100,7 +120,9 @@ service cloud.firestore {
     function isOperationalCollection(collectionId) {
       return collectionId in [
         'customers',
+        'merchant_items',
         'sales',
+        'sale_items',
         'rewards',
         'redemptions',
         'appointments',
@@ -124,7 +146,7 @@ service cloud.firestore {
       allow list: if isSignedIn() && request.query.limit != null && request.query.limit <= 1;
       allow get: if canAccessBusiness(merchantId) || canBootstrapBusinessRead(merchantId) || canReadLegacyBusiness(merchantId);
       allow create: if canBootstrapBusiness(merchantId) || canAccessBusiness(merchantId);
-      allow update: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId) || canClaimLegacyBusiness(merchantId);
+      allow update: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId) || canClaimLegacyBusiness(merchantId) || canClaimPhoneMatchedBusiness(merchantId);
       allow delete: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId);
 
       // Owner-only policy/config collections.

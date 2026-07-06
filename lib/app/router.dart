@@ -14,6 +14,7 @@ import '../features/auth/presentation/onboarding_entry_screen.dart';
 import '../features/auth/presentation/post_auth_navigation.dart';
 import '../features/auth/presentation/splash_screen.dart';
 import '../features/admin_portal/presentation/admin_portal_shell.dart';
+import '../features/catalog/presentation/merchant_catalog_screen.dart';
 import '../features/customers/presentation/customer_detail_screen.dart';
 import '../features/customers/presentation/customer_create_screen.dart';
 import '../features/customers/presentation/customer_list_screen.dart';
@@ -44,6 +45,7 @@ import '../features/settings/presentation/staff_management_screen.dart';
 import '../features/appointments/presentation/appointments_screen.dart';
 import '../features/subscription/presentation/subscription_admin_screen.dart';
 import '../features/subscription/presentation/onboarding_plan_selection_screen.dart';
+import '../features/subscription/presentation/feature_upsell_screen.dart';
 import '../features/sync/presentation/pending_sync_screen.dart';
 
 const _publicRoutes = {
@@ -372,6 +374,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/sales', builder: (_, __) => const SalesHistoryScreen()),
       GoRoute(
+        path: '/catalog',
+        builder: (_, __) => const MerchantCatalogScreen(),
+      ),
+      GoRoute(
         path: '/appointments',
         builder: (_, __) => const AppointmentsScreen(),
       ),
@@ -419,6 +425,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/subscription-admin',
         builder: (_, __) => const SubscriptionAdminScreen(),
+      ),
+      GoRoute(
+        path: featureUpsellRoutePath,
+        builder: (_, state) {
+          final extra = state.extra;
+          return FeatureUpsellScreen(
+            args: extra is FeatureUpsellArgs
+                ? extra
+                : FeatureUpsellArgs.fromQuery(state.uri.queryParameters),
+          );
+        },
       ),
       GoRoute(
         path: '/merchant-config',

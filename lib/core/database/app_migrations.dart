@@ -107,6 +107,11 @@ class AppMigrations {
       name: 'sync queue last_error',
       up: _createV21Schema,
     ),
+    const MigrationStep(
+      version: 22,
+      name: 'merchant catalog + sale items',
+      up: _createV22Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -372,6 +377,32 @@ class _SchemaVerifier {
       'updated_at',
       'synced',
     },
+    'merchant_items': {
+      'id',
+      'merchant_id',
+      'name',
+      'type',
+      'default_price',
+      'is_active',
+      'display_order',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
+    'sale_items': {
+      'id',
+      'merchant_id',
+      'sale_id',
+      'merchant_item_id',
+      'name_snapshot',
+      'type_snapshot',
+      'quantity',
+      'unit_price',
+      'subtotal',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
   };
 
   Future<bool> needsRepair(Database db) async {
@@ -412,6 +443,7 @@ class _SchemaVerifier {
       await _createV19Schema(txn);
       await _createV20Schema(txn);
       await _createV21Schema(txn);
+      await _createV22Schema(txn);
     });
   }
 
@@ -1185,6 +1217,58 @@ Future<void> _createV20Schema(DatabaseExecutor db) async {
 
 Future<void> _createV21Schema(DatabaseExecutor db) async {
   await _addColumnIfMissing(db, 'sync_queue', 'last_error TEXT');
+}
+
+Future<void> _createV22Schema(DatabaseExecutor db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS merchant_items (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      default_price REAL,
+      is_active INTEGER NOT NULL DEFAULT 1,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      created_by_app_user_id TEXT,
+      updated_by_app_user_id TEXT
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_merchant_items_scope_type ON merchant_items(merchant_id, type, is_active, display_order)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_merchant_items_synced ON merchant_items(merchant_id, synced)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS sale_items (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT,
+      sale_id TEXT NOT NULL,
+      merchant_item_id TEXT NOT NULL,
+      name_snapshot TEXT NOT NULL,
+      type_snapshot TEXT NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      unit_price REAL,
+      subtotal REAL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      created_by_app_user_id TEXT,
+      updated_by_app_user_id TEXT,
+      FOREIGN KEY (sale_id) REFERENCES sales(id) ON DELETE CASCADE,
+      FOREIGN KEY (merchant_item_id) REFERENCES merchant_items(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id, created_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sale_items_synced ON sale_items(merchant_id, synced)',
+  );
 }
 
 Future<void> _addColumnIfMissing(

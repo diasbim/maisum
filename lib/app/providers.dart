@@ -22,6 +22,9 @@ import '../features/appointments/data/appointment_dao.dart';
 import '../features/appointments/data/appointment_repository.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/auth_controller.dart';
+import '../features/catalog/data/merchant_catalog_dao.dart';
+import '../features/catalog/data/merchant_catalog_repository.dart';
+import '../features/catalog/domain/merchant_item.dart';
 import '../features/customers/data/customer_dao.dart';
 import '../features/customers/data/customer_repository.dart';
 import '../features/rewards/data/redemption_dao.dart';
@@ -31,6 +34,8 @@ import '../features/rewards/data/reward_repository.dart';
 import '../features/retention/data/retention_dao.dart';
 import '../features/retention/data/retention_repository.dart';
 import '../features/sales/data/sale_dao.dart';
+import '../features/sales/data/sale_item_dao.dart';
+import '../features/sales/data/sale_item_repository.dart';
 import '../features/sales/data/sale_repository.dart';
 import '../features/settings/data/staff_management_repository.dart';
 import '../features/settings/domain/staff_member.dart';
@@ -181,6 +186,20 @@ final saleDaoProvider = Provider<SaleDao>(
   ),
 );
 
+final saleItemDaoProvider = Provider<SaleItemDao>(
+  (ref) => SaleItemDao(
+    ref.read(appDatabaseProvider),
+    merchantId: ref.watch(activeMerchantIdProvider),
+  ),
+);
+
+final merchantCatalogDaoProvider = Provider<MerchantCatalogDao>(
+  (ref) => MerchantCatalogDao(
+    ref.read(appDatabaseProvider),
+    merchantId: ref.watch(activeMerchantIdProvider),
+  ),
+);
+
 final rewardDaoProvider = Provider<RewardDao>(
   (ref) => RewardDao(
     ref.read(appDatabaseProvider),
@@ -261,6 +280,23 @@ final saleRepositoryProvider = Provider<SaleRepository>(
     ref.read(saleDaoProvider),
     merchantId: ref.watch(activeMerchantIdProvider),
     deviceId: ref.watch(activeDeviceIdProvider),
+    appUserId: ref.watch(activeAppUserIdProvider),
+    saleItemDao: ref.read(saleItemDaoProvider),
+  ),
+);
+
+final saleItemRepositoryProvider = Provider<SaleItemRepository>(
+  (ref) => SaleItemRepository(
+    ref.read(saleItemDaoProvider),
+    ref.read(syncDaoProvider),
+    appUserId: ref.watch(activeAppUserIdProvider),
+  ),
+);
+
+final merchantCatalogRepositoryProvider = Provider<MerchantCatalogRepository>(
+  (ref) => MerchantCatalogRepository(
+    ref.read(merchantCatalogDaoProvider),
+    ref.read(syncDaoProvider),
     appUserId: ref.watch(activeAppUserIdProvider),
   ),
 );
@@ -430,6 +466,18 @@ final allSalesWithCustomerProvider = FutureProvider<List<Map<String, dynamic>>>(
   (ref) {
     return ref.read(saleDaoProvider).getAllWithCustomer();
   },
+);
+
+final merchantCatalogServicesProvider = FutureProvider<List<MerchantItem>>(
+  (ref) => ref.read(merchantCatalogRepositoryProvider).getServices(),
+);
+
+final merchantCatalogProductsProvider = FutureProvider<List<MerchantItem>>(
+  (ref) => ref.read(merchantCatalogRepositoryProvider).getProducts(),
+);
+
+final activeMerchantItemsProvider = FutureProvider<List<MerchantItem>>(
+  (ref) => ref.read(merchantCatalogRepositoryProvider).getActiveItems(),
 );
 
 final pendingSyncItemsProvider = FutureProvider<List<SyncItem>>((ref) {

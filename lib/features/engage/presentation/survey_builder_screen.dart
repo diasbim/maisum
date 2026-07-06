@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -50,9 +53,17 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
         ),
         data: (access) {
           if (!access.canManageSurveys) {
-            return const EmptyState(
+            return EmptyState(
               title: 'Surveys indisponiveis no seu plano',
               subtitle: 'Criacao de surveys e exclusiva do plano Business.',
+              actionLabel: 'Falar no WhatsApp',
+              onAction: () => context.push(
+                featureUpsellLocation(
+                  featureKey: FeatureKeys.engageManageSurveys,
+                  featureName: 'Criar survey',
+                  reason: 'plan_restricted',
+                ),
+              ),
             );
           }
 
@@ -112,18 +123,18 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
                 const Text('Adicione pelo menos uma pergunta.')
               else
                 ..._questions.asMap().entries.map(
-                  (entry) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                    child: _QuestionCard(
-                      index: entry.key,
-                      value: entry.value,
-                      onChanged: (value) =>
-                          setState(() => _questions[entry.key] = value),
-                      onRemove: () =>
-                          setState(() => _questions.removeAt(entry.key)),
+                      (entry) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        child: _QuestionCard(
+                          index: entry.key,
+                          value: entry.value,
+                          onChanged: (value) =>
+                              setState(() => _questions[entry.key] = value),
+                          onRemove: () =>
+                              setState(() => _questions.removeAt(entry.key)),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
               const SizedBox(height: AppSpacing.lg),
               FilledButton.icon(
                 onPressed: _submitting ? null : _publish,
@@ -218,9 +229,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
           )
           .toList();
 
-      await ref
-          .read(engageRepositoryProvider)
-          .createSurvey(
+      await ref.read(engageRepositoryProvider).createSurvey(
             title: title,
             description: _descriptionController.text.trim().isEmpty
                 ? null

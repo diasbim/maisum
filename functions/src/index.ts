@@ -43,9 +43,21 @@ const ENTITY_CONFIG: Record<string, EntityConfig> = {
     idField: 'id',
     selectSql: '*',
   },
+  merchant_item: {
+    table: 'merchant_items',
+    orderField: 'updated_at',
+    idField: 'id',
+    selectSql: '*',
+  },
   sale: {
     table: 'sales',
     orderField: 'created_at',
+    idField: 'id',
+    selectSql: '*',
+  },
+  sale_item: {
+    table: 'sale_items',
+    orderField: 'updated_at',
     idField: 'id',
     selectSql: '*',
   },
@@ -953,11 +965,25 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
           await upsertCustomer(merchantId, payload, entityId);
         }
         return res.json({ success: true });
+      case 'merchant_item':
+        if (operation === 'delete') {
+          await deleteById('merchant_items', entityId, merchantId);
+        } else {
+          await upsertMerchantItem(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
       case 'sale':
         if (operation === 'delete') {
           await deleteById('sales', entityId, merchantId);
         } else {
           await upsertSale(merchantId, payload, entityId);
+        }
+        return res.json({ success: true });
+      case 'sale_item':
+        if (operation === 'delete') {
+          await deleteById('sale_items', entityId, merchantId);
+        } else {
+          await upsertSaleItem(merchantId, payload, entityId);
         }
         return res.json({ success: true });
       case 'reward':
@@ -2034,6 +2060,151 @@ async function upsertSale(
     points,
     createdAt,
     deviceId,
+    createdByAppUserId,
+    updatedByAppUserId,
+  ]);
+}
+async function upsertMerchantItem(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const id = pickString(payload, 'id') ?? entityId;
+  const name = pickString(payload, 'name');
+  const type = pickString(payload, 'type');
+  const defaultPrice = pickNumber(payload, 'default_price') ?? pickNumber(payload, 'defaultPrice');
+  const isActive = pickBoolean(payload, 'is_active') ?? pickBoolean(payload, 'isActive') ?? true;
+  const displayOrder =
+    pickNumber(payload, 'display_order') ?? pickNumber(payload, 'displayOrder') ?? 0;
+  const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? createdAt;
+  const createdByAppUserId =
+    pickString(payload, 'created_by_app_user_id') ?? pickString(payload, 'createdByAppUserId');
+  const updatedByAppUserId =
+    pickString(payload, 'updated_by_app_user_id') ?? pickString(payload, 'updatedByAppUserId');
+
+  if (!name || !type) {
+    throw new Error('Missing merchant item fields');
+  }
+
+  const sql = `
+    INSERT INTO merchant_items (
+      id,
+      merchant_id,
+      name,
+      type,
+      default_price,
+      is_active,
+      display_order,
+      created_at,
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      name = EXCLUDED.name,
+      type = EXCLUDED.type,
+      default_price = EXCLUDED.default_price,
+      is_active = EXCLUDED.is_active,
+      display_order = EXCLUDED.display_order,
+      created_at = LEAST(merchant_items.created_at, EXCLUDED.created_at),
+      updated_at = EXCLUDED.updated_at,
+      created_by_app_user_id = COALESCE(EXCLUDED.created_by_app_user_id, merchant_items.created_by_app_user_id),
+      updated_by_app_user_id = COALESCE(EXCLUDED.updated_by_app_user_id, merchant_items.updated_by_app_user_id)
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    name,
+    type,
+    defaultPrice,
+    isActive,
+    displayOrder,
+    createdAt,
+    updatedAt,
+    createdByAppUserId,
+    updatedByAppUserId,
+  ]);
+}
+
+async function upsertSaleItem(
+  merchantId: string,
+  payload: Record<string, unknown>,
+  entityId: string,
+): Promise<void> {
+  const id = pickString(payload, 'id') ?? entityId;
+  const saleId = pickString(payload, 'sale_id') ?? pickString(payload, 'saleId');
+  const merchantItemId =
+    pickString(payload, 'merchant_item_id') ?? pickString(payload, 'merchantItemId');
+  const nameSnapshot = pickString(payload, 'name_snapshot') ?? pickString(payload, 'nameSnapshot');
+  const typeSnapshot = pickString(payload, 'type_snapshot') ?? pickString(payload, 'typeSnapshot');
+  const quantity = pickNumber(payload, 'quantity') ?? 1;
+  const unitPrice = pickNumber(payload, 'unit_price') ?? pickNumber(payload, 'unitPrice');
+  const subtotal = pickNumber(payload, 'subtotal');
+  const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+  const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? createdAt;
+  const createdByAppUserId =
+    pickString(payload, 'created_by_app_user_id') ?? pickString(payload, 'createdByAppUserId');
+  const updatedByAppUserId =
+    pickString(payload, 'updated_by_app_user_id') ?? pickString(payload, 'updatedByAppUserId');
+
+  if (!saleId || !merchantItemId || !nameSnapshot || !typeSnapshot) {
+    throw new Error('Missing sale item fields');
+  }
+
+  const parentSale = await pool.query(
+    'SELECT id FROM sales WHERE merchant_id = $1 AND id = $2 LIMIT 1',
+    [merchantId, saleId],
+  );
+  if (parentSale.rowCount === 0) {
+    throw new Error('Missing parent sale');
+  }
+
+  const sql = `
+    INSERT INTO sale_items (
+      id,
+      merchant_id,
+      sale_id,
+      merchant_item_id,
+      name_snapshot,
+      type_snapshot,
+      quantity,
+      unit_price,
+      subtotal,
+      created_at,
+      updated_at,
+      created_by_app_user_id,
+      updated_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+    ON CONFLICT (id) DO UPDATE SET
+      merchant_id = EXCLUDED.merchant_id,
+      sale_id = EXCLUDED.sale_id,
+      merchant_item_id = EXCLUDED.merchant_item_id,
+      name_snapshot = EXCLUDED.name_snapshot,
+      type_snapshot = EXCLUDED.type_snapshot,
+      quantity = EXCLUDED.quantity,
+      unit_price = EXCLUDED.unit_price,
+      subtotal = EXCLUDED.subtotal,
+      created_at = LEAST(sale_items.created_at, EXCLUDED.created_at),
+      updated_at = EXCLUDED.updated_at,
+      created_by_app_user_id = COALESCE(EXCLUDED.created_by_app_user_id, sale_items.created_by_app_user_id),
+      updated_by_app_user_id = COALESCE(EXCLUDED.updated_by_app_user_id, sale_items.updated_by_app_user_id)
+  `;
+
+  await pool.query(sql, [
+    id,
+    merchantId,
+    saleId,
+    merchantItemId,
+    nameSnapshot,
+    typeSnapshot,
+    quantity,
+    unitPrice,
+    subtotal,
+    createdAt,
+    updatedAt,
     createdByAppUserId,
     updatedByAppUserId,
   ]);

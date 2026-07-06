@@ -1,4 +1,5 @@
 import '../data/remote_config_repository.dart';
+import '../domain/remote_config_defaults.dart';
 import '../domain/remote_config_keys.dart';
 
 class PricingOverride {
@@ -26,6 +27,13 @@ class QuotaOverride {
 
   final int? limit;
   final bool? softLimit;
+}
+
+class UpsellWhatsAppConfig {
+  const UpsellWhatsAppConfig({required this.number, required this.message});
+
+  final String number;
+  final String message;
 }
 
 class RemoteConfigReader {
@@ -57,6 +65,26 @@ class RemoteConfigReader {
 
   Future<Map<String, dynamic>?> getJson(String key) async {
     return _payload(key);
+  }
+
+  Future<int> getTrialDays() async {
+    return await getInt(RemoteConfigKeys.trialDays) ??
+        RemoteConfigDefaults.trialDays;
+  }
+
+  Future<UpsellWhatsAppConfig> getUpsellWhatsAppConfig() async {
+    final payload = await _payload(RemoteConfigKeys.upsellWhatsApp);
+    final number = _normalizePhone(
+      _asString(payload?['number'] ?? payload?['phone'] ?? payload?['value']),
+    );
+    final message = _asString(payload?['message'] ?? payload?['text']);
+    return UpsellWhatsAppConfig(
+      number:
+          number.isEmpty ? RemoteConfigDefaults.upsellWhatsAppNumber : number,
+      message: (message == null || message.trim().isEmpty)
+          ? RemoteConfigDefaults.upsellWhatsAppMessage
+          : message.trim(),
+    );
   }
 
   Future<PricingOverride?> getPricingOverride(String planCode) async {
@@ -91,6 +119,11 @@ class RemoteConfigReader {
   String? _asString(Object? value) {
     if (value == null) return null;
     return value.toString();
+  }
+
+  String _normalizePhone(String? value) {
+    if (value == null) return '';
+    return value.replaceAll(RegExp(r'\D'), '');
   }
 
   int? _asInt(Object? value) {

@@ -24,6 +24,7 @@ class MaisUmTextField extends StatelessWidget {
     this.enabled = true,
     this.readOnly = false,
     this.maxLines = 1,
+    this.autofocus = false,
     this.textCapitalization = TextCapitalization.none,
     this.autovalidateMode,
     this.validationState = ValidationState.neutral,
@@ -49,6 +50,7 @@ class MaisUmTextField extends StatelessWidget {
   final bool enabled;
   final bool readOnly;
   final int maxLines;
+  final bool autofocus;
   final TextCapitalization textCapitalization;
   final AutovalidateMode? autovalidateMode;
   final ValidationState validationState;
@@ -93,6 +95,7 @@ class MaisUmTextField extends StatelessWidget {
       enabled: enabled,
       readOnly: readOnly,
       maxLines: maxLines,
+      autofocus: autofocus,
       textCapitalization: textCapitalization,
       autovalidateMode: autovalidateMode,
       autofillHints: autofillHints,

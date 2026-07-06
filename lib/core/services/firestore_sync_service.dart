@@ -15,7 +15,9 @@ class FirestoreSyncService implements SyncTransport {
 
   static const _collectionMap = {
     'customer': 'customers',
+    'merchant_item': 'merchant_items',
     'sale': 'sales',
+    'sale_item': 'sale_items',
     'reward': 'rewards',
     'redemption': 'redemptions',
     'appointment': 'appointments',

@@ -275,17 +275,21 @@ class MerchantOnboardingController
 
     state = AsyncData(current.copyWith(isSaving: true, clearError: true));
     try {
-      final session = await ref.read(authControllerProvider.future);
+      var session = await ref.read(authControllerProvider.future);
       if (session == null) throw StateError('Sem sessao ativa.');
+
+      final authController = ref.read(authControllerProvider.notifier);
+      final onboardingRepository =
+          ref.read(merchantOnboardingRepositoryProvider);
+      final storage = ref.read(secureStorageServiceProvider);
+      final draftStore = ref.read(merchantDraftStoreProvider);
 
       final draft = current.draft;
       final businessName = draft.businessName?.trim();
       if (businessName != null &&
           businessName.isNotEmpty &&
           businessName != session.merchantName) {
-        await ref
-            .read(authControllerProvider.notifier)
-            .updateMerchantName(businessName);
+        session = await authController.updateMerchantName(businessName);
       }
 
       final firebaseUid = session.firebaseUid ??
@@ -294,24 +298,35 @@ class MerchantOnboardingController
         throw StateError('Sessao Firebase invalida para criar comerciante.');
       }
 
-      await ref.read(merchantOnboardingRepositoryProvider).saveMerchant(
-            session: session,
-            draft: draft,
-            firebaseUid: firebaseUid,
-            wasProfileCompleteAtLoad: current.wasProfileCompleteAtLoad,
-          );
+      await onboardingRepository.saveMerchant(
+        session: session,
+        draft: draft,
+        firebaseUid: firebaseUid,
+        wasProfileCompleteAtLoad: current.wasProfileCompleteAtLoad,
+      );
 
-      final storage = ref.read(secureStorageServiceProvider);
+      if (!current.wasProfileCompleteAtLoad) {
+        final trialDays =
+            await ref.read(remoteConfigReaderProvider).getTrialDays();
+        await ref.read(subscriptionRepositoryProvider).ensureTrialStarted(
+              merchantId: session.resolvedMerchantId,
+              startedAt: DateTime.now(),
+              trialDays: trialDays,
+            );
+        ref.invalidate(subscriptionStateProvider);
+        ref.invalidate(subscriptionSnapshotProvider);
+      }
+
       final role = await storage.getAppUserRole();
       await storage.setOnboardingPlanConfirmed(
         true,
         merchantId: session.resolvedMerchantId,
         role: role,
       );
-      await ref.read(merchantDraftStoreProvider).clear(
-            merchantId: session.resolvedMerchantId,
-            role: role,
-          );
+      await draftStore.clear(
+        merchantId: session.resolvedMerchantId,
+        role: role,
+      );
       state = AsyncData(current.copyWith(isSaving: false, clearError: true));
     } catch (error, stackTrace) {
       AppErrorReporter.report(

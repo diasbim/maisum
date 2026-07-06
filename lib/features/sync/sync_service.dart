@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:sqflite/sqflite.dart';
 
@@ -36,7 +38,9 @@ class _SyncEntityConfig {
 
 const _syncEntities = [
   _SyncEntityConfig(entityType: 'customer', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'merchant_item', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'sale', cursorField: 'created_at'),
+  _SyncEntityConfig(entityType: 'sale_item', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'reward', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'redemption', cursorField: 'redeemed_at'),
   _SyncEntityConfig(entityType: 'appointment', cursorField: 'updated_at'),
@@ -63,6 +67,7 @@ const _syncEntities = [
   _SyncEntityConfig(entityType: 'feature_flag', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'remote_config', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'usage_balance', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'usage_event', cursorField: 'occurred_at'),
   _SyncEntityConfig(entityType: 'app_user', cursorField: 'updated_at'),
 ];
 
@@ -88,15 +93,19 @@ class SyncStatus {
   bool get isSyncing => phase == SyncPhase.syncing;
   bool get hasPending => pendingCount > 0;
   bool get hasFailures => failedCount > 0;
+  bool get isQueueEmpty => pendingCount == 0 && failedCount == 0;
   SyncViewState get viewState {
     if (!isOnline) return SyncViewState.idle;
+    if (isQueueEmpty) {
+      return SyncViewState.success;
+    }
     if (phase == SyncPhase.syncing || phase == SyncPhase.retrying) {
       return SyncViewState.syncing;
     }
     if (phase == SyncPhase.syncFailed || lastError != null || hasFailures) {
       return SyncViewState.failed;
     }
-    if (phase == SyncPhase.synced && pendingCount == 0) {
+    if (phase == SyncPhase.synced) {
       return SyncViewState.success;
     }
     return SyncViewState.idle;
@@ -425,8 +434,12 @@ class SyncService {
     switch (entityType) {
       case 'customer':
         return _applyCustomer(txn, remote);
+      case 'merchant_item':
+        return _applyMerchantItem(txn, remote);
       case 'sale':
         return _applySale(txn, remote);
+      case 'sale_item':
+        return _applySaleItem(txn, remote);
       case 'reward':
         return _applyReward(txn, remote);
       case 'redemption':
@@ -461,6 +474,8 @@ class SyncService {
         return _applyRemoteConfig(txn, remote);
       case 'usage_balance':
         return _applyUsageBalance(txn, remote);
+      case 'usage_event':
+        return Future.value();
       case 'app_user':
         return _applyAppUser(txn, remote);
       default:
@@ -608,6 +623,125 @@ class SyncService {
 
     await txn.update(
       'sales',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applyMerchantItem(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'merchant_items',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'name',
+      'type',
+      'default_price',
+      'is_active',
+      'display_order',
+      'created_at',
+      'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
+      'synced',
+    })
+      ..['synced'] = 1;
+    _normalizeBoolean(incoming, 'is_active');
+
+    if (row.isEmpty) {
+      await txn.insert('merchant_items', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData = local['name'] == incoming['name'] &&
+        local['type'] == incoming['type'] &&
+        local['default_price'] == incoming['default_price'] &&
+        local['is_active'] == incoming['is_active'] &&
+        local['display_order'] == incoming['display_order'] &&
+        local['updated_at'] == incoming['updated_at'];
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'merchant_items',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  Future<void> _applySaleItem(dynamic txn, Map<String, dynamic> remote) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'sale_id',
+      'merchant_item_id',
+      'name_snapshot',
+      'type_snapshot',
+      'quantity',
+      'unit_price',
+      'subtotal',
+      'created_at',
+      'updated_at',
+      'created_by_app_user_id',
+      'updated_by_app_user_id',
+      'synced',
+    })
+      ..['synced'] = 1;
+
+    final saleId = incoming['sale_id'] as String?;
+    if (saleId == null) return;
+    final saleRows = await txn.query(
+      'sales',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([saleId]),
+      limit: 1,
+    );
+    if (saleRows.isEmpty) return;
+
+    final row = await txn.query(
+      'sale_items',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+
+    if (row.isEmpty) {
+      await txn.insert('sale_items', incoming);
+      return;
+    }
+
+    final local = Map<String, dynamic>.from(row.first);
+    final sameData = local['sale_id'] == incoming['sale_id'] &&
+        local['merchant_item_id'] == incoming['merchant_item_id'] &&
+        local['name_snapshot'] == incoming['name_snapshot'] &&
+        local['type_snapshot'] == incoming['type_snapshot'] &&
+        local['quantity'] == incoming['quantity'] &&
+        local['unit_price'] == incoming['unit_price'] &&
+        local['subtotal'] == incoming['subtotal'] &&
+        local['updated_at'] == incoming['updated_at'];
+    if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      return;
+    }
+
+    await txn.update(
+      'sale_items',
       incoming,
       where: _entityWhereClause('id = ?'),
       whereArgs: _entityWhereArgs([id]),
@@ -1451,9 +1585,25 @@ class SyncService {
           whereArgs: _entityWhereArgs([entityId]),
         );
         break;
+      case 'merchant_item':
+        await db.update(
+          'merchant_items',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
       case 'sale':
         await db.update(
           'sales',
+          {'synced': 1},
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([entityId]),
+        );
+        break;
+      case 'sale_item':
+        await db.update(
+          'sale_items',
           {'synced': 1},
           where: _entityWhereClause('id = ?'),
           whereArgs: _entityWhereArgs([entityId]),
@@ -1607,8 +1757,19 @@ class SyncService {
   ) {
     return {
       for (final entry in source.entries)
-        if (allowed.contains(entry.key)) entry.key: entry.value,
+        if (allowed.contains(entry.key)) entry.key: _sqliteValue(entry.value),
     };
+  }
+
+  Object? _sqliteValue(Object? value) {
+    if (value == null ||
+        value is num ||
+        value is String ||
+        value is Uint8List) {
+      return value;
+    }
+    if (value is bool) return value ? 1 : 0;
+    return jsonEncode(value);
   }
 
   String _entityWhereClause(String clause) {

@@ -6,6 +6,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/retention_metric.dart';
 import '../providers/retention_providers.dart';
 import '../widgets/inactive_customer_card.dart';
@@ -57,8 +59,14 @@ class RetentionDashboardScreen extends ConsumerWidget {
               title: 'Retencao indisponivel no seu plano',
               subtitle:
                   'Funcionalidade premium. Atualize para Pro ou Business para desbloquear.',
-              actionLabel: 'Gerir plano',
-              onAction: () => context.push('/subscription-admin'),
+              actionLabel: 'Falar no WhatsApp',
+              onAction: () => context.push(
+                featureUpsellLocation(
+                  featureKey: FeatureKeys.engageViewRisk,
+                  featureName: 'Retencao inteligente',
+                  reason: 'plan_restricted',
+                ),
+              ),
             );
           }
 

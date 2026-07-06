@@ -134,6 +134,11 @@ class _SaleHistoryTile extends StatelessWidget {
     final points = data['points'] as int;
     final customerName = data['customer_name'] as String? ?? 'Cliente';
     final synced = (data['synced'] as int? ?? 0) == 1;
+    final items = (data['items'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => item['name_snapshot'] as String? ?? '')
+        .where((name) => name.isNotEmpty)
+        .toList();
 
     return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -174,6 +179,18 @@ class _SaleHistoryTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (items.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    items.join(' · '),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),

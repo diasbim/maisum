@@ -6,6 +6,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -40,8 +42,14 @@ class EngageDashboardScreen extends ConsumerWidget {
               title: 'Engage indisponivel no seu plano',
               subtitle:
                   'Atualize para Pro ou Business para acompanhar risco e recuperar clientes.',
-              actionLabel: 'Gerir plano',
-              onAction: () => context.push('/onboarding-plan'),
+              actionLabel: 'Falar no WhatsApp',
+              onAction: () => context.push(
+                featureUpsellLocation(
+                  featureKey: FeatureKeys.engageViewRisk,
+                  featureName: 'MaisUm Engage',
+                  reason: 'plan_restricted',
+                ),
+              ),
             );
           }
 
@@ -110,9 +118,13 @@ class EngageDashboardScreen extends ConsumerWidget {
                         : 'Somente leitura no plano atual.',
                     icon: Icons.playlist_add_check_circle_outlined,
                     enabled: access.canManageRecovery,
-                    onTap: access.canManageRecovery
-                        ? () => context.push('/engage/actions')
-                        : null,
+                    onTap: () => access.canManageRecovery
+                        ? context.push('/engage/actions')
+                        : context.push(featureUpsellLocation(
+                            featureKey: FeatureKeys.engageManageRecovery,
+                            featureName: 'Fila de recuperacao',
+                            reason: 'plan_restricted',
+                          )),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
@@ -122,9 +134,13 @@ class EngageDashboardScreen extends ConsumerWidget {
                         : 'Disponivel apenas no plano Business.',
                     icon: Icons.assignment_turned_in_outlined,
                     enabled: access.canManageVisits,
-                    onTap: access.canManageVisits
-                        ? () => context.push('/engage/visit-report')
-                        : null,
+                    onTap: () => access.canManageVisits
+                        ? context.push('/engage/visit-report')
+                        : context.push(featureUpsellLocation(
+                            featureKey: FeatureKeys.engageManageVisits,
+                            featureName: 'Relatorios de visitas',
+                            reason: 'plan_restricted',
+                          )),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
@@ -134,9 +150,13 @@ class EngageDashboardScreen extends ConsumerWidget {
                         : 'Disponivel apenas no plano Business.',
                     icon: Icons.quiz_outlined,
                     enabled: access.canManageSurveys,
-                    onTap: access.canManageSurveys
-                        ? () => context.push('/engage/surveys/new')
-                        : null,
+                    onTap: () => access.canManageSurveys
+                        ? context.push('/engage/surveys/new')
+                        : context.push(featureUpsellLocation(
+                            featureKey: FeatureKeys.engageManageSurveys,
+                            featureName: 'Criar survey',
+                            reason: 'plan_restricted',
+                          )),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
@@ -146,9 +166,13 @@ class EngageDashboardScreen extends ConsumerWidget {
                         : 'Disponivel apenas no plano Business.',
                     icon: Icons.send_outlined,
                     enabled: access.canManageSurveys,
-                    onTap: access.canManageSurveys
-                        ? () => context.push('/engage/surveys/respond')
-                        : null,
+                    onTap: () => access.canManageSurveys
+                        ? context.push('/engage/surveys/respond')
+                        : context.push(featureUpsellLocation(
+                            featureKey: FeatureKeys.engageManageSurveys,
+                            featureName: 'Submeter resposta de survey',
+                            reason: 'plan_restricted',
+                          )),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
@@ -156,9 +180,13 @@ class EngageDashboardScreen extends ConsumerWidget {
                     subtitle: 'Response rate, satisfacao e top motivos.',
                     icon: Icons.insights_outlined,
                     enabled: access.canManageSurveys,
-                    onTap: access.canManageSurveys
-                        ? () => context.push('/engage/surveys/analytics')
-                        : null,
+                    onTap: () => access.canManageSurveys
+                        ? context.push('/engage/surveys/analytics')
+                        : context.push(featureUpsellLocation(
+                            featureKey: FeatureKeys.engageManageSurveys,
+                            featureName: 'Analytics de surveys',
+                            reason: 'plan_restricted',
+                          )),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   Text(
@@ -365,7 +393,7 @@ class _ActionCard extends StatelessWidget {
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.all(AppSpacing.md),
-        onTap: enabled ? onTap : null,
+        onTap: onTap,
         leading: Icon(
           icon,
           color: enabled ? AppColors.primary : AppColors.onSurfaceVariant,

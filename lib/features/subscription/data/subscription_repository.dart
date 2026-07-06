@@ -8,6 +8,7 @@ import '../domain/entitlement.dart';
 import '../domain/feature_keys.dart';
 import '../domain/plan.dart';
 import '../domain/plan_catalog.dart';
+import '../domain/remote_config_defaults.dart';
 import '../domain/subscription_state.dart';
 import '../domain/subscription_snapshot.dart';
 import '../domain/subscription_status.dart';
@@ -136,6 +137,49 @@ class SubscriptionRepository {
         createdAt: now,
       ),
     );
+  }
+
+  Future<SubscriptionState> ensureTrialStarted({
+    required String merchantId,
+    DateTime? startedAt,
+    int trialDays = RemoteConfigDefaults.trialDays,
+  }) async {
+    final currentState = await _dao.getSubscriptionState();
+    if (currentState?.trialEndsAt != null) {
+      return currentState!;
+    }
+
+    final now = DateTime.now();
+    final start = startedAt ?? now;
+    final end = start.add(Duration(days: trialDays));
+    final planDefinition = PlanCatalog.forPlan(Plan.free);
+    final nextState = SubscriptionState(
+      merchantId: merchantId,
+      planCode: Plan.free.code,
+      planName: planDefinition.displayName,
+      status: SubscriptionStatus.trial.code,
+      planVersion: currentState?.planVersion ?? 1,
+      pricingVersion: currentState?.pricingVersion ?? 1,
+      trialEndsAt: end,
+      graceEndsAt: currentState?.graceEndsAt,
+      periodStart: currentState?.periodStart ?? start,
+      periodEnd: currentState?.periodEnd ?? end,
+      updatedAt: now,
+    );
+
+    await _dao.upsertSubscriptionState(nextState);
+    await _syncDao.enqueue(
+      SyncItem(
+        id: _uuid.v4(),
+        operation: 'update',
+        entityType: 'subscription_state',
+        entityId: merchantId,
+        payload: jsonEncode(nextState.toDbMap()),
+        createdAt: now,
+      ),
+    );
+
+    return nextState;
   }
 
   _UsageWindow _monthlyWindow(DateTime now) {

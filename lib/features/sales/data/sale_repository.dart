@@ -6,21 +6,27 @@ import '../../../core/utils/points_calculator.dart';
 import '../../../core/database/app_database.dart';
 import '../../customers/domain/customer.dart';
 import '../domain/sale.dart';
+import '../domain/sale_item.dart';
 import 'sale_dao.dart';
+import 'sale_item_dao.dart';
 import '../../sync/domain/sync_item.dart';
 
 class SaleRepository {
   SaleRepository(
-    this._database,
+    AppDatabase database,
     this._saleDao, {
     this.merchantId,
     this.deviceId,
     this.appUserId,
-  });
+    SaleItemDao? saleItemDao,
+  })  : _database = database,
+        _saleItemDao =
+            saleItemDao ?? SaleItemDao(database, merchantId: merchantId);
 
   final AppDatabase _database;
 
   final SaleDao _saleDao;
+  final SaleItemDao _saleItemDao;
   final String? merchantId;
   final String? deviceId;
   final String? appUserId;
@@ -30,6 +36,7 @@ class SaleRepository {
   Future<Sale> createSale({
     required String customerId,
     required double amount,
+    List<SaleItemInput> items = const <SaleItemInput>[],
   }) async {
     final db = await _database.database;
     return db.transaction((txn) async {
@@ -44,6 +51,7 @@ class SaleRepository {
       );
 
       await txn.insert('sales', _saleRow(sale));
+      var saleWithItems = sale;
 
       final customerRows = await txn.query(
         'customers',
@@ -101,7 +109,35 @@ class SaleRepository {
         ),
       );
 
-      return sale;
+      if (items.isNotEmpty) {
+        final saleItems = await _saleItemDao.insertItems(
+          txn,
+          saleId: sale.id,
+          items: items,
+          now: now,
+          appUserId: appUserId,
+        );
+        saleWithItems = sale.copyWith(items: saleItems);
+        for (final saleItem in saleItems) {
+          await txn.insert(
+            'sync_queue',
+            _syncQueueRow(
+              SyncItem(
+                id: _uuid.v4(),
+                operation: 'create',
+                entityType: 'sale_item',
+                entityId: saleItem.id,
+                payload: jsonEncode(
+                  _saleItemDao.rowForSync(saleItem, appUserId: appUserId),
+                ),
+                createdAt: now.add(const Duration(milliseconds: 1)),
+              ),
+            ),
+          );
+        }
+      }
+
+      return saleWithItems;
     });
   }
 

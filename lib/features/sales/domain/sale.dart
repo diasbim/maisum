@@ -1,5 +1,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
+import 'sale_item.dart';
+
 part 'sale.freezed.dart';
 part 'sale.g.dart';
 
@@ -13,6 +15,7 @@ class Sale with _$Sale {
     required double amount,
     required int points,
     required DateTime createdAt,
+    @Default(<SaleItem>[]) List<SaleItem> items,
     @Default(false) bool synced,
   }) = _Sale;
 
@@ -34,5 +37,6 @@ Sale saleFromMap(Map<String, dynamic> map) => Sale(
       amount: (map['amount'] as num).toDouble(),
       points: map['points'] as int,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['created_at'] as int),
+      items: saleItemsFromValue(map['items']),
       synced: (map['synced'] as int? ?? 0) == 1,
     );

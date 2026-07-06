@@ -59,7 +59,7 @@ void main() {
 
     expect(find.byKey(const Key('default_country_code')), findsOneWidget);
     expect(find.text('+258'), findsOneWidget);
-    expect(find.text('Bem-vindo 👋'), findsOneWidget);
+    expect(find.text('Bem-vindo'), findsOneWidget);
     expect(find.text('CONTINUAR'), findsOneWidget);
     expect(find.byKey(const Key('google_auth_button')), findsOneWidget);
     expect(find.text('Continuar com Google'), findsOneWidget);
@@ -74,8 +74,9 @@ void main() {
         );
 
     expect(find.byKey(const Key('welcome_start_button')), findsOneWidget);
-    expect(assetNames, contains('assets/images/welcomebg.png'));
+    expect(assetNames, contains('assets/images/logotypographi.png'));
     expect(assetNames, contains('assets/images/welcome.png'));
+    expect(assetNames, isNot(contains('assets/images/welcomebg.png')));
     expect(assetNames, isNot(contains('assets/images/welcome_background.png')));
     expect(assetNames, isNot(contains('assets/images/welcome_barber.png')));
     expect(find.byType(SingleChildScrollView), findsNothing);

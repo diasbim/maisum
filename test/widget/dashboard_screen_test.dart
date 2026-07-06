@@ -23,8 +23,14 @@ class _FakeDashboardController extends DashboardController {
 }
 
 class _FakeSyncController extends SyncController {
+  _FakeSyncController([
+    this._status = const SyncStatus(isOnline: true),
+  ]);
+
+  final SyncStatus _status;
+
   @override
-  SyncStatus build() => const SyncStatus(isOnline: true);
+  SyncStatus build() => _status;
 }
 
 class _FakeCustomerRepository extends CustomerRepository {
@@ -46,13 +52,16 @@ extension on DashboardStats {
   Widget buildDashboard({
     bool isOnline = true,
     int customersCount = 1,
+    SyncStatus syncStatus = const SyncStatus(isOnline: true),
   }) =>
       ProviderScope(
         overrides: [
           dashboardControllerProvider.overrideWith(
             () => _FakeDashboardController(this),
           ),
-          syncControllerProvider.overrideWith(_FakeSyncController.new),
+          syncControllerProvider.overrideWith(
+            () => _FakeSyncController(syncStatus),
+          ),
           isOnlineProvider.overrideWith((ref) => Stream.value(isOnline)),
           customerRepositoryProvider.overrideWithValue(
             _FakeCustomerRepository(customersCount),
@@ -117,6 +126,39 @@ void main() {
       expect(find.text(AppStrings.recompensas), findsOneWidget);
       expect(find.text(AppStrings.historicoVendas), findsNothing);
       expect(find.textContaining(AppStrings.pendentes), findsNothing);
+    });
+
+    testWidgets('shows synced when queue is empty after a previous failure',
+        (tester) async {
+      await tester.pumpWidget(
+        const DashboardStats(totalCustomers: 3).buildDashboard(
+          syncStatus: SyncStatus(
+            isOnline: true,
+            phase: SyncPhase.syncFailed,
+            lastError: 'stale error',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(AppStrings.sincronizado), findsWidgets);
+      expect(find.text(AppStrings.syncInterrompida), findsNothing);
+    });
+
+    testWidgets('shows synced when queue is empty during a sync pass',
+        (tester) async {
+      await tester.pumpWidget(
+        const DashboardStats(totalCustomers: 3).buildDashboard(
+          syncStatus: SyncStatus(
+            isOnline: true,
+            phase: SyncPhase.syncing,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(AppStrings.sincronizado), findsWidgets);
+      expect(find.text(AppStrings.sincronizando), findsNothing);
     });
   });
 

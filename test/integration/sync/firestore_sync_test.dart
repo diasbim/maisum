@@ -162,6 +162,8 @@ void main() {
 
     test('sync entity types map to Firestore collection names', () async {
       const mappings = {
+        'merchant_item': 'merchant_items',
+        'sale_item': 'sale_items',
         'customer_risk_score': 'customer_risk_scores',
         'recovery_task': 'recovery_tasks',
         'recovery_action': 'recovery_actions',

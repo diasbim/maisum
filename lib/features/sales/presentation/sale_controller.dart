@@ -4,6 +4,7 @@ import '../../../core/constants/app_strings.dart';
 import '../../../core/errors/app_error_reporter.dart';
 import '../../subscription/domain/usage_metrics.dart';
 import '../domain/sale.dart';
+import '../domain/sale_item.dart';
 import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customers_controller.dart';
 
@@ -91,6 +92,7 @@ class SaleController extends AsyncNotifier<SaleResult?> {
   Future<SaleResult> createSale({
     required String customerId,
     required double amount,
+    List<SaleItemInput> items = const <SaleItemInput>[],
   }) async {
     if (amount < 1) throw ArgumentError(AppStrings.amountInvalid);
     state = const AsyncLoading();
@@ -98,7 +100,7 @@ class SaleController extends AsyncNotifier<SaleResult?> {
     try {
       final sale = await ref
           .read(saleRepositoryProvider)
-          .createSale(customerId: customerId, amount: amount);
+          .createSale(customerId: customerId, amount: amount, items: items);
 
       try {
         await ref.read(usageTrackerProvider).record(
@@ -115,7 +117,11 @@ class SaleController extends AsyncNotifier<SaleResult?> {
         await ref.read(analyticsServiceProvider).record(
           eventType: 'sale_registered',
           source: 'sale',
-          properties: {'amount': amount, 'points': sale.points},
+          properties: {
+            'amount': amount,
+            'points': sale.points,
+            'item_count': items.length,
+          },
         );
         await ref.read(analyticsServiceProvider).record(
           eventType: 'sale_registration_completed',
@@ -124,6 +130,7 @@ class SaleController extends AsyncNotifier<SaleResult?> {
             'amount': amount,
             'points': sale.points,
             'customer_id': customerId,
+            'item_count': items.length,
           },
         );
         final streak = await ref.read(streakServiceProvider).getCurrentStreak();

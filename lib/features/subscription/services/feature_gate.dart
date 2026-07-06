@@ -1,5 +1,6 @@
 import '../data/subscription_dao.dart';
 import '../domain/feature_keys.dart';
+import '../domain/plan.dart';
 import '../domain/plan_catalog.dart';
 import '../domain/subscription_state.dart';
 import '../domain/subscription_status.dart';
@@ -89,20 +90,34 @@ class FeatureGate {
     }
 
     final entitlement = await _dao.getEntitlement(featureKey);
-    final planDefinition = PlanCatalog.fromCode(state?.planCode);
+    final isKnownFeature = FeatureKeys.all.contains(featureKey);
+    final isActiveTrial = _isActiveTrial(state, now);
+    final usesPostTrialFallback = _usesPostTrialFallback(state, now);
+    final planDefinition = usesPostTrialFallback
+        ? PlanCatalog.forPlan(Plan.free)
+        : PlanCatalog.fromCode(state?.planCode);
     final planAllows = planDefinition.allowsFeature(featureKey);
-    if (entitlement != null) {
-      if (!entitlement.isEnabled) {
+    if (!isActiveTrial) {
+      if (entitlement != null && !entitlement.isEnabled) {
         return GateDecision.blocked(
           status: subscriptionStatus,
           reason: 'entitlement_disabled',
         );
       }
-    } else if (!planAllows && FeatureKeys.all.contains(featureKey)) {
-      return GateDecision.blocked(
-        status: subscriptionStatus,
-        reason: 'plan_restricted',
-      );
+
+      if (usesPostTrialFallback && isKnownFeature && !planAllows) {
+        return GateDecision.blocked(
+          status: subscriptionStatus,
+          reason: 'trial_expired',
+        );
+      }
+
+      if (entitlement == null && !planAllows && isKnownFeature) {
+        return GateDecision.blocked(
+          status: subscriptionStatus,
+          reason: 'plan_restricted',
+        );
+      }
     }
 
     final metric = metricKey ?? featureKey;
@@ -155,5 +170,23 @@ class FeatureGate {
       }
     }
     return null;
+  }
+
+  bool _isActiveTrial(SubscriptionState? state, DateTime now) {
+    if (state == null) return false;
+    if (SubscriptionStatus.fromWire(state.status) != SubscriptionStatus.trial) {
+      return false;
+    }
+    final trialEndsAt = state.trialEndsAt;
+    return trialEndsAt != null && !now.isAfter(trialEndsAt);
+  }
+
+  bool _usesPostTrialFallback(SubscriptionState? state, DateTime now) {
+    if (state == null) return false;
+    if (SubscriptionStatus.fromWire(state.status) != SubscriptionStatus.trial) {
+      return false;
+    }
+    final trialEndsAt = state.trialEndsAt;
+    return trialEndsAt == null || now.isAfter(trialEndsAt);
   }
 }

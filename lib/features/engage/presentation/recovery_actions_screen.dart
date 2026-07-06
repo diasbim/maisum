@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -52,10 +55,18 @@ class _RecoveryActionsScreenState extends ConsumerState<RecoveryActionsScreen> {
         ),
         data: (access) {
           if (!access.canManageRecovery) {
-            return const EmptyState(
+            return EmptyState(
               title: 'Ações indisponíveis no seu plano',
               subtitle:
                   'A criação de ações de recuperação é exclusiva do plano Business.',
+              actionLabel: 'Falar no WhatsApp',
+              onAction: () => context.push(
+                featureUpsellLocation(
+                  featureKey: FeatureKeys.engageManageRecovery,
+                  featureName: 'Acoes de recuperacao',
+                  reason: 'plan_restricted',
+                ),
+              ),
             );
           }
 
@@ -134,19 +145,17 @@ class _RecoveryActionsScreenState extends ConsumerState<RecoveryActionsScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref
-          .read(engageRepositoryProvider)
-          .logRecoveryAction(
-            customerId: customerId,
-            actionType: _actionType,
-            taskId: _taskIdController.text.trim().isEmpty
-                ? null
-                : _taskIdController.text.trim(),
-            payload: {
-              if (_notesController.text.trim().isNotEmpty)
-                'notes': _notesController.text.trim(),
-            },
-          );
+      await ref.read(engageRepositoryProvider).logRecoveryAction(
+        customerId: customerId,
+        actionType: _actionType,
+        taskId: _taskIdController.text.trim().isEmpty
+            ? null
+            : _taskIdController.text.trim(),
+        payload: {
+          if (_notesController.text.trim().isNotEmpty)
+            'notes': _notesController.text.trim(),
+        },
+      );
       if (!mounted) return;
       AppFeedback.showSuccessToast(
         context,

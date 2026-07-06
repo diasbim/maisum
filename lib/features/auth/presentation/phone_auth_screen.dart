@@ -30,8 +30,7 @@ import 'post_auth_navigation.dart';
 const _defaultCountryDialCode = '+258';
 const _brandNavy = Color(0xFF102A5E);
 const _brandAccent = Color(0xFFF4C542);
-const _welcomeBackgroundAsset = 'assets/images/welcomebg.png';
-const _welcomeLogoAsset = 'assets/images/welcome_logo.png';
+const _welcomeLogoAsset = 'assets/images/logotypographi.png';
 const _welcomeBarberAsset = 'assets/images/welcome.png';
 
 class PhoneAuthScreen extends ConsumerStatefulWidget {
@@ -599,45 +598,44 @@ class _WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final media = MediaQuery.of(context);
     final shortestSide = media.size.shortestSide;
-    final compact = media.size.height < 700;
+    final compact = media.size.height < 680;
+    final tight = media.size.height < 600;
     final maxWidth = shortestSide >= 600 ? 520.0 : double.infinity;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF001944),
+      resizeToAvoidBottomInset: false,
+      backgroundColor: const Color(0xFF001235),
       body: Stack(
         fit: StackFit.expand,
         children: [
-          const _WelcomeAssetImage(
-            assetName: _welcomeBackgroundAsset,
-            fit: BoxFit.cover,
-            fallback: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Color(0xFF000A1F),
-                    Color(0xFF00235E),
-                    Color(0xFF001238),
-                  ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0.04, -0.08),
+                radius: 0.88,
+                colors: [
+                  Color(0xFF063D9F),
+                  Color(0xFF01235F),
+                  Color(0xFF000719),
+                ],
+                stops: [0, 0.45, 1],
               ),
             ),
           ),
+          const _WelcomeBackgroundGlow(),
           DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF000A1F).withValues(alpha: 0.18),
-                  const Color(0xFF001A49).withValues(alpha: 0.12),
-                  const Color(0xFF001238).withValues(alpha: 0.92),
+                  const Color(0xFF000718).withValues(alpha: 0.10),
+                  const Color(0xFF001D55).withValues(alpha: 0.02),
+                  const Color(0xFF001136).withValues(alpha: 0.84),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                stops: const [0, 0.46, 1],
+                stops: const [0, 0.44, 1],
               ),
             ),
           ),
@@ -648,107 +646,48 @@ class _WelcomeScreen extends StatelessWidget {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final tightHeight = constraints.maxHeight < 620;
-                    final horizontalPadding = tightHeight ? 20.0 : 24.0;
+                    final horizontalPadding = tightHeight ? 18.0 : 24.0;
                     final contentWidth =
                         constraints.maxWidth - (horizontalPadding * 2);
 
                     return Padding(
                       padding: EdgeInsets.fromLTRB(
                         horizontalPadding,
-                        tightHeight ? 10 : (compact ? 18 : 26),
+                        tightHeight ? 10 : (compact ? 14 : 24),
                         horizontalPadding,
-                        tightHeight ? 10 : 18,
+                        tightHeight ? 10 : 16,
                       ),
                       child: Column(
                         children: [
+                          _WelcomeAssetImage(
+                            assetName: _welcomeLogoAsset,
+                            width: tight ? 146 : (compact ? 168 : 196),
+                            fit: BoxFit.contain,
+                            semanticLabel: 'MaisUm',
+                            fallback: const _WelcomeLogoFallback(),
+                          ),
+                          SizedBox(height: tight ? 4 : 10),
                           Expanded(
-                            child: Align(
-                              alignment: Alignment.topCenter,
+                            child: Center(
                               child: FittedBox(
                                 fit: BoxFit.scaleDown,
-                                alignment: Alignment.topCenter,
+                                alignment: Alignment.center,
                                 child: SizedBox(
                                   width: contentWidth,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _WelcomeAssetImage(
-                                        assetName: _welcomeLogoAsset,
-                                        width: compact ? 184 : 230,
-                                        fit: BoxFit.contain,
-                                        semanticLabel: 'MaisUm',
-                                        fallback: const _WelcomeLogoFallback(),
-                                      ),
-                                      SizedBox(height: compact ? 10 : 18),
-                                      _WelcomeHero(compact: compact),
-                                      SizedBox(height: compact ? 12 : 22),
-                                      Text.rich(
-                                        const TextSpan(
-                                          children: [
-                                            TextSpan(
-                                                text:
-                                                    'Vamos colocar o seu\nnegocio no '),
-                                            TextSpan(
-                                              text: 'MaisUm',
-                                              style: TextStyle(
-                                                  color: _brandAccent),
-                                            ),
-                                          ],
-                                        ),
-                                        textAlign: TextAlign.center,
-                                        style: theme.textTheme.displaySmall
-                                            ?.copyWith(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w900,
-                                          height: 1.12,
-                                          letterSpacing: 0,
-                                          fontSize: compact ? 31 : 38,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text.rich(
-                                        const TextSpan(
-                                          children: [
-                                            TextSpan(text: 'Em menos de '),
-                                            TextSpan(
-                                              text: '2 minutos',
-                                              style: TextStyle(
-                                                color: _brandAccent,
-                                                fontWeight: FontWeight.w900,
-                                              ),
-                                            ),
-                                            TextSpan(
-                                                text:
-                                                    ' estara pronto\npara comecar a receber clientes.'),
-                                          ],
-                                        ),
-                                        textAlign: TextAlign.center,
-                                        style:
-                                            theme.textTheme.bodyLarge?.copyWith(
-                                          color: Colors.white
-                                              .withValues(alpha: 0.72),
-                                          height: 1.4,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0,
-                                          fontSize: compact ? 15 : 17,
-                                        ),
-                                      ),
-                                      SizedBox(height: compact ? 18 : 26),
-                                      _WelcomeBenefits(compact: compact),
-                                      const SizedBox(height: 20),
-                                      const _WelcomeDots(),
-                                    ],
-                                  ),
+                                  child: _WelcomeHero(compact: compact),
                                 ),
                               ),
                             ),
                           ),
-                          SizedBox(height: tightHeight ? 8 : 14),
+                          _WelcomeBenefits(compact: compact),
+                          SizedBox(height: tightHeight ? 14 : 20),
                           _WelcomePrimaryButton(
                             compact: tightHeight,
                             onPressed: onStart,
                           ),
-                          SizedBox(height: tightHeight ? 10 : 18),
+                          SizedBox(height: tightHeight ? 8 : 12),
+                          const _WelcomeDots(),
+                          SizedBox(height: tightHeight ? 6 : 10),
                           _WelcomeTerms(
                             compact: tightHeight,
                             onTerms: onTerms,
@@ -768,6 +707,57 @@ class _WelcomeScreen extends StatelessWidget {
   }
 }
 
+class _WelcomeBackgroundGlow extends StatelessWidget {
+  const _WelcomeBackgroundGlow();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned(
+            top: 96,
+            left: -54,
+            right: -54,
+            child: Container(
+              height: 420,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.045),
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _WelcomeDotPatternPainter(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WelcomeDotPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.055)
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round;
+    for (var y = size.height * 0.18; y < size.height * 0.48; y += 14) {
+      for (var x = 22.0; x < size.width; x += 14) {
+        if ((x + y).round().isEven) {
+          canvas.drawCircle(Offset(x, y), 0.7, paint);
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class _WelcomeHero extends StatelessWidget {
   const _WelcomeHero({required this.compact});
 
@@ -775,36 +765,51 @@ class _WelcomeHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final heroHeight = compact ? 292.0 : 384.0;
     return SizedBox(
-      height: compact ? 230 : 330,
+      height: heroHeight,
       child: Stack(
-        clipBehavior: Clip.none,
-        alignment: Alignment.bottomCenter,
+        clipBehavior: Clip.hardEdge,
+        alignment: Alignment.center,
         children: [
           Positioned(
-            top: compact ? 18 : 30,
-            child: Container(
-              width: compact ? 280 : 360,
-              height: compact ? 190 : 260,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.055),
+            top: compact ? 8 : 4,
+            left: compact ? -20 : -34,
+            right: compact ? -20 : -34,
+            bottom: compact ? -10 : -20,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(compact ? 26 : 34),
+              child: _WelcomeAssetImage(
+                assetName: _welcomeBarberAsset,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+                fallback: _WelcomeBarberFallback(height: heroHeight),
               ),
             ),
           ),
           Positioned(
+            left: 0,
+            right: 0,
             bottom: 0,
-            child: _WelcomeAssetImage(
-              assetName: _welcomeBarberAsset,
-              height: compact ? 222 : 320,
-              fit: BoxFit.contain,
-              alignment: Alignment.bottomCenter,
-              fallback: _WelcomeBarberFallback(height: compact ? 222 : 320),
+            height: heroHeight * 0.42,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFF001136).withValues(alpha: 0),
+                    const Color(0xFF001136).withValues(alpha: 0.88),
+                    const Color(0xFF001136),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
             ),
           ),
           Positioned(
-            right: 0,
-            top: compact ? 76 : 116,
+            left: compact ? 18 : 34,
+            right: compact ? 18 : 34,
+            bottom: compact ? 12 : 18,
             child: const _WelcomeGrowthPill(),
           ),
         ],
@@ -821,49 +826,52 @@ class _WelcomeGrowthPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white.withValues(alpha: 0.97),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
             color: _shadowColor,
-            blurRadius: 24,
-            offset: Offset(0, 12),
+            blurRadius: 30,
+            offset: Offset(0, 16),
           ),
         ],
       ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.groups_rounded, color: _brandAccent, size: 30),
-          SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Mais clientes',
-                style: TextStyle(
-                  color: _brandNavy,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 12,
+      child: const FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.trending_up_rounded, color: Color(0xFF2FAA4A), size: 34),
+            SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '+26% este mes',
+                  style: TextStyle(
+                    color: Color(0xFF2FAA4A),
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
                 ),
-              ),
-              SizedBox(height: 3),
-              Text(
-                '+26% este mes',
-                style: TextStyle(
-                  color: Color(0xFF4A5166),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+                SizedBox(height: 4),
+                Text(
+                  'Mais clientes fieis',
+                  style: TextStyle(
+                    color: _brandNavy,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          SizedBox(width: 6),
-          Icon(Icons.trending_up_rounded, color: Color(0xFF2FAA4A), size: 20),
-        ],
+              ],
+            ),
+            SizedBox(width: 12),
+            Icon(Icons.groups_rounded, color: _brandAccent, size: 34),
+          ],
+        ),
       ),
     );
   }
@@ -876,79 +884,57 @@ class _WelcomeBenefits extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = [
-      const _BenefitItem(
-        icon: Icons.flash_on_rounded,
-        title: 'Rapido e facil',
-        subtitle: 'Registo em menos\nde 2 minutos.',
-      ),
-      const _BenefitItem(
-        icon: Icons.verified_user_rounded,
-        title: 'Seguro',
-        subtitle: 'Os seus dados estao\nsempre protegidos.',
-      ),
-      const _BenefitItem(
-        icon: Icons.trending_up_rounded,
-        title: 'Mais crescimento',
-        subtitle: 'Ferramentas para atrair\ne fidelizar clientes.',
-      ),
-    ];
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return const Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        for (final item in items) Expanded(child: item),
+        Expanded(
+          child: _BenefitItem(text: 'Registo em menos\nde 2 minutos.'),
+        ),
+        _BenefitDivider(),
+        Expanded(
+          child: _BenefitItem(text: 'Dados sempre\nprotegidos.'),
+        ),
+        _BenefitDivider(),
+        Expanded(
+          child: _BenefitItem(
+              text: 'Ferramentas para atrair\ne fidelizar clientes.'),
+        ),
       ],
     );
   }
 }
 
 class _BenefitItem extends StatelessWidget {
-  const _BenefitItem({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
+  const _BenefitItem({required this.text});
 
-  final IconData icon;
-  final String title;
-  final String subtitle;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 58,
-          height: 58,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: Colors.white.withValues(alpha: 0.075),
-          ),
-          child: Icon(icon, color: _brandAccent, size: 30),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w900,
-            fontSize: 13,
-          ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          subtitle,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.62),
-            fontWeight: FontWeight.w600,
-            fontSize: 11,
-            height: 1.25,
-          ),
-        ),
-      ],
+    return Text(
+      text,
+      textAlign: TextAlign.center,
+      style: TextStyle(
+        color: Colors.white.withValues(alpha: 0.68),
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+        height: 1.28,
+        letterSpacing: 0,
+      ),
+    );
+  }
+}
+
+class _BenefitDivider extends StatelessWidget {
+  const _BenefitDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 1,
+      height: 34,
+      margin: const EdgeInsets.symmetric(horizontal: 10),
+      color: Colors.white.withValues(alpha: 0.16),
     );
   }
 }
@@ -962,24 +948,24 @@ class _WelcomeDots extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Container(
-          width: 10,
-          height: 10,
+          width: 28,
+          height: 4,
           decoration: const BoxDecoration(
-            color: _brandAccent,
-            shape: BoxShape.circle,
+            color: Colors.white,
+            borderRadius: BorderRadius.all(Radius.circular(999)),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         for (var i = 0; i < 2; i++) ...[
           Container(
-            width: 10,
-            height: 10,
+            width: 4,
+            height: 4,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.14),
+              color: Colors.white.withValues(alpha: 0.34),
               shape: BoxShape.circle,
             ),
           ),
-          if (i == 0) const SizedBox(width: 12),
+          if (i == 0) const SizedBox(width: 8),
         ],
       ],
     );
@@ -1000,11 +986,11 @@ class _WelcomePrimaryButton extends StatelessWidget {
     return KeyedSubtree(
       key: const Key('welcome_start_button'),
       child: MaisUmButton(
-        label: 'Comecar',
+        label: 'Começar agora',
         onPressed: onPressed,
         trailingIcon: Icons.arrow_forward_rounded,
-        height: compact ? 58 : 68,
-        radius: 18,
+        height: compact ? 62 : 72,
+        radius: 999,
         backgroundColor: _brandAccent,
         foregroundColor: _brandNavy,
       ),
@@ -1096,7 +1082,6 @@ class _WelcomeAssetImage extends StatelessWidget {
     required this.assetName,
     required this.fallback,
     this.width,
-    this.height,
     this.fit,
     this.alignment = Alignment.center,
     this.semanticLabel,
@@ -1105,7 +1090,6 @@ class _WelcomeAssetImage extends StatelessWidget {
   final String assetName;
   final Widget fallback;
   final double? width;
-  final double? height;
   final BoxFit? fit;
   final AlignmentGeometry alignment;
   final String? semanticLabel;
@@ -1115,7 +1099,6 @@ class _WelcomeAssetImage extends StatelessWidget {
     return Image.asset(
       assetName,
       width: width,
-      height: height,
       fit: fit,
       alignment: alignment,
       semanticLabel: semanticLabel,

@@ -12,6 +12,10 @@ _$SaleImpl _$$SaleImplFromJson(Map<String, dynamic> json) => _$SaleImpl(
       amount: (json['amount'] as num).toDouble(),
       points: (json['points'] as num).toInt(),
       createdAt: DateTime.parse(json['createdAt'] as String),
+      items: (json['items'] as List<dynamic>?)
+              ?.map((e) => SaleItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const <SaleItem>[],
       synced: json['synced'] as bool? ?? false,
     );
 
@@ -22,5 +26,6 @@ Map<String, dynamic> _$$SaleImplToJson(_$SaleImpl instance) =>
       'amount': instance.amount,
       'points': instance.points,
       'createdAt': instance.createdAt.toIso8601String(),
+      'items': instance.items,
       'synced': instance.synced,
     };

@@ -25,6 +25,7 @@ mixin _$Sale {
   double get amount => throw _privateConstructorUsedError;
   int get points => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
+  List<SaleItem> get items => throw _privateConstructorUsedError;
   bool get synced => throw _privateConstructorUsedError;
 
   /// Serializes this Sale to a JSON map.
@@ -47,6 +48,7 @@ abstract class $SaleCopyWith<$Res> {
       double amount,
       int points,
       DateTime createdAt,
+      List<SaleItem> items,
       bool synced});
 }
 
@@ -70,6 +72,7 @@ class _$SaleCopyWithImpl<$Res, $Val extends Sale>
     Object? amount = null,
     Object? points = null,
     Object? createdAt = null,
+    Object? items = null,
     Object? synced = null,
   }) {
     return _then(_value.copyWith(
@@ -93,6 +96,10 @@ class _$SaleCopyWithImpl<$Res, $Val extends Sale>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      items: null == items
+          ? _value.items
+          : items // ignore: cast_nullable_to_non_nullable
+              as List<SaleItem>,
       synced: null == synced
           ? _value.synced
           : synced // ignore: cast_nullable_to_non_nullable
@@ -114,6 +121,7 @@ abstract class _$$SaleImplCopyWith<$Res> implements $SaleCopyWith<$Res> {
       double amount,
       int points,
       DateTime createdAt,
+      List<SaleItem> items,
       bool synced});
 }
 
@@ -134,6 +142,7 @@ class __$$SaleImplCopyWithImpl<$Res>
     Object? amount = null,
     Object? points = null,
     Object? createdAt = null,
+    Object? items = null,
     Object? synced = null,
   }) {
     return _then(_$SaleImpl(
@@ -157,6 +166,10 @@ class __$$SaleImplCopyWithImpl<$Res>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      items: null == items
+          ? _value._items
+          : items // ignore: cast_nullable_to_non_nullable
+              as List<SaleItem>,
       synced: null == synced
           ? _value.synced
           : synced // ignore: cast_nullable_to_non_nullable
@@ -174,8 +187,10 @@ class _$SaleImpl extends _Sale {
       required this.amount,
       required this.points,
       required this.createdAt,
+      final List<SaleItem> items = const <SaleItem>[],
       this.synced = false})
-      : super._();
+      : _items = items,
+        super._();
 
   factory _$SaleImpl.fromJson(Map<String, dynamic> json) =>
       _$$SaleImplFromJson(json);
@@ -190,13 +205,22 @@ class _$SaleImpl extends _Sale {
   final int points;
   @override
   final DateTime createdAt;
+  final List<SaleItem> _items;
+  @override
+  @JsonKey()
+  List<SaleItem> get items {
+    if (_items is EqualUnmodifiableListView) return _items;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_items);
+  }
+
   @override
   @JsonKey()
   final bool synced;
 
   @override
   String toString() {
-    return 'Sale(id: $id, customerId: $customerId, amount: $amount, points: $points, createdAt: $createdAt, synced: $synced)';
+    return 'Sale(id: $id, customerId: $customerId, amount: $amount, points: $points, createdAt: $createdAt, items: $items, synced: $synced)';
   }
 
   @override
@@ -211,13 +235,14 @@ class _$SaleImpl extends _Sale {
             (identical(other.points, points) || other.points == points) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
+            const DeepCollectionEquality().equals(other._items, _items) &&
             (identical(other.synced, synced) || other.synced == synced));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(
-      runtimeType, id, customerId, amount, points, createdAt, synced);
+  int get hashCode => Object.hash(runtimeType, id, customerId, amount, points,
+      createdAt, const DeepCollectionEquality().hash(_items), synced);
 
   /// Create a copy of Sale
   /// with the given fields replaced by the non-null parameter values.
@@ -242,6 +267,7 @@ abstract class _Sale extends Sale {
       required final double amount,
       required final int points,
       required final DateTime createdAt,
+      final List<SaleItem> items,
       final bool synced}) = _$SaleImpl;
   const _Sale._() : super._();
 
@@ -257,6 +283,8 @@ abstract class _Sale extends Sale {
   int get points;
   @override
   DateTime get createdAt;
+  @override
+  List<SaleItem> get items;
   @override
   bool get synced;
 

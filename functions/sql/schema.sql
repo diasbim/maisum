@@ -159,6 +159,43 @@ CREATE TABLE IF NOT EXISTS usage_balances (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_balances_window
   ON usage_balances(merchant_id, metric_key, window_start, window_end);
+CREATE TABLE IF NOT EXISTS merchant_items (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  default_price DOUBLE PRECISION,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_merchant_items_scope_type
+  ON merchant_items(merchant_id, type, is_active, display_order);
+CREATE INDEX IF NOT EXISTS idx_merchant_items_updated
+  ON merchant_items(merchant_id, updated_at, id);
+
+CREATE TABLE IF NOT EXISTS sale_items (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  sale_id TEXT NOT NULL,
+  merchant_item_id TEXT NOT NULL REFERENCES merchant_items(id),
+  name_snapshot TEXT NOT NULL,
+  type_snapshot TEXT NOT NULL,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  unit_price DOUBLE PRECISION,
+  subtotal DOUBLE PRECISION,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id
+  ON sale_items(sale_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_sale_items_updated
+  ON sale_items(merchant_id, updated_at, id);
 
 CREATE TABLE IF NOT EXISTS customer_risk_scores (
   id TEXT PRIMARY KEY,

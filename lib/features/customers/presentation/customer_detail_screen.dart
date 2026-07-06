@@ -27,6 +27,7 @@ import '../../sales/domain/sale.dart';
 import '../../sales/presentation/new_sale_screen.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/domain/usage_metrics.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import 'customers_controller.dart';
 
 class CustomerDetailScreen extends ConsumerStatefulWidget {
@@ -556,9 +557,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     );
     if (!decision.allowed) {
       if (context.mounted) {
-        AppFeedback.showMessage(
-          context,
-          message: AppStrings.funcaoIndisponivel,
+        context.push(
+          featureUpsellLocation(
+            featureKey: FeatureKeys.whatsappAutomation,
+            featureName: AppStrings.enviarWhatsApp,
+            reason: decision.reason,
+          ),
         );
       }
       return;
@@ -1198,6 +1202,21 @@ class _SaleCard extends StatelessWidget {
                   PtDateFormat.dayMonthYearTime(sale.createdAt),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                if (sale.items.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    sale.items
+                        .map((item) => item.nameSnapshot)
+                        .where((name) => name.isNotEmpty)
+                        .join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
               ],
             ),
           ),

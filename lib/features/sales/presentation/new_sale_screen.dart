@@ -10,11 +10,14 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
+import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/quick_amount_button.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/errors/app_error_mapper.dart';
 import '../../../design_system/design_system.dart';
+import '../../catalog/domain/merchant_item.dart';
 import '../../customers/domain/customer.dart';
+import '../domain/sale_item.dart';
 import '../widgets/sale_progress_stepper.dart';
 import 'sale_controller.dart';
 import 'sale_success_screen.dart';
@@ -46,6 +49,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   bool _showCompletedStepper = false;
   int? _completedPoints;
   Customer? _selectedCustomer;
+  List<SaleItemInput> _selectedSaleItems = <SaleItemInput>[];
   int? _quickAmount;
   int? _lastAmount;
   _SaleInitializationState _initializationState =
@@ -248,6 +252,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       final result = await saleCtrl.createSale(
         customerId: customer.id,
         amount: _amount,
+        items: _selectedSaleItems,
       );
 
       if (!mounted) return;
@@ -269,6 +274,30 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  Future<void> _openSaleItemsSelector() async {
+    if (_isSubmitting) return;
+    final selected = await showModalBottomSheet<List<SaleItemInput>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) =>
+          _SaleItemsSelectionSheet(initialItems: _selectedSaleItems),
+    );
+    if (!mounted || selected == null) return;
+    setState(() => _selectedSaleItems = selected);
+  }
+
+  void _removeSaleItem(String merchantItemId) {
+    setState(() {
+      _selectedSaleItems = _selectedSaleItems
+          .where((item) => item.merchantItemId != merchantItemId)
+          .toList();
+    });
   }
 
   @override
@@ -447,6 +476,21 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                               _completedPoints = null;
                             }),
                           ),
+                          const SizedBox(height: 12),
+                          MaisUmButton(
+                            onPressed: isBusy ? null : _openSaleItemsSelector,
+                            label: 'Adicionar produtos e servicos',
+                            leadingIcon: Icons.add_rounded,
+                            variant: MaisUmButtonVariant.outlined,
+                            foregroundColor: AppColors.primary,
+                          ),
+                          if (_selectedSaleItems.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            _SelectedSaleItemsChips(
+                              items: _selectedSaleItems,
+                              onRemove: _removeSaleItem,
+                            ),
+                          ],
                           const SizedBox(height: 18),
                           const _SectionTitle(title: '3. ${AppStrings.resumo}'),
                           const SizedBox(height: 12),
@@ -633,6 +677,344 @@ class _CustomerSelectionSheet extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _SelectedSaleItemsChips extends StatelessWidget {
+  const _SelectedSaleItemsChips({required this.items, required this.onRemove});
+
+  final List<SaleItemInput> items;
+  final ValueChanged<String> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Selecionado',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: AppColors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: items
+              .map(
+                (item) => InputChip(
+                  label: Text(
+                    item.quantity > 1
+                        ? '${item.nameSnapshot} x${item.quantity}'
+                        : item.nameSnapshot,
+                  ),
+                  onDeleted: () => onRemove(item.merchantItemId),
+                  deleteIcon: const Icon(Icons.close_rounded, size: 18),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+}
+
+class _SaleItemsSelectionSheet extends ConsumerStatefulWidget {
+  const _SaleItemsSelectionSheet({required this.initialItems});
+
+  final List<SaleItemInput> initialItems;
+
+  @override
+  ConsumerState<_SaleItemsSelectionSheet> createState() =>
+      _SaleItemsSelectionSheetState();
+}
+
+class _SaleItemsSelectionSheetState
+    extends ConsumerState<_SaleItemsSelectionSheet> {
+  final _searchCtrl = TextEditingController();
+  late Map<String, SaleItemInput> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = {
+      for (final item in widget.initialItems) item.merchantItemId: item,
+    };
+    _searchCtrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final itemsAsync = ref.watch(activeMerchantItemsProvider);
+    final mediaQuery = MediaQuery.of(context);
+    final bottomInset = mediaQuery.viewInsets.bottom;
+    final maxSheetHeight =
+        (mediaQuery.size.height - bottomInset - mediaQuery.padding.top - 16)
+            .clamp(240.0, mediaQuery.size.height * 0.9)
+            .toDouble();
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: SizedBox(
+        height: maxSheetHeight,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Produtos e Servicos',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppColors.onSurface,
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Fechar',
+                    onPressed: () =>
+                        Navigator.of(context).pop(widget.initialItems),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _searchCtrl,
+                decoration: const InputDecoration(
+                  hintText: 'Pesquisar...',
+                  prefixIcon: Icon(Icons.search_rounded),
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: itemsAsync.when(
+                  data: _buildItemsList,
+                  loading: () => const Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child:
+                          CircularProgressIndicator(color: AppColors.secondary),
+                    ),
+                  ),
+                  error: (_, __) => Center(
+                    child: MaisUmButton(
+                      onPressed: () =>
+                          ref.invalidate(activeMerchantItemsProvider),
+                      label: AppStrings.tentar,
+                      leadingIcon: Icons.refresh_rounded,
+                      variant: MaisUmButtonVariant.outlined,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              MaisUmButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(_selected.values.toList()),
+                label: 'Confirmar',
+                leadingIcon: Icons.check_rounded,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildItemsList(List<MerchantItem> items) {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? items
+        : items
+            .where((item) => item.name.toLowerCase().contains(query))
+            .toList();
+    if (filtered.isEmpty) {
+      return ListView(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 28),
+            child: EmptyState(
+              title:
+                  items.isEmpty ? 'Catalogo vazio' : 'Nenhum item encontrado',
+              subtitle: items.isEmpty
+                  ? 'Crie produtos e servicos no catalogo para usa-los aqui.'
+                  : null,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final services = filtered
+        .where((item) => item.type == MerchantItemType.service)
+        .toList();
+    final products = filtered
+        .where((item) => item.type == MerchantItemType.product)
+        .toList();
+
+    return ListView(
+      children: [
+        if (services.isNotEmpty) ...[
+          const _SaleItemSectionLabel('SERVICOS'),
+          ...services.map(_itemTile),
+        ],
+        if (products.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          const _SaleItemSectionLabel('PRODUTOS'),
+          ...products.map(_itemTile),
+        ],
+      ],
+    );
+  }
+
+  Widget _itemTile(MerchantItem item) {
+    final selected = _selected[item.id];
+    final isSelected = selected != null;
+    final price = item.defaultPrice == null
+        ? null
+        : '${item.defaultPrice!.toStringAsFixed(0)} ${AppStrings.moedaMzn}';
+    return MaisUmSurface(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      radius: AppRadius.lg,
+      selected: isSelected,
+      shadows: const [],
+      onTap: () => _toggle(item),
+      semanticButton: true,
+      child: Row(
+        children: [
+          Checkbox(
+            value: isSelected,
+            onChanged: (_) => _toggle(item),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : AppColors.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (price != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    price,
+                    style: TextStyle(
+                      color: isSelected
+                          ? Colors.white.withValues(alpha: 0.75)
+                          : AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (isSelected)
+            _QuantityStepper(
+              value: selected.quantity,
+              onChanged: (quantity) => _setQuantity(item.id, quantity),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _toggle(MerchantItem item) {
+    setState(() {
+      if (_selected.containsKey(item.id)) {
+        _selected.remove(item.id);
+      } else {
+        _selected[item.id] = SaleItemInput.fromMerchantItem(item);
+      }
+    });
+  }
+
+  void _setQuantity(String merchantItemId, int quantity) {
+    final current = _selected[merchantItemId];
+    if (current == null) return;
+    setState(() {
+      _selected[merchantItemId] = current.copyWith(quantity: quantity);
+    });
+  }
+}
+
+class _SaleItemSectionLabel extends StatelessWidget {
+  const _SaleItemSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: AppColors.onSurfaceVariant,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.8,
+            ),
+      ),
+    );
+  }
+}
+
+class _QuantityStepper extends StatelessWidget {
+  const _QuantityStepper({required this.value, required this.onChanged});
+
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'Diminuir',
+          onPressed: value <= 1 ? null : () => onChanged(value - 1),
+          icon: const Icon(Icons.remove_circle_outline_rounded),
+          color: Colors.white,
+        ),
+        SizedBox(
+          width: 28,
+          child: Text(
+            '$value',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Aumentar',
+          onPressed: value >= 999 ? null : () => onChanged(value + 1),
+          icon: const Icon(Icons.add_circle_outline_rounded),
+          color: Colors.white,
+        ),
+      ],
     );
   }
 }

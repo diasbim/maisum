@@ -17,8 +17,10 @@ import '../../../design_system/design_system.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../merchant_onboarding/presentation/controllers/merchant_onboarding_controller.dart';
 import '../../subscription/data/firestore_plan_offers.dart';
+import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/domain/plan.dart';
 import '../../subscription/domain/plan_catalog.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 
 final businessLinkCodeProvider = FutureProvider<String?>((ref) async {
   final session = ref.watch(authControllerProvider).valueOrNull;
@@ -71,6 +73,63 @@ const _buildNumber = String.fromEnvironment(
   'APP_BUILD_NUMBER',
   defaultValue: '10',
 );
+
+const _paidSettingsFeatures = [
+  _PaidSettingsFeature(
+    icon: Icons.analytics_outlined,
+    iconColor: AppColors.green,
+    title: 'Relatorios de vendas',
+    subtitle: 'Historico e analise do negocio',
+    route: '/sales',
+    featureKey: FeatureKeys.analytics,
+    requiredPlanLabel: 'Starter ou superior',
+  ),
+  _PaidSettingsFeature(
+    icon: Icons.favorite_border_rounded,
+    iconColor: AppColors.primaryDark,
+    title: 'Retencao inteligente',
+    subtitle: 'Clientes recorrentes e em risco',
+    route: '/retention',
+    featureKey: FeatureKeys.engageViewRisk,
+    requiredPlanLabel: 'Pro ou Business',
+  ),
+  _PaidSettingsFeature(
+    icon: Icons.auto_graph_rounded,
+    iconColor: AppColors.primaryDark,
+    title: 'MaisUm Engage',
+    subtitle: 'Risco, recuperacao e surveys',
+    route: '/engage',
+    featureKey: FeatureKeys.engageViewRisk,
+    requiredPlanLabel: 'Pro ou Business',
+  ),
+  _PaidSettingsFeature(
+    icon: Icons.playlist_add_check_circle_outlined,
+    iconColor: AppColors.primaryDark,
+    title: 'Recuperacao de clientes',
+    subtitle: 'Fila de acoes premium',
+    route: '/engage/actions',
+    featureKey: FeatureKeys.engageManageRecovery,
+    requiredPlanLabel: 'Business',
+  ),
+  _PaidSettingsFeature(
+    icon: Icons.assignment_turned_in_outlined,
+    iconColor: AppColors.primaryDark,
+    title: 'Relatorios de visitas',
+    subtitle: 'Visitas e resultados de recuperacao',
+    route: '/engage/visit-report',
+    featureKey: FeatureKeys.engageManageVisits,
+    requiredPlanLabel: 'Business',
+  ),
+  _PaidSettingsFeature(
+    icon: Icons.insights_outlined,
+    iconColor: AppColors.green,
+    title: 'Analytics de surveys',
+    subtitle: 'Insights de respostas e satisfacao',
+    route: '/engage/surveys/analytics',
+    featureKey: FeatureKeys.engageManageSurveys,
+    requiredPlanLabel: 'Business',
+  ),
+];
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -223,6 +282,23 @@ class SettingsScreen extends ConsumerWidget {
                 size: 20,
               ),
               onTap: () => context.push('/appointments'),
+            ),
+            const _Section('Premium'),
+            ..._paidSettingsFeatures.map(
+              (feature) => _SettingsTile(
+                icon: feature.icon,
+                iconColor: feature.iconColor,
+                title: feature.title,
+                subtitle:
+                    '${feature.subtitle}. Pago: ${feature.requiredPlanLabel}',
+                trailing: const _PaidFeatureTrailing(),
+                onTap: () => _openPaidFeature(
+                  context,
+                  ref,
+                  feature,
+                  isOwner: isOwner,
+                ),
+              ),
             ),
           ],
           const _Section('Segurança'),
@@ -590,6 +666,60 @@ String _buildDiagnosticsText({
   ].join('\n');
 }
 
+Future<void> _openPaidFeature(
+  BuildContext context,
+  WidgetRef ref,
+  _PaidSettingsFeature feature, {
+  required bool isOwner,
+}) async {
+  try {
+    final decision = await ref.read(featureGateProvider).check(
+          featureKey: feature.featureKey,
+        );
+    if (!context.mounted) return;
+
+    if (decision.allowed) {
+      context.push(feature.route);
+      return;
+    }
+
+    context.push(
+      featureUpsellLocation(
+        featureKey: feature.featureKey,
+        featureName: feature.title,
+        reason: decision.reason,
+      ),
+    );
+  } catch (_) {
+    if (!context.mounted) return;
+    AppFeedback.showMessage(
+      context,
+      message: 'Nao foi possivel validar o plano. Tente novamente.',
+      isError: true,
+    );
+  }
+}
+
+class _PaidSettingsFeature {
+  const _PaidSettingsFeature({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.route,
+    required this.featureKey,
+    required this.requiredPlanLabel,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final String route;
+  final String featureKey;
+  final String requiredPlanLabel;
+}
+
 class SupportDiagnosticsScreen extends ConsumerWidget {
   const SupportDiagnosticsScreen({super.key});
 
@@ -817,6 +947,38 @@ class _HeaderPill extends StatelessWidget {
                 letterSpacing: 0.4,
               ),
         ),
+      );
+}
+
+class _PaidFeatureTrailing extends StatelessWidget {
+  const _PaidFeatureTrailing();
+
+  @override
+  Widget build(BuildContext context) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.amberLight,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              'PAGO',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: AppColors.secondaryDark,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                  ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.chevron_right_rounded,
+            color: AppColors.g300,
+            size: 20,
+          ),
+        ],
       );
 }
 

@@ -50,4 +50,37 @@ void main() {
       expect(updated.pendingCount, 5);
     });
   });
+
+  group('SyncStatus.viewState', () {
+    test('reports success when queue is empty despite stale failure fields',
+        () {
+      const status = SyncStatus(
+        isOnline: true,
+        phase: SyncPhase.syncFailed,
+        lastError: 'stale error',
+      );
+
+      expect(status.viewState, SyncViewState.success);
+    });
+
+    test('reports success when queue is empty despite transient syncing phase',
+        () {
+      const status = SyncStatus(
+        isOnline: true,
+        phase: SyncPhase.syncing,
+      );
+
+      expect(status.viewState, SyncViewState.success);
+    });
+
+    test('reports failed when failed items remain', () {
+      const status = SyncStatus(
+        isOnline: true,
+        failedCount: 1,
+        lastError: 'sync failed',
+      );
+
+      expect(status.viewState, SyncViewState.failed);
+    });
+  });
 }

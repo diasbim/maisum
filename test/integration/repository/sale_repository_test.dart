@@ -1,8 +1,12 @@
 ﻿import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/database/app_database.dart';
+import 'package:maisum/features/catalog/data/merchant_catalog_dao.dart';
+import 'package:maisum/features/catalog/data/merchant_catalog_repository.dart';
+import 'package:maisum/features/catalog/domain/merchant_item.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
 import 'package:maisum/features/sales/data/sale_dao.dart';
 import 'package:maisum/features/sales/data/sale_repository.dart';
+import 'package:maisum/features/sales/domain/sale_item.dart';
 import 'package:maisum/features/sync/data/sync_dao.dart';
 
 import '../../helpers/test_database.dart';
@@ -94,6 +98,47 @@ void main() {
       expect(payload, contains(sale.id));
     });
 
+    test('registers sale with item snapshot and queues sale item after sale',
+        () async {
+      final catalogRepository = MerchantCatalogRepository(
+        MerchantCatalogDao(AppDatabase.instance, merchantId: merchantId),
+        syncDao,
+      );
+      final service = await catalogRepository.save(
+        name: 'Haircut',
+        type: MerchantItemType.service,
+        defaultPrice: 500,
+      );
+
+      final sale = await repo.createSale(
+        customerId: customerId,
+        amount: 500,
+        items: [SaleItemInput.fromMerchantItem(service)],
+      );
+
+      expect(sale.items, hasLength(1));
+      expect(sale.items.single.nameSnapshot, 'Haircut');
+      final db = await AppDatabase.instance.database;
+      final rows = await db.query(
+        'sale_items',
+        where: 'sale_id = ?',
+        whereArgs: [sale.id],
+      );
+      expect(rows.single['name_snapshot'], 'Haircut');
+      expect(rows.single['unit_price'], 500);
+
+      final queue = await syncDao.getPending();
+      final saleQueueIndex = queue.indexWhere(
+        (item) => item.entityType == 'sale' && item.entityId == sale.id,
+      );
+      final saleItemQueueIndex = queue.indexWhere(
+        (item) =>
+            item.entityType == 'sale_item' && item.payload.contains('Haircut'),
+      );
+      expect(saleQueueIndex, isNonNegative);
+      expect(saleItemQueueIndex, greaterThan(saleQueueIndex));
+    });
+
     test(
       'stamps merchant_id and device_id on sale row and queue payload',
       () async {
@@ -157,4 +202,3 @@ void main() {
     });
   });
 }
-

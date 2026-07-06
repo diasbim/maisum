@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../subscription/domain/feature_keys.dart';
+import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -52,9 +55,17 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
         ),
         data: (access) {
           if (!access.canManageSurveys) {
-            return const EmptyState(
+            return EmptyState(
               title: 'Envio de surveys indisponivel',
               subtitle: 'Funcionalidade exclusiva do plano Business.',
+              actionLabel: 'Falar no WhatsApp',
+              onAction: () => context.push(
+                featureUpsellLocation(
+                  featureKey: FeatureKeys.engageManageSurveys,
+                  featureName: 'Submeter resposta de survey',
+                  reason: 'plan_restricted',
+                ),
+              ),
             );
           }
 
@@ -237,31 +248,28 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
     final answers = survey.questions
         .where((question) => _answers.containsKey(question.id))
         .map((question) {
-          final value = _answers[question.id];
-          if (value is bool) {
-            return SurveyAnswerInput(
-              questionId: question.id,
-              answerBool: value,
-            );
-          }
-          if (value is num) {
-            return SurveyAnswerInput(
-              questionId: question.id,
-              answerNumeric: value.toDouble(),
-            );
-          }
-          return SurveyAnswerInput(
-            questionId: question.id,
-            answerText: value?.toString(),
-          );
-        })
-        .toList();
+      final value = _answers[question.id];
+      if (value is bool) {
+        return SurveyAnswerInput(
+          questionId: question.id,
+          answerBool: value,
+        );
+      }
+      if (value is num) {
+        return SurveyAnswerInput(
+          questionId: question.id,
+          answerNumeric: value.toDouble(),
+        );
+      }
+      return SurveyAnswerInput(
+        questionId: question.id,
+        answerText: value?.toString(),
+      );
+    }).toList();
 
     setState(() => _submitting = true);
     try {
-      await ref
-          .read(engageRepositoryProvider)
-          .submitSurveyResponse(
+      await ref.read(engageRepositoryProvider).submitSurveyResponse(
             SurveySubmissionInput(
               surveyId: survey.id,
               customerId: _customerIdController.text.trim().isEmpty
