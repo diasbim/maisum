@@ -132,7 +132,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         const DashboardStats(totalCustomers: 3).buildDashboard(
-          syncStatus: SyncStatus(
+          syncStatus: const SyncStatus(
             isOnline: true,
             phase: SyncPhase.syncFailed,
             lastError: 'stale error',
@@ -149,7 +149,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         const DashboardStats(totalCustomers: 3).buildDashboard(
-          syncStatus: SyncStatus(
+          syncStatus: const SyncStatus(
             isOnline: true,
             phase: SyncPhase.syncing,
           ),
