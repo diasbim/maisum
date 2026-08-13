@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:maisum/core/theme/app_colors.dart';
+import 'package:maisum/core/theme/app_theme.dart';
 import 'package:maisum/features/auth/presentation/phone_auth_screen.dart';
 
 void main() {
@@ -8,6 +10,7 @@ void main() {
     WidgetTester tester, {
     double keyboardInset = 0,
     Size? physicalSize,
+    ThemeData? theme,
   }) async {
     if (physicalSize != null) {
       tester.view.physicalSize = physicalSize;
@@ -22,9 +25,10 @@ void main() {
     addTearDown(tester.view.resetViewInsets);
 
     await tester.pumpWidget(
-      const ProviderScope(
+      ProviderScope(
         child: MaterialApp(
-          home: PhoneAuthScreen(),
+          theme: theme,
+          home: const PhoneAuthScreen(),
         ),
       ),
     );
@@ -131,6 +135,22 @@ void main() {
     await tester.enterText(find.byKey(const Key('phone_input')), '843262347');
     await tester.pump();
     expect(continueButton(tester).onPressed, isNotNull);
+  });
+
+  testWidgets('keeps entered phone number visible in dark mode',
+      (tester) async {
+    await pumpScreen(tester, theme: AppTheme.dark);
+    await openPhoneForm(tester);
+
+    final phoneInput = find.byKey(const Key('phone_input'));
+    await tester.enterText(phoneInput, '843262347');
+    await tester.pump();
+
+    final editableText = tester.widget<EditableText>(
+      find.descendant(of: phoneInput, matching: find.byType(EditableText)),
+    );
+    expect(editableText.controller.text, '84 326 2347');
+    expect(editableText.style.color, AppColors.onSurface);
   });
 
   testWidgets('keeps layout stable on small devices with keyboard open',

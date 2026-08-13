@@ -1,3 +1,17 @@
 {
+    "chat.tools.terminal.autoApprove": {
+        "/^Set-Location 'c:\\\\Dev\\\\flutter\\\\maisum\\\\android'; \\.\\\\gradlew\\.bat :app:signingReport$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git config --global --add safe\\.directory C:/Dev/flutter/maisum; if \\(\\$\\?\\) \\{ git --no-pager status --short --branch; git --no-pager diff --stat; git --no-pager diff --cached --stat; git remote -v \\}$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^git add -A; if \\(-not \\$\\?\\) \\{ exit 1 \\}; git --no-pager diff --cached --stat; git commit -m \"chore: improve auth logging and project configuration\" -m \"Co-authored-by: Copilot <223556219\\+Copilot@users\\.noreply\\.github\\.com>\"; if \\(-not \\$\\?\\) \\{ exit 1 \\}; git push origin main$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    },
     "java.configuration.updateBuildConfiguration": "interactive"
 }

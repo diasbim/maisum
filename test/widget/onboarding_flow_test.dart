@@ -22,6 +22,11 @@ import 'package:maisum/features/merchant_onboarding/presentation/pages/business_
 import 'package:maisum/features/merchant_onboarding/presentation/pages/review_page.dart';
 import 'package:maisum/features/merchant_onboarding/presentation/pages/services_page.dart';
 import 'package:maisum/features/merchant_onboarding/presentation/pages/working_hours_page.dart';
+import 'package:maisum/features/subscription/data/subscription_repository.dart';
+import 'package:maisum/features/subscription/domain/plan.dart';
+import 'package:maisum/features/subscription/domain/subscription_snapshot.dart';
+import 'package:maisum/features/subscription/domain/subscription_state.dart';
+import 'package:maisum/features/subscription/services/remote_config_reader.dart';
 
 class _FakeAuthController extends AuthController {
   _FakeAuthController(this._session);
@@ -107,6 +112,75 @@ class _SpySecureStorageService extends SecureStorageService {
 
   String _draftKey({String? merchantId, String? role}) {
     return 'merchant_onboarding_draft_${merchantId ?? ''}_${role ?? ''}';
+  }
+}
+
+class _FakeRemoteConfigReader implements RemoteConfigReader {
+  @override
+  Future<bool?> getBool(String key) async => null;
+
+  @override
+  Future<int?> getInt(String key) async => null;
+
+  @override
+  Future<Map<String, dynamic>?> getJson(String key) async => null;
+
+  @override
+  Future<PricingOverride?> getPricingOverride(String planCode) async => null;
+
+  @override
+  Future<QuotaOverride?> getQuotaOverride(String metricKey) async => null;
+
+  @override
+  Future<String?> getString(String key) async => null;
+
+  @override
+  Future<int> getTrialDays() async => 14;
+
+  @override
+  Future<UpsellWhatsAppConfig> getUpsellWhatsAppConfig() async {
+    return const UpsellWhatsAppConfig(number: '', message: '');
+  }
+}
+
+class _SpySubscriptionRepository implements SubscriptionRepository {
+  String? trialMerchantId;
+
+  @override
+  Future<SubscriptionState> ensureTrialStarted({
+    required String merchantId,
+    DateTime? startedAt,
+    int trialDays = 14,
+  }) async {
+    trialMerchantId = merchantId;
+    final start = startedAt ?? DateTime.now();
+    final end = start.add(Duration(days: trialDays));
+    return SubscriptionState(
+      merchantId: merchantId,
+      planCode: Plan.free.code,
+      planName: Plan.free.displayName,
+      status: 'TRIAL',
+      planVersion: 1,
+      pricingVersion: 1,
+      trialEndsAt: end,
+      periodStart: start,
+      periodEnd: end,
+      updatedAt: start,
+    );
+  }
+
+  @override
+  Future<SubscriptionSnapshot> getSnapshot() {
+    throw UnsupportedError('getSnapshot is not used by onboarding tests');
+  }
+
+  @override
+  Future<void> switchPlan({
+    required String merchantId,
+    required Plan plan,
+    String? status,
+  }) {
+    throw UnsupportedError('switchPlan is not used by onboarding tests');
   }
 }
 
@@ -282,6 +356,7 @@ Widget _buildMerchantOnboardingFlow({
   required AuthSession session,
   required FakeFirebaseFirestore firestore,
   required _SpySecureStorageService storage,
+  _SpySubscriptionRepository? subscriptionRepository,
 }) {
   final router = GoRouter(
     initialLocation: '/merchant-onboarding/type',
@@ -322,6 +397,10 @@ Widget _buildMerchantOnboardingFlow({
       authControllerProvider.overrideWith(() => _FakeAuthController(session)),
       firestoreInstanceProvider.overrideWithValue(firestore),
       secureStorageServiceProvider.overrideWithValue(storage),
+      remoteConfigReaderProvider.overrideWithValue(_FakeRemoteConfigReader()),
+      subscriptionRepositoryProvider.overrideWithValue(
+        subscriptionRepository ?? _SpySubscriptionRepository(),
+      ),
     ],
     child: MaterialApp.router(routerConfig: router),
   );
@@ -798,6 +877,7 @@ void main() {
       final firestore = FakeFirebaseFirestore();
       await _seedMerchantOnboardingConfig(firestore);
       final storage = _SpySecureStorageService(initialPlanConfirmed: true);
+      final subscriptionRepository = _SpySubscriptionRepository();
       final session = AuthSession(
         userId: 'user-1',
         merchantId: 'merchant-1',
@@ -812,6 +892,7 @@ void main() {
           session: session,
           firestore: firestore,
           storage: storage,
+          subscriptionRepository: subscriptionRepository,
         ),
       );
       await tester.pumpAndSettle();
@@ -874,6 +955,7 @@ void main() {
       expect(data?['services'], [
         containsPair('id', 'cut_from_firestore'),
       ]);
+      expect(subscriptionRepository.trialMerchantId, 'merchant-1');
       expect(find.text('dashboard-route'), findsOneWidget);
     });
 

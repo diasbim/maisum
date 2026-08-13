@@ -86,6 +86,8 @@ class MaisUmTextField extends StatelessWidget {
       key: fieldKey,
       controller: controller,
       focusNode: focusNode,
+      style: const TextStyle(color: AppColors.onSurface),
+      cursorColor: AppColors.secondary,
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       inputFormatters: inputFormatters,

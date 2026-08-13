@@ -1,6 +1,7 @@
 ﻿import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/services/firebase_auth_service.dart';
+import 'package:maisum/core/utils/app_logger.dart';
 
 void main() {
   group('FirebaseAuthService', () {
@@ -47,6 +48,9 @@ void main() {
       final user = MockUser(uid: 'uid-789', phoneNumber: '+258840000001');
       final auth = MockFirebaseAuth(mockUser: user);
       final svc = FirebaseAuthService(auth);
+      final events = <AppLogEvent>[];
+      Log.bindSink(events.add);
+      addTearDown(() => Log.bindSink(null));
       expect(svc.isSignedIn, false);
 
       final result = await svc.verifyOtp(
@@ -55,7 +59,25 @@ void main() {
       );
       expect(result.user?.uid, 'uid-789');
       expect(svc.isSignedIn, true);
+      expect(
+        events.map((event) => event.message),
+        containsAll([
+          'phone_auth:otp_verification_started',
+          'phone_auth:otp_verification_succeeded',
+        ]),
+      );
+      expect(
+        events.map((event) => event.message).join(' '),
+        isNot(contains('fake-verification-id')),
+      );
+      expect(
+        events.map((event) => event.message).join(' '),
+        isNot(contains('123456')),
+      );
+      expect(
+        events.map((event) => event.message).join(' '),
+        isNot(contains('+258840000001')),
+      );
     });
   });
 }
-
