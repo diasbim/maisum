@@ -12,6 +12,8 @@ import '../../../core/widgets/brand_mark.dart';
 import '../../../core/errors/app_error_reporter.dart';
 import '../../../design_system/design_system.dart';
 import '../../customers/domain/customer.dart';
+import '../../engage/domain/engage_models.dart';
+import '../../engage/providers/engage_providers.dart';
 import '../../rewards/domain/reward.dart';
 import '../../rewards/domain/reward_progress.dart';
 import '../../rewards/presentation/rewards_controller.dart';
@@ -165,7 +167,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                         const SizedBox(height: 6),
                         Center(
                           child: Text(
-                            '$customerLabel ganhou ${sale.points} pontos',
+                            '$customerLabel tem ${sale.points} pontos a confirmar',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: Colors.white.withValues(alpha: 0.8),
                             ),
@@ -197,7 +199,8 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                           isSaving: createAppointmentState.isLoading,
                           onQuickSelect: (days) =>
                               _handleQuickSchedule(customer.id, days),
-                          onPickDate: () => _handleManualSchedule(customer.id),
+                          onPickDate: () =>
+                              _handleManualSchedule(customer.id),
                           onViewAll: () => context.push('/appointments'),
                         ),
                         const SizedBox(height: 18),
@@ -242,7 +245,9 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         : 'Obrigado pela sua visita, $firstName!';
     final buffer = StringBuffer()
       ..writeln(greeting)
-      ..writeln('Ganhou $pointsEarned pontos.');
+      ..writeln(
+        'Registámos $pointsEarned pontos, que serão confirmados após sincronização.',
+      );
     final safePointsLeft = pointsLeft < 0 ? 0 : pointsLeft;
     if (unlockedRewardName != null) {
       buffer.writeln('Já tem pontos para resgatar $unlockedRewardName.');
@@ -267,6 +272,14 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     Customer customer,
     String message,
   ) async {
+    if (customer.marketingConsentStatus != CustomerConsentStatus.granted) {
+      AppFeedback.showMessage(
+        context,
+        message: AppStrings.marketingConsentRequired,
+        isError: true,
+      );
+      return;
+    }
     final clean = customer.phone.replaceAll(RegExp(r'\D'), '');
     if (clean.isEmpty) return;
     final number = clean.startsWith('258') ? clean : '258$clean';
@@ -286,6 +299,14 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
 
   Future<void> _sendWhatsApp(Customer customer, String message) async {
     if (_isSendingWhatsApp) return;
+    if (customer.whatsappConsentStatus != CustomerConsentStatus.granted) {
+      AppFeedback.showMessage(
+        context,
+        message: AppStrings.whatsappConsentRequired,
+        isError: true,
+      );
+      return;
+    }
     setState(() => _isSendingWhatsApp = true);
 
     try {
@@ -315,10 +336,12 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         if (clean.isEmpty) return;
         final number = clean.startsWith('258') ? clean : '258$clean';
         await ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
+              customerId: customer.id,
               phone: number,
               message: message,
               source: 'sale_success',
             );
+        await _recordWhatsAppAction(customer.id, queued: true);
         try {
           await ref.read(analyticsServiceProvider).record(
             eventType: 'whatsapp_sent',
@@ -350,6 +373,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
         return;
       }
       if (launched) {
+        await _recordWhatsAppAction(customer.id, queued: false);
         try {
           await ref.read(usageTrackerProvider).record(
             metricKey: UsageMetrics.whatsappMessages,
@@ -369,6 +393,29 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
       if (mounted) {
         setState(() => _isSendingWhatsApp = false);
       }
+    }
+  }
+
+  Future<void> _recordWhatsAppAction(
+    String customerId, {
+    required bool queued,
+  }) async {
+    try {
+      await ref.read(engageRepositoryProvider).logRecoveryAction(
+        customerId: customerId,
+        actionType: RecoveryActionType.whatsapp,
+        payload: {
+          'source': 'sale_success',
+          'message_type': 'sale_confirmation',
+          'delivery_mode': queued ? 'queued' : 'business_assisted',
+        },
+      );
+    } catch (error, stackTrace) {
+      AppErrorReporter.report(
+        error,
+        stackTrace,
+        hint: 'sale_success_whatsapp_attribution',
+      );
     }
   }
 

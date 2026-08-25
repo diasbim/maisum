@@ -29,6 +29,17 @@ service cloud.firestore {
       );
     }
 
+    function merchantClaimMatches(merchantId) {
+      return isSignedIn() && (
+        request.auth.token.merchant_id == merchantId ||
+        request.auth.token.merchantId == merchantId ||
+        (request.auth.token.merchant_ids is list &&
+          merchantId in request.auth.token.merchant_ids) ||
+        (request.auth.token.merchantIds is list &&
+          merchantId in request.auth.token.merchantIds)
+      );
+    }
+
     function businessDoc(merchantId) {
       return get(/databases/$(database)/documents/businesses/$(merchantId));
     }
@@ -42,8 +53,10 @@ service cloud.firestore {
     }
 
     function canAccessBusiness(merchantId) {
-      return isAdmin() || hasOwnerClaim() || hasStaffClaim() ||
-        isBusinessOwner(merchantId) || authPhoneMatchesBusiness(merchantId);
+      return isAdmin() ||
+        merchantClaimMatches(merchantId) ||
+        isBusinessOwner(merchantId) ||
+        authPhoneMatchesBusiness(merchantId);
     }
 
     function canBootstrapBusiness(merchantId) {
@@ -68,8 +81,24 @@ service cloud.firestore {
     }
 
     function authPhoneMatchesBusiness(merchantId) {
-      return request.auth.token.phone_number is string &&
+      return exists(/databases/$(database)/documents/businesses/$(merchantId)) &&
+        request.auth.token.phone_number is string &&
         businessDoc(merchantId).data.phone == request.auth.token.phone_number;
+    }
+
+    function authPhoneMatchesListedBusiness() {
+      return request.auth.token.phone_number is string &&
+        resource.data.phone == request.auth.token.phone_number;
+    }
+
+    function canListBusinessDoc() {
+      return isSignedIn() &&
+        request.query.limit != null &&
+        request.query.limit <= 1 && (
+          resource.data.owner_user_id == request.auth.uid ||
+          resource.data.firebase_uid == request.auth.uid ||
+          authPhoneMatchesListedBusiness()
+        );
     }
 
     function canClaimLegacyBusiness(merchantId) {
@@ -107,17 +136,28 @@ service cloud.firestore {
         (merchantId == request.auth.uid || authPhoneMatchesBusiness(merchantId));
     }
 
-    function isOwnerOnlyCollection(collectionId) {
+    function isClientWritableOperationalCollection(collectionId) {
       return collectionId in [
-        'subscription_state',
-        'entitlements',
-        'feature_flags',
-        'remote_config',
+        'customers',
+        'merchant_items',
+        'sales',
+        'sale_items',
+        'rewards',
+        'appointments',
+        'retention_metrics',
+        'customer_risk_scores',
+        'recovery_tasks',
+        'recovery_actions',
+        'visit_reports',
+        'surveys',
+        'survey_questions',
+        'survey_responses',
+        'survey_response_answers',
         'app_users'
       ];
     }
 
-    function isOperationalCollection(collectionId) {
+    function isReadableBusinessCollection(collectionId) {
       return collectionId in [
         'customers',
         'merchant_items',
@@ -135,30 +175,233 @@ service cloud.firestore {
         'survey_questions',
         'survey_responses',
         'survey_response_answers',
+        'subscription_state',
+        'entitlements',
+        'feature_flags',
+        'remote_config',
+        'app_users',
+        'loyalty_ledger',
+        'domain_events',
+        'retention_policies',
+        'customer_transitions',
+        'customer_recommendations',
         'usage_balances',
         'usage_events',
         'notification_queue'
       ];
     }
 
+    function canManageBusinessProfile(merchantId) {
+      return canAccessBusiness(merchantId) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'id',
+          'merchant_name',
+          'phone',
+          'city',
+          'district',
+          'address',
+          'reference',
+          'location',
+          'business_type',
+          'business_profile_version',
+          'working_hours',
+          'services',
+          'created_at',
+          'updated_at',
+          'device_id'
+        ]);
+    }
+
+    function canManageAppUsers(merchantId) {
+      return isAdmin() ||
+        isBusinessOwner(merchantId) ||
+        merchantClaimMatches(merchantId) ||
+        authPhoneMatchesBusiness(merchantId);
+    }
+
+    function customerClientWritableFields() {
+      return [
+        'id',
+        'merchant_id',
+        'device_id',
+        'name',
+        'phone',
+        'total_points',
+        'marketing_consent_status',
+        'whatsapp_consent_status',
+        'created_at',
+        'updated_at',
+        'synced'
+      ];
+    }
+
+    function customerMerchantIdMatchesPath(merchantId) {
+      return !request.resource.data.keys().hasAny(['merchant_id']) ||
+        request.resource.data.merchant_id == merchantId;
+    }
+
+    function customerIdMatchesPath(docId) {
+      return !request.resource.data.keys().hasAny(['id']) ||
+        request.resource.data.id == docId;
+    }
+
+    function customerCreateIsValid(merchantId, docId) {
+      return request.resource.data.keys().hasOnly(customerClientWritableFields()) &&
+        customerMerchantIdMatchesPath(merchantId) &&
+        customerIdMatchesPath(docId);
+    }
+
+    function customerUpdateIsValid(merchantId, docId) {
+      return request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasOnly(customerClientWritableFields()) &&
+        customerMerchantIdMatchesPath(merchantId) &&
+        customerIdMatchesPath(docId) &&
+        (!resource.data.keys().hasAny(['merchant_id']) ||
+          request.resource.data.merchant_id == resource.data.merchant_id) &&
+        (!resource.data.keys().hasAny(['id']) ||
+          request.resource.data.id == resource.data.id);
+    }
+
+    function saleClientWritableFields() {
+      return [
+        'id',
+        'merchant_id',
+        'customer_id',
+        'amount',
+        'points',
+        'created_at',
+        'updated_at',
+        'device_id',
+        'created_by_app_user_id',
+        'updated_by_app_user_id',
+        'synced'
+      ];
+    }
+
+    function saleMerchantIdMatchesPath(merchantId) {
+      return !request.resource.data.keys().hasAny(['merchant_id']) ||
+        request.resource.data.merchant_id == merchantId;
+    }
+
+    function saleIdMatchesPath(docId) {
+      return !request.resource.data.keys().hasAny(['id']) ||
+        request.resource.data.id == docId;
+    }
+
+    function saleHasRequiredShape() {
+      return request.resource.data.customer_id is string &&
+        request.resource.data.customer_id != '' &&
+        request.resource.data.amount is number &&
+        request.resource.data.amount > 0 &&
+        (!request.resource.data.keys().hasAny(['points']) ||
+          request.resource.data.points is number) &&
+        (!request.resource.data.keys().hasAny(['created_at']) ||
+          request.resource.data.created_at is number) &&
+        (!request.resource.data.keys().hasAny(['updated_at']) ||
+          request.resource.data.updated_at is number);
+    }
+
+    function saleCreateIsValid(merchantId, docId) {
+      return request.resource.data.keys().hasOnly(saleClientWritableFields()) &&
+        saleMerchantIdMatchesPath(merchantId) &&
+        saleIdMatchesPath(docId) &&
+        saleHasRequiredShape();
+    }
+
+    function saleUpdateIsValid(merchantId, docId) {
+      return request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasOnly(saleClientWritableFields()) &&
+        saleMerchantIdMatchesPath(merchantId) &&
+        saleIdMatchesPath(docId) &&
+        (!resource.data.keys().hasAny(['merchant_id']) ||
+          request.resource.data.merchant_id == resource.data.merchant_id) &&
+        (!resource.data.keys().hasAny(['id']) ||
+          request.resource.data.id == resource.data.id) &&
+        (
+          !resource.data.keys().hasAny(['confirmation_status']) ||
+          resource.data.confirmation_status != 'CONFIRMED' ||
+          request.resource.data.diff(resource.data)
+            .affectedKeys()
+            .hasOnly(['synced'])
+        ) &&
+        saleHasRequiredShape();
+    }
+
     match /businesses/{merchantId} {
       // Entry flow query by phone uses limit(1); keep narrow list access.
-      allow list: if isSignedIn() && request.query.limit != null && request.query.limit <= 1;
+      allow list: if canListBusinessDoc();
       allow get: if canAccessBusiness(merchantId) || canBootstrapBusinessRead(merchantId) || canReadLegacyBusiness(merchantId);
-      allow create: if canBootstrapBusiness(merchantId) || canAccessBusiness(merchantId);
-      allow update: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId) || canClaimLegacyBusiness(merchantId) || canClaimPhoneMatchedBusiness(merchantId);
-      allow delete: if isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId);
+      allow create: if isAdmin() || canBootstrapBusiness(merchantId);
+      allow update: if isAdmin() || canManageBusinessProfile(merchantId) || canClaimLegacyBusiness(merchantId) || canClaimPhoneMatchedBusiness(merchantId);
+      allow delete: if isAdmin() || isBusinessOwner(merchantId);
 
-      // Owner-only policy/config collections.
+      // Business-scoped collections. Server-owned collections remain read-only to clients.
       match /{collectionId}/{docId} {
-        allow read: if canAccessBusiness(merchantId);
+        allow read: if isReadableBusinessCollection(collectionId) && canAccessBusiness(merchantId);
 
-        allow write: if isOwnerOnlyCollection(collectionId) &&
-          (isAdmin() || hasOwnerClaim() || isBusinessOwner(merchantId));
+        allow create: if collectionId == 'customers' &&
+          canAccessBusiness(merchantId) &&
+          customerCreateIsValid(merchantId, docId);
+        allow update: if collectionId == 'customers' &&
+          canAccessBusiness(merchantId) &&
+          customerUpdateIsValid(merchantId, docId);
+        allow delete: if collectionId == 'customers' && canAccessBusiness(merchantId);
 
-        allow write: if isOperationalCollection(collectionId) &&
-          (canAccessBusiness(merchantId) || canBootstrapBusiness(merchantId));
+        allow create: if collectionId == 'sales' &&
+          canAccessBusiness(merchantId) &&
+          saleCreateIsValid(merchantId, docId);
+        allow update: if collectionId == 'sales' &&
+          canAccessBusiness(merchantId) &&
+          saleUpdateIsValid(merchantId, docId);
+
+        allow create, update, delete: if collectionId == 'app_users' &&
+          canManageAppUsers(merchantId);
+
+        allow create, update, delete: if isClientWritableOperationalCollection(collectionId) &&
+          collectionId != 'customers' &&
+          collectionId != 'sales' &&
+          collectionId != 'app_users' &&
+          canAccessBusiness(merchantId);
       }
+
+      match /loyalty_ledger/{docId} {
+        allow read: if canAccessBusiness(merchantId);
+        allow write: if false;
+      }
+
+      match /domain_events/{docId} {
+        allow read: if canAccessBusiness(merchantId);
+        allow write: if false;
+      }
+
+      match /retention_policies/{docId} {
+        allow read: if canAccessBusiness(merchantId);
+        allow write: if false;
+      }
+
+      match /customer_transitions/{docId} {
+        allow read: if canAccessBusiness(merchantId);
+        allow write: if false;
+      }
+
+      match /customer_recommendations/{docId} {
+        allow read: if canAccessBusiness(merchantId);
+        allow write: if false;
+      }
+    }
+
+    match /customer_identities/{docId} {
+      allow read, write: if false;
+    }
+
+    match /business_customer_identity_links/{docId} {
+      allow read, write: if false;
+    }
+
+    match /canonical_identity_business_links/{docId} {
+      allow read, write: if false;
     }
 
     // Global plan catalog used by onboarding/settings plan selectors.

@@ -25,6 +25,13 @@ mixin _$Sale {
   double get amount => throw _privateConstructorUsedError;
   int get points => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
+  DateTime? get updatedAt => throw _privateConstructorUsedError;
+  SaleConfirmationStatus get confirmationStatus =>
+      throw _privateConstructorUsedError;
+  int? get confirmedPoints => throw _privateConstructorUsedError;
+  DateTime? get confirmedAt => throw _privateConstructorUsedError;
+  String? get confirmationErrorCode => throw _privateConstructorUsedError;
+  int? get loyaltyPolicyVersion => throw _privateConstructorUsedError;
   List<SaleItem> get items => throw _privateConstructorUsedError;
   bool get synced => throw _privateConstructorUsedError;
 
@@ -48,6 +55,12 @@ abstract class $SaleCopyWith<$Res> {
       double amount,
       int points,
       DateTime createdAt,
+      DateTime? updatedAt,
+      SaleConfirmationStatus confirmationStatus,
+      int? confirmedPoints,
+      DateTime? confirmedAt,
+      String? confirmationErrorCode,
+      int? loyaltyPolicyVersion,
       List<SaleItem> items,
       bool synced});
 }
@@ -72,6 +85,12 @@ class _$SaleCopyWithImpl<$Res, $Val extends Sale>
     Object? amount = null,
     Object? points = null,
     Object? createdAt = null,
+    Object? updatedAt = freezed,
+    Object? confirmationStatus = null,
+    Object? confirmedPoints = freezed,
+    Object? confirmedAt = freezed,
+    Object? confirmationErrorCode = freezed,
+    Object? loyaltyPolicyVersion = freezed,
     Object? items = null,
     Object? synced = null,
   }) {
@@ -96,6 +115,30 @@ class _$SaleCopyWithImpl<$Res, $Val extends Sale>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      updatedAt: freezed == updatedAt
+          ? _value.updatedAt
+          : updatedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      confirmationStatus: null == confirmationStatus
+          ? _value.confirmationStatus
+          : confirmationStatus // ignore: cast_nullable_to_non_nullable
+              as SaleConfirmationStatus,
+      confirmedPoints: freezed == confirmedPoints
+          ? _value.confirmedPoints
+          : confirmedPoints // ignore: cast_nullable_to_non_nullable
+              as int?,
+      confirmedAt: freezed == confirmedAt
+          ? _value.confirmedAt
+          : confirmedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      confirmationErrorCode: freezed == confirmationErrorCode
+          ? _value.confirmationErrorCode
+          : confirmationErrorCode // ignore: cast_nullable_to_non_nullable
+              as String?,
+      loyaltyPolicyVersion: freezed == loyaltyPolicyVersion
+          ? _value.loyaltyPolicyVersion
+          : loyaltyPolicyVersion // ignore: cast_nullable_to_non_nullable
+              as int?,
       items: null == items
           ? _value.items
           : items // ignore: cast_nullable_to_non_nullable
@@ -121,6 +164,12 @@ abstract class _$$SaleImplCopyWith<$Res> implements $SaleCopyWith<$Res> {
       double amount,
       int points,
       DateTime createdAt,
+      DateTime? updatedAt,
+      SaleConfirmationStatus confirmationStatus,
+      int? confirmedPoints,
+      DateTime? confirmedAt,
+      String? confirmationErrorCode,
+      int? loyaltyPolicyVersion,
       List<SaleItem> items,
       bool synced});
 }
@@ -142,6 +191,12 @@ class __$$SaleImplCopyWithImpl<$Res>
     Object? amount = null,
     Object? points = null,
     Object? createdAt = null,
+    Object? updatedAt = freezed,
+    Object? confirmationStatus = null,
+    Object? confirmedPoints = freezed,
+    Object? confirmedAt = freezed,
+    Object? confirmationErrorCode = freezed,
+    Object? loyaltyPolicyVersion = freezed,
     Object? items = null,
     Object? synced = null,
   }) {
@@ -166,6 +221,30 @@ class __$$SaleImplCopyWithImpl<$Res>
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
               as DateTime,
+      updatedAt: freezed == updatedAt
+          ? _value.updatedAt
+          : updatedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      confirmationStatus: null == confirmationStatus
+          ? _value.confirmationStatus
+          : confirmationStatus // ignore: cast_nullable_to_non_nullable
+              as SaleConfirmationStatus,
+      confirmedPoints: freezed == confirmedPoints
+          ? _value.confirmedPoints
+          : confirmedPoints // ignore: cast_nullable_to_non_nullable
+              as int?,
+      confirmedAt: freezed == confirmedAt
+          ? _value.confirmedAt
+          : confirmedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      confirmationErrorCode: freezed == confirmationErrorCode
+          ? _value.confirmationErrorCode
+          : confirmationErrorCode // ignore: cast_nullable_to_non_nullable
+              as String?,
+      loyaltyPolicyVersion: freezed == loyaltyPolicyVersion
+          ? _value.loyaltyPolicyVersion
+          : loyaltyPolicyVersion // ignore: cast_nullable_to_non_nullable
+              as int?,
       items: null == items
           ? _value._items
           : items // ignore: cast_nullable_to_non_nullable
@@ -187,6 +266,12 @@ class _$SaleImpl extends _Sale {
       required this.amount,
       required this.points,
       required this.createdAt,
+      this.updatedAt,
+      this.confirmationStatus = SaleConfirmationStatus.pending,
+      this.confirmedPoints,
+      this.confirmedAt,
+      this.confirmationErrorCode,
+      this.loyaltyPolicyVersion,
       final List<SaleItem> items = const <SaleItem>[],
       this.synced = false})
       : _items = items,
@@ -205,6 +290,19 @@ class _$SaleImpl extends _Sale {
   final int points;
   @override
   final DateTime createdAt;
+  @override
+  final DateTime? updatedAt;
+  @override
+  @JsonKey()
+  final SaleConfirmationStatus confirmationStatus;
+  @override
+  final int? confirmedPoints;
+  @override
+  final DateTime? confirmedAt;
+  @override
+  final String? confirmationErrorCode;
+  @override
+  final int? loyaltyPolicyVersion;
   final List<SaleItem> _items;
   @override
   @JsonKey()
@@ -220,7 +318,7 @@ class _$SaleImpl extends _Sale {
 
   @override
   String toString() {
-    return 'Sale(id: $id, customerId: $customerId, amount: $amount, points: $points, createdAt: $createdAt, items: $items, synced: $synced)';
+    return 'Sale(id: $id, customerId: $customerId, amount: $amount, points: $points, createdAt: $createdAt, updatedAt: $updatedAt, confirmationStatus: $confirmationStatus, confirmedPoints: $confirmedPoints, confirmedAt: $confirmedAt, confirmationErrorCode: $confirmationErrorCode, loyaltyPolicyVersion: $loyaltyPolicyVersion, items: $items, synced: $synced)';
   }
 
   @override
@@ -235,14 +333,39 @@ class _$SaleImpl extends _Sale {
             (identical(other.points, points) || other.points == points) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt) &&
+            (identical(other.updatedAt, updatedAt) ||
+                other.updatedAt == updatedAt) &&
+            (identical(other.confirmationStatus, confirmationStatus) ||
+                other.confirmationStatus == confirmationStatus) &&
+            (identical(other.confirmedPoints, confirmedPoints) ||
+                other.confirmedPoints == confirmedPoints) &&
+            (identical(other.confirmedAt, confirmedAt) ||
+                other.confirmedAt == confirmedAt) &&
+            (identical(other.confirmationErrorCode, confirmationErrorCode) ||
+                other.confirmationErrorCode == confirmationErrorCode) &&
+            (identical(other.loyaltyPolicyVersion, loyaltyPolicyVersion) ||
+                other.loyaltyPolicyVersion == loyaltyPolicyVersion) &&
             const DeepCollectionEquality().equals(other._items, _items) &&
             (identical(other.synced, synced) || other.synced == synced));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, customerId, amount, points,
-      createdAt, const DeepCollectionEquality().hash(_items), synced);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      customerId,
+      amount,
+      points,
+      createdAt,
+      updatedAt,
+      confirmationStatus,
+      confirmedPoints,
+      confirmedAt,
+      confirmationErrorCode,
+      loyaltyPolicyVersion,
+      const DeepCollectionEquality().hash(_items),
+      synced);
 
   /// Create a copy of Sale
   /// with the given fields replaced by the non-null parameter values.
@@ -267,6 +390,12 @@ abstract class _Sale extends Sale {
       required final double amount,
       required final int points,
       required final DateTime createdAt,
+      final DateTime? updatedAt,
+      final SaleConfirmationStatus confirmationStatus,
+      final int? confirmedPoints,
+      final DateTime? confirmedAt,
+      final String? confirmationErrorCode,
+      final int? loyaltyPolicyVersion,
       final List<SaleItem> items,
       final bool synced}) = _$SaleImpl;
   const _Sale._() : super._();
@@ -283,6 +412,18 @@ abstract class _Sale extends Sale {
   int get points;
   @override
   DateTime get createdAt;
+  @override
+  DateTime? get updatedAt;
+  @override
+  SaleConfirmationStatus get confirmationStatus;
+  @override
+  int? get confirmedPoints;
+  @override
+  DateTime? get confirmedAt;
+  @override
+  String? get confirmationErrorCode;
+  @override
+  int? get loyaltyPolicyVersion;
   @override
   List<SaleItem> get items;
   @override

@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
-import { randomUUID } from 'crypto';
+import { createHash, createHmac, randomUUID } from 'crypto';
 import express from 'express';
+import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { Pool, type PoolClient } from 'pg';
@@ -179,6 +180,155 @@ const OWNER_ONLY_SYNC_ENTITIES = new Set([
   'app_user',
 ]);
 
+const CUSTOMER_IDENTITY_COLLECTION = 'customer_identities';
+const BUSINESS_CUSTOMER_LINK_COLLECTION = 'business_customer_identity_links';
+const CANONICAL_IDENTITY_BUSINESS_LINK_COLLECTION = 'canonical_identity_business_links';
+const LOYALTY_LEDGER_COLLECTION = 'loyalty_ledger';
+const DOMAIN_EVENT_COLLECTION = 'domain_events';
+const RETENTION_POLICY_COLLECTION = 'retention_policies';
+const CUSTOMER_TRANSITION_COLLECTION = 'customer_transitions';
+const CUSTOMER_RECOMMENDATION_COLLECTION = 'customer_recommendations';
+const RETENTION_POLICY_SCHEMA_VERSION = 1;
+const CLASSIFICATION_SCHEMA_VERSION = 1;
+const DOMAIN_EVENT_SCHEMA_VERSION = 1;
+const DEFAULT_RETENTION_SCAN_LIMIT = 100;
+const MAX_LEDGER_ENTRIES_PER_CUSTOMER = 5000;
+const LOYALTY_PROJECTION_VERSION = 2;
+const DEFAULT_LOYALTY_POINTS_PER_MZN = 100;
+const DEFAULT_LOYALTY_CONFIG_VERSION = 1;
+const CUSTOMER_CORE_SECRET_ENV = 'CUSTOMER_IDENTITY_HMAC_SECRET';
+const MOZAMBIQUE_PHONE_PREFIXES = new Set(['82', '83', '84', '85', '86', '87']);
+const CUSTOMER_SERVER_OWNED_FIELDS = [
+  'canonical_customer_id',
+  'canonical_lookup_key',
+  'canonical_phone_e164',
+  'canonical_phone_last4',
+  'canonical_linked_at',
+  'canonical_identity_version',
+  'canonical_link_status',
+  'canonical_link_error_code',
+  'canonical_link_error_message',
+  'canonical_link_error_at',
+  'account_state',
+  'relationship_status',
+  'lifecycle_stage',
+  'retention_status',
+  'first_visit_at',
+  'last_visit_at',
+  'total_visits',
+  'total_spent',
+  'average_spend',
+  'average_visit_interval_days',
+  'schema_version',
+  'confirmed_points',
+  'loyalty_projection_version',
+  'loyalty_projection_status',
+  'loyalty_backfill_required',
+  'loyalty_last_reconciled_at',
+  'loyalty_last_ledger_entry_at',
+  'classification_schema_version',
+  'classification_policy_version',
+  'classification_explanation',
+  'lifecycle_reasons',
+  'retention_reasons',
+  'classification_updated_at',
+  'classification_last_activity_at',
+  'pre_return_active_relationship',
+] as const;
+
+type LifecycleStage =
+  | 'NEW'
+  | 'ACTIVE'
+  | 'RETURNING'
+  | 'REGULAR'
+  | 'LOYAL'
+  | 'VIP'
+  | 'ADVOCATE';
+
+type RetentionStatus = 'HEALTHY' | 'AT_RISK' | 'INACTIVE' | 'LOST';
+
+type DomainEventType =
+  | 'CUSTOMER_CREATED'
+  | 'CUSTOMER_LINKED'
+  | 'FIRST_PURCHASE'
+  | 'CUSTOMER_VISITED'
+  | 'PURCHASE_COMPLETED'
+  | 'POINTS_EARNED'
+  | 'REWARD_REDEEMED'
+  | 'CUSTOMER_RETURNED'
+  | 'CUSTOMER_BECAME_REGULAR'
+  | 'CUSTOMER_BECAME_AT_RISK'
+  | 'CUSTOMER_BECAME_INACTIVE'
+  | 'CUSTOMER_REACTIVATED'
+  | 'SALE_CONFIRMED'
+  | 'REDEMPTION_CONFIRMED'
+  | 'CUSTOMER_LIFECYCLE_TRANSITIONED'
+  | 'CUSTOMER_RETENTION_TRANSITIONED';
+
+type DomainEventSourceType =
+  | 'customer_link'
+  | 'sale'
+  | 'redemption'
+  | 'classification'
+  | 'inactivity_scan';
+
+type DomainEventEnvelope = {
+  event_id: string;
+  event_type: DomainEventType;
+  schema_version: number;
+  merchant_id: string;
+  canonical_customer_id: string;
+  business_customer_id: string;
+  source: {
+    type: DomainEventSourceType;
+    id: string;
+  };
+  correlation_id: string;
+  causation_id: string | null;
+  occurred_at: number;
+  recorded_at: number;
+  payload: Record<string, unknown>;
+};
+
+type RetentionPolicy = {
+  schemaVersion: number;
+  version: number;
+  activeDays: number;
+  attentionDays: number;
+  riskDays: number;
+  returningVisits: number;
+  regularVisits: number;
+  loyalVisits: number;
+  vipSpendMzn: number;
+  advocateVisits: number;
+  advocateSpendMzn: number;
+};
+
+type CustomerClassification = {
+  lifecycle: LifecycleStage;
+  retention: RetentionStatus;
+  lifecycleReasons: string[];
+  retentionReasons: string[];
+  explanation: string;
+  daysSinceActivity: number | null;
+};
+const SALE_SERVER_OWNED_FIELDS = [
+  'confirmation_status',
+  'confirmed_points',
+  'confirmed_at',
+  'confirmation_error_code',
+  'loyalty_policy_version',
+  'confirmed_points_awarded',
+  'loyalty_ledger_entry_id',
+  'loyalty_points_per_mzn',
+  'loyalty_config_version',
+  'loyalty_status',
+  'loyalty_error_code',
+  'loyalty_error_message',
+  'loyalty_error_at',
+  'loyalty_processed_at',
+] as const;
+
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
@@ -216,7 +366,7 @@ app.use(async (req, res, next) => {
     const decoded = await admin.auth().verifyIdToken(token);
     const merchantId = resolveMerchantId(decoded);
     const adminAccess = isAdminPath(req) && hasAdminClaims(decoded);
-    if (!merchantId && !adminAccess) {
+    if (!merchantId && !adminAccess && !supportsBodyMerchantScope(req)) {
       return res
         .status(403)
         .json({ success: false, message: 'Missing merchant scope' });
@@ -864,7 +1014,214 @@ adminRouter.post('/plans/:planCode/features', async (req, res) => {
   }
 });
 
+adminRouter.post('/customer-core/business-customers/backfill', async (req, res) => {
+  try {
+    const result = await handleCustomerCoreBackfillRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+adminRouter.post('/loyalty/ledger/backfill', async (req, res) => {
+  try {
+    const result = await handleLoyaltyLedgerBackfillRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+adminRouter.post('/loyalty/ledger/reconcile', async (req, res) => {
+  try {
+    const result = await handleLoyaltyLedgerReconcileRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+adminRouter.post('/retention/policies', async (req, res) => {
+  try {
+    const result = await handleRetentionPolicyUpsertRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+adminRouter.post('/retention/classifications/scan', async (req, res) => {
+  try {
+    const result = await handleRetentionClassificationScanRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
 app.use('/admin', adminRouter);
+
+app.post('/customer-core/identities/lookup', async (req, res) => {
+  try {
+    const payload = requireBodyObject(req.body);
+    const merchantId = await resolveCustomerCoreMerchantId(
+      req as unknown as AuthedRequest,
+      payload,
+    );
+    const rawPhone = requirePayloadString(payload, 'phone');
+    const phoneE164 = normalizeMozambiquePhoneToE164(rawPhone);
+    const identity = await findCanonicalCustomerIdentity(phoneE164);
+
+    return res.json({
+      success: true,
+      found: identity != null,
+      data: identity
+        ? serializeCanonicalCustomerIdentity(identity)
+        : {
+            merchant_id: merchantId,
+            canonical_customer_id: buildCanonicalCustomerId(phoneE164),
+            phone_e164: phoneE164,
+            phone_last4: last4(phoneE164),
+          },
+    });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/customer-core/identities', async (req, res) => {
+  try {
+    const payload = requireBodyObject(req.body);
+    const merchantId = await resolveCustomerCoreMerchantId(
+      req as unknown as AuthedRequest,
+      payload,
+    );
+    const rawPhone = requirePayloadString(payload, 'phone');
+    const phoneE164 = normalizeMozambiquePhoneToE164(rawPhone);
+    const identity = await findOrCreateCanonicalCustomerIdentity(
+      merchantId,
+      phoneE164,
+    );
+
+    return res.json({
+      success: true,
+      created: identity.created,
+      data: {
+        merchant_id: merchantId,
+        ...serializeCanonicalCustomerIdentity(identity),
+      },
+    });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/customer-core/business-customers/link', async (req, res) => {
+  try {
+    const payload = requireBodyObject(req.body);
+    const merchantId = await resolveCustomerCoreMerchantId(
+      req as unknown as AuthedRequest,
+      payload,
+    );
+    const result = await handleBusinessCustomerLinkRequest(
+      req as unknown as AuthedRequest,
+      merchantId,
+      payload,
+    );
+
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/customer-core/business-customers/backfill', async (req, res) => {
+  try {
+    const result = await handleCustomerCoreBackfillRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/loyalty/ledger/backfill', async (req, res) => {
+  try {
+    const result = await handleLoyaltyLedgerBackfillRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/loyalty/ledger/reconcile', async (req, res) => {
+  try {
+    const result = await handleLoyaltyLedgerReconcileRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/loyalty/redemptions', async (req, res) => {
+  try {
+    const payload = requireBodyObject(req.body);
+    const result = await handleAssistedLoyaltyRedemptionRequest(
+      req as unknown as AuthedRequest,
+      payload,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/retention/policies', async (req, res) => {
+  try {
+    const result = await handleRetentionPolicyUpsertRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/retention/classifications/scan', async (req, res) => {
+  try {
+    const result = await handleRetentionClassificationScanRequest(
+      req as unknown as AuthedRequest,
+      req.body,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
 
 app.get('/sync/:entityType', async (req, res) => {
   const { entityType } = req.params;
@@ -1118,43 +1475,110 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
 });
 
 app.post('/notifications/queue', async (req, res) => {
-  const merchantId = (req as unknown as AuthedRequest).merchantId;
-  const channel = pickString(req.body ?? {}, 'channel');
-  const payload = (req.body ?? {}).payload;
-  const scheduledAtRaw = pickString(req.body ?? {}, 'scheduled_at');
-
-  if (!channel) {
-    return res.status(400).json({ success: false, message: 'Missing channel' });
-  }
-  if (!payload || typeof payload !== 'object') {
-    return res.status(400).json({ success: false, message: 'Invalid payload' });
-  }
-
-  const scheduledAt = scheduledAtRaw ? Date.parse(scheduledAtRaw) : Date.now();
-  if (!Number.isFinite(scheduledAt)) {
-    return res
-      .status(400)
-      .json({ success: false, message: 'Invalid scheduled_at' });
-  }
-
   try {
-    await admin
-      .firestore()
-      .collection('businesses')
-      .doc(merchantId)
-      .collection('notification_queue')
-      .add({
-        merchant_id: merchantId,
-        channel,
-        payload,
-        scheduled_at: scheduledAt,
-        status: 'queued',
-        created_at: Date.now(),
-      });
+    const body = requireBodyObject(req.body);
+    const merchantId = await resolveCustomerCoreMerchantId(
+      req as unknown as AuthedRequest,
+      body,
+    );
+    const notificationId = requirePayloadString(body, 'notification_id');
+    const channel = requirePayloadString(body, 'channel').toLowerCase();
+    const payloadRaw = body.payload;
+    if (!payloadRaw || typeof payloadRaw !== 'object') {
+      throw new CustomerCoreError(
+        400,
+        'notification_payload_invalid',
+        'Notification payload must be an object.',
+      );
+    }
+    const payload = payloadRaw as Record<string, unknown>;
+    const customerId = requirePayloadString(payload, 'customer_id');
+    const scheduledAtRaw = maybePayloadString(body, 'scheduled_at', 'scheduledAt');
+    const scheduledAt = scheduledAtRaw ? Date.parse(scheduledAtRaw) : Date.now();
+    if (!Number.isFinite(scheduledAt)) {
+      throw new CustomerCoreError(
+        400,
+        'notification_schedule_invalid',
+        'scheduled_at must be a valid date.',
+      );
+    }
+    if (channel !== 'whatsapp') {
+      throw new CustomerCoreError(
+        400,
+        'notification_channel_unsupported',
+        'Only WhatsApp queueing is currently supported.',
+      );
+    }
 
-    return res.json({ success: true });
+    const customerSnapshot = await businessCustomerRef(merchantId, customerId).get();
+    if (!customerSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'notification_customer_not_found',
+        'Business customer not found.',
+        { merchant_id: merchantId, customer_id: customerId },
+      );
+    }
+    const customerData = snapshotDataRecord(customerSnapshot);
+    if (
+      maybePayloadString(customerData, 'whatsapp_consent_status')?.toUpperCase() !==
+      'GRANTED'
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'notification_consent_required',
+        'WhatsApp consent is required before queueing this notification.',
+        { merchant_id: merchantId, customer_id: customerId },
+      );
+    }
+    const customerPhone = requirePayloadString(customerData, 'phone');
+    const normalizedPayload = {
+      ...payload,
+      customer_id: customerId,
+      phone: normalizeMozambiquePhoneToE164(customerPhone),
+    };
+    const notificationRef = businessDocumentRef(merchantId)
+      .collection('notification_queue')
+      .doc(notificationId);
+    const idempotentReplay = await admin.firestore().runTransaction(
+      async (transaction) => {
+        const existing = await transaction.get(notificationRef);
+        if (existing.exists) {
+          const existingData = snapshotDataRecord(existing);
+          if (
+            maybePayloadString(existingData, 'merchant_id') !== merchantId ||
+            maybePayloadString(existingData, 'customer_id') !== customerId
+          ) {
+            throw new CustomerCoreError(
+              409,
+              'notification_idempotency_conflict',
+              'notification_id was already used for another customer.',
+            );
+          }
+          return true;
+        }
+        transaction.create(notificationRef, {
+          id: notificationId,
+          client_notification_id: notificationId,
+          merchant_id: merchantId,
+          customer_id: customerId,
+          channel,
+          payload: normalizedPayload,
+          scheduled_at: scheduledAt,
+          status: 'queued',
+          created_at: Date.now(),
+        });
+        return false;
+      },
+    );
+
+    return res.json({
+      success: true,
+      notification_id: notificationId,
+      idempotent_replay: idempotentReplay,
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Server error' });
+    return respondCustomerCoreError(res, error);
   }
 });
 
@@ -1788,6 +2212,166 @@ app.get('/engage/analytics', async (req, res) => {
 
 export const api = onRequest({ cors: true }, app);
 
+export const customerCoreCanonicalLinkOnCustomerWrite = onDocumentWritten(
+  'businesses/{merchantId}/customers/{customerId}',
+  async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+      ? event.params.merchantId.trim()
+      : '';
+    const customerId = isNonEmptyString(event.params.customerId)
+      ? event.params.customerId.trim()
+      : '';
+    if (!merchantId || !customerId) {
+      return;
+    }
+
+    const beforeSnapshot = event.data?.before;
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) {
+      return;
+    }
+
+    const beforeData = beforeSnapshot?.exists
+      ? snapshotDataRecord(beforeSnapshot)
+      : {};
+    const afterData = snapshotDataRecord(afterSnapshot);
+    if (
+      beforeSnapshot?.exists &&
+      shouldIgnoreCustomerCanonicalProjectionWrite(beforeData, afterData)
+    ) {
+      return;
+    }
+
+    try {
+      await linkCanonicalCustomerToBusinessCustomer({
+        merchantId,
+        customerId,
+        rawPhone: maybePayloadString(afterData, 'phone'),
+        customerName: maybePayloadString(afterData, 'name'),
+        createCustomerIfMissing: false,
+        dryRun: false,
+      });
+    } catch (error) {
+      if (error instanceof CustomerCoreError) {
+        if (error.code.startsWith('retention_')) {
+          console.error('retention_classification_after_link_error', {
+            merchant_id: merchantId,
+            customer_id: customerId,
+            code: error.code,
+            message: error.message,
+            details: error.details,
+          });
+          throw error;
+        }
+        console.error('customer_core_trigger_error', {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        });
+        await afterSnapshot.ref.set({
+          canonical_link_status: 'ERROR',
+          canonical_link_error_code: error.code,
+          canonical_link_error_message: error.message,
+          canonical_link_error_at: Date.now(),
+        }, { merge: true });
+        return;
+      }
+      throw error;
+    }
+  },
+);
+
+export const loyaltyLedgerSaleOnSaleWrite = onDocumentWritten(
+  'businesses/{merchantId}/sales/{saleId}',
+  async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+      ? event.params.merchantId.trim()
+      : '';
+    const saleId = isNonEmptyString(event.params.saleId)
+      ? event.params.saleId.trim()
+      : '';
+    if (!merchantId || !saleId) {
+      return;
+    }
+
+    const beforeSnapshot = event.data?.before;
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists) {
+      return;
+    }
+
+    const beforeData = beforeSnapshot?.exists
+      ? snapshotDataRecord(beforeSnapshot)
+      : {};
+    const afterData = snapshotDataRecord(afterSnapshot);
+    if (beforeSnapshot?.exists && shouldIgnoreSaleProjectionWrite(beforeData, afterData)) {
+      return;
+    }
+
+    try {
+      await applySaleToLoyaltyLedger({
+        merchantId,
+        saleId,
+        saleSnapshot: afterSnapshot,
+        allowLegacyBootstrap: false,
+        saleUpdateMode: 'trigger',
+      });
+    } catch (error) {
+      if (error instanceof CustomerCoreError) {
+        if (error.code.startsWith('retention_')) {
+          console.error('retention_classification_after_sale_error', {
+            merchant_id: merchantId,
+            sale_id: saleId,
+            code: error.code,
+            message: error.message,
+            details: error.details,
+          });
+          throw error;
+        }
+        console.error('loyalty_sale_trigger_error', {
+          merchant_id: merchantId,
+          sale_id: saleId,
+          code: error.code,
+          message: error.message,
+          details: error.details,
+        });
+        await afterSnapshot.ref.set({
+          confirmation_status:
+            error.code === 'loyalty_backfill_required'
+              ? 'BASELINE_REQUIRED'
+              : 'REJECTED',
+          confirmation_error_code: error.code,
+          confirmed_at: admin.firestore.FieldValue.delete(),
+          confirmed_points: admin.firestore.FieldValue.delete(),
+          updated_at: Date.now(),
+          loyalty_policy_version: admin.firestore.FieldValue.delete(),
+          confirmed_points_awarded: admin.firestore.FieldValue.delete(),
+          loyalty_ledger_entry_id: admin.firestore.FieldValue.delete(),
+          loyalty_points_per_mzn: admin.firestore.FieldValue.delete(),
+          loyalty_config_version: admin.firestore.FieldValue.delete(),
+          loyalty_status: admin.firestore.FieldValue.delete(),
+          loyalty_error_code: admin.firestore.FieldValue.delete(),
+          loyalty_error_message: admin.firestore.FieldValue.delete(),
+          loyalty_error_at: admin.firestore.FieldValue.delete(),
+          loyalty_processed_at: admin.firestore.FieldValue.delete(),
+        }, { merge: true });
+        const customerId = maybePayloadString(afterData, 'customer_id', 'customerId');
+        if (customerId && error.code === 'loyalty_backfill_required') {
+          await businessCustomerRef(merchantId, customerId).set({
+            loyalty_projection_status: 'BACKFILL_REQUIRED',
+            loyalty_backfill_required: true,
+            loyalty_last_reconciled_at: Date.now(),
+          }, { merge: true });
+        }
+        return;
+      }
+      throw error;
+    }
+  },
+);
+
 function resolveMerchantId(decoded: admin.auth.DecodedIdToken): string | null {
   const claims = decoded as Record<string, unknown>;
   const fromClaims =
@@ -1855,6 +2439,13 @@ function isAdminPath(req: express.Request): boolean {
   return req.path === '/admin' || req.path.startsWith('/admin/');
 }
 
+function supportsBodyMerchantScope(req: express.Request): boolean {
+  return req.path.startsWith('/customer-core/') ||
+    req.path.startsWith('/loyalty/') ||
+    req.path.startsWith('/retention/') ||
+    req.path.startsWith('/notifications/');
+}
+
 function isOwnerRequest(req: AuthedRequest): boolean {
   const role = req.appUserRole?.trim().toUpperCase();
   return role == null || role.length === 0 || role === 'OWNER';
@@ -1901,6 +2492,77 @@ function pickBoolean(payload: Record<string, unknown>, key: string): boolean | n
   return null;
 }
 
+export const retentionDomainEventPostgresProjection = onDocumentWritten(
+  'businesses/{merchantId}/domain_events/{eventId}',
+  async (event) => {
+    const beforeSnapshot = event.data?.before;
+    const afterSnapshot = event.data?.after;
+    if (beforeSnapshot?.exists || !afterSnapshot?.exists) {
+      return;
+    }
+
+    const merchantId = isNonEmptyString(event.params.merchantId)
+      ? event.params.merchantId.trim()
+      : '';
+    const eventId = isNonEmptyString(event.params.eventId)
+      ? event.params.eventId.trim()
+      : '';
+    const data = snapshotDataRecord(afterSnapshot);
+    if (
+      !merchantId ||
+      !eventId ||
+      maybePayloadString(data, 'event_id') !== eventId ||
+      maybePayloadString(data, 'merchant_id') !== merchantId
+    ) {
+      throw new Error('Invalid retention domain event path identity.');
+    }
+
+    const sourceRaw = data.source;
+    const source = sourceRaw != null && typeof sourceRaw === 'object'
+      ? sourceRaw as Record<string, unknown>
+      : {};
+    await pool.query(
+      `
+        INSERT INTO retention_domain_events (
+          event_id,
+          event_type,
+          schema_version,
+          merchant_id,
+          canonical_customer_id,
+          business_customer_id,
+          source_type,
+          source_id,
+          correlation_id,
+          causation_id,
+          occurred_at,
+          recorded_at,
+          payload,
+          projected_at
+        ) VALUES (
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14
+        )
+        ON CONFLICT (event_id) DO NOTHING
+      `,
+      [
+        eventId,
+        maybePayloadString(data, 'event_type'),
+        pickNumber(data, 'schema_version'),
+        merchantId,
+        maybePayloadString(data, 'canonical_customer_id'),
+        maybePayloadString(data, 'business_customer_id'),
+        maybePayloadString(source, 'type'),
+        maybePayloadString(source, 'id'),
+        maybePayloadString(data, 'correlation_id'),
+        maybePayloadString(data, 'causation_id'),
+        pickNumber(data, 'occurred_at'),
+        pickNumber(data, 'recorded_at'),
+        JSON.stringify(data.payload ?? {}),
+        Date.now(),
+      ],
+    );
+  },
+);
+
 function pickHeaderString(value: string | string[] | undefined): string | null {
   if (typeof value === 'string' && value.trim().length > 0) {
     return value.trim();
@@ -1925,6 +2587,4073 @@ function pickQueryString(value: unknown): string | null {
     return typeof first === 'string' ? first.trim() : null;
   }
   return null;
+}
+
+type CanonicalCustomerIdentity = {
+  canonicalCustomerId: string;
+  phoneE164: string;
+  phoneLast4: string;
+  createdAt: number;
+  updatedAt: number;
+  created: boolean;
+};
+
+type BusinessCustomerLinkResult = {
+  merchant_id: string;
+  customer_id: string;
+  canonical_customer_id: string;
+  phone_e164: string;
+  phone_last4: string;
+  customer_created: boolean;
+  identity_created: boolean;
+  link_created: boolean;
+  customer_path: string;
+  dry_run?: boolean;
+};
+
+class CustomerCoreError extends Error {
+  status: number;
+  code: string;
+  details?: Record<string, unknown>;
+
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = 'CustomerCoreError';
+    this.status = status;
+    this.code = code;
+    this.details = details;
+  }
+}
+
+function respondCustomerCoreError(res: express.Response, error: unknown) {
+  if (error instanceof CustomerCoreError) {
+    return res.status(error.status).json({
+      success: false,
+      code: error.code,
+      message: error.message,
+      ...(error.details ? { details: error.details } : {}),
+    });
+  }
+
+  console.error('customer_core_error', error);
+  return res.status(500).json({
+    success: false,
+    code: 'customer_core_internal',
+    message: 'Server error',
+  });
+}
+
+function requireBodyObject(body: unknown): Record<string, unknown> {
+  if (body == null || typeof body !== 'object' || Array.isArray(body)) {
+    throw new CustomerCoreError(400, 'invalid_payload', 'Invalid payload.');
+  }
+  return body as Record<string, unknown>;
+}
+
+function maybePayloadString(
+  payload: Record<string, unknown>,
+  ...keys: string[]
+): string | null {
+  for (const key of keys) {
+    const value = pickString(payload, key);
+    if (value) return value;
+  }
+  return null;
+}
+
+function maybePayloadBoolean(
+  payload: Record<string, unknown>,
+  ...keys: string[]
+): boolean | null {
+  for (const key of keys) {
+    const value = pickBoolean(payload, key);
+    if (value != null) return value;
+  }
+  return null;
+}
+
+function requirePayloadString(
+  payload: Record<string, unknown>,
+  key: string,
+): string {
+  const value = pickString(payload, key);
+  if (!value) {
+    throw new CustomerCoreError(
+      400,
+      'missing_field',
+      `Missing required field: ${key}.`,
+    );
+  }
+  return value;
+}
+
+function requireCustomerCoreSecret(): string {
+  const secret = process.env[CUSTOMER_CORE_SECRET_ENV];
+  if (typeof secret !== 'string' || secret.trim().length < 16) {
+    throw new CustomerCoreError(
+      500,
+      'customer_core_secret_missing',
+      `Set ${CUSTOMER_CORE_SECRET_ENV} before using customer core routes.`,
+    );
+  }
+  return secret;
+}
+
+function normalizeMozambiquePhoneToE164(raw: string): string {
+  const clean = raw.trim().replace(/[\s-]/g, '');
+  let local: string | null = null;
+
+  if (clean.startsWith('+258')) {
+    local = clean.substring(4);
+  } else if (clean.startsWith('258') && clean.length === 12) {
+    local = clean.substring(3);
+  } else if (clean.length === 9) {
+    local = clean;
+  }
+
+  if (
+    local &&
+    /^[0-9]{9}$/.test(local) &&
+    MOZAMBIQUE_PHONE_PREFIXES.has(local.substring(0, 2))
+  ) {
+    return `+258${local}`;
+  }
+
+  throw new CustomerCoreError(
+    400,
+    'invalid_phone',
+    'Use a valid Mozambique phone number in 8X XXX XXXX or +258XXXXXXXXX format.',
+    { phone: raw },
+  );
+}
+
+function tryNormalizeMozambiquePhoneToE164(raw: unknown): string | null {
+  if (!isNonEmptyString(raw)) return null;
+  try {
+    return normalizeMozambiquePhoneToE164(raw);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeMozambiquePhoneToLocal(raw: string): string {
+  return normalizeMozambiquePhoneToE164(raw).substring(4);
+}
+
+function buildCanonicalCustomerId(phoneE164: string): string {
+  const secret = requireCustomerCoreSecret();
+  return createHmac('sha256', secret)
+    .update(`moz-phone-e164-v1:${phoneE164}`)
+    .digest('hex');
+}
+
+function serializeCanonicalCustomerIdentity(
+  identity: CanonicalCustomerIdentity,
+): Record<string, unknown> {
+  return {
+    canonical_customer_id: identity.canonicalCustomerId,
+    lookup_key: identity.canonicalCustomerId,
+    phone_e164: identity.phoneE164,
+    phone_last4: identity.phoneLast4,
+    created_at: identity.createdAt,
+    updated_at: identity.updatedAt,
+  };
+}
+
+function last4(value: string): string {
+  return value.slice(-4);
+}
+
+function snapshotDataRecord(
+  snapshot: admin.firestore.DocumentSnapshot,
+): Record<string, unknown> {
+  const data = snapshot.data();
+  if (data == null || typeof data !== 'object') {
+    return {};
+  }
+  return data as Record<string, unknown>;
+}
+
+function buildCompoundKey(...parts: string[]): string {
+  return parts
+    .map((part) => Buffer.from(part, 'utf8').toString('base64url'))
+    .join('__');
+}
+
+function valuesEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (left == null || right == null) return left === right;
+  if (typeof left === 'object' || typeof right === 'object') {
+    try {
+      return JSON.stringify(left) === JSON.stringify(right);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function changedKeys(
+  beforeData: Record<string, unknown>,
+  afterData: Record<string, unknown>,
+): string[] {
+  const keys = new Set<string>([
+    ...Object.keys(beforeData),
+    ...Object.keys(afterData),
+  ]);
+  return [...keys].filter((key) => !valuesEqual(beforeData[key], afterData[key]));
+}
+
+function shouldIgnoreCustomerCanonicalProjectionWrite(
+  beforeData: Record<string, unknown>,
+  afterData: Record<string, unknown>,
+): boolean {
+  const changed = changedKeys(beforeData, afterData);
+  return changed.length > 0 && changed.every(
+    (key) => key === 'updated_at' || CUSTOMER_SERVER_OWNED_FIELDS.includes(
+      key as (typeof CUSTOMER_SERVER_OWNED_FIELDS)[number],
+    ),
+  );
+}
+
+function shouldIgnoreSaleProjectionWrite(
+  beforeData: Record<string, unknown>,
+  afterData: Record<string, unknown>,
+): boolean {
+  const changed = changedKeys(beforeData, afterData);
+  return changed.length > 0 && changed.every((key) =>
+    key === 'updated_at' ||
+    SALE_SERVER_OWNED_FIELDS.includes(key as (typeof SALE_SERVER_OWNED_FIELDS)[number]),
+  );
+}
+
+function buildDefaultBusinessCustomerId(canonicalCustomerId: string): string {
+  return `cust_${canonicalCustomerId.substring(0, 24)}`;
+}
+
+function setIfMissingString(
+  patch: Record<string, unknown>,
+  source: Record<string, unknown>,
+  key: string,
+  value: string,
+) {
+  if (maybePayloadString(source, key) == null) {
+    patch[key] = value;
+  }
+}
+
+function setIfMissingNumber(
+  patch: Record<string, unknown>,
+  source: Record<string, unknown>,
+  key: string,
+  value: number,
+) {
+  if (pickNumber(source, key) == null) {
+    patch[key] = value;
+  }
+}
+
+function canonicalCustomerIdentityRef(canonicalCustomerId: string) {
+  return admin.firestore().collection(CUSTOMER_IDENTITY_COLLECTION).doc(canonicalCustomerId);
+}
+
+function businessCustomerRef(merchantId: string, customerId: string) {
+  return admin
+    .firestore()
+    .collection('businesses')
+    .doc(merchantId)
+    .collection('customers')
+    .doc(customerId);
+}
+
+function businessCustomerLinkRef(merchantId: string, customerId: string) {
+  return admin
+    .firestore()
+    .collection(BUSINESS_CUSTOMER_LINK_COLLECTION)
+    .doc(buildCompoundKey(merchantId, customerId));
+}
+
+function canonicalIdentityBusinessLinkRef(
+  merchantId: string,
+  canonicalCustomerId: string,
+) {
+  return admin
+    .firestore()
+    .collection(CANONICAL_IDENTITY_BUSINESS_LINK_COLLECTION)
+    .doc(buildCompoundKey(merchantId, canonicalCustomerId));
+}
+
+function requestHasMerchantClaim(
+  decoded: admin.auth.DecodedIdToken | undefined,
+  merchantId: string,
+): boolean {
+  if (!decoded) return false;
+  const claims = decoded as Record<string, unknown>;
+  const directClaim =
+    typeof claims.merchant_id === 'string'
+      ? claims.merchant_id
+      : typeof claims.merchantId === 'string'
+        ? claims.merchantId
+        : null;
+  if (directClaim === merchantId) return true;
+
+  const merchantIds = claims.merchant_ids;
+  if (Array.isArray(merchantIds) && merchantIds.includes(merchantId)) {
+    return true;
+  }
+  const merchantIdsAlt = claims.merchantIds;
+  if (Array.isArray(merchantIdsAlt) && merchantIdsAlt.includes(merchantId)) {
+    return true;
+  }
+  return false;
+}
+
+function requestMatchesBusinessOwner(
+  req: AuthedRequest,
+  businessData: Record<string, unknown>,
+): boolean {
+  const authUid = req.auth?.uid;
+  const ownerUserId = maybePayloadString(businessData, 'owner_user_id', 'ownerUserId');
+  const firebaseUid = maybePayloadString(businessData, 'firebase_uid', 'firebaseUid');
+  if (authUid && (ownerUserId === authUid || firebaseUid === authUid)) {
+    return true;
+  }
+  if (req.appUserId && ownerUserId === req.appUserId) {
+    return true;
+  }
+
+  const businessPhone = tryNormalizeMozambiquePhoneToE164(
+    maybePayloadString(businessData, 'phone'),
+  );
+  const authPhone = tryNormalizeMozambiquePhoneToE164(req.auth?.phone_number);
+  return businessPhone != null && authPhone != null && businessPhone === authPhone;
+}
+
+function buildPhoneSearchCandidates(rawPhone: string, phoneE164: string): string[] {
+  const values = new Set<string>();
+  const trimmed = rawPhone.trim();
+  if (trimmed.length > 0) {
+    values.add(trimmed);
+  }
+  values.add(phoneE164);
+  values.add(normalizeMozambiquePhoneToLocal(phoneE164));
+  return [...values];
+}
+
+async function requestHasBusinessMembership(
+  req: AuthedRequest,
+  merchantId: string,
+): Promise<boolean> {
+  const authPhone = req.auth?.phone_number;
+  const normalizedPhone = tryNormalizeMozambiquePhoneToE164(authPhone);
+  if (!normalizedPhone || !authPhone) {
+    return false;
+  }
+
+  const candidates = buildPhoneSearchCandidates(authPhone, normalizedPhone);
+  const appUsersRef = admin
+    .firestore()
+    .collection('businesses')
+    .doc(merchantId)
+    .collection('app_users');
+
+  for (const candidate of candidates) {
+    const snapshot = await appUsersRef.where('phone', '==', candidate).limit(5).get();
+    const hasActiveMembership = snapshot.docs.some((doc) => {
+      const data = snapshotDataRecord(doc);
+      const status = maybePayloadString(data, 'status');
+      return status !== 'INACTIVE';
+    });
+    if (hasActiveMembership) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function requestCanAccessMerchant(
+  req: AuthedRequest,
+  merchantId: string,
+): Promise<boolean> {
+  if (isAdminRequest(req)) return true;
+  if (!req.auth || !merchantId.trim()) return false;
+  if (requestHasMerchantClaim(req.auth, merchantId)) {
+    return true;
+  }
+
+  const businessSnapshot = await admin
+    .firestore()
+    .collection('businesses')
+    .doc(merchantId)
+    .get();
+  if (!businessSnapshot.exists) {
+    return false;
+  }
+
+  const businessData = snapshotDataRecord(businessSnapshot);
+  if (requestMatchesBusinessOwner(req, businessData)) {
+    return true;
+  }
+
+  return requestHasBusinessMembership(req, merchantId);
+}
+
+async function resolveCustomerCoreMerchantId(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<string> {
+  const requestedMerchantId = maybePayloadString(payload, 'merchant_id', 'merchantId');
+  if (isAdminRequest(req)) {
+    if (!requestedMerchantId) {
+      throw new CustomerCoreError(
+        400,
+        'merchant_scope_required',
+        'merchant_id is required for admin customer core requests.',
+      );
+    }
+    return requestedMerchantId;
+  }
+
+  const merchantId = requestedMerchantId ?? req.merchantId;
+  if (!merchantId) {
+    throw new CustomerCoreError(
+      403,
+      'merchant_scope_required',
+      'Missing merchant scope.',
+    );
+  }
+
+  if (!(await requestCanAccessMerchant(req, merchantId))) {
+    throw new CustomerCoreError(
+      403,
+      'merchant_access_denied',
+      'Authenticated user is not allowed to access the requested business.',
+      { merchant_id: merchantId },
+    );
+  }
+
+  return merchantId;
+}
+
+async function findCanonicalCustomerIdentity(
+  phoneE164: string,
+): Promise<CanonicalCustomerIdentity | null> {
+  const canonicalCustomerId = buildCanonicalCustomerId(phoneE164);
+  const snapshot = await canonicalCustomerIdentityRef(canonicalCustomerId).get();
+  if (!snapshot.exists) {
+    return null;
+  }
+
+  const data = snapshotDataRecord(snapshot);
+  const createdAt = pickNumber(data, 'created_at') ?? Date.now();
+  const updatedAt = pickNumber(data, 'updated_at') ?? createdAt;
+  return {
+    canonicalCustomerId,
+    phoneE164: maybePayloadString(data, 'phone_e164') ?? phoneE164,
+    phoneLast4: maybePayloadString(data, 'phone_last4') ?? last4(phoneE164),
+    createdAt,
+    updatedAt,
+    created: false,
+  };
+}
+
+async function findOrCreateCanonicalCustomerIdentity(
+  merchantId: string,
+  phoneE164: string,
+): Promise<CanonicalCustomerIdentity> {
+  const canonicalCustomerId = buildCanonicalCustomerId(phoneE164);
+  const now = Date.now();
+
+  const result = await admin.firestore().runTransaction(async (transaction) => {
+    const identityRef = canonicalCustomerIdentityRef(canonicalCustomerId);
+    const snapshot = await transaction.get(identityRef);
+    if (snapshot.exists) {
+      const data = snapshotDataRecord(snapshot);
+      const createdAt = pickNumber(data, 'created_at') ?? now;
+      const updatedAt = pickNumber(data, 'updated_at') ?? createdAt;
+      return {
+        canonicalCustomerId,
+        phoneE164: maybePayloadString(data, 'phone_e164') ?? phoneE164,
+        phoneLast4: maybePayloadString(data, 'phone_last4') ?? last4(phoneE164),
+        createdAt,
+        updatedAt,
+        created: false,
+      };
+    }
+
+    transaction.set(identityRef, {
+      id: canonicalCustomerId,
+      lookup_key: canonicalCustomerId,
+      phone_e164: phoneE164,
+      phone_last4: last4(phoneE164),
+      country_code: 'MZ',
+      identity_version: 1,
+      created_at: now,
+      updated_at: now,
+      created_by_merchant_id: merchantId,
+      last_linked_merchant_id: merchantId,
+      last_linked_at: now,
+    });
+
+    return {
+      canonicalCustomerId,
+      phoneE164,
+      phoneLast4: last4(phoneE164),
+      createdAt: now,
+      updatedAt: now,
+      created: true,
+    };
+  });
+  return result;
+}
+
+async function findMatchingBusinessCustomers(
+  merchantId: string,
+  rawPhone: string,
+  phoneE164: string,
+): Promise<admin.firestore.QueryDocumentSnapshot[]> {
+  const candidates = buildPhoneSearchCandidates(rawPhone, phoneE164);
+  const customersRef = admin
+    .firestore()
+    .collection('businesses')
+    .doc(merchantId)
+    .collection('customers');
+  const matches = new Map<string, admin.firestore.QueryDocumentSnapshot>();
+
+  for (const candidate of candidates) {
+    const snapshot = await customersRef.where('phone', '==', candidate).limit(25).get();
+    for (const doc of snapshot.docs) {
+      const data = snapshotDataRecord(doc);
+      const candidatePhoneE164 = tryNormalizeMozambiquePhoneToE164(
+        maybePayloadString(data, 'phone'),
+      );
+      if (candidatePhoneE164 === phoneE164) {
+        matches.set(doc.id, doc);
+      }
+    }
+  }
+
+  return [...matches.values()];
+}
+
+async function handleBusinessCustomerLinkRequest(
+  _req: AuthedRequest,
+  merchantId: string,
+  payload: Record<string, unknown>,
+): Promise<BusinessCustomerLinkResult> {
+  const customerId = maybePayloadString(payload, 'customer_id', 'customerId');
+  const rawPhone = maybePayloadString(payload, 'phone');
+  const customerName = maybePayloadString(
+    payload,
+    'customer_name',
+    'customerName',
+    'name',
+  );
+  const createCustomerIfMissing =
+    maybePayloadBoolean(payload, 'create_customer_if_missing', 'createCustomerIfMissing') ??
+    false;
+  const dryRun = maybePayloadBoolean(payload, 'dry_run', 'dryRun') ?? false;
+
+  if (!customerId && !rawPhone) {
+    throw new CustomerCoreError(
+      400,
+      'customer_locator_required',
+      'Provide customer_id or phone to link a business customer.',
+    );
+  }
+
+  return linkCanonicalCustomerToBusinessCustomer({
+    merchantId,
+    customerId,
+    rawPhone,
+    customerName,
+    createCustomerIfMissing,
+    dryRun,
+  });
+}
+
+async function linkCanonicalCustomerToBusinessCustomer(options: {
+  merchantId: string;
+  customerId: string | null;
+  rawPhone: string | null;
+  customerName: string | null;
+  createCustomerIfMissing: boolean;
+  dryRun: boolean;
+}): Promise<BusinessCustomerLinkResult & {
+  classification?: Record<string, unknown>;
+  domain_event_id?: string;
+  domain_event_type?: DomainEventType;
+}> {
+  const { merchantId, rawPhone, customerName, createCustomerIfMissing, dryRun } = options;
+  let customerId = options.customerId;
+  let customerSnapshot: admin.firestore.DocumentSnapshot | null = null;
+  let customerData: Record<string, unknown> = {};
+  let phoneE164 = rawPhone ? normalizeMozambiquePhoneToE164(rawPhone) : null;
+
+  if (customerId) {
+    customerSnapshot = await businessCustomerRef(merchantId, customerId).get();
+    if (customerSnapshot.exists) {
+      customerData = snapshotDataRecord(customerSnapshot);
+    } else if (!createCustomerIfMissing) {
+      throw new CustomerCoreError(
+        404,
+        'business_customer_not_found',
+        'Business customer not found.',
+        { merchant_id: merchantId, customer_id: customerId },
+      );
+    }
+  }
+
+  const existingCustomerPhone = maybePayloadString(customerData, 'phone');
+  const existingCustomerCanonicalId = maybePayloadString(
+    customerData,
+    'canonical_customer_id',
+    'canonicalCustomerId',
+  );
+  const existingCustomerPhoneE164 = tryNormalizeMozambiquePhoneToE164(existingCustomerPhone);
+
+  if (phoneE164 == null && existingCustomerPhoneE164 != null) {
+    phoneE164 = existingCustomerPhoneE164;
+  }
+
+  if (phoneE164 == null && existingCustomerCanonicalId) {
+    const existingIdentity = await canonicalCustomerIdentityRef(
+      existingCustomerCanonicalId,
+    ).get();
+    if (existingIdentity.exists) {
+      const identityData = snapshotDataRecord(existingIdentity);
+      phoneE164 = maybePayloadString(identityData, 'phone_e164');
+    }
+  }
+
+  if (phoneE164 == null) {
+    throw new CustomerCoreError(
+      400,
+      'customer_phone_required',
+      'A valid Mozambique phone number is required to resolve canonical identity.',
+      { merchant_id: merchantId, customer_id: customerId },
+    );
+  }
+
+  if (
+    existingCustomerPhoneE164 != null &&
+    existingCustomerPhoneE164 !== phoneE164
+  ) {
+    throw new CustomerCoreError(
+      409,
+      'business_customer_phone_conflict',
+      'Existing business customer phone does not match the requested canonical phone.',
+      {
+        merchant_id: merchantId,
+        customer_id: customerId,
+        existing_phone_e164: existingCustomerPhoneE164,
+        requested_phone_e164: phoneE164,
+      },
+    );
+  }
+
+  const canonicalIdentity = await findCanonicalCustomerIdentity(phoneE164);
+  const canonicalCustomerId =
+    canonicalIdentity?.canonicalCustomerId ?? buildCanonicalCustomerId(phoneE164);
+  const phoneLast4 = last4(phoneE164);
+
+  if (!customerId) {
+    const matches = await findMatchingBusinessCustomers(
+      merchantId,
+      rawPhone ?? phoneE164,
+      phoneE164,
+    );
+    if (matches.length > 1) {
+      throw new CustomerCoreError(
+        409,
+        'business_customer_ambiguity',
+        'Multiple business customers share the same normalized phone. Resolve the duplicate customer records first.',
+        {
+          merchant_id: merchantId,
+          canonical_customer_id: canonicalCustomerId,
+          candidate_customer_ids: matches.map((doc) => doc.id),
+        },
+      );
+    }
+
+    if (matches.length === 1) {
+      customerSnapshot = matches[0];
+      customerId = matches[0].id;
+      customerData = snapshotDataRecord(matches[0]);
+    } else if (createCustomerIfMissing) {
+      customerId = buildDefaultBusinessCustomerId(canonicalCustomerId);
+    } else {
+      throw new CustomerCoreError(
+        404,
+        'business_customer_not_found_by_phone',
+        'No business customer with that phone was found. Pass customer_id or enable create_customer_if_missing.',
+        {
+          merchant_id: merchantId,
+          canonical_customer_id: canonicalCustomerId,
+        },
+      );
+    }
+  }
+
+  if (!customerId) {
+    throw new CustomerCoreError(
+      500,
+      'customer_core_resolution_failed',
+      'Unable to resolve business customer target.',
+    );
+  }
+
+  const idempotentExistingLink =
+    existingCustomerCanonicalId != null &&
+    existingCustomerCanonicalId === canonicalCustomerId;
+  if (!idempotentExistingLink) {
+    const duplicates = await findMatchingBusinessCustomers(
+      merchantId,
+      rawPhone ?? existingCustomerPhone ?? phoneE164,
+      phoneE164,
+    );
+    const duplicateIds = duplicates
+      .map((doc) => doc.id)
+      .filter((id) => id !== customerId);
+    if (duplicateIds.length > 0) {
+      throw new CustomerCoreError(
+        409,
+        'business_customer_ambiguity',
+        'Multiple business customers map to the same normalized phone. The backend will not auto-merge verified conflicts.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          canonical_customer_id: canonicalCustomerId,
+          conflicting_customer_ids: duplicateIds,
+        },
+      );
+    }
+  }
+
+  if (!customerSnapshot) {
+    customerSnapshot = await businessCustomerRef(merchantId, customerId).get();
+    customerData = customerSnapshot.exists ? snapshotDataRecord(customerSnapshot) : {};
+  }
+
+  if (!customerSnapshot.exists && !createCustomerIfMissing) {
+    throw new CustomerCoreError(
+      404,
+      'business_customer_not_found',
+      'Business customer not found.',
+      { merchant_id: merchantId, customer_id: customerId },
+    );
+  }
+
+  if (!customerSnapshot.exists && (!customerName || customerName.trim().length === 0)) {
+    throw new CustomerCoreError(
+      400,
+      'customer_name_required',
+      'customer_name is required when creating a missing business customer.',
+      { merchant_id: merchantId, customer_id: customerId },
+    );
+  }
+
+  if (dryRun) {
+    const [customerLinkSnapshot, canonicalLinkSnapshot] = await Promise.all([
+      businessCustomerLinkRef(merchantId, customerId).get(),
+      canonicalIdentityBusinessLinkRef(merchantId, canonicalCustomerId).get(),
+    ]);
+    return {
+      merchant_id: merchantId,
+      customer_id: customerId,
+      canonical_customer_id: canonicalCustomerId,
+      phone_e164: phoneE164,
+      phone_last4: phoneLast4,
+      customer_created: !customerSnapshot.exists,
+      identity_created: canonicalIdentity == null,
+      link_created:
+        !customerLinkSnapshot.exists ||
+        !canonicalLinkSnapshot.exists ||
+        existingCustomerCanonicalId !== canonicalCustomerId,
+      customer_path: `businesses/${merchantId}/customers/${customerId}`,
+      dry_run: true,
+    };
+  }
+
+  const phoneLocal = normalizeMozambiquePhoneToLocal(phoneE164);
+  const now = Date.now();
+  const result = await admin.firestore().runTransaction(async (transaction) => {
+    const currentCustomerRef = businessCustomerRef(merchantId, customerId);
+    const identityRef = canonicalCustomerIdentityRef(canonicalCustomerId);
+    const currentCustomerLinkRef = businessCustomerLinkRef(merchantId, customerId);
+    const currentCanonicalLinkRef = canonicalIdentityBusinessLinkRef(
+      merchantId,
+      canonicalCustomerId,
+    );
+    const linkedEvent = buildDomainEvent({
+      eventType: 'CUSTOMER_LINKED',
+      merchantId,
+      canonicalCustomerId,
+      businessCustomerId: customerId,
+      sourceType: 'customer_link',
+      sourceId: customerId,
+      occurredAt: now,
+      recordedAt: now,
+      payload: {
+        customer_created: !customerSnapshot?.exists,
+        phone_last4: phoneLast4,
+      },
+    });
+    const createdEvent = buildDomainEvent({
+      eventType: 'CUSTOMER_CREATED',
+      merchantId,
+      canonicalCustomerId,
+      businessCustomerId: customerId,
+      sourceType: 'customer_link',
+      sourceId: customerId,
+      occurredAt: now,
+      recordedAt: now,
+      payload: {
+        customer_created: true,
+        phone_last4: phoneLast4,
+      },
+    });
+    const linkedEventRef = domainEventCollectionRef(merchantId).doc(linkedEvent.event_id);
+    const createdEventRef = domainEventCollectionRef(merchantId).doc(createdEvent.event_id);
+
+    const [
+      identitySnapshot,
+      currentCustomerSnapshot,
+      currentCustomerLinkSnapshot,
+      currentCanonicalLinkSnapshot,
+      linkedEventSnapshot,
+      createdEventSnapshot,
+    ] = await Promise.all([
+      transaction.get(identityRef),
+      transaction.get(currentCustomerRef),
+      transaction.get(currentCustomerLinkRef),
+      transaction.get(currentCanonicalLinkRef),
+      transaction.get(linkedEventRef),
+      transaction.get(createdEventRef),
+    ]);
+
+    const currentCustomerData = snapshotDataRecord(currentCustomerSnapshot);
+    const currentCanonicalCustomerId = maybePayloadString(
+      currentCustomerData,
+      'canonical_customer_id',
+      'canonicalCustomerId',
+    );
+    if (
+      currentCanonicalCustomerId != null &&
+      currentCanonicalCustomerId !== canonicalCustomerId
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'business_customer_link_conflict',
+        'Business customer is already linked to a different canonical customer.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          existing_canonical_customer_id: currentCanonicalCustomerId,
+          requested_canonical_customer_id: canonicalCustomerId,
+        },
+      );
+    }
+
+    const reverseLinkData = snapshotDataRecord(currentCanonicalLinkSnapshot);
+    const reverseLinkedCustomerId = maybePayloadString(
+      reverseLinkData,
+      'business_customer_id',
+      'customer_id',
+    );
+    if (
+      currentCanonicalLinkSnapshot.exists &&
+      reverseLinkedCustomerId != null &&
+      reverseLinkedCustomerId !== customerId
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'canonical_customer_conflict',
+        'Canonical customer is already linked to a different business customer for this business.',
+        {
+          merchant_id: merchantId,
+          canonical_customer_id: canonicalCustomerId,
+          existing_customer_id: reverseLinkedCustomerId,
+          requested_customer_id: customerId,
+        },
+      );
+    }
+
+    const forwardLinkData = snapshotDataRecord(currentCustomerLinkSnapshot);
+    const forwardCanonicalCustomerId = maybePayloadString(
+      forwardLinkData,
+      'canonical_customer_id',
+      'canonicalCustomerId',
+    );
+    if (
+      currentCustomerLinkSnapshot.exists &&
+      forwardCanonicalCustomerId != null &&
+      forwardCanonicalCustomerId !== canonicalCustomerId
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'business_customer_link_conflict',
+        'Business customer link record points to a different canonical customer.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          existing_canonical_customer_id: forwardCanonicalCustomerId,
+          requested_canonical_customer_id: canonicalCustomerId,
+        },
+      );
+    }
+
+    const currentCustomerPhone = maybePayloadString(currentCustomerData, 'phone');
+    const currentCustomerPhoneE164 = tryNormalizeMozambiquePhoneToE164(
+      currentCustomerPhone,
+    );
+    if (
+      currentCustomerPhone != null &&
+      currentCustomerPhoneE164 != null &&
+      currentCustomerPhoneE164 !== phoneE164
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'business_customer_phone_conflict',
+        'Existing business customer phone does not match the requested canonical phone.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          existing_phone_e164: currentCustomerPhoneE164,
+          requested_phone_e164: phoneE164,
+        },
+      );
+    }
+
+    if (!identitySnapshot.exists) {
+      transaction.set(identityRef, {
+        id: canonicalCustomerId,
+        lookup_key: canonicalCustomerId,
+        phone_e164: phoneE164,
+        phone_last4: phoneLast4,
+        country_code: 'MZ',
+        identity_version: 1,
+        created_at: now,
+        updated_at: now,
+        created_by_merchant_id: merchantId,
+        last_linked_merchant_id: merchantId,
+        last_linked_at: now,
+      });
+    }
+
+    const customerPatch: Record<string, unknown> = {
+      id: customerId,
+      merchant_id: merchantId,
+      canonical_customer_id: canonicalCustomerId,
+      canonical_lookup_key: canonicalCustomerId,
+      canonical_phone_e164: phoneE164,
+      canonical_phone_last4: phoneLast4,
+      canonical_linked_at: now,
+      canonical_link_status: 'LINKED',
+      canonical_link_error_code: admin.firestore.FieldValue.delete(),
+      canonical_link_error_message: admin.firestore.FieldValue.delete(),
+      canonical_link_error_at: admin.firestore.FieldValue.delete(),
+      canonical_identity_version: 1,
+      updated_at: now,
+    };
+
+    setIfMissingString(customerPatch, currentCustomerData, 'account_state', 'UNCLAIMED');
+    setIfMissingString(
+      customerPatch,
+      currentCustomerData,
+      'relationship_status',
+      'ACTIVE',
+    );
+    setIfMissingString(customerPatch, currentCustomerData, 'lifecycle_stage', 'NEW');
+    setIfMissingString(
+      customerPatch,
+      currentCustomerData,
+      'retention_status',
+      'HEALTHY',
+    );
+    setIfMissingNumber(customerPatch, currentCustomerData, 'total_visits', 0);
+    setIfMissingNumber(customerPatch, currentCustomerData, 'total_spent', 0);
+    setIfMissingNumber(customerPatch, currentCustomerData, 'average_spend', 0);
+    setIfMissingNumber(customerPatch, currentCustomerData, 'schema_version', 1);
+    setIfMissingString(
+      customerPatch,
+      currentCustomerData,
+      'marketing_consent_status',
+      'UNKNOWN',
+    );
+    setIfMissingString(
+      customerPatch,
+      currentCustomerData,
+      'whatsapp_consent_status',
+      'UNKNOWN',
+    );
+
+    if (!currentCustomerSnapshot.exists) {
+      customerPatch.name = customerName;
+      customerPatch.phone = phoneLocal;
+      customerPatch.total_points = 0;
+      customerPatch.created_at = now;
+    } else {
+      if (!currentCustomerPhone) {
+        customerPatch.phone = phoneLocal;
+      }
+      if (!maybePayloadString(currentCustomerData, 'name') && customerName) {
+        customerPatch.name = customerName;
+      }
+      if (pickNumber(currentCustomerData, 'created_at') == null) {
+        customerPatch.created_at = now;
+      }
+      if (pickNumber(currentCustomerData, 'total_points') == null) {
+        customerPatch.total_points = 0;
+      }
+    }
+
+    transaction.set(currentCustomerRef, customerPatch, { merge: true });
+
+    const linkPayload = {
+      merchant_id: merchantId,
+      business_customer_id: customerId,
+      canonical_customer_id: canonicalCustomerId,
+      phone_e164: phoneE164,
+      phone_last4: phoneLast4,
+      updated_at: now,
+      ...(currentCustomerLinkSnapshot.exists ? {} : { created_at: now }),
+    };
+
+    transaction.set(currentCustomerLinkRef, linkPayload, { merge: true });
+    transaction.set(currentCanonicalLinkRef, linkPayload, { merge: true });
+    const customerEvent = !currentCustomerSnapshot.exists || createdEventSnapshot.exists
+      ? createdEvent
+      : linkedEvent;
+    const customerEventRef = customerEvent.event_type === 'CUSTOMER_CREATED'
+      ? createdEventRef
+      : linkedEventRef;
+    const customerEventSnapshot = customerEvent.event_type === 'CUSTOMER_CREATED'
+      ? createdEventSnapshot
+      : linkedEventSnapshot;
+    if (!customerEventSnapshot.exists) {
+      transaction.set(customerEventRef, {
+        ...customerEvent,
+        occurred_at:
+          pickNumber(currentCustomerData, 'canonical_linked_at') ?? now,
+        payload: {
+          ...customerEvent.payload,
+          customer_created: !currentCustomerSnapshot.exists,
+        },
+      });
+    }
+
+    return {
+      merchant_id: merchantId,
+      customer_id: customerId,
+      canonical_customer_id: canonicalCustomerId,
+      phone_e164: phoneE164,
+      phone_last4: phoneLast4,
+      customer_created: !currentCustomerSnapshot.exists,
+      identity_created: !identitySnapshot.exists,
+      link_created:
+        !currentCustomerLinkSnapshot.exists ||
+        !currentCanonicalLinkSnapshot.exists ||
+        currentCanonicalCustomerId !== canonicalCustomerId,
+      domain_event_id: customerEvent.event_id,
+      domain_event_type: customerEvent.event_type,
+      customer_path: `businesses/${merchantId}/customers/${customerId}`,
+    };
+  });
+
+  const classification = await updateCustomerClassification({
+    merchantId,
+    customerId: result.customer_id,
+    sourceType: 'customer_link',
+    sourceId: result.customer_id,
+    causationId: result.domain_event_id ?? null,
+    occurredAt: now,
+    dryRun: false,
+  });
+  return { ...result, classification };
+}
+
+async function handleCustomerCoreBackfillRequest(
+  req: AuthedRequest,
+  body: unknown,
+): Promise<Record<string, unknown>> {
+  const payload = requireBodyObject(body);
+  const merchantId = await resolveCustomerCoreMerchantId(req, payload);
+  const limit = clampLimit(payload.limit, 50, 200);
+  const startAfterCustomerId = maybePayloadString(
+    payload,
+    'start_after_customer_id',
+    'startAfterCustomerId',
+  );
+  const dryRun = maybePayloadBoolean(payload, 'dry_run', 'dryRun') ?? false;
+
+  let query = admin
+    .firestore()
+    .collection('businesses')
+    .doc(merchantId)
+    .collection('customers')
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .limit(limit);
+  if (startAfterCustomerId) {
+    query = query.startAfter(startAfterCustomerId);
+  }
+
+  const snapshot = await query.get();
+  const results: Array<Record<string, unknown>> = [];
+  let linkedCount = 0;
+  let skippedCount = 0;
+
+  for (const doc of snapshot.docs) {
+    const data = snapshotDataRecord(doc);
+    try {
+      const linkResult = await linkCanonicalCustomerToBusinessCustomer({
+        merchantId,
+        customerId: doc.id,
+        rawPhone: maybePayloadString(data, 'phone'),
+        customerName: maybePayloadString(data, 'name'),
+        createCustomerIfMissing: false,
+        dryRun,
+      });
+      const status = dryRun
+        ? (linkResult.link_created || linkResult.identity_created
+          ? 'dry_run'
+          : 'already_linked')
+        : (linkResult.link_created ? 'linked' : 'already_linked');
+      if (status === 'linked') {
+        linkedCount += 1;
+      }
+      results.push({
+        customer_id: doc.id,
+        status,
+        canonical_customer_id: linkResult.canonical_customer_id,
+        phone_e164: linkResult.phone_e164,
+        message:
+          status === 'already_linked'
+            ? 'Canonical link already present.'
+            : dryRun
+              ? 'Canonical link would be applied.'
+              : 'Canonical link applied.',
+      });
+    } catch (error) {
+      skippedCount += 1;
+      if (error instanceof CustomerCoreError) {
+        results.push({
+          customer_id: doc.id,
+          status: error.status >= 500 ? 'error' : 'skipped',
+          code: error.code,
+          message: error.message,
+          ...(error.details ? { details: error.details } : {}),
+        });
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const nextCursor =
+    snapshot.docs.length === limit && snapshot.docs.length > 0
+      ? snapshot.docs[snapshot.docs.length - 1].id
+      : null;
+
+  return {
+    merchant_id: merchantId,
+    dry_run: dryRun,
+    processed: snapshot.docs.length,
+    linked: linkedCount,
+    skipped: skippedCount,
+    has_more: nextCursor != null,
+    next_cursor: nextCursor,
+    results,
+  };
+}
+
+type LoyaltyBusinessConfig = {
+  pointsPerMzn: number;
+  configVersion: number;
+};
+
+type LoyaltyLedgerEntryType = 'SALE' | 'REDEMPTION';
+
+type LoyaltyLedgerEntryRecord = {
+  id: string;
+  merchant_id: string;
+  customer_id: string;
+  entry_type: LoyaltyLedgerEntryType;
+  source_type: 'sale' | 'redemption';
+  source_id: string;
+  occurred_at: number;
+  points_delta: number;
+  policy_version: number;
+  balance_after: number;
+  canonical_customer_id?: string;
+  amount_mzn?: number;
+  reward_id?: string | null;
+  idempotency_key?: string | null;
+  created_at: number;
+  updated_at: number;
+};
+
+type LoyaltyCustomerProjection = {
+  confirmedPoints: number;
+  firstVisitAt: number | null;
+  lastVisitAt: number | null;
+  totalVisits: number;
+  totalSpent: number;
+  averageSpend: number;
+  averageVisitIntervalDays: number;
+  lastLedgerEntryAt: number | null;
+};
+
+function businessDocumentRef(merchantId: string) {
+  return admin.firestore().collection('businesses').doc(merchantId);
+}
+
+function businessSalesCollectionRef(merchantId: string) {
+  return businessDocumentRef(merchantId).collection('sales');
+}
+
+function businessRewardsCollectionRef(merchantId: string) {
+  return businessDocumentRef(merchantId).collection('rewards');
+}
+
+function businessRedemptionsCollectionRef(merchantId: string) {
+  return businessDocumentRef(merchantId).collection('redemptions');
+}
+
+function loyaltyLedgerCollectionRef(merchantId: string) {
+  return businessDocumentRef(merchantId).collection(LOYALTY_LEDGER_COLLECTION);
+}
+
+function loyaltyLedgerDocumentRef(merchantId: string, entryId: string) {
+  return loyaltyLedgerCollectionRef(merchantId).doc(entryId);
+}
+
+function boundedCustomerLedgerQuery(merchantId: string, customerId: string) {
+  return loyaltyLedgerCollectionRef(merchantId)
+    .where('customer_id', '==', customerId)
+    .limit(MAX_LEDGER_ENTRIES_PER_CUSTOMER + 1);
+}
+
+function assertLedgerQueryIsBounded(
+  snapshot: admin.firestore.QuerySnapshot,
+  merchantId: string,
+  customerId: string,
+): void {
+  if (snapshot.size > MAX_LEDGER_ENTRIES_PER_CUSTOMER) {
+    throw new CustomerCoreError(
+      409,
+      'loyalty_ledger_projection_limit_exceeded',
+      'Customer ledger is too large for synchronous projection; use a dedicated projection job.',
+      {
+        merchant_id: merchantId,
+        customer_id: customerId,
+        maximum_entries: MAX_LEDGER_ENTRIES_PER_CUSTOMER,
+      },
+    );
+  }
+}
+
+function domainEventCollectionRef(merchantId: string) {
+  return businessDocumentRef(merchantId).collection(DOMAIN_EVENT_COLLECTION);
+}
+
+function retentionPolicyDocumentRef(merchantId: string, version: number) {
+  return businessDocumentRef(merchantId)
+    .collection(RETENTION_POLICY_COLLECTION)
+    .doc(`v${version}`);
+}
+
+function customerTransitionDocumentRef(merchantId: string, transitionId: string) {
+  return businessDocumentRef(merchantId)
+    .collection(CUSTOMER_TRANSITION_COLLECTION)
+    .doc(transitionId);
+}
+
+function customerRecommendationDocumentRef(merchantId: string, customerId: string) {
+  return businessDocumentRef(merchantId)
+    .collection(CUSTOMER_RECOMMENDATION_COLLECTION)
+    .doc(customerId);
+}
+
+function deterministicDocumentId(prefix: string, parts: string[]): string {
+  const digest = createHash('sha256')
+    .update(parts.join('\u001f'))
+    .digest('hex')
+    .substring(0, 40);
+  return `${prefix}_${digest}`;
+}
+
+function buildDomainEvent(params: {
+  eventType: DomainEventType;
+  merchantId: string;
+  canonicalCustomerId: string;
+  businessCustomerId: string;
+  sourceType: DomainEventSourceType;
+  sourceId: string;
+  correlationId?: string;
+  causationId?: string | null;
+  occurredAt: number;
+  recordedAt: number;
+  payload: Record<string, unknown>;
+}): DomainEventEnvelope {
+  const eventId = deterministicDocumentId('evt', [
+    params.merchantId,
+    params.eventType,
+    params.sourceType,
+    params.sourceId,
+  ]);
+  return {
+    event_id: eventId,
+    event_type: params.eventType,
+    schema_version: DOMAIN_EVENT_SCHEMA_VERSION,
+    merchant_id: params.merchantId,
+    canonical_customer_id: params.canonicalCustomerId,
+    business_customer_id: params.businessCustomerId,
+    source: {
+      type: params.sourceType,
+      id: params.sourceId,
+    },
+    correlation_id: params.correlationId ?? eventId,
+    causation_id: params.causationId ?? null,
+    occurred_at: params.occurredAt,
+    recorded_at: params.recordedAt,
+    payload: params.payload,
+  };
+}
+
+function buildDeterministicLoyaltyLedgerEntryId(
+  entryType: LoyaltyLedgerEntryType,
+  sourceId: string,
+): string {
+  return `${entryType.toLowerCase()}_${sourceId}`;
+}
+
+function buildDeterministicRedemptionId(
+  merchantId: string,
+  idempotencyKey: string,
+): string {
+  const secret = requireCustomerCoreSecret();
+  return `red_${createHmac('sha256', secret)
+    .update(`loyalty-redemption-v1:${merchantId}:${idempotencyKey}`)
+    .digest('hex')
+    .substring(0, 40)}`;
+}
+
+function positiveIntegerOrDefault(value: unknown, fallback: number): number {
+  const parsed = parseNumber(value);
+  if (parsed == null || parsed <= 0) {
+    return fallback;
+  }
+  return Math.floor(parsed);
+}
+
+function getBusinessLoyaltyConfig(data: Record<string, unknown>): LoyaltyBusinessConfig {
+  const loyaltyConfigRaw = data.loyalty_config;
+  const loyaltyConfig =
+    loyaltyConfigRaw != null && typeof loyaltyConfigRaw === 'object'
+      ? loyaltyConfigRaw as Record<string, unknown>
+      : {};
+
+  return {
+    pointsPerMzn: positiveIntegerOrDefault(
+      loyaltyConfig.points_per_mzn,
+      DEFAULT_LOYALTY_POINTS_PER_MZN,
+    ),
+    configVersion: positiveIntegerOrDefault(
+      loyaltyConfig.version,
+      DEFAULT_LOYALTY_CONFIG_VERSION,
+    ),
+  };
+}
+
+function calculateConfirmedSalePoints(amount: number, pointsPerMzn: number): number {
+  return Math.floor(amount / pointsPerMzn);
+}
+
+function loyaltyLedgerEntryFromData(
+  data: Record<string, unknown>,
+): LoyaltyLedgerEntryRecord {
+  return {
+    id: maybePayloadString(data, 'id') ?? '',
+    merchant_id: maybePayloadString(data, 'merchant_id') ?? '',
+    customer_id: maybePayloadString(data, 'customer_id') ?? '',
+    entry_type: (maybePayloadString(data, 'entry_type') ?? 'SALE') as LoyaltyLedgerEntryType,
+    source_type:
+      (maybePayloadString(data, 'source_type') ?? 'sale') as 'sale' | 'redemption',
+    source_id: maybePayloadString(data, 'source_id') ?? '',
+    occurred_at: pickNumber(data, 'occurred_at') ?? 0,
+    points_delta: pickNumber(data, 'points_delta') ?? 0,
+    policy_version: pickNumber(data, 'policy_version') ?? DEFAULT_LOYALTY_CONFIG_VERSION,
+    balance_after: pickNumber(data, 'balance_after') ?? 0,
+    canonical_customer_id: maybePayloadString(data, 'canonical_customer_id') ?? undefined,
+    amount_mzn: pickNumber(data, 'amount_mzn') ?? 0,
+    reward_id: maybePayloadString(data, 'reward_id'),
+    idempotency_key: maybePayloadString(data, 'idempotency_key'),
+    created_at: pickNumber(data, 'created_at') ?? 0,
+    updated_at: pickNumber(data, 'updated_at') ?? pickNumber(data, 'created_at') ?? 0,
+  };
+}
+
+function loyaltyLedgerEntryHasDrift(
+  existingData: Record<string, unknown>,
+  expected: LoyaltyLedgerEntryRecord,
+): boolean {
+  const comparableKeys: Array<keyof LoyaltyLedgerEntryRecord> = [
+    'merchant_id',
+    'customer_id',
+    'entry_type',
+    'source_type',
+    'source_id',
+    'occurred_at',
+    'points_delta',
+    'policy_version',
+    'balance_after',
+    'amount_mzn',
+    'reward_id',
+    'idempotency_key',
+  ];
+
+  return comparableKeys.some((key) => !valuesEqual(existingData[key], expected[key]));
+}
+
+function computeCustomerProjectionFromLedgerEntries(
+  entries: LoyaltyLedgerEntryRecord[],
+): LoyaltyCustomerProjection {
+  const balancedEntries = computeLedgerEntriesWithBalances(entries);
+  const confirmedPoints = entries.reduce((sum, entry) => sum + entry.points_delta, 0);
+  const saleEntries = balancedEntries
+    .filter((entry) => entry.entry_type === 'SALE')
+    .sort((left, right) => left.occurred_at - right.occurred_at);
+  const totalVisits = saleEntries.length;
+  const totalSpent = saleEntries.reduce((sum, entry) => sum + (entry.amount_mzn ?? 0), 0);
+  const firstVisitAt = totalVisits > 0 ? saleEntries[0].occurred_at : null;
+  const lastVisitAt = totalVisits > 0
+    ? saleEntries[totalVisits - 1].occurred_at
+    : null;
+  const averageSpend = totalVisits > 0 ? totalSpent / totalVisits : 0;
+  const intervals: number[] = [];
+  for (let index = 1; index < saleEntries.length; index += 1) {
+    intervals.push(saleEntries[index].occurred_at - saleEntries[index - 1].occurred_at);
+  }
+  const averageVisitIntervalDays = intervals.length > 0
+    ? Math.round(
+      intervals.reduce((sum, value) => sum + value, 0) /
+        intervals.length /
+        (24 * 60 * 60 * 1000),
+    )
+    : 0;
+  const lastLedgerEntryAt = balancedEntries.reduce<number | null>((latest, entry) => {
+    if (latest == null || entry.occurred_at > latest) {
+      return entry.occurred_at;
+    }
+    return latest;
+  }, null);
+
+  return {
+    confirmedPoints,
+    firstVisitAt,
+    lastVisitAt,
+    totalVisits,
+    totalSpent,
+    averageSpend,
+    averageVisitIntervalDays,
+    lastLedgerEntryAt,
+  };
+}
+
+function computeLedgerEntriesWithBalances(
+  entries: LoyaltyLedgerEntryRecord[],
+): LoyaltyLedgerEntryRecord[] {
+  const ordered = [...entries].sort((left, right) => {
+    const byOccurredAt = left.occurred_at - right.occurred_at;
+    if (byOccurredAt !== 0) return byOccurredAt;
+    const byCreatedAt = left.created_at - right.created_at;
+    if (byCreatedAt !== 0) return byCreatedAt;
+    return left.id.localeCompare(right.id);
+  });
+
+  let runningBalance = 0;
+  return ordered.map((entry) => {
+    runningBalance += entry.points_delta;
+    return {
+      ...entry,
+      balance_after: runningBalance,
+    };
+  });
+}
+
+function buildCustomerProjectionPatch(
+  currentCustomerData: Record<string, unknown>,
+  projection: LoyaltyCustomerProjection,
+  now: number,
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {
+    confirmed_points: projection.confirmedPoints,
+    total_points: projection.confirmedPoints,
+    total_visits: projection.totalVisits,
+    total_spent: projection.totalSpent,
+    average_spend: projection.averageSpend,
+    average_visit_interval_days: projection.averageVisitIntervalDays,
+    loyalty_projection_version: LOYALTY_PROJECTION_VERSION,
+    loyalty_projection_status: 'READY',
+    loyalty_backfill_required: false,
+    loyalty_last_reconciled_at: now,
+    schema_version: pickNumber(currentCustomerData, 'schema_version') ?? 1,
+    updated_at: now,
+  };
+
+  patch.first_visit_at = projection.firstVisitAt == null
+    ? admin.firestore.FieldValue.delete()
+    : projection.firstVisitAt;
+  patch.last_visit_at = projection.lastVisitAt == null
+    ? admin.firestore.FieldValue.delete()
+    : projection.lastVisitAt;
+  patch.loyalty_last_ledger_entry_at = projection.lastLedgerEntryAt == null
+    ? admin.firestore.FieldValue.delete()
+    : projection.lastLedgerEntryAt;
+
+  setIfMissingString(patch, currentCustomerData, 'account_state', 'UNCLAIMED');
+  setIfMissingString(patch, currentCustomerData, 'relationship_status', 'ACTIVE');
+  setIfMissingString(patch, currentCustomerData, 'lifecycle_stage', 'NEW');
+  setIfMissingString(patch, currentCustomerData, 'retention_status', 'HEALTHY');
+  setIfMissingString(
+    patch,
+    currentCustomerData,
+    'marketing_consent_status',
+    'UNKNOWN',
+  );
+  setIfMissingString(
+    patch,
+    currentCustomerData,
+    'whatsapp_consent_status',
+    'UNKNOWN',
+  );
+
+  return patch;
+}
+
+async function resolveCanonicalCustomerForLoyalty(
+  merchantId: string,
+  customerId: string,
+  customerData: Record<string, unknown>,
+  dryRun: boolean,
+): Promise<{ canonicalCustomerId: string; phoneE164: string; }> {
+  const existingCanonicalCustomerId = maybePayloadString(
+    customerData,
+    'canonical_customer_id',
+    'canonicalCustomerId',
+  );
+  const rawPhone = maybePayloadString(customerData, 'phone');
+  const canonicalPhoneE164 = maybePayloadString(customerData, 'canonical_phone_e164');
+
+  if (existingCanonicalCustomerId && canonicalPhoneE164) {
+    return {
+      canonicalCustomerId: existingCanonicalCustomerId,
+      phoneE164: canonicalPhoneE164,
+    };
+  }
+
+  if (existingCanonicalCustomerId && rawPhone) {
+    const phoneE164 = normalizeMozambiquePhoneToE164(rawPhone);
+    if (buildCanonicalCustomerId(phoneE164) !== existingCanonicalCustomerId) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_canonical_conflict',
+        'Customer canonical identity does not match the stored phone number.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          canonical_customer_id: existingCanonicalCustomerId,
+          phone_e164: phoneE164,
+        },
+      );
+    }
+    return {
+      canonicalCustomerId: existingCanonicalCustomerId,
+      phoneE164,
+    };
+  }
+
+  if (!rawPhone) {
+    throw new CustomerCoreError(
+      409,
+      'loyalty_customer_phone_missing',
+      'Customer phone is required before loyalty can be confirmed.',
+      { merchant_id: merchantId, customer_id: customerId },
+    );
+  }
+
+  const result = await linkCanonicalCustomerToBusinessCustomer({
+    merchantId,
+    customerId,
+    rawPhone,
+    customerName: maybePayloadString(customerData, 'name'),
+    createCustomerIfMissing: false,
+    dryRun,
+  });
+
+  return {
+    canonicalCustomerId: result.canonical_customer_id,
+    phoneE164: result.phone_e164,
+  };
+}
+
+async function requireCustomerCanonicalRelationship(
+  merchantId: string,
+  customerId: string,
+): Promise<{ customerData: Record<string, unknown>; canonicalCustomerId: string; }> {
+  const customerSnapshot = await businessCustomerRef(merchantId, customerId).get();
+  if (!customerSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_customer_not_found',
+      'Business customer not found.',
+      { merchant_id: merchantId, customer_id: customerId },
+    );
+  }
+
+  const customerData = snapshotDataRecord(customerSnapshot);
+  const canonicalCustomerId = maybePayloadString(
+    customerData,
+    'canonical_customer_id',
+    'canonicalCustomerId',
+  );
+  if (!canonicalCustomerId) {
+    throw new CustomerCoreError(
+      409,
+      'loyalty_canonical_link_required',
+      'Customer canonical relationship is missing. Run customer linking/backfill first.',
+      { merchant_id: merchantId, customer_id: customerId },
+    );
+  }
+
+  const [forwardLinkSnapshot, reverseLinkSnapshot] = await Promise.all([
+    businessCustomerLinkRef(merchantId, customerId).get(),
+    canonicalIdentityBusinessLinkRef(merchantId, canonicalCustomerId).get(),
+  ]);
+
+  const forwardLinkData = snapshotDataRecord(forwardLinkSnapshot);
+  const reverseLinkData = snapshotDataRecord(reverseLinkSnapshot);
+  if (
+    !forwardLinkSnapshot.exists ||
+    maybePayloadString(forwardLinkData, 'canonical_customer_id') !== canonicalCustomerId ||
+    !reverseLinkSnapshot.exists ||
+    maybePayloadString(reverseLinkData, 'business_customer_id', 'customer_id') !== customerId
+  ) {
+    throw new CustomerCoreError(
+      409,
+      'loyalty_canonical_link_inconsistent',
+      'Customer canonical relationship is inconsistent. Run customer backfill to repair it.',
+      {
+        merchant_id: merchantId,
+        customer_id: customerId,
+        canonical_customer_id: canonicalCustomerId,
+      },
+    );
+  }
+
+  return { customerData, canonicalCustomerId };
+}
+
+async function assertCustomerReadyForLiveSale(
+  transaction: admin.firestore.Transaction,
+  merchantId: string,
+  customerId: string,
+  saleId: string,
+  customerData: Record<string, unknown>,
+  derivedPoints: number,
+): Promise<void> {
+  const projectionVersion = pickNumber(customerData, 'loyalty_projection_version');
+  if (projectionVersion === LOYALTY_PROJECTION_VERSION) {
+    return;
+  }
+
+  const existingLedgerSnapshot = await transaction.get(
+    loyaltyLedgerCollectionRef(merchantId).where('customer_id', '==', customerId).limit(1),
+  );
+  if (!existingLedgerSnapshot.empty) {
+    return;
+  }
+
+  const [salesSnapshot, redemptionsSnapshot] = await Promise.all([
+    transaction.get(
+      businessSalesCollectionRef(merchantId).where('customer_id', '==', customerId).limit(5),
+    ),
+    transaction.get(
+      businessRedemptionsCollectionRef(merchantId).where('customer_id', '==', customerId).limit(5),
+    ),
+  ]);
+
+  const otherSales = salesSnapshot.docs.filter((doc) => doc.id !== saleId);
+  const legacyTotalPoints = pickNumber(customerData, 'total_points') ?? 0;
+  const canBootstrapFromCurrentSale =
+    otherSales.length === 0 &&
+    redemptionsSnapshot.empty &&
+    (legacyTotalPoints === 0 || legacyTotalPoints === derivedPoints);
+
+  if (!canBootstrapFromCurrentSale) {
+    throw new CustomerCoreError(
+      409,
+      'loyalty_backfill_required',
+      'Existing customer loyalty history must be backfilled before live sale confirmation can continue.',
+      {
+        merchant_id: merchantId,
+        customer_id: customerId,
+      },
+    );
+  }
+}
+
+function buildExpectedSaleLedgerEntry(params: {
+  merchantId: string;
+  customerId: string;
+  canonicalCustomerId: string;
+  saleId: string;
+  saleData: Record<string, unknown>;
+  businessConfig: LoyaltyBusinessConfig;
+  now: number;
+  createdAt: number;
+}): LoyaltyLedgerEntryRecord {
+  const amount = pickNumber(params.saleData, 'amount') ?? 0;
+  const sourceCreatedAt = pickNumber(params.saleData, 'created_at') ?? params.now;
+  return {
+    id: buildDeterministicLoyaltyLedgerEntryId('SALE', params.saleId),
+    merchant_id: params.merchantId,
+    customer_id: params.customerId,
+    entry_type: 'SALE',
+    source_type: 'sale',
+    source_id: params.saleId,
+    occurred_at: sourceCreatedAt,
+    points_delta: calculateConfirmedSalePoints(amount, params.businessConfig.pointsPerMzn),
+    policy_version: params.businessConfig.configVersion,
+    balance_after: 0,
+    canonical_customer_id: params.canonicalCustomerId,
+    amount_mzn: amount,
+    reward_id: null,
+    idempotency_key: null,
+    created_at: params.createdAt,
+    updated_at: params.now,
+  };
+}
+
+function buildExpectedRedemptionLedgerEntry(params: {
+  merchantId: string;
+  customerId: string;
+  canonicalCustomerId: string;
+  redemptionId: string;
+  redemptionData: Record<string, unknown>;
+  businessConfig: LoyaltyBusinessConfig;
+  now: number;
+  createdAt: number;
+}): LoyaltyLedgerEntryRecord {
+  const pointsSpent = pickNumber(params.redemptionData, 'points_spent') ?? 0;
+  const sourceCreatedAt =
+    pickNumber(params.redemptionData, 'redeemed_at') ??
+    pickNumber(params.redemptionData, 'created_at') ??
+    params.now;
+  return {
+    id: buildDeterministicLoyaltyLedgerEntryId('REDEMPTION', params.redemptionId),
+    merchant_id: params.merchantId,
+    customer_id: params.customerId,
+    entry_type: 'REDEMPTION',
+    source_type: 'redemption',
+    source_id: params.redemptionId,
+    occurred_at: sourceCreatedAt,
+    points_delta: -Math.abs(pointsSpent),
+    policy_version: params.businessConfig.configVersion,
+    balance_after: 0,
+    canonical_customer_id: params.canonicalCustomerId,
+    amount_mzn: 0,
+    reward_id: maybePayloadString(params.redemptionData, 'reward_id', 'rewardId'),
+    idempotency_key: maybePayloadString(params.redemptionData, 'idempotency_key', 'idempotencyKey'),
+    created_at: params.createdAt,
+    updated_at: params.now,
+  };
+}
+
+function mergeLedgerEntriesForProjection(
+  snapshot: admin.firestore.QuerySnapshot,
+  expectedEntry: LoyaltyLedgerEntryRecord,
+  removeEntryId?: string | null,
+): LoyaltyLedgerEntryRecord[] {
+  const byId = new Map<string, LoyaltyLedgerEntryRecord>();
+  for (const doc of snapshot.docs) {
+    byId.set(doc.id, loyaltyLedgerEntryFromData(snapshotDataRecord(doc)));
+  }
+  if (removeEntryId) {
+    byId.delete(removeEntryId);
+  }
+  byId.set(expectedEntry.id, expectedEntry);
+  return [...byId.values()];
+}
+
+async function updateCustomerProjectionFromLedger(
+  transaction: admin.firestore.Transaction,
+  merchantId: string,
+  customerId: string,
+  currentCustomerData: Record<string, unknown>,
+  expectedEntry: LoyaltyLedgerEntryRecord,
+  removeEntryId?: string | null,
+): Promise<{
+  projection: LoyaltyCustomerProjection;
+  balancedExpectedEntry: LoyaltyLedgerEntryRecord;
+}> {
+  const ledgerSnapshot = await transaction.get(
+    boundedCustomerLedgerQuery(merchantId, customerId),
+  );
+  assertLedgerQueryIsBounded(ledgerSnapshot, merchantId, customerId);
+  const existingExpectedSnapshot = ledgerSnapshot.docs.find(
+    (doc) => doc.id === expectedEntry.id,
+  );
+  const effectiveExpectedEntry = existingExpectedSnapshot
+    ? loyaltyLedgerEntryFromData(snapshotDataRecord(existingExpectedSnapshot))
+    : expectedEntry;
+  const mergedEntries = mergeLedgerEntriesForProjection(
+    ledgerSnapshot,
+    effectiveExpectedEntry,
+    removeEntryId,
+  );
+  const balancedEntries = computeLedgerEntriesWithBalances(mergedEntries);
+  const balancedExpectedEntry =
+    balancedEntries.find((entry) => entry.id === expectedEntry.id) ??
+    effectiveExpectedEntry;
+  if (!existingExpectedSnapshot) {
+    transaction.set(
+      loyaltyLedgerDocumentRef(merchantId, balancedExpectedEntry.id),
+      balancedExpectedEntry,
+    );
+  }
+  const projection = computeCustomerProjectionFromLedgerEntries(balancedEntries);
+  transaction.set(
+    businessCustomerRef(merchantId, customerId),
+    buildCustomerProjectionPatch(currentCustomerData, projection, Date.now()),
+    { merge: true },
+  );
+  return { projection, balancedExpectedEntry };
+}
+
+async function resetCustomerProjectionFromExistingLedger(
+  transaction: admin.firestore.Transaction,
+  merchantId: string,
+  customerId: string,
+): Promise<void> {
+  const customerSnapshot = await transaction.get(businessCustomerRef(merchantId, customerId));
+  if (!customerSnapshot.exists) {
+    return;
+  }
+  const currentCustomerData = snapshotDataRecord(customerSnapshot);
+  const ledgerSnapshot = await transaction.get(
+    boundedCustomerLedgerQuery(merchantId, customerId),
+  );
+  assertLedgerQueryIsBounded(ledgerSnapshot, merchantId, customerId);
+  const entries = ledgerSnapshot.docs.map((doc) =>
+    loyaltyLedgerEntryFromData(snapshotDataRecord(doc)));
+  const projection = computeCustomerProjectionFromLedgerEntries(entries);
+  transaction.set(
+    businessCustomerRef(merchantId, customerId),
+    buildCustomerProjectionPatch(currentCustomerData, projection, Date.now()),
+    { merge: true },
+  );
+}
+
+async function applySaleToLoyaltyLedger(params: {
+  merchantId: string;
+  saleId: string;
+  saleSnapshot?: admin.firestore.DocumentSnapshot;
+  allowLegacyBootstrap: boolean;
+  saleUpdateMode?: 'trigger' | 'backfill';
+}): Promise<Record<string, unknown>> {
+  const saleSnapshot = params.saleSnapshot ?? await businessSalesCollectionRef(params.merchantId).doc(params.saleId).get();
+  if (!saleSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_sale_not_found',
+      'Sale document not found.',
+      { merchant_id: params.merchantId, sale_id: params.saleId },
+    );
+  }
+
+  const saleData = snapshotDataRecord(saleSnapshot);
+  const customerId = maybePayloadString(saleData, 'customer_id', 'customerId');
+  const amount = pickNumber(saleData, 'amount');
+  if (!customerId) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_sale_customer_missing',
+      'Sale customer_id is required.',
+      { merchant_id: params.merchantId, sale_id: params.saleId },
+    );
+  }
+  if (amount == null || amount <= 0) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_sale_amount_invalid',
+      'Sale amount must be greater than zero.',
+      { merchant_id: params.merchantId, sale_id: params.saleId },
+    );
+  }
+
+  const customerSnapshot = await businessCustomerRef(params.merchantId, customerId).get();
+  if (!customerSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_customer_not_found',
+      'Business customer not found for sale.',
+      { merchant_id: params.merchantId, sale_id: params.saleId, customer_id: customerId },
+    );
+  }
+
+  const customerData = snapshotDataRecord(customerSnapshot);
+  const canonical = await resolveCanonicalCustomerForLoyalty(
+    params.merchantId,
+    customerId,
+    customerData,
+    false,
+  );
+  const now = Date.now();
+
+  const result = await admin.firestore().runTransaction(async (transaction) => {
+    const currentSaleSnapshot = await transaction.get(
+      businessSalesCollectionRef(params.merchantId).doc(params.saleId),
+    );
+    if (!currentSaleSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'loyalty_sale_not_found',
+        'Sale document not found.',
+        { merchant_id: params.merchantId, sale_id: params.saleId },
+      );
+    }
+
+    const currentSaleData = snapshotDataRecord(currentSaleSnapshot);
+    const currentCustomerId =
+      maybePayloadString(currentSaleData, 'customer_id', 'customerId') ?? customerId;
+    const currentAmount = pickNumber(currentSaleData, 'amount');
+    if (currentCustomerId !== customerId) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_sale_customer_changed',
+        'Sale customer changed during processing. Retry the operation.',
+        { merchant_id: params.merchantId, sale_id: params.saleId },
+      );
+    }
+    if (currentAmount == null || currentAmount <= 0) {
+      throw new CustomerCoreError(
+        400,
+        'loyalty_sale_amount_invalid',
+        'Sale amount must be greater than zero.',
+        { merchant_id: params.merchantId, sale_id: params.saleId },
+      );
+    }
+
+    const saleEventTypes: DomainEventType[] = [
+      'SALE_CONFIRMED',
+      'FIRST_PURCHASE',
+      'CUSTOMER_VISITED',
+      'PURCHASE_COMPLETED',
+      'POINTS_EARNED',
+    ];
+    const saleEventRefs = saleEventTypes.map((eventType) =>
+      domainEventCollectionRef(params.merchantId).doc(
+        deterministicDocumentId('evt', [
+          params.merchantId,
+          eventType,
+          'sale',
+          params.saleId,
+        ]),
+      ));
+    const [
+      businessSnapshot,
+      currentCustomerSnapshot,
+      existingLedgerSnapshot,
+      saleEventSnapshots,
+    ] =
+      await Promise.all([
+        transaction.get(businessDocumentRef(params.merchantId)),
+        transaction.get(businessCustomerRef(params.merchantId, customerId)),
+        transaction.get(
+          loyaltyLedgerDocumentRef(
+            params.merchantId,
+            buildDeterministicLoyaltyLedgerEntryId('SALE', params.saleId),
+          ),
+        ),
+        Promise.all(saleEventRefs.map((eventRef) => transaction.get(eventRef))),
+      ]);
+
+    if (!businessSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'loyalty_business_not_found',
+        'Business document not found.',
+        { merchant_id: params.merchantId },
+      );
+    }
+    if (!currentCustomerSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'loyalty_customer_not_found',
+        'Business customer not found for sale.',
+        { merchant_id: params.merchantId, sale_id: params.saleId, customer_id: customerId },
+      );
+    }
+
+    const currentCustomerData = snapshotDataRecord(currentCustomerSnapshot);
+    const businessConfig = getBusinessLoyaltyConfig(snapshotDataRecord(businessSnapshot));
+    const derivedPoints = calculateConfirmedSalePoints(currentAmount, businessConfig.pointsPerMzn);
+    if (!params.allowLegacyBootstrap) {
+      await assertCustomerReadyForLiveSale(
+        transaction,
+        params.merchantId,
+        customerId,
+        params.saleId,
+        currentCustomerData,
+        derivedPoints,
+      );
+    }
+
+    const existingLedgerData = existingLedgerSnapshot.exists
+      ? snapshotDataRecord(existingLedgerSnapshot)
+      : {};
+    const expectedEntry = buildExpectedSaleLedgerEntry({
+      merchantId: params.merchantId,
+      customerId,
+      canonicalCustomerId: canonical.canonicalCustomerId,
+      saleId: params.saleId,
+      saleData: currentSaleData,
+      businessConfig,
+      now,
+      createdAt: pickNumber(existingLedgerData, 'created_at') ?? now,
+    });
+    if (
+      existingLedgerSnapshot.exists &&
+      loyaltyLedgerEntryHasDrift(existingLedgerData, expectedEntry)
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_ledger_immutable_conflict',
+        'The immutable sale ledger entry differs from the current sale.',
+        {
+          merchant_id: params.merchantId,
+          sale_id: params.saleId,
+          ledger_entry_id: expectedEntry.id,
+        },
+      );
+    }
+    const existingSaleUpdatedAt = pickNumber(currentSaleData, 'updated_at');
+    const saleCreatedAt = pickNumber(currentSaleData, 'created_at') ?? now;
+
+    const { projection, balancedExpectedEntry } = await updateCustomerProjectionFromLedger(
+      transaction,
+      params.merchantId,
+      customerId,
+      currentCustomerData,
+      expectedEntry,
+    );
+    const saleUpdatedAt = params.saleUpdateMode === 'backfill'
+      ? (existingSaleUpdatedAt ?? saleCreatedAt)
+      : (
+        maybePayloadString(currentSaleData, 'confirmation_status') === 'CONFIRMED' &&
+        pickNumber(currentSaleData, 'confirmed_points') === balancedExpectedEntry.points_delta &&
+        pickNumber(currentSaleData, 'loyalty_policy_version') === businessConfig.configVersion &&
+        existingSaleUpdatedAt != null
+          ? existingSaleUpdatedAt
+          : now
+      );
+
+    const previousCustomerId = maybePayloadString(existingLedgerData, 'customer_id');
+    if (previousCustomerId && previousCustomerId !== customerId) {
+      await resetCustomerProjectionFromExistingLedger(
+        transaction,
+        params.merchantId,
+        previousCustomerId,
+      );
+    }
+
+    transaction.set(currentSaleSnapshot.ref, {
+      confirmation_status: 'CONFIRMED',
+      confirmed_points: expectedEntry.points_delta,
+      confirmed_at: now,
+      confirmation_error_code: admin.firestore.FieldValue.delete(),
+      loyalty_policy_version: businessConfig.configVersion,
+      updated_at: saleUpdatedAt,
+      confirmed_points_awarded: admin.firestore.FieldValue.delete(),
+      loyalty_ledger_entry_id: admin.firestore.FieldValue.delete(),
+      loyalty_points_per_mzn: admin.firestore.FieldValue.delete(),
+      loyalty_config_version: admin.firestore.FieldValue.delete(),
+      loyalty_status: admin.firestore.FieldValue.delete(),
+      loyalty_error_code: admin.firestore.FieldValue.delete(),
+      loyalty_error_message: admin.firestore.FieldValue.delete(),
+      loyalty_error_at: admin.firestore.FieldValue.delete(),
+      loyalty_processed_at: admin.firestore.FieldValue.delete(),
+    }, { merge: true });
+    const emittedSaleEventTypes = saleEventTypes.filter((eventType) =>
+      eventType !== 'FIRST_PURCHASE' || projection.totalVisits === 1)
+      .filter((eventType) =>
+        eventType !== 'POINTS_EARNED' || balancedExpectedEntry.points_delta > 0);
+    for (const eventType of emittedSaleEventTypes) {
+      const eventIndex = saleEventTypes.indexOf(eventType);
+      if (saleEventSnapshots[eventIndex].exists) continue;
+      const event = buildDomainEvent({
+        eventType,
+        merchantId: params.merchantId,
+        canonicalCustomerId: canonical.canonicalCustomerId,
+        businessCustomerId: customerId,
+        sourceType: 'sale',
+        sourceId: params.saleId,
+        occurredAt: expectedEntry.occurred_at,
+        recordedAt: now,
+        payload: {
+          amount_mzn: currentAmount,
+          points_awarded: balancedExpectedEntry.points_delta,
+          ledger_entry_id: balancedExpectedEntry.id,
+          loyalty_policy_version: businessConfig.configVersion,
+        },
+      });
+      transaction.set(saleEventRefs[eventIndex], event);
+    }
+
+    return {
+      merchant_id: params.merchantId,
+      sale_id: params.saleId,
+      customer_id: customerId,
+      ledger_entry_id: balancedExpectedEntry.id,
+      confirmed_points: balancedExpectedEntry.points_delta,
+      updated_at: saleUpdatedAt,
+      client_points: pickNumber(currentSaleData, 'points'),
+      client_points_drift:
+        (pickNumber(currentSaleData, 'points') ?? balancedExpectedEntry.points_delta) !== balancedExpectedEntry.points_delta,
+      customer_confirmed_points: projection.confirmedPoints,
+      total_visits: projection.totalVisits,
+      total_spent: projection.totalSpent,
+      drift_detected: existingLedgerSnapshot.exists &&
+        loyaltyLedgerEntryHasDrift(existingLedgerData, balancedExpectedEntry),
+      confirmation_status: 'CONFIRMED',
+    };
+  });
+  const classification = await updateCustomerClassification({
+    merchantId: params.merchantId,
+    customerId,
+    sourceType: 'sale',
+    sourceId: params.saleId,
+    causationId: deterministicDocumentId('evt', [
+      params.merchantId,
+      'PURCHASE_COMPLETED',
+      'sale',
+      params.saleId,
+    ]),
+    occurredAt: pickNumber(saleData, 'created_at') ?? now,
+    dryRun: false,
+  });
+  return { ...result, classification };
+}
+
+async function inspectSaleForLoyaltyBackfill(params: {
+  merchantId: string;
+  saleId: string;
+  saleSnapshot?: admin.firestore.DocumentSnapshot;
+}): Promise<Record<string, unknown>> {
+  const saleSnapshot = params.saleSnapshot ?? await businessSalesCollectionRef(params.merchantId).doc(params.saleId).get();
+  if (!saleSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_sale_not_found',
+      'Sale document not found.',
+      { merchant_id: params.merchantId, sale_id: params.saleId },
+    );
+  }
+
+  const saleData = snapshotDataRecord(saleSnapshot);
+  const customerId = maybePayloadString(saleData, 'customer_id', 'customerId');
+  const amount = pickNumber(saleData, 'amount');
+  if (!customerId) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_sale_customer_missing',
+      'Sale customer_id is required.',
+      { merchant_id: params.merchantId, sale_id: params.saleId },
+    );
+  }
+  if (amount == null || amount <= 0) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_sale_amount_invalid',
+      'Sale amount must be greater than zero.',
+      { merchant_id: params.merchantId, sale_id: params.saleId },
+    );
+  }
+
+  const [businessSnapshot, customerSnapshot] = await Promise.all([
+    businessDocumentRef(params.merchantId).get(),
+    businessCustomerRef(params.merchantId, customerId).get(),
+  ]);
+  if (!businessSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_business_not_found',
+      'Business document not found.',
+      { merchant_id: params.merchantId },
+    );
+  }
+  if (!customerSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_customer_not_found',
+      'Business customer not found for sale.',
+      { merchant_id: params.merchantId, sale_id: params.saleId, customer_id: customerId },
+    );
+  }
+
+  const customerData = snapshotDataRecord(customerSnapshot);
+  const canonical = await resolveCanonicalCustomerForLoyalty(
+    params.merchantId,
+    customerId,
+    customerData,
+    true,
+  );
+  const businessConfig = getBusinessLoyaltyConfig(snapshotDataRecord(businessSnapshot));
+  const expectedEntry = buildExpectedSaleLedgerEntry({
+    merchantId: params.merchantId,
+    customerId,
+    canonicalCustomerId: canonical.canonicalCustomerId,
+    saleId: params.saleId,
+    saleData,
+    businessConfig,
+    now: Date.now(),
+    createdAt: Date.now(),
+  });
+  const customerLedgerSnapshot = await boundedCustomerLedgerQuery(
+    params.merchantId,
+    customerId,
+  ).get();
+  assertLedgerQueryIsBounded(
+    customerLedgerSnapshot,
+    params.merchantId,
+    customerId,
+  );
+  const balancedEntries = computeLedgerEntriesWithBalances(
+    mergeLedgerEntriesForProjection(customerLedgerSnapshot, expectedEntry),
+  );
+  const balancedExpectedEntry =
+    balancedEntries.find((entry) => entry.id === expectedEntry.id) ?? expectedEntry;
+  const existingLedgerSnapshot = await loyaltyLedgerDocumentRef(params.merchantId, expectedEntry.id).get();
+  const saleUpdatedAt =
+    pickNumber(saleData, 'updated_at') ??
+    pickNumber(saleData, 'created_at') ??
+    Date.now();
+
+  return {
+    merchant_id: params.merchantId,
+    sale_id: params.saleId,
+    customer_id: customerId,
+    ledger_entry_id: balancedExpectedEntry.id,
+    confirmed_points: balancedExpectedEntry.points_delta,
+    updated_at: saleUpdatedAt,
+    client_points: pickNumber(saleData, 'points'),
+    drift_detected: existingLedgerSnapshot.exists &&
+      loyaltyLedgerEntryHasDrift(snapshotDataRecord(existingLedgerSnapshot), balancedExpectedEntry),
+    client_points_drift:
+      (pickNumber(saleData, 'points') ?? balancedExpectedEntry.points_delta) !== balancedExpectedEntry.points_delta,
+    balance_after: balancedExpectedEntry.balance_after,
+    status: 'DRY_RUN',
+  };
+}
+
+async function processExistingRedemptionToLoyaltyLedger(params: {
+  merchantId: string;
+  redemptionId: string;
+  redemptionSnapshot?: admin.firestore.DocumentSnapshot;
+  dryRun: boolean;
+}): Promise<Record<string, unknown>> {
+  const redemptionSnapshot =
+    params.redemptionSnapshot ??
+    await businessRedemptionsCollectionRef(params.merchantId).doc(params.redemptionId).get();
+  if (!redemptionSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_redemption_not_found',
+      'Redemption document not found.',
+      { merchant_id: params.merchantId, redemption_id: params.redemptionId },
+    );
+  }
+
+  const redemptionData = snapshotDataRecord(redemptionSnapshot);
+  const customerId = maybePayloadString(redemptionData, 'customer_id', 'customerId');
+  const pointsSpent = pickNumber(redemptionData, 'points_spent') ?? pickNumber(redemptionData, 'pointsSpent');
+  if (!customerId) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_redemption_customer_missing',
+      'Redemption customer_id is required.',
+      { merchant_id: params.merchantId, redemption_id: params.redemptionId },
+    );
+  }
+  if (pointsSpent == null || pointsSpent <= 0) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_redemption_points_invalid',
+      'Redemption points_spent must be greater than zero.',
+      { merchant_id: params.merchantId, redemption_id: params.redemptionId },
+    );
+  }
+
+  const [businessSnapshot, customerSnapshot] = await Promise.all([
+    businessDocumentRef(params.merchantId).get(),
+    businessCustomerRef(params.merchantId, customerId).get(),
+  ]);
+  if (!businessSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_business_not_found',
+      'Business document not found.',
+      { merchant_id: params.merchantId },
+    );
+  }
+  if (!customerSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'loyalty_customer_not_found',
+      'Business customer not found for redemption.',
+      { merchant_id: params.merchantId, redemption_id: params.redemptionId, customer_id: customerId },
+    );
+  }
+
+  const customerData = snapshotDataRecord(customerSnapshot);
+  const canonical = await resolveCanonicalCustomerForLoyalty(
+    params.merchantId,
+    customerId,
+    customerData,
+    params.dryRun,
+  );
+  const businessConfig = getBusinessLoyaltyConfig(snapshotDataRecord(businessSnapshot));
+  const ledgerEntryId = buildDeterministicLoyaltyLedgerEntryId('REDEMPTION', params.redemptionId);
+  const existingLedgerSnapshot = await loyaltyLedgerDocumentRef(
+    params.merchantId,
+    ledgerEntryId,
+  ).get();
+  const existingLedgerData = existingLedgerSnapshot.exists
+    ? snapshotDataRecord(existingLedgerSnapshot)
+    : {};
+  const now = Date.now();
+  const expectedEntry = buildExpectedRedemptionLedgerEntry({
+    merchantId: params.merchantId,
+    customerId,
+    canonicalCustomerId: canonical.canonicalCustomerId,
+    redemptionId: params.redemptionId,
+    redemptionData,
+    businessConfig,
+    now,
+    createdAt: pickNumber(existingLedgerData, 'created_at') ?? now,
+  });
+  const customerLedgerSnapshot = await boundedCustomerLedgerQuery(
+    params.merchantId,
+    customerId,
+  ).get();
+  assertLedgerQueryIsBounded(
+    customerLedgerSnapshot,
+    params.merchantId,
+    customerId,
+  );
+  const balancedEntries = computeLedgerEntriesWithBalances(
+    mergeLedgerEntriesForProjection(customerLedgerSnapshot, expectedEntry),
+  );
+  const balancedExpectedEntry =
+    balancedEntries.find((entry) => entry.id === expectedEntry.id) ?? expectedEntry;
+
+  if (params.dryRun) {
+    return {
+      merchant_id: params.merchantId,
+      redemption_id: params.redemptionId,
+      customer_id: customerId,
+      ledger_entry_id: ledgerEntryId,
+      points_delta: balancedExpectedEntry.points_delta,
+      balance_after: balancedExpectedEntry.balance_after,
+      drift_detected: existingLedgerSnapshot.exists &&
+        loyaltyLedgerEntryHasDrift(existingLedgerData, balancedExpectedEntry),
+      status: 'DRY_RUN',
+    };
+  }
+
+  const result = await admin.firestore().runTransaction(async (transaction) => {
+    const currentCustomerSnapshot = await transaction.get(
+      businessCustomerRef(params.merchantId, customerId),
+    );
+    if (!currentCustomerSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'loyalty_customer_not_found',
+        'Business customer not found for redemption.',
+        { merchant_id: params.merchantId, redemption_id: params.redemptionId, customer_id: customerId },
+      );
+    }
+
+    const currentCustomerData = snapshotDataRecord(currentCustomerSnapshot);
+    const currentExistingLedgerSnapshot = await transaction.get(
+      loyaltyLedgerDocumentRef(params.merchantId, ledgerEntryId),
+    );
+    const redemptionEvents = ([
+      'REDEMPTION_CONFIRMED',
+      'REWARD_REDEEMED',
+    ] as DomainEventType[]).map((eventType) => buildDomainEvent({
+      eventType,
+      merchantId: params.merchantId,
+      canonicalCustomerId: canonical.canonicalCustomerId,
+      businessCustomerId: customerId,
+      sourceType: 'redemption',
+      sourceId: params.redemptionId,
+      occurredAt: expectedEntry.occurred_at,
+      recordedAt: now,
+      payload: {
+        points_spent: Math.abs(expectedEntry.points_delta),
+        ledger_entry_id: ledgerEntryId,
+        reward_id: expectedEntry.reward_id ?? null,
+      },
+    }));
+    const redemptionEventRefs = redemptionEvents.map((event) =>
+      domainEventCollectionRef(params.merchantId).doc(event.event_id));
+    const redemptionEventSnapshots = await Promise.all(
+      redemptionEventRefs.map((eventRef) => transaction.get(eventRef)),
+    );
+    const currentExistingLedgerData = currentExistingLedgerSnapshot.exists
+      ? snapshotDataRecord(currentExistingLedgerSnapshot)
+      : {};
+    const entryToWrite = {
+      ...expectedEntry,
+      created_at: pickNumber(currentExistingLedgerData, 'created_at') ?? expectedEntry.created_at,
+    };
+    if (
+      currentExistingLedgerSnapshot.exists &&
+      loyaltyLedgerEntryHasDrift(currentExistingLedgerData, entryToWrite)
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_ledger_immutable_conflict',
+        'The immutable redemption ledger entry differs from the redemption.',
+        {
+          merchant_id: params.merchantId,
+          redemption_id: params.redemptionId,
+          ledger_entry_id: ledgerEntryId,
+        },
+      );
+    }
+
+    const { projection, balancedExpectedEntry } = await updateCustomerProjectionFromLedger(
+      transaction,
+      params.merchantId,
+      customerId,
+      currentCustomerData,
+      entryToWrite,
+    );
+    transaction.set(
+      businessRedemptionsCollectionRef(params.merchantId).doc(params.redemptionId),
+      {
+        confirmed_points_spent: Math.abs(entryToWrite.points_delta),
+        loyalty_ledger_entry_id: ledgerEntryId,
+        loyalty_status: 'CONFIRMED',
+        loyalty_processed_at: Date.now(),
+      },
+      { merge: true },
+    );
+    redemptionEvents.forEach((event, index) => {
+      if (!redemptionEventSnapshots[index].exists) {
+        transaction.set(redemptionEventRefs[index], event);
+      }
+    });
+
+    return {
+      merchant_id: params.merchantId,
+      redemption_id: params.redemptionId,
+      customer_id: customerId,
+      ledger_entry_id: balancedExpectedEntry.id,
+      confirmed_points_balance: projection.confirmedPoints,
+      drift_detected: currentExistingLedgerSnapshot.exists &&
+        loyaltyLedgerEntryHasDrift(currentExistingLedgerData, balancedExpectedEntry),
+      status: 'CONFIRMED',
+    };
+  });
+  const classification = await updateCustomerClassification({
+    merchantId: params.merchantId,
+    customerId: customerId!,
+    sourceType: 'redemption',
+    sourceId: params.redemptionId,
+    causationId: deterministicDocumentId('evt', [
+      params.merchantId,
+      'REWARD_REDEEMED',
+      'redemption',
+      params.redemptionId,
+    ]),
+    occurredAt: expectedEntry.occurred_at,
+    dryRun: false,
+  });
+  return { ...result, classification };
+}
+
+async function handleLoyaltyLedgerBackfillRequest(
+  req: AuthedRequest,
+  body: unknown,
+): Promise<Record<string, unknown>> {
+  const payload = requireBodyObject(body);
+  const merchantId = await resolveCustomerCoreMerchantId(req, payload);
+  const requestedSourceType =
+    maybePayloadString(payload, 'source_type', 'sourceType')?.toLowerCase() ?? 'all';
+  if (!['all', 'sales', 'redemptions'].includes(requestedSourceType)) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_source_type_invalid',
+      'source_type must be all, sales, or redemptions.',
+    );
+  }
+
+  const cursorSourceType = (
+    maybePayloadString(payload, 'cursor_source_type', 'cursorSourceType')?.toLowerCase() ??
+    (requestedSourceType === 'all' ? 'sales' : requestedSourceType)
+  );
+  const startAfterId = maybePayloadString(payload, 'start_after_id', 'startAfterId');
+  const apply = maybePayloadBoolean(payload, 'apply') ?? false;
+  const limit = clampLimit(payload.limit, 50, 200);
+
+  const sourceType = requestedSourceType === 'all'
+    ? cursorSourceType
+    : requestedSourceType;
+  if (!['sales', 'redemptions'].includes(sourceType)) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_source_type_invalid',
+      'cursor_source_type must be sales or redemptions.',
+    );
+  }
+
+  let query = (
+    sourceType === 'sales'
+      ? businessSalesCollectionRef(merchantId)
+      : businessRedemptionsCollectionRef(merchantId)
+  )
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .limit(limit);
+  if (startAfterId) {
+    query = query.startAfter(startAfterId);
+  }
+
+  const snapshot = await query.get();
+  const results: Array<Record<string, unknown>> = [];
+  const affectedCustomerIds = new Set<string>();
+  let appliedCount = 0;
+  let driftCount = 0;
+  let ambiguityCount = 0;
+  let errorCount = 0;
+
+  for (const doc of snapshot.docs) {
+    try {
+      const result = sourceType === 'sales'
+        ? apply
+          ? await applySaleToLoyaltyLedger({
+            merchantId,
+            saleId: doc.id,
+            saleSnapshot: doc,
+            allowLegacyBootstrap: true,
+            saleUpdateMode: 'backfill',
+          })
+          : await inspectSaleForLoyaltyBackfill({
+            merchantId,
+            saleId: doc.id,
+            saleSnapshot: doc,
+          })
+        : await processExistingRedemptionToLoyaltyLedger({
+          merchantId,
+          redemptionId: doc.id,
+          redemptionSnapshot: doc,
+          dryRun: !apply,
+        });
+
+      results.push({
+        ...result,
+        status: apply ? 'APPLIED' : 'DRY_RUN',
+      });
+      if (
+        (result.drift_detected as boolean | undefined) === true ||
+        (result.client_points_drift as boolean | undefined) === true
+      ) {
+        driftCount += 1;
+      }
+      if (apply) {
+        appliedCount += 1;
+      }
+
+      const affectedCustomerId = maybePayloadString(result, 'customer_id');
+      if (affectedCustomerId) {
+        affectedCustomerIds.add(affectedCustomerId);
+      }
+    } catch (error) {
+      if (error instanceof CustomerCoreError) {
+        results.push({
+          source_type: sourceType,
+          source_id: doc.id,
+          status: error.code.includes('ambigu') || error.code.includes('conflict')
+            ? 'AMBIGUITY'
+            : 'ERROR',
+          code: error.code,
+          message: error.message,
+          ...(error.details ? { details: error.details } : {}),
+        });
+        if (error.code.includes('ambigu') || error.code.includes('conflict')) {
+          ambiguityCount += 1;
+        } else {
+          errorCount += 1;
+        }
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const nextCursor =
+    snapshot.docs.length === limit && snapshot.docs.length > 0
+      ? { source_type: sourceType, start_after_id: snapshot.docs[snapshot.docs.length - 1].id }
+      : requestedSourceType === 'all' && sourceType === 'sales'
+        ? { source_type: 'redemptions', start_after_id: null }
+        : null;
+
+  return {
+    merchant_id: merchantId,
+    mode: apply ? 'apply' : 'dry_run',
+    source_type: sourceType,
+    processed: snapshot.docs.length,
+    applied: appliedCount,
+    drift_count: driftCount,
+    ambiguity_count: ambiguityCount,
+    error_count: errorCount,
+    affected_customer_ids: [...affectedCustomerIds],
+    has_more: nextCursor != null,
+    next_cursor: nextCursor,
+    results,
+  };
+}
+
+async function handleLoyaltyLedgerReconcileRequest(
+  req: AuthedRequest,
+  body: unknown,
+): Promise<Record<string, unknown>> {
+  const payload = requireBodyObject(body);
+  const merchantId = await resolveCustomerCoreMerchantId(req, payload);
+  const apply = maybePayloadBoolean(payload, 'apply') ?? false;
+  const limit = clampLimit(payload.limit, 50, 200);
+  const startAfterCustomerId = maybePayloadString(
+    payload,
+    'start_after_customer_id',
+    'startAfterCustomerId',
+  );
+
+  let query = businessDocumentRef(merchantId)
+    .collection('customers')
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .limit(limit);
+  if (startAfterCustomerId) {
+    query = query.startAfter(startAfterCustomerId);
+  }
+
+  const snapshot = await query.get();
+  const results: Array<Record<string, unknown>> = [];
+  let driftCount = 0;
+  let appliedCount = 0;
+
+  for (const doc of snapshot.docs) {
+    const customerData = snapshotDataRecord(doc);
+    const [ledgerSnapshot, salesSnapshot, redemptionsSnapshot] = await Promise.all([
+      boundedCustomerLedgerQuery(merchantId, doc.id).get(),
+      businessSalesCollectionRef(merchantId).where('customer_id', '==', doc.id).limit(1).get(),
+      businessRedemptionsCollectionRef(merchantId).where('customer_id', '==', doc.id).limit(1).get(),
+    ]);
+    assertLedgerQueryIsBounded(ledgerSnapshot, merchantId, doc.id);
+
+    if (
+      ledgerSnapshot.empty &&
+      salesSnapshot.empty &&
+      redemptionsSnapshot.empty &&
+      (pickNumber(customerData, 'total_points') ?? 0) <= 0 &&
+      pickNumber(customerData, 'confirmed_points') == null
+    ) {
+      results.push({
+        customer_id: doc.id,
+        status: 'NO_ACTIVITY',
+        ledger_entry_count: 0,
+      });
+      continue;
+    }
+
+    if (
+      ledgerSnapshot.empty &&
+      (
+        !salesSnapshot.empty ||
+        !redemptionsSnapshot.empty ||
+        (pickNumber(customerData, 'total_points') ?? 0) > 0
+      )
+    ) {
+      results.push({
+        customer_id: doc.id,
+        status: 'BACKFILL_REQUIRED',
+        code: 'loyalty_backfill_required',
+        message: 'Customer has loyalty activity but no authoritative ledger entries yet.',
+      });
+      driftCount += 1;
+      continue;
+    }
+
+    const projection = computeCustomerProjectionFromLedgerEntries(
+      ledgerSnapshot.docs.map((item) => loyaltyLedgerEntryFromData(snapshotDataRecord(item))),
+    );
+    const expectedPatch = buildCustomerProjectionPatch(customerData, projection, Date.now());
+    const drift =
+      !valuesEqual(customerData.confirmed_points, expectedPatch.confirmed_points) ||
+      !valuesEqual(customerData.total_points, expectedPatch.total_points) ||
+      !valuesEqual(customerData.total_visits, expectedPatch.total_visits) ||
+      !valuesEqual(customerData.total_spent, expectedPatch.total_spent) ||
+      !valuesEqual(customerData.average_spend, expectedPatch.average_spend) ||
+      !valuesEqual(
+        customerData.average_visit_interval_days,
+        expectedPatch.average_visit_interval_days,
+      ) ||
+      !valuesEqual(customerData.first_visit_at, expectedPatch.first_visit_at) ||
+      !valuesEqual(customerData.last_visit_at, expectedPatch.last_visit_at);
+
+    if (drift) {
+      driftCount += 1;
+    }
+
+    if (apply && drift) {
+      await doc.ref.set(expectedPatch, { merge: true });
+      appliedCount += 1;
+    }
+
+    results.push({
+      customer_id: doc.id,
+      status: drift ? (apply ? 'APPLIED' : 'DRIFT') : 'IN_SYNC',
+      ledger_entry_count: ledgerSnapshot.size,
+      expected_confirmed_points: expectedPatch.confirmed_points,
+      stored_confirmed_points: pickNumber(customerData, 'confirmed_points') ?? 0,
+      stored_total_points: pickNumber(customerData, 'total_points') ?? 0,
+      expected_total_visits: expectedPatch.total_visits,
+      stored_total_visits: pickNumber(customerData, 'total_visits') ?? 0,
+    });
+  }
+
+  const nextCursor =
+    snapshot.docs.length === limit && snapshot.docs.length > 0
+      ? snapshot.docs[snapshot.docs.length - 1].id
+      : null;
+
+  return {
+    merchant_id: merchantId,
+    mode: apply ? 'apply' : 'dry_run',
+    processed: snapshot.docs.length,
+    drift_count: driftCount,
+    applied: appliedCount,
+    has_more: nextCursor != null,
+    next_cursor: nextCursor,
+    results,
+  };
+}
+
+async function handleAssistedLoyaltyRedemptionRequest(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const merchantId = await resolveCustomerCoreMerchantId(req, payload);
+  const customerId = requirePayloadString(payload, 'customer_id');
+  const rewardId = requirePayloadString(payload, 'reward_id');
+  const idempotencyKey =
+    maybePayloadString(payload, 'idempotency_key', 'idempotencyKey');
+  if (!idempotencyKey) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_idempotency_key_missing',
+      'idempotency_key is required for assisted redemption.',
+    );
+  }
+
+  const now = Date.now();
+  const redemptionId = buildDeterministicRedemptionId(
+    merchantId,
+    idempotencyKey,
+  );
+  const redemptionEventTypes: DomainEventType[] = [
+    'REDEMPTION_CONFIRMED',
+    'REWARD_REDEEMED',
+  ];
+  const redemptionEventRefs = redemptionEventTypes.map((eventType) =>
+    domainEventCollectionRef(merchantId).doc(deterministicDocumentId('evt', [
+      merchantId,
+      eventType,
+      'redemption',
+      redemptionId,
+    ])));
+
+  const result = await admin.firestore().runTransaction(async (transaction) => {
+    const [
+      businessSnapshot,
+      rewardSnapshot,
+      customerSnapshot,
+      redemptionSnapshot,
+      redemptionEventSnapshots,
+    ] =
+      await Promise.all([
+        transaction.get(businessDocumentRef(merchantId)),
+        transaction.get(businessRewardsCollectionRef(merchantId).doc(rewardId)),
+        transaction.get(businessCustomerRef(merchantId, customerId)),
+        transaction.get(businessRedemptionsCollectionRef(merchantId).doc(redemptionId)),
+        Promise.all(redemptionEventRefs.map((eventRef) => transaction.get(eventRef))),
+      ]);
+
+    if (!businessSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'loyalty_business_not_found',
+        'Business document not found.',
+        { merchant_id: merchantId },
+      );
+    }
+    if (!rewardSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'loyalty_reward_not_found',
+        'Reward not found.',
+        { merchant_id: merchantId, reward_id: rewardId },
+      );
+    }
+    if (!customerSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'loyalty_customer_not_found',
+        'Business customer not found.',
+        { merchant_id: merchantId, customer_id: customerId },
+      );
+    }
+
+    const ledgerEntryId = buildDeterministicLoyaltyLedgerEntryId('REDEMPTION', redemptionId);
+    const ledgerRef = loyaltyLedgerDocumentRef(merchantId, ledgerEntryId);
+    const ledgerSnapshot = await transaction.get(ledgerRef);
+    if (redemptionSnapshot.exists && ledgerSnapshot.exists) {
+      const existingRedemptionData = snapshotDataRecord(redemptionSnapshot);
+      if (
+        maybePayloadString(existingRedemptionData, 'customer_id', 'customerId') !== customerId ||
+        maybePayloadString(existingRedemptionData, 'reward_id', 'rewardId') !== rewardId
+      ) {
+        throw new CustomerCoreError(
+          409,
+          'loyalty_redemption_idempotency_conflict',
+          'The supplied idempotency_key was already used for a different redemption request.',
+          { merchant_id: merchantId, redemption_id: redemptionId },
+        );
+      }
+
+      const existingLedgerEntriesSnapshot = await transaction.get(
+        boundedCustomerLedgerQuery(merchantId, customerId),
+      );
+      assertLedgerQueryIsBounded(
+        existingLedgerEntriesSnapshot,
+        merchantId,
+        customerId,
+      );
+      const existingProjection = computeCustomerProjectionFromLedgerEntries(
+        existingLedgerEntriesSnapshot.docs.map((doc) =>
+          loyaltyLedgerEntryFromData(snapshotDataRecord(doc))),
+      );
+      transaction.set(
+        businessCustomerRef(merchantId, customerId),
+        buildCustomerProjectionPatch(snapshotDataRecord(customerSnapshot), existingProjection, now),
+        { merge: true },
+      );
+      const replayCustomerData = snapshotDataRecord(customerSnapshot);
+      const replayLedgerData = snapshotDataRecord(ledgerSnapshot);
+      const replayCanonicalCustomerId = maybePayloadString(
+        replayCustomerData,
+        'canonical_customer_id',
+        'canonicalCustomerId',
+      );
+      if (!replayCanonicalCustomerId) {
+        throw new CustomerCoreError(
+          409,
+          'loyalty_canonical_link_required',
+          'Customer canonical relationship is missing. Run customer linking/backfill first.',
+          { merchant_id: merchantId, customer_id: customerId },
+        );
+      }
+      redemptionEventTypes.forEach((eventType, index) => {
+        if (redemptionEventSnapshots[index].exists) return;
+        transaction.set(redemptionEventRefs[index], buildDomainEvent({
+          eventType,
+          merchantId,
+          canonicalCustomerId: replayCanonicalCustomerId,
+          businessCustomerId: customerId,
+          sourceType: 'redemption',
+          sourceId: redemptionId,
+          occurredAt:
+            pickNumber(existingRedemptionData, 'redeemed_at') ??
+            pickNumber(existingRedemptionData, 'created_at') ??
+            now,
+          recordedAt: now,
+          payload: {
+            points_spent: Math.abs(pickNumber(replayLedgerData, 'points_delta') ?? 0),
+            ledger_entry_id: ledgerEntryId,
+            reward_id: rewardId,
+          },
+        }));
+      });
+
+      return {
+        merchant_id: merchantId,
+        redemption_id: redemptionId,
+        customer_id: customerId,
+        redemption: {
+          ...existingRedemptionData,
+          confirmed_points: existingProjection.confirmedPoints,
+        },
+        confirmed_points: existingProjection.confirmedPoints,
+        idempotent_replay: true,
+      };
+    }
+
+    const rewardData = snapshotDataRecord(rewardSnapshot);
+    const rewardActive = pickBoolean(rewardData, 'active') ?? true;
+    const pointsRequired =
+      pickNumber(rewardData, 'points_required') ?? pickNumber(rewardData, 'pointsRequired');
+    if (!rewardActive) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_reward_inactive',
+        'Reward is not active.',
+        { merchant_id: merchantId, reward_id: rewardId },
+      );
+    }
+    if (pointsRequired == null || pointsRequired <= 0) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_reward_points_invalid',
+        'Reward points_required must be greater than zero.',
+        { merchant_id: merchantId, reward_id: rewardId },
+      );
+    }
+
+    const customerData = snapshotDataRecord(customerSnapshot);
+    const canonicalCustomerId = maybePayloadString(
+      customerData,
+      'canonical_customer_id',
+      'canonicalCustomerId',
+    );
+    if (!canonicalCustomerId) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_canonical_link_required',
+        'Customer canonical relationship is missing. Run customer linking/backfill first.',
+        { merchant_id: merchantId, customer_id: customerId },
+      );
+    }
+    if (pickNumber(customerData, 'loyalty_projection_version') !== LOYALTY_PROJECTION_VERSION) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_backfill_required',
+        'Customer loyalty history must be backfilled before online redemption.',
+        { merchant_id: merchantId, customer_id: customerId },
+      );
+    }
+
+    const [forwardLinkSnapshot, reverseLinkSnapshot] = await Promise.all([
+      transaction.get(businessCustomerLinkRef(merchantId, customerId)),
+      transaction.get(canonicalIdentityBusinessLinkRef(merchantId, canonicalCustomerId)),
+    ]);
+    const forwardLinkData = snapshotDataRecord(forwardLinkSnapshot);
+    const reverseLinkData = snapshotDataRecord(reverseLinkSnapshot);
+    if (
+      !forwardLinkSnapshot.exists ||
+      maybePayloadString(forwardLinkData, 'canonical_customer_id') !== canonicalCustomerId ||
+      !reverseLinkSnapshot.exists ||
+      maybePayloadString(reverseLinkData, 'business_customer_id', 'customer_id') !== customerId
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_canonical_link_inconsistent',
+        'Customer canonical relationship is inconsistent. Run customer backfill to repair it.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          canonical_customer_id: canonicalCustomerId,
+        },
+      );
+    }
+
+    const businessConfig = getBusinessLoyaltyConfig(snapshotDataRecord(businessSnapshot));
+
+    if (redemptionSnapshot.exists) {
+      const existingRedemptionData = snapshotDataRecord(redemptionSnapshot);
+      if (
+        maybePayloadString(existingRedemptionData, 'customer_id', 'customerId') !== customerId ||
+        maybePayloadString(existingRedemptionData, 'reward_id', 'rewardId') !== rewardId
+      ) {
+        throw new CustomerCoreError(
+          409,
+          'loyalty_redemption_idempotency_conflict',
+          'The supplied idempotency_key was already used for a different redemption request.',
+          { merchant_id: merchantId, redemption_id: redemptionId },
+        );
+      }
+    }
+
+    const ledgerQuerySnapshot = await transaction.get(
+      boundedCustomerLedgerQuery(merchantId, customerId),
+    );
+    assertLedgerQueryIsBounded(ledgerQuerySnapshot, merchantId, customerId);
+    const existingEntries = ledgerQuerySnapshot.docs.map((doc) =>
+      loyaltyLedgerEntryFromData(snapshotDataRecord(doc)));
+    const projectionBefore = computeCustomerProjectionFromLedgerEntries(existingEntries);
+    if (projectionBefore.confirmedPoints < pointsRequired) {
+      throw new CustomerCoreError(
+        409,
+        'loyalty_insufficient_confirmed_points',
+        'Customer does not have enough confirmed points for this reward.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          confirmed_points: projectionBefore.confirmedPoints,
+          points_required: pointsRequired,
+        },
+      );
+    }
+
+    const redemptionData: Record<string, unknown> = {
+      id: redemptionId,
+      merchant_id: merchantId,
+      customer_id: customerId,
+      canonical_customer_id: canonicalCustomerId,
+      reward_id: rewardId,
+      points_spent: pointsRequired,
+      confirmed_points_spent: pointsRequired,
+      redeemed_at: pickNumber(payload, 'redeemed_at') ?? now,
+      idempotency_key: idempotencyKey,
+      loyalty_ledger_entry_id: ledgerEntryId,
+      loyalty_status: 'CONFIRMED',
+      loyalty_processed_at: now,
+      created_at: pickNumber(payload, 'redeemed_at') ?? now,
+      updated_at: now,
+    };
+
+    const expectedEntry = buildExpectedRedemptionLedgerEntry({
+      merchantId,
+      customerId,
+      canonicalCustomerId,
+      redemptionId,
+      redemptionData,
+      businessConfig,
+      now,
+      createdAt: ledgerSnapshot.exists
+        ? (pickNumber(snapshotDataRecord(ledgerSnapshot), 'created_at') ?? now)
+        : now,
+    });
+
+    transaction.set(
+      businessRedemptionsCollectionRef(merchantId).doc(redemptionId),
+      redemptionData,
+      { merge: true },
+    );
+    if (ledgerSnapshot.exists) {
+      const ledgerData = snapshotDataRecord(ledgerSnapshot);
+      if (loyaltyLedgerEntryHasDrift(ledgerData, expectedEntry)) {
+        throw new CustomerCoreError(
+          409,
+          'loyalty_ledger_immutable_conflict',
+          'The immutable redemption ledger entry differs from the redemption request.',
+          {
+            merchant_id: merchantId,
+            redemption_id: redemptionId,
+            ledger_entry_id: ledgerEntryId,
+          },
+        );
+      }
+    } else {
+      transaction.set(ledgerRef, expectedEntry);
+    }
+    redemptionEventTypes.forEach((eventType, index) => {
+      if (redemptionEventSnapshots[index].exists) return;
+      transaction.set(redemptionEventRefs[index], buildDomainEvent({
+        eventType,
+        merchantId,
+        canonicalCustomerId,
+        businessCustomerId: customerId,
+        sourceType: 'redemption',
+        sourceId: redemptionId,
+        occurredAt: expectedEntry.occurred_at,
+        recordedAt: now,
+        payload: {
+          points_spent: pointsRequired,
+          ledger_entry_id: ledgerEntryId,
+          reward_id: rewardId,
+        },
+      }));
+    });
+
+    const projection = computeCustomerProjectionFromLedgerEntries([
+      ...existingEntries.filter((entry) => entry.id !== expectedEntry.id),
+      expectedEntry,
+    ]);
+    transaction.set(
+      businessCustomerRef(merchantId, customerId),
+      buildCustomerProjectionPatch(customerData, projection, now),
+      { merge: true },
+    );
+
+    return {
+      merchant_id: merchantId,
+      redemption_id: redemptionId,
+      customer_id: customerId,
+      redemption: {
+        ...redemptionData,
+        confirmed_points: projection.confirmedPoints,
+      },
+      confirmed_points: projection.confirmedPoints,
+      idempotent_replay: redemptionSnapshot.exists && ledgerSnapshot.exists,
+    };
+  });
+  const classification = await updateCustomerClassification({
+    merchantId,
+    customerId,
+    sourceType: 'redemption',
+    sourceId: redemptionId,
+    causationId: deterministicDocumentId('evt', [
+      merchantId,
+      'REWARD_REDEEMED',
+      'redemption',
+      redemptionId,
+    ]),
+    occurredAt: pickNumber(payload, 'redeemed_at') ?? now,
+    dryRun: false,
+  });
+  return { ...result, classification };
+}
+
+function retentionDefaultsForBusiness(
+  businessData: Record<string, unknown>,
+): { activeDays: number; attentionDays: number; riskDays: number } {
+  const businessType = (
+    maybePayloadString(businessData, 'business_type', 'businessType') ?? 'other'
+  ).toLowerCase();
+  const defaults: Record<string, [number, number, number]> = {
+    barbershop: [14, 30, 60],
+    salon: [21, 45, 75],
+    spa: [30, 60, 90],
+    retail: [30, 60, 120],
+    restaurant: [7, 21, 45],
+    cafe: [7, 21, 45],
+    clinic: [30, 60, 90],
+    gym: [7, 14, 30],
+    workshop: [60, 120, 240],
+    professional_services: [30, 60, 90],
+    other: [30, 60, 90],
+  };
+  const selected = defaults[businessType] ?? defaults.other;
+  const rawConfig = businessData.retention_config;
+  const config = rawConfig != null && typeof rawConfig === 'object'
+    ? rawConfig as Record<string, unknown>
+    : {};
+  const activeDays = positiveIntegerOrDefault(config.active_days, selected[0]);
+  const attentionDays = positiveIntegerOrDefault(config.attention_days, selected[1]);
+  const riskDays = positiveIntegerOrDefault(config.risk_days, selected[2]);
+  if (activeDays < attentionDays && attentionDays < riskDays) {
+    return { activeDays, attentionDays, riskDays };
+  }
+  return {
+    activeDays: selected[0],
+    attentionDays: selected[1],
+    riskDays: selected[2],
+  };
+}
+
+function buildSeedRetentionPolicy(
+  businessData: Record<string, unknown>,
+): RetentionPolicy {
+  const retention = retentionDefaultsForBusiness(businessData);
+  return {
+    schemaVersion: RETENTION_POLICY_SCHEMA_VERSION,
+    version: 1,
+    activeDays: retention.activeDays,
+    attentionDays: retention.attentionDays,
+    riskDays: retention.riskDays,
+    returningVisits: 2,
+    regularVisits: 5,
+    loyalVisits: 10,
+    vipSpendMzn: 5000,
+    advocateVisits: 20,
+    advocateSpendMzn: 10000,
+  };
+}
+
+function validateRetentionPolicy(policy: RetentionPolicy): RetentionPolicy {
+  const integerValues = [
+    policy.version,
+    policy.activeDays,
+    policy.attentionDays,
+    policy.riskDays,
+    policy.returningVisits,
+    policy.regularVisits,
+    policy.loyalVisits,
+    policy.advocateVisits,
+  ];
+  if (integerValues.some((value) => !Number.isInteger(value) || value <= 0)) {
+    throw new CustomerCoreError(
+      400,
+      'retention_policy_invalid',
+      'Retention policy day and visit thresholds must be positive integers.',
+    );
+  }
+  if (!(policy.activeDays < policy.attentionDays &&
+      policy.attentionDays < policy.riskDays)) {
+    throw new CustomerCoreError(
+      400,
+      'retention_policy_invalid',
+      'Retention thresholds must satisfy active_days < attention_days < risk_days.',
+    );
+  }
+  if (!(policy.returningVisits < policy.regularVisits &&
+      policy.regularVisits < policy.loyalVisits &&
+      policy.loyalVisits < policy.advocateVisits)) {
+    throw new CustomerCoreError(
+      400,
+      'retention_policy_invalid',
+      'Lifecycle visit thresholds must increase from returning through advocate.',
+    );
+  }
+  if (!Number.isFinite(policy.vipSpendMzn) ||
+      policy.vipSpendMzn <= 0 ||
+      !Number.isFinite(policy.advocateSpendMzn) ||
+      policy.advocateSpendMzn < policy.vipSpendMzn) {
+    throw new CustomerCoreError(
+      400,
+      'retention_policy_invalid',
+      'Spend thresholds must be positive and advocate spend must be at least VIP spend.',
+    );
+  }
+  return policy;
+}
+
+function retentionPolicyFromData(
+  data: Record<string, unknown>,
+  expectedVersion: number,
+): RetentionPolicy {
+  return validateRetentionPolicy({
+    schemaVersion:
+      positiveIntegerOrDefault(data.schema_version, RETENTION_POLICY_SCHEMA_VERSION),
+    version: positiveIntegerOrDefault(data.version, expectedVersion),
+    activeDays: positiveIntegerOrDefault(data.active_days, 30),
+    attentionDays: positiveIntegerOrDefault(data.attention_days, 60),
+    riskDays: positiveIntegerOrDefault(data.risk_days, 90),
+    returningVisits: positiveIntegerOrDefault(data.returning_visits, 2),
+    regularVisits: positiveIntegerOrDefault(data.regular_visits, 5),
+    loyalVisits: positiveIntegerOrDefault(data.loyal_visits, 10),
+    vipSpendMzn: parseNumber(data.vip_spend_mzn) ?? 5000,
+    advocateVisits: positiveIntegerOrDefault(data.advocate_visits, 20),
+    advocateSpendMzn: parseNumber(data.advocate_spend_mzn) ?? 10000,
+  });
+}
+
+function retentionPolicyDocumentData(
+  merchantId: string,
+  policy: RetentionPolicy,
+  source: 'SEEDED' | 'CONFIGURED',
+  now: number,
+  actorId?: string,
+): Record<string, unknown> {
+  return {
+    id: `v${policy.version}`,
+    merchant_id: merchantId,
+    schema_version: policy.schemaVersion,
+    version: policy.version,
+    status: 'ACTIVE',
+    active_days: policy.activeDays,
+    attention_days: policy.attentionDays,
+    risk_days: policy.riskDays,
+    returning_visits: policy.returningVisits,
+    regular_visits: policy.regularVisits,
+    loyal_visits: policy.loyalVisits,
+    vip_spend_mzn: policy.vipSpendMzn,
+    advocate_visits: policy.advocateVisits,
+    advocate_spend_mzn: policy.advocateSpendMzn,
+    source,
+    effective_at: now,
+    created_at: now,
+    created_by: actorId ?? 'system',
+  };
+}
+
+async function resolveActiveRetentionPolicy(
+  merchantId: string,
+  persistSeed = true,
+): Promise<RetentionPolicy> {
+  const businessRef = businessDocumentRef(merchantId);
+  const businessSnapshot = await businessRef.get();
+  if (!businessSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'retention_business_not_found',
+      'Business document not found.',
+      { merchant_id: merchantId },
+    );
+  }
+  const businessData = snapshotDataRecord(businessSnapshot);
+  const activeVersion = pickNumber(businessData, 'active_retention_policy_version');
+  if (activeVersion != null) {
+    const policySnapshot = await retentionPolicyDocumentRef(
+      merchantId,
+      activeVersion,
+    ).get();
+    if (!policySnapshot.exists) {
+      throw new CustomerCoreError(
+        409,
+        'retention_active_policy_missing',
+        'The business active retention policy document is missing.',
+        { merchant_id: merchantId, policy_version: activeVersion },
+      );
+    }
+    return retentionPolicyFromData(snapshotDataRecord(policySnapshot), activeVersion);
+  }
+
+  const seed = validateRetentionPolicy(buildSeedRetentionPolicy(businessData));
+  if (!persistSeed) return seed;
+  const now = Date.now();
+  return admin.firestore().runTransaction(async (transaction) => {
+    const currentBusinessSnapshot = await transaction.get(businessRef);
+    if (!currentBusinessSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'retention_business_not_found',
+        'Business document not found.',
+        { merchant_id: merchantId },
+      );
+    }
+    const currentBusinessData = snapshotDataRecord(currentBusinessSnapshot);
+    const currentVersion = pickNumber(
+      currentBusinessData,
+      'active_retention_policy_version',
+    );
+    const version = currentVersion ?? 1;
+    const policyRef = retentionPolicyDocumentRef(merchantId, version);
+    const policySnapshot = await transaction.get(policyRef);
+    if (currentVersion != null && !policySnapshot.exists) {
+      throw new CustomerCoreError(
+        409,
+        'retention_active_policy_missing',
+        'The business active retention policy document is missing.',
+        { merchant_id: merchantId, policy_version: currentVersion },
+      );
+    }
+    if (policySnapshot.exists) {
+      return retentionPolicyFromData(snapshotDataRecord(policySnapshot), version);
+    }
+    const currentSeed = validateRetentionPolicy(
+      buildSeedRetentionPolicy(currentBusinessData),
+    );
+    transaction.set(
+      policyRef,
+      retentionPolicyDocumentData(merchantId, currentSeed, 'SEEDED', now),
+    );
+    transaction.set(businessRef, {
+      active_retention_policy_version: currentSeed.version,
+      retention_policy_schema_version: RETENTION_POLICY_SCHEMA_VERSION,
+      retention_policy_seeded_at: now,
+    }, { merge: true });
+    return currentSeed;
+  });
+}
+
+function classifyCustomer(
+  input: {
+    totalVisits: number;
+    totalSpent: number;
+    lastVisitAt: number | null;
+    explicitPreReturnActiveRelationship: boolean;
+    now: number;
+  },
+  policy: RetentionPolicy,
+): CustomerClassification {
+  const totalVisits = Math.max(0, Math.floor(input.totalVisits));
+  const totalSpent = Math.max(0, input.totalSpent);
+  let lifecycle: LifecycleStage;
+  let lifecycleReasons: string[];
+  if (totalVisits === 0 && input.explicitPreReturnActiveRelationship) {
+    lifecycle = 'ACTIVE';
+    lifecycleReasons = ['explicit_pre_return_active_relationship=true', 'visits=0'];
+  } else if (totalVisits <= 1) {
+    lifecycle = 'NEW';
+    lifecycleReasons = totalVisits === 0
+      ? ['visits=0']
+      : ['first_confirmed_visit', 'first_confirmed_visit_remains_new'];
+  } else if (totalVisits >= policy.advocateVisits &&
+      totalSpent >= policy.advocateSpendMzn) {
+    lifecycle = 'ADVOCATE';
+    lifecycleReasons = [
+      `visits>=${policy.advocateVisits}`,
+      `spend_mzn>=${policy.advocateSpendMzn}`,
+    ];
+  } else if (
+    totalVisits >= policy.regularVisits &&
+    totalSpent >= policy.vipSpendMzn
+  ) {
+    lifecycle = 'VIP';
+    lifecycleReasons = [`spend_mzn>=${policy.vipSpendMzn}`];
+  } else if (totalVisits >= policy.loyalVisits) {
+    lifecycle = 'LOYAL';
+    lifecycleReasons = [`visits>=${policy.loyalVisits}`];
+  } else if (totalVisits >= policy.regularVisits) {
+    lifecycle = 'REGULAR';
+    lifecycleReasons = [`visits>=${policy.regularVisits}`];
+  } else {
+    lifecycle = 'RETURNING';
+    lifecycleReasons = [
+      `visits>=${policy.returningVisits}`,
+      'second_confirmed_visit_is_returning',
+    ];
+  }
+
+  const nowDate = new Date(input.now);
+  const lastDate = input.lastVisitAt == null ? null : new Date(input.lastVisitAt);
+  const daysSinceActivity = lastDate == null
+    ? null
+    : Math.max(0, Math.floor(
+      (
+        Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate()) -
+        Date.UTC(lastDate.getUTCFullYear(), lastDate.getUTCMonth(), lastDate.getUTCDate())
+      ) / (24 * 60 * 60 * 1000),
+    ));
+  let retention: RetentionStatus;
+  let retentionReasons: string[];
+  if (daysSinceActivity == null || daysSinceActivity <= policy.activeDays) {
+    retention = 'HEALTHY';
+    retentionReasons = daysSinceActivity == null
+      ? ['no_confirmed_visit_yet']
+      : [`days_since_activity<=${policy.activeDays}`];
+  } else if (daysSinceActivity <= policy.attentionDays) {
+    retention = 'AT_RISK';
+    retentionReasons = [
+      `days_since_activity>${policy.activeDays}`,
+      `days_since_activity<=${policy.attentionDays}`,
+    ];
+  } else if (daysSinceActivity <= policy.riskDays) {
+    retention = 'INACTIVE';
+    retentionReasons = [
+      `days_since_activity>${policy.attentionDays}`,
+      `days_since_activity<=${policy.riskDays}`,
+    ];
+  } else {
+    retention = 'LOST';
+    retentionReasons = [`days_since_activity>${policy.riskDays}`];
+  }
+  return {
+    lifecycle,
+    retention,
+    lifecycleReasons,
+    retentionReasons,
+    daysSinceActivity,
+    explanation:
+      `Lifecycle ${lifecycle} from ${totalVisits} confirmed visits and ${totalSpent} MZN; ` +
+      `retention ${retention} from ` +
+      (daysSinceActivity == null ? 'no confirmed visit' : `${daysSinceActivity} inactive days`) +
+      ` under policy v${policy.version}.`,
+  };
+}
+
+function nextBestActionFor(
+  classification: CustomerClassification,
+): {
+  actionType: string;
+  priority: number;
+  explanation: string;
+  reasons: string[];
+} {
+  if (classification.retention === 'LOST') {
+    return {
+      actionType: 'WIN_BACK',
+      priority: 100,
+      explanation: 'Offer a personal win-back incentive and ask what changed.',
+      reasons: classification.retentionReasons,
+    };
+  }
+  if (classification.retention === 'INACTIVE') {
+    return {
+      actionType: 'RECOVERY_OUTREACH',
+      priority: 90,
+      explanation: 'Contact the customer with a relevant reason to return.',
+      reasons: classification.retentionReasons,
+    };
+  }
+  if (classification.retention === 'AT_RISK') {
+    return {
+      actionType: 'TIMELY_REMINDER',
+      priority: 80,
+      explanation: 'Send a consent-aware reminder before inactivity deepens.',
+      reasons: classification.retentionReasons,
+    };
+  }
+  if (classification.lifecycle === 'ADVOCATE') {
+    return {
+      actionType: 'REQUEST_REFERRAL',
+      priority: 55,
+      explanation: 'Thank this advocate and invite a referral.',
+      reasons: classification.lifecycleReasons,
+    };
+  }
+  if (classification.lifecycle === 'VIP' || classification.lifecycle === 'LOYAL') {
+    return {
+      actionType: 'LOYALTY_RECOGNITION',
+      priority: 50,
+      explanation: 'Recognize loyalty with a relevant benefit or personal thank-you.',
+      reasons: classification.lifecycleReasons,
+    };
+  }
+  if (classification.lifecycle === 'NEW') {
+    return {
+      actionType: 'WELCOME',
+      priority: 35,
+      explanation: 'Welcome the customer and set an expectation for the first visit.',
+      reasons: classification.lifecycleReasons,
+    };
+  }
+  return {
+    actionType: 'SUGGEST_NEXT_VISIT',
+    priority: 30,
+    explanation: 'Suggest the next relevant visit while the relationship is healthy.',
+    reasons: classification.lifecycleReasons,
+  };
+}
+
+async function updateCustomerClassification(params: {
+  merchantId: string;
+  customerId: string;
+  sourceType: DomainEventSourceType;
+  sourceId: string;
+  causationId?: string | null;
+  occurredAt: number;
+  dryRun: boolean;
+}): Promise<Record<string, unknown>> {
+  const policy = await resolveActiveRetentionPolicy(
+    params.merchantId,
+    !params.dryRun,
+  );
+  const customerRef = businessCustomerRef(params.merchantId, params.customerId);
+  const initialSnapshot = await customerRef.get();
+  if (!initialSnapshot.exists) {
+    throw new CustomerCoreError(
+      404,
+      'retention_customer_not_found',
+      'Business customer not found.',
+      { merchant_id: params.merchantId, customer_id: params.customerId },
+    );
+  }
+  const initialData = snapshotDataRecord(initialSnapshot);
+  const canonicalCustomerId = maybePayloadString(
+    initialData,
+    'canonical_customer_id',
+    'canonicalCustomerId',
+  );
+  if (!canonicalCustomerId) {
+    return {
+      merchant_id: params.merchantId,
+      customer_id: params.customerId,
+      status: 'CANONICAL_LINK_REQUIRED',
+      policy_version: policy.version,
+    };
+  }
+  const now = Date.now();
+  const preview = classifyCustomer({
+    totalVisits: pickNumber(initialData, 'total_visits') ?? 0,
+    totalSpent: pickNumber(initialData, 'total_spent') ?? 0,
+    lastVisitAt: pickNumber(initialData, 'last_visit_at'),
+    explicitPreReturnActiveRelationship:
+      pickBoolean(initialData, 'pre_return_active_relationship') === true,
+    now,
+  }, policy);
+  if (params.dryRun) {
+    return {
+      merchant_id: params.merchantId,
+      customer_id: params.customerId,
+      canonical_customer_id: canonicalCustomerId,
+      status: 'DRY_RUN',
+      policy_version: policy.version,
+      lifecycle_stage: preview.lifecycle,
+      retention_status: preview.retention,
+      lifecycle_reasons: preview.lifecycleReasons,
+      retention_reasons: preview.retentionReasons,
+      explanation: preview.explanation,
+      days_since_activity: preview.daysSinceActivity,
+    };
+  }
+
+  return admin.firestore().runTransaction(async (transaction) => {
+    const customerSnapshot = await transaction.get(customerRef);
+    if (!customerSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'retention_customer_not_found',
+        'Business customer not found.',
+        { merchant_id: params.merchantId, customer_id: params.customerId },
+      );
+    }
+    const customerData = snapshotDataRecord(customerSnapshot);
+    const currentCanonicalCustomerId = maybePayloadString(
+      customerData,
+      'canonical_customer_id',
+      'canonicalCustomerId',
+    );
+    if (!currentCanonicalCustomerId) {
+      return {
+        merchant_id: params.merchantId,
+        customer_id: params.customerId,
+        status: 'CANONICAL_LINK_REQUIRED',
+        policy_version: policy.version,
+      };
+    }
+    const classification = classifyCustomer({
+      totalVisits: pickNumber(customerData, 'total_visits') ?? 0,
+      totalSpent: pickNumber(customerData, 'total_spent') ?? 0,
+      lastVisitAt: pickNumber(customerData, 'last_visit_at'),
+      explicitPreReturnActiveRelationship:
+        pickBoolean(customerData, 'pre_return_active_relationship') === true,
+      now,
+    }, policy);
+    const hasClassificationProjection =
+      pickNumber(customerData, 'classification_schema_version') ===
+      CLASSIFICATION_SCHEMA_VERSION;
+    const previousLifecycle = hasClassificationProjection
+      ? maybePayloadString(customerData, 'lifecycle_stage') as LifecycleStage | null
+      : null;
+    const previousRetention = hasClassificationProjection
+      ? maybePayloadString(customerData, 'retention_status') as RetentionStatus | null
+      : null;
+    const transitions: Array<{
+      dimension: 'LIFECYCLE' | 'RETENTION';
+      from: string | null;
+      to: string;
+      reasons: string[];
+      eventType: DomainEventType;
+    }> = [];
+    if (previousLifecycle !== classification.lifecycle) {
+      transitions.push({
+        dimension: 'LIFECYCLE',
+        from: previousLifecycle,
+        to: classification.lifecycle,
+        reasons: classification.lifecycleReasons,
+        eventType: 'CUSTOMER_LIFECYCLE_TRANSITIONED',
+      });
+    }
+    if (previousRetention !== classification.retention) {
+      transitions.push({
+        dimension: 'RETENTION',
+        from: previousRetention,
+        to: classification.retention,
+        reasons: classification.retentionReasons,
+        eventType: 'CUSTOMER_RETENTION_TRANSITIONED',
+      });
+    }
+
+    const transitionRecords = transitions.map((item) => {
+      const id = deterministicDocumentId('trn', [
+        params.merchantId,
+        params.customerId,
+        item.dimension,
+        item.from ?? 'NONE',
+        item.to,
+        `policy-v${policy.version}`,
+        params.sourceType,
+        params.sourceId,
+      ]);
+      const genericEvent = buildDomainEvent({
+        eventType: item.eventType,
+        merchantId: params.merchantId,
+        canonicalCustomerId: currentCanonicalCustomerId,
+        businessCustomerId: params.customerId,
+        sourceType:
+          params.sourceType === 'inactivity_scan' ? 'inactivity_scan' : 'classification',
+        sourceId: id,
+        correlationId: params.causationId ?? undefined,
+        causationId: params.causationId,
+        occurredAt: params.occurredAt,
+        recordedAt: now,
+        payload: {
+          transition_id: id,
+          dimension: item.dimension,
+          from: item.from,
+          to: item.to,
+          reasons: item.reasons,
+          policy_version: policy.version,
+        },
+      });
+      let productEventType: DomainEventType | null = null;
+      if (
+        item.from != null &&
+        item.dimension === 'LIFECYCLE' &&
+        item.to === 'RETURNING'
+      ) {
+        productEventType = 'CUSTOMER_RETURNED';
+      } else if (
+        item.from != null &&
+        item.dimension === 'LIFECYCLE' &&
+        ['NEW', 'ACTIVE', 'RETURNING'].includes(item.from) &&
+        ['REGULAR', 'LOYAL', 'VIP', 'ADVOCATE'].includes(item.to)
+      ) {
+        productEventType = 'CUSTOMER_BECAME_REGULAR';
+      } else if (
+        item.from != null &&
+        item.dimension === 'RETENTION' &&
+        item.to === 'AT_RISK'
+      ) {
+        productEventType = 'CUSTOMER_BECAME_AT_RISK';
+      } else if (
+        item.from != null &&
+        item.dimension === 'RETENTION' &&
+        item.to === 'INACTIVE'
+      ) {
+        productEventType = 'CUSTOMER_BECAME_INACTIVE';
+      } else if (
+        item.dimension === 'RETENTION' &&
+        item.to === 'HEALTHY' &&
+        item.from != null &&
+        item.from !== 'HEALTHY'
+      ) {
+        productEventType = 'CUSTOMER_REACTIVATED';
+      }
+      const productEvent = productEventType == null
+        ? null
+        : buildDomainEvent({
+          eventType: productEventType,
+          merchantId: params.merchantId,
+          canonicalCustomerId: currentCanonicalCustomerId,
+          businessCustomerId: params.customerId,
+          sourceType:
+            params.sourceType === 'inactivity_scan'
+              ? 'inactivity_scan'
+              : 'classification',
+          sourceId: id,
+          correlationId: params.causationId ?? undefined,
+          causationId: genericEvent.event_id,
+          occurredAt: params.occurredAt,
+          recordedAt: now,
+          payload: {
+            transition_id: id,
+            from: item.from,
+            to: item.to,
+            reasons: item.reasons,
+            policy_version: policy.version,
+          },
+        });
+      return {
+        item,
+        id,
+        transitionRef: customerTransitionDocumentRef(params.merchantId, id),
+        genericEvent,
+        productEvent,
+      };
+    });
+    const transitionEventRecords = transitionRecords.flatMap((record) =>
+      [record.genericEvent, record.productEvent]
+        .filter((event): event is DomainEventEnvelope => event != null)
+        .map((event) => ({
+          event,
+          eventRef: domainEventCollectionRef(params.merchantId).doc(event.event_id),
+        })));
+    const recommendationRef = customerRecommendationDocumentRef(
+      params.merchantId,
+      params.customerId,
+    );
+    const [recommendationSnapshot, transitionSnapshots, eventSnapshots] =
+      await Promise.all([
+        transaction.get(recommendationRef),
+        Promise.all(transitionRecords.map((record) =>
+          transaction.get(record.transitionRef))),
+        Promise.all(transitionEventRecords.map((record) =>
+          transaction.get(record.eventRef))),
+      ]);
+
+    const customerPatch: Record<string, unknown> = {
+      lifecycle_stage: classification.lifecycle,
+      retention_status: classification.retention,
+      lifecycle_reasons: classification.lifecycleReasons,
+      retention_reasons: classification.retentionReasons,
+      classification_explanation: classification.explanation,
+      classification_schema_version: CLASSIFICATION_SCHEMA_VERSION,
+      classification_policy_version: policy.version,
+      classification_updated_at: now,
+      updated_at: now,
+    };
+    const lastVisitAt = pickNumber(customerData, 'last_visit_at');
+    customerPatch.classification_last_activity_at = lastVisitAt == null
+      ? admin.firestore.FieldValue.delete()
+      : lastVisitAt;
+    transaction.set(customerRef, customerPatch, { merge: true });
+
+    transitionRecords.forEach((record, index) => {
+      if (!transitionSnapshots[index].exists) {
+        transaction.set(record.transitionRef, {
+          id: record.id,
+          merchant_id: params.merchantId,
+          canonical_customer_id: currentCanonicalCustomerId,
+          business_customer_id: params.customerId,
+          dimension: record.item.dimension,
+          from_status: record.item.from,
+          to_status: record.item.to,
+          reasons: record.item.reasons,
+          explanation: classification.explanation,
+          policy_version: policy.version,
+          classification_schema_version: CLASSIFICATION_SCHEMA_VERSION,
+          source: {
+            type: params.sourceType,
+            id: params.sourceId,
+          },
+          correlation_id: params.causationId ?? record.genericEvent.event_id,
+          causation_id: params.causationId ?? null,
+          occurred_at: params.occurredAt,
+          recorded_at: now,
+        });
+      }
+    });
+    transitionEventRecords.forEach((record, index) => {
+      if (!eventSnapshots[index].exists) {
+        transaction.set(record.eventRef, record.event);
+      }
+    });
+
+    const recommendation = nextBestActionFor(classification);
+    const existingRecommendationData = recommendationSnapshot.exists
+      ? snapshotDataRecord(recommendationSnapshot)
+      : {};
+    const recommendationChanged =
+      maybePayloadString(existingRecommendationData, 'action_type') !==
+        recommendation.actionType ||
+      pickNumber(existingRecommendationData, 'policy_version') !== policy.version ||
+      maybePayloadString(existingRecommendationData, 'lifecycle_stage') !==
+        classification.lifecycle ||
+      maybePayloadString(existingRecommendationData, 'retention_status') !==
+        classification.retention;
+    if (recommendationChanged) {
+      transaction.set(recommendationRef, {
+        id: params.customerId,
+        merchant_id: params.merchantId,
+        canonical_customer_id: currentCanonicalCustomerId,
+        business_customer_id: params.customerId,
+        action_type: recommendation.actionType,
+        priority: recommendation.priority,
+        explanation: recommendation.explanation,
+        reasons: recommendation.reasons,
+        lifecycle_stage: classification.lifecycle,
+        retention_status: classification.retention,
+        policy_version: policy.version,
+        projection_version: 1,
+        status: 'ACTIVE',
+        generated_at: now,
+        updated_at: now,
+        ...(recommendationSnapshot.exists ? {} : { created_at: now }),
+      }, { merge: true });
+    }
+
+    return {
+      merchant_id: params.merchantId,
+      customer_id: params.customerId,
+      canonical_customer_id: currentCanonicalCustomerId,
+      status: transitions.length > 0 ? 'TRANSITIONED' : 'CLASSIFIED',
+      policy_version: policy.version,
+      lifecycle_stage: classification.lifecycle,
+      retention_status: classification.retention,
+      lifecycle_reasons: classification.lifecycleReasons,
+      retention_reasons: classification.retentionReasons,
+      explanation: classification.explanation,
+      days_since_activity: classification.daysSinceActivity,
+      transition_ids: transitionRecords.map((record) => record.id),
+      recommendation_action: recommendation.actionType,
+    };
+  });
+}
+
+async function handleRetentionPolicyUpsertRequest(
+  req: AuthedRequest,
+  body: unknown,
+): Promise<Record<string, unknown>> {
+  const payload = requireBodyObject(body);
+  const merchantId = await resolveCustomerCoreMerchantId(req, payload);
+  if (!isOwnerOrAdminRequest(req)) {
+    throw new CustomerCoreError(
+      403,
+      'retention_policy_owner_required',
+      'Only a business owner or admin can activate retention policies.',
+      { merchant_id: merchantId },
+    );
+  }
+  const rawPolicy = payload.policy;
+  const policyPayload = rawPolicy != null && typeof rawPolicy === 'object'
+    ? rawPolicy as Record<string, unknown>
+    : payload;
+  const expectedCurrentVersion = parseNumber(
+    payload.expected_current_version ?? payload.expectedCurrentVersion,
+  );
+  const now = Date.now();
+  return admin.firestore().runTransaction(async (transaction) => {
+    const businessRef = businessDocumentRef(merchantId);
+    const businessSnapshot = await transaction.get(businessRef);
+    if (!businessSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'retention_business_not_found',
+        'Business document not found.',
+        { merchant_id: merchantId },
+      );
+    }
+    const businessData = snapshotDataRecord(businessSnapshot);
+    const currentVersion =
+      pickNumber(businessData, 'active_retention_policy_version') ?? 0;
+    if (expectedCurrentVersion != null &&
+        expectedCurrentVersion !== currentVersion) {
+      throw new CustomerCoreError(
+        409,
+        'retention_policy_version_conflict',
+        'The active retention policy changed; reload before saving.',
+        {
+          merchant_id: merchantId,
+          expected_version: expectedCurrentVersion,
+          active_version: currentVersion,
+        },
+      );
+    }
+    const seeded = buildSeedRetentionPolicy(businessData);
+    const nextVersion = currentVersion + 1;
+    const policy = validateRetentionPolicy({
+      schemaVersion: RETENTION_POLICY_SCHEMA_VERSION,
+      version: nextVersion,
+      activeDays: positiveIntegerOrDefault(
+        policyPayload.active_days ?? policyPayload.activeDays,
+        seeded.activeDays,
+      ),
+      attentionDays: positiveIntegerOrDefault(
+        policyPayload.attention_days ?? policyPayload.attentionDays,
+        seeded.attentionDays,
+      ),
+      riskDays: positiveIntegerOrDefault(
+        policyPayload.risk_days ?? policyPayload.riskDays,
+        seeded.riskDays,
+      ),
+      returningVisits: positiveIntegerOrDefault(
+        policyPayload.returning_visits ?? policyPayload.returningVisits,
+        seeded.returningVisits,
+      ),
+      regularVisits: positiveIntegerOrDefault(
+        policyPayload.regular_visits ?? policyPayload.regularVisits,
+        seeded.regularVisits,
+      ),
+      loyalVisits: positiveIntegerOrDefault(
+        policyPayload.loyal_visits ?? policyPayload.loyalVisits,
+        seeded.loyalVisits,
+      ),
+      vipSpendMzn:
+        parseNumber(policyPayload.vip_spend_mzn ?? policyPayload.vipSpendMzn) ??
+        seeded.vipSpendMzn,
+      advocateVisits: positiveIntegerOrDefault(
+        policyPayload.advocate_visits ?? policyPayload.advocateVisits,
+        seeded.advocateVisits,
+      ),
+      advocateSpendMzn:
+        parseNumber(
+          policyPayload.advocate_spend_mzn ?? policyPayload.advocateSpendMzn,
+        ) ?? seeded.advocateSpendMzn,
+    });
+    const policyRef = retentionPolicyDocumentRef(merchantId, nextVersion);
+    const existingPolicySnapshot = await transaction.get(policyRef);
+    if (existingPolicySnapshot.exists) {
+      throw new CustomerCoreError(
+        409,
+        'retention_policy_version_conflict',
+        'The next retention policy version already exists.',
+        { merchant_id: merchantId, policy_version: nextVersion },
+      );
+    }
+    transaction.set(
+      policyRef,
+      retentionPolicyDocumentData(
+        merchantId,
+        policy,
+        'CONFIGURED',
+        now,
+        req.appUserId,
+      ),
+    );
+    if (currentVersion > 0) {
+      transaction.set(retentionPolicyDocumentRef(merchantId, currentVersion), {
+        status: 'SUPERSEDED',
+        superseded_at: now,
+        superseded_by_version: nextVersion,
+      }, { merge: true });
+    }
+    transaction.set(businessRef, {
+      active_retention_policy_version: nextVersion,
+      retention_policy_schema_version: RETENTION_POLICY_SCHEMA_VERSION,
+      retention_policy_updated_at: now,
+    }, { merge: true });
+    return {
+      merchant_id: merchantId,
+      policy_version: nextVersion,
+      status: 'ACTIVE',
+      effective_at: now,
+    };
+  });
+}
+
+async function handleRetentionClassificationScanRequest(
+  req: AuthedRequest,
+  body: unknown,
+): Promise<Record<string, unknown>> {
+  const payload = requireBodyObject(body);
+  const merchantId = await resolveCustomerCoreMerchantId(req, payload);
+  const apply = maybePayloadBoolean(payload, 'apply') ?? false;
+  if (apply && !isOwnerOrAdminRequest(req)) {
+    throw new CustomerCoreError(
+      403,
+      'retention_scan_owner_required',
+      'Only a business owner or admin can apply a retention scan.',
+      { merchant_id: merchantId },
+    );
+  }
+  const limit = clampLimit(payload.limit, 50, 200);
+  const startAfterCustomerId = maybePayloadString(
+    payload,
+    'start_after_customer_id',
+    'startAfterCustomerId',
+  );
+  let query = businessDocumentRef(merchantId)
+    .collection('customers')
+    .orderBy(admin.firestore.FieldPath.documentId())
+    .limit(limit);
+  if (startAfterCustomerId) query = query.startAfter(startAfterCustomerId);
+  const snapshot = await query.get();
+  const now = Date.now();
+  const scanId = `manual:${new Date(now).toISOString().substring(0, 10)}`;
+  const results: Array<Record<string, unknown>> = [];
+  for (const doc of snapshot.docs) {
+    results.push(await updateCustomerClassification({
+      merchantId,
+      customerId: doc.id,
+      sourceType: 'inactivity_scan',
+      sourceId: scanId,
+      occurredAt: now,
+      dryRun: !apply,
+    }));
+  }
+  const nextCursor = snapshot.docs.length === limit
+    ? snapshot.docs[snapshot.docs.length - 1].id
+    : null;
+  return {
+    merchant_id: merchantId,
+    mode: apply ? 'apply' : 'dry_run',
+    processed: snapshot.size,
+    has_more: nextCursor != null,
+    next_cursor: nextCursor,
+    results,
+  };
 }
 
 async function recordAdminAuditEvent(
@@ -3705,6 +8434,127 @@ function monthlyWindow(occurredAtMs: number): { start: number; end: number } {
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0;
 }
+
+export const retentionInactivityScanDaily = onSchedule(
+  {
+    schedule: 'every day 01:45',
+    timeZone: 'UTC',
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async () => {
+    const configuredLimit = parseInt(
+      process.env.RETENTION_SCAN_LIMIT ?? `${DEFAULT_RETENTION_SCAN_LIMIT}`,
+      10,
+    );
+    const limit = Number.isFinite(configuredLimit)
+      ? Math.min(500, Math.max(1, configuredLimit))
+      : DEFAULT_RETENTION_SCAN_LIMIT;
+    const configuredMaxPages = parseInt(
+      process.env.RETENTION_SCAN_MAX_PAGES ?? '20',
+      10,
+    );
+    const maxPages = Number.isFinite(configuredMaxPages)
+      ? Math.min(50, Math.max(1, configuredMaxPages))
+      : 20;
+    const configuredTimeBudgetMs = parseInt(
+      process.env.RETENTION_SCAN_TIME_BUDGET_MS ?? '480000',
+      10,
+    );
+    const timeBudgetMs = Number.isFinite(configuredTimeBudgetMs)
+      ? Math.min(500000, Math.max(30000, configuredTimeBudgetMs))
+      : 480000;
+    const startedAt = Date.now();
+    const checkpointRef = admin.firestore()
+      .collection('system_jobs')
+      .doc('retention_inactivity_scan');
+    const checkpointSnapshot = await checkpointRef.get();
+    let cursorPath = checkpointSnapshot.exists
+      ? maybePayloadString(snapshotDataRecord(checkpointSnapshot), 'cursor_path')
+      : null;
+    const scanId = `scheduled:${new Date(startedAt).toISOString().substring(0, 10)}`;
+    let processed = 0;
+    let pagesProcessed = 0;
+    let completedCycle = false;
+    while (
+      pagesProcessed < maxPages &&
+      Date.now() - startedAt < timeBudgetMs
+    ) {
+      let query = admin.firestore()
+        .collectionGroup('customers')
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .limit(limit);
+      if (cursorPath) query = query.startAfter(cursorPath);
+      const snapshot = await query.get();
+      if (snapshot.empty) {
+        cursorPath = null;
+        completedCycle = true;
+        await checkpointRef.set({
+          job: 'retention_inactivity_scan',
+          cursor_path: null,
+          processed_in_invocation: processed,
+          pages_in_invocation: pagesProcessed,
+          page_size: 0,
+          completed_cycle: true,
+          stopped_for_time_budget: false,
+          updated_at: Date.now(),
+        }, { merge: true });
+        break;
+      }
+      const occurredAt = Date.now();
+      for (const doc of snapshot.docs) {
+        const pathParts = doc.ref.path.split('/');
+        if (
+          pathParts.length === 4 &&
+          pathParts[0] === 'businesses' &&
+          pathParts[2] === 'customers'
+        ) {
+          await updateCustomerClassification({
+            merchantId: pathParts[1],
+            customerId: pathParts[3],
+            sourceType: 'inactivity_scan',
+            sourceId: scanId,
+            occurredAt,
+            dryRun: false,
+          });
+          processed += 1;
+        }
+      }
+      pagesProcessed += 1;
+      completedCycle = snapshot.size < limit;
+      cursorPath = completedCycle
+        ? null
+        : snapshot.docs[snapshot.docs.length - 1].ref.path;
+      await checkpointRef.set({
+        job: 'retention_inactivity_scan',
+        cursor_path: cursorPath,
+        processed_in_invocation: processed,
+        pages_in_invocation: pagesProcessed,
+        page_size: snapshot.size,
+        completed_cycle: completedCycle,
+        stopped_for_time_budget: false,
+        time_budget_ms: timeBudgetMs,
+        max_pages: maxPages,
+        updated_at: Date.now(),
+      }, { merge: true });
+      if (completedCycle) break;
+    }
+    if (!completedCycle) {
+      await checkpointRef.set({
+        job: 'retention_inactivity_scan',
+        cursor_path: cursorPath,
+        processed_in_invocation: processed,
+        pages_in_invocation: pagesProcessed,
+        completed_cycle: false,
+        stopped_for_time_budget: Date.now() - startedAt >= timeBudgetMs,
+        stopped_for_page_limit: pagesProcessed >= maxPages,
+        time_budget_ms: timeBudgetMs,
+        max_pages: maxPages,
+        updated_at: Date.now(),
+      }, { merge: true });
+    }
+  },
+);
 
 export const usageBackfillDaily = onSchedule(
   { schedule: 'every day 02:30', timeZone: 'UTC' },

@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/database/app_database.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
 import 'package:maisum/features/customers/data/customer_repository.dart';
@@ -14,7 +14,7 @@ void main() {
     await setUpTestDatabase();
     final db = AppDatabase.instance;
     syncDao = SyncDao(db);
-    repo = CustomerRepository(CustomerDao(db), syncDao);
+    repo = CustomerRepository(CustomerDao.unscoped(db), syncDao);
   });
 
   tearDown(tearDownTestDatabase);
@@ -28,7 +28,8 @@ void main() {
       expect(found.name, 'Filipe');
     });
 
-    test('enqueues sync item with operation=create, entityType=customer', () async {
+    test('enqueues sync item with operation=create, entityType=customer',
+        () async {
       final c = await repo.createCustomer(name: 'Graça', phone: '840000202');
       final items = await syncDao.getPending();
       expect(items.length, 1);
@@ -86,4 +87,3 @@ void main() {
     });
   });
 }
-

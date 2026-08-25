@@ -100,6 +100,37 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_events_target
 CREATE INDEX IF NOT EXISTS idx_admin_audit_events_merchant
   ON admin_audit_events(merchant_id, created_at DESC);
 
+-- Derived analytics copy of immutable Firestore retention events.
+-- It intentionally has no merchant foreign key so projection retries do not
+-- depend on merchant synchronization order.
+CREATE TABLE IF NOT EXISTS retention_domain_events (
+  event_id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  schema_version INTEGER NOT NULL,
+  merchant_id TEXT NOT NULL,
+  canonical_customer_id TEXT NOT NULL,
+  business_customer_id TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  causation_id TEXT,
+  occurred_at BIGINT NOT NULL,
+  recorded_at BIGINT NOT NULL,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  projected_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_retention_domain_events_merchant_occurred
+  ON retention_domain_events(merchant_id, occurred_at DESC, event_id DESC);
+CREATE INDEX IF NOT EXISTS idx_retention_domain_events_customer_occurred
+  ON retention_domain_events(
+    merchant_id,
+    business_customer_id,
+    occurred_at DESC,
+    event_id DESC
+  );
+CREATE INDEX IF NOT EXISTS idx_retention_domain_events_type_occurred
+  ON retention_domain_events(merchant_id, event_type, occurred_at DESC);
+
 CREATE TABLE IF NOT EXISTS entitlements (
   id TEXT PRIMARY KEY,
   merchant_id TEXT NOT NULL REFERENCES merchants(id),

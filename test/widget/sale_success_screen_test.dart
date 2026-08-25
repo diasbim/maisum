@@ -55,6 +55,7 @@ Customer _customer() => Customer(
       name: 'Ana Costa',
       phone: '841000001',
       totalPoints: 15,
+      whatsappConsentStatus: CustomerConsentStatus.granted,
       createdAt: DateTime(2024, 1, 1),
       updatedAt: DateTime(2024, 1, 2),
     );

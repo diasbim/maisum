@@ -260,6 +260,10 @@ class AppStrings {
       'Limite mensal atingido. Vamos sincronizar depois.';
   static const String whatsappQueued = 'Será enviado quando online ⏳';
   static const String whatsappSent = 'WhatsApp enviado ✅';
+  static const String whatsappConsentRequired =
+      'Registe o consentimento do cliente antes de enviar mensagens por WhatsApp.';
+  static const String marketingConsentRequired =
+      'Registe o consentimento do cliente antes de enviar mensagens de marketing.';
   static const String phoneRequired = 'Introduza o número de telemóvel';
   static const String otpRequired = 'Introduza o código de 6 dígitos';
   static const String amountRequired = 'Introduza o valor da venda';

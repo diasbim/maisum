@@ -86,7 +86,7 @@ class SaleRepository {
               entityType: 'customer',
               entityId: customerId,
               payload: jsonEncode({
-                ...updatedCustomer.toDbMap(),
+                ...updatedCustomer.toClientSyncMap(),
                 'merchant_id': merchantId,
               }),
               createdAt: now,
@@ -103,7 +103,7 @@ class SaleRepository {
             operation: 'create',
             entityType: 'sale',
             entityId: sale.id,
-            payload: jsonEncode(_saleRow(sale)),
+            payload: jsonEncode(_saleSyncRow(sale)),
             createdAt: now,
           ),
         ),
@@ -148,6 +148,14 @@ class SaleRepository {
 
   Map<String, dynamic> _saleRow(Sale sale) => {
         ...sale.toDbMap(),
+        'merchant_id': merchantId,
+        'device_id': deviceId,
+        'created_by_app_user_id': appUserId,
+        'updated_by_app_user_id': appUserId,
+      };
+
+  Map<String, dynamic> _saleSyncRow(Sale sale) => {
+        ...sale.toClientSyncMap(),
         'merchant_id': merchantId,
         'device_id': deviceId,
         'created_by_app_user_id': appUserId,

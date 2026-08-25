@@ -16,22 +16,26 @@ class RetentionDao {
     final rows = await db.rawQuery(
       merchantId == null
           ? '''
-            SELECT rm.customer_id, c.name, rm.total_visits, rm.last_visit_at,
-                   rm.average_visit_interval, rm.total_spent
-            FROM retention_metrics rm
-            INNER JOIN customers c ON c.id = rm.customer_id
-            WHERE rm.is_recurring = 1
-            ORDER BY rm.total_visits DESC, rm.total_spent DESC
+            SELECT c.id AS customer_id, c.name, c.total_visits, c.last_visit_at,
+                   c.average_visit_interval_days AS average_visit_interval,
+                   c.total_spent
+            FROM customers c
+            WHERE c.lifecycle_stage IN (
+              'RETURNING', 'REGULAR', 'LOYAL', 'VIP', 'ADVOCATE'
+            )
+            ORDER BY c.total_visits DESC, c.total_spent DESC
             LIMIT ?
           '''
           : '''
-            SELECT rm.customer_id, c.name, rm.total_visits, rm.last_visit_at,
-                   rm.average_visit_interval, rm.total_spent
-            FROM retention_metrics rm
-            INNER JOIN customers c
-              ON c.id = rm.customer_id AND c.merchant_id = rm.merchant_id
-            WHERE rm.merchant_id = ? AND rm.is_recurring = 1
-            ORDER BY rm.total_visits DESC, rm.total_spent DESC
+            SELECT c.id AS customer_id, c.name, c.total_visits, c.last_visit_at,
+                   c.average_visit_interval_days AS average_visit_interval,
+                   c.total_spent
+            FROM customers c
+            WHERE c.merchant_id = ?
+              AND c.lifecycle_stage IN (
+                'RETURNING', 'REGULAR', 'LOYAL', 'VIP', 'ADVOCATE'
+              )
+            ORDER BY c.total_visits DESC, c.total_spent DESC
             LIMIT ?
           ''',
       merchantId == null ? [limit] : [merchantId, limit],
@@ -59,23 +63,20 @@ class RetentionDao {
     final rows = await db.rawQuery(
       merchantId == null
           ? '''
-            SELECT rm.customer_id, c.name, rm.days_inactive, rm.last_visit_at,
-                   rm.risk_level, rm.total_visits, rm.total_spent
-            FROM retention_metrics rm
-            INNER JOIN customers c ON c.id = rm.customer_id
-            WHERE rm.risk_level IN ('attention', 'risk', 'lost')
-            ORDER BY rm.days_inactive DESC, rm.total_spent DESC
+            SELECT c.id AS customer_id, c.name, c.last_visit_at,
+                   c.retention_status, c.total_visits, c.total_spent
+            FROM customers c
+            WHERE c.retention_status IN ('AT_RISK', 'INACTIVE', 'LOST')
+            ORDER BY c.last_visit_at ASC, c.total_spent DESC
             LIMIT ?
           '''
           : '''
-            SELECT rm.customer_id, c.name, rm.days_inactive, rm.last_visit_at,
-                   rm.risk_level, rm.total_visits, rm.total_spent
-            FROM retention_metrics rm
-            INNER JOIN customers c
-              ON c.id = rm.customer_id AND c.merchant_id = rm.merchant_id
-            WHERE rm.merchant_id = ?
-              AND rm.risk_level IN ('attention', 'risk', 'lost')
-            ORDER BY rm.days_inactive DESC, rm.total_spent DESC
+            SELECT c.id AS customer_id, c.name, c.last_visit_at,
+                   c.retention_status, c.total_visits, c.total_spent
+            FROM customers c
+            WHERE c.merchant_id = ?
+              AND c.retention_status IN ('AT_RISK', 'INACTIVE', 'LOST')
+            ORDER BY c.last_visit_at ASC, c.total_spent DESC
             LIMIT ?
           ''',
       merchantId == null ? [limit] : [merchantId, limit],
@@ -85,13 +86,21 @@ class RetentionDao {
       (row) {
         final visits = (row['total_visits'] as num?)?.toInt() ?? 0;
         final totalSpent = (row['total_spent'] as num?)?.toDouble() ?? 0;
+        final lastVisitAt = _toDate(row['last_visit_at']);
+        final retentionStatus =
+            (row['retention_status'] as String?)?.toUpperCase();
         return InactiveCustomerSummary(
           customerId: row['customer_id'] as String,
           name: (row['name'] as String?) ?? 'Cliente',
-          daysInactive: (row['days_inactive'] as num?)?.toInt() ?? 0,
-          lastVisitAt: _toDate(row['last_visit_at']),
+          daysInactive: _daysInactive(lastVisitAt, DateTime.now()),
+          lastVisitAt: lastVisitAt,
           averageTicket: visits <= 0 ? 0 : (totalSpent / visits),
-          riskLevel: (row['risk_level'] as String?) ?? RetentionRiskLevel.risk,
+          riskLevel: switch (retentionStatus) {
+            'AT_RISK' => RetentionRiskLevel.attention,
+            'INACTIVE' => RetentionRiskLevel.risk,
+            'LOST' => RetentionRiskLevel.lost,
+            _ => RetentionRiskLevel.active,
+          },
         );
       },
     ).toList();

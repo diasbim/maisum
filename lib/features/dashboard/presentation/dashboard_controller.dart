@@ -9,6 +9,11 @@ class DashboardStats {
     this.pendingSyncCount = 0,
     this.totalCustomers = 0,
     this.returningCustomers = 0,
+    this.regularCustomers = 0,
+    this.atRiskCustomers = 0,
+    this.inactiveCustomers = 0,
+    this.retentionRate = 0,
+    this.averageVisitsPerCustomer = 0,
     this.streakDays = 0,
     this.streakAtRisk = false,
   });
@@ -18,6 +23,11 @@ class DashboardStats {
   final int pendingSyncCount;
   final int totalCustomers;
   final int returningCustomers;
+  final int regularCustomers;
+  final int atRiskCustomers;
+  final int inactiveCustomers;
+  final double retentionRate;
+  final double averageVisitsPerCustomer;
   final int streakDays;
   final bool streakAtRisk;
 }
@@ -39,15 +49,60 @@ class DashboardController extends AsyncNotifier<DashboardStats> {
   Future<DashboardStats> _load() async {
     final salesFuture = ref.read(saleRepositoryProvider).getTodayStats();
     final pendingFuture = ref.read(syncDaoProvider).getPendingCount();
-    final totalCustomersFuture = ref.read(customerDaoProvider).getCount();
-    final returningFuture =
+    final customersFuture = ref.read(customerDaoProvider).getAll();
+    final recentReturningFuture =
         ref.read(saleDaoProvider).getReturningCustomersCount(days: 30);
     final streakFuture = ref.read(streakServiceProvider).getCurrentStreak();
 
     final salesStats = await salesFuture;
     final pendingCount = await pendingFuture;
-    final totalCustomers = await totalCustomersFuture;
-    final returningCustomers = await returningFuture;
+    final customers = await customersFuture;
+    final totalCustomers = customers.length;
+    final lifecycleReturningCustomers = customers
+        .where((customer) => switch (customer.lifecycleStage) {
+              CustomerLifecycleStage.returning ||
+              CustomerLifecycleStage.regular ||
+              CustomerLifecycleStage.loyal ||
+              CustomerLifecycleStage.vip ||
+              CustomerLifecycleStage.advocate =>
+                true,
+              _ => false,
+            })
+        .length;
+    final recentReturningCustomers = await recentReturningFuture;
+    final returningCustomers =
+        lifecycleReturningCustomers > recentReturningCustomers
+            ? lifecycleReturningCustomers
+            : recentReturningCustomers;
+    final regularCustomers = customers
+        .where((customer) => switch (customer.lifecycleStage) {
+              CustomerLifecycleStage.regular ||
+              CustomerLifecycleStage.loyal ||
+              CustomerLifecycleStage.vip ||
+              CustomerLifecycleStage.advocate =>
+                true,
+              _ => false,
+            })
+        .length;
+    final atRiskCustomers = customers
+        .where(
+          (customer) =>
+              customer.retentionStatus == CustomerRetentionStatus.atRisk,
+        )
+        .length;
+    final inactiveCustomers = customers
+        .where(
+          (customer) =>
+              customer.retentionStatus == CustomerRetentionStatus.inactive ||
+              customer.retentionStatus == CustomerRetentionStatus.lost,
+        )
+        .length;
+    final totalVisits =
+        customers.fold<int>(0, (sum, customer) => sum + customer.totalVisits);
+    final retentionRate =
+        totalCustomers == 0 ? 0.0 : returningCustomers / totalCustomers;
+    final averageVisitsPerCustomer =
+        totalCustomers == 0 ? 0.0 : totalVisits / totalCustomers;
     final streak = await streakFuture;
 
     return DashboardStats(
@@ -56,6 +111,11 @@ class DashboardController extends AsyncNotifier<DashboardStats> {
       pendingSyncCount: pendingCount,
       totalCustomers: totalCustomers,
       returningCustomers: returningCustomers,
+      regularCustomers: regularCustomers,
+      atRiskCustomers: atRiskCustomers,
+      inactiveCustomers: inactiveCustomers,
+      retentionRate: retentionRate.clamp(0, 1),
+      averageVisitsPerCustomer: averageVisitsPerCustomer,
       streakDays: streak.days,
       streakAtRisk: streak.isAtRisk,
     );

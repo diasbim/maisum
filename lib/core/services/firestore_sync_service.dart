@@ -20,6 +20,7 @@ class FirestoreSyncService implements SyncTransport {
     'sale_item': 'sale_items',
     'reward': 'rewards',
     'redemption': 'redemptions',
+    'loyalty_ledger': 'loyalty_ledger',
     'appointment': 'appointments',
     'retention_metric': 'retention_metrics',
     'customer_risk_score': 'customer_risk_scores',

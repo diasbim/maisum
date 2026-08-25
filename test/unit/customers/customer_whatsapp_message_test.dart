@@ -4,11 +4,12 @@ import 'package:maisum/features/customers/domain/customer_whatsapp_message.dart'
 import 'package:maisum/features/rewards/domain/reward.dart';
 import 'package:maisum/features/sales/domain/sale.dart';
 
-Customer _customer({int points = 0}) => Customer(
+Customer _customer({int points = 0, int? confirmedPoints}) => Customer(
       id: 'c1',
       name: 'Ana Costa',
       phone: '841000001',
       totalPoints: points,
+      confirmedPoints: confirmedPoints,
       createdAt: DateTime(2024, 1, 1),
       updatedAt: DateTime(2024, 1, 2),
     );
@@ -57,6 +58,19 @@ void main() {
       expect(draft.message, contains('faltam só 2 pontos'));
     });
 
+    test('does not promise a reward from unconfirmed points', () {
+      final draft = buildCustomerWhatsAppDraft(
+        customer: _customer(points: 25, confirmedPoints: 12),
+        sales: [_sale(DateTime(2026, 5, 3))],
+        rewards: [_reward('r1', 'Corte grátis', 20)],
+        now: DateTime(2026, 5, 5),
+      );
+
+      expect(draft.type, CustomerWhatsAppMessageType.nearReward);
+      expect(draft.message, contains('faltam só 8 pontos'));
+      expect(draft.message, isNot(contains('Já tens pontos para resgatar')));
+    });
+
     test('falls back to inactive recovery when last sale is old', () {
       final draft = buildCustomerWhatsAppDraft(
         customer: _customer(points: 8),
@@ -82,4 +96,3 @@ void main() {
     });
   });
 }
-

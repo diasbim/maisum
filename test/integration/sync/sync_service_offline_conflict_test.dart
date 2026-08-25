@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/database/app_database.dart';
 import 'package:maisum/core/services/connectivity_service.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
+import 'package:maisum/features/customers/domain/customer.dart';
 import 'package:maisum/features/sync/data/sync_dao.dart';
 import 'package:maisum/features/sync/data/sync_transport.dart';
 import 'package:maisum/features/sync/domain/sync_item.dart';
@@ -123,6 +124,16 @@ void main() {
           'name': 'Remote Name',
           'phone': '841111111',
           'total_points': 50,
+          'confirmed_points': 40,
+          'canonical_customer_id': 'canonical-1',
+          'account_state': 'UNCLAIMED',
+          'relationship_status': 'ACTIVE',
+          'lifecycle_stage': 'RETURNING',
+          'retention_status': 'AT_RISK',
+          'total_visits': 2,
+          'total_spent': 500.0,
+          'average_spend': 250.0,
+          'schema_version': 1,
           'created_at': 2000,
           'updated_at': 2000,
         },
@@ -154,6 +165,102 @@ void main() {
     expect(customer?.name, 'Local Name');
     expect(customer?.phone, '840000000');
     expect(customer?.totalPoints, 10);
+    expect(customer?.confirmedPoints, 40);
+    expect(customer?.canonicalCustomerId, 'canonical-1');
+    expect(customer?.lifecycleStage, CustomerLifecycleStage.returning);
+    expect(customer?.retentionStatus, CustomerRetentionStatus.atRisk);
+    expect(customer?.totalVisits, 2);
+    expect(customer?.totalSpent, 500);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('server confirmation and immutable ledger merge into pending sale',
+      () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => <ConnectivityResult>[
+        ConnectivityResult.wifi,
+      ],
+      initialOnline: true,
+    );
+    final customer = await customerDao.create(
+      name: 'Ana',
+      phone: '841234568',
+    );
+    final db = await AppDatabase.instance.database;
+    await db.insert('sales', <String, Object?>{
+      'id': 'sale-1',
+      'merchant_id': 'merchant-1',
+      'customer_id': customer.id,
+      'amount': 200,
+      'points': 2,
+      'created_at': 1000,
+      'updated_at': 1000,
+      'confirmation_status': 'PENDING',
+      'synced': 0,
+    });
+    final transport = _FakeSyncTransport(collections: {
+      'sale': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'id': 'sale-1',
+          'merchant_id': 'merchant-1',
+          'customer_id': customer.id,
+          'amount': 200,
+          'points': 999,
+          'created_at': 1000,
+          'updated_at': 2000,
+          'confirmation_status': 'CONFIRMED',
+          'confirmed_points': 2,
+          'confirmed_at': 2000,
+          'loyalty_policy_version': 1,
+        },
+      ],
+      'loyalty_ledger': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'id': 'sale-sale-1',
+          'merchant_id': 'merchant-1',
+          'customer_id': customer.id,
+          'entry_type': 'EARN',
+          'points_delta': 2,
+          'source_type': 'SALE',
+          'source_id': 'sale-1',
+          'policy_version': 1,
+          'occurred_at': 1000,
+          'created_at': 2000,
+          'balance_after': 2,
+        },
+      ],
+    });
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await service.processQueue();
+
+    final sale = (await db.query(
+      'sales',
+      where: 'id = ?',
+      whereArgs: <Object?>['sale-1'],
+    ))
+        .single;
+    expect(sale['points'], 2);
+    expect(sale['confirmation_status'], 'CONFIRMED');
+    expect(sale['confirmed_points'], 2);
+    expect(
+      await db.query(
+        'loyalty_ledger',
+        where: 'id = ?',
+        whereArgs: <Object?>['sale-sale-1'],
+      ),
+      hasLength(1),
+    );
 
     service.dispose();
     connectivity.dispose();

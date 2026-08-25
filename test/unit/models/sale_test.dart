@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/constants/app_constants.dart';
 import 'package:maisum/features/sales/domain/sale.dart';
 
@@ -19,6 +19,8 @@ void main() {
       expect(s.customerId, 'c1');
       expect(s.amount, 200.0);
       expect(s.points, 2);
+      expect(s.confirmationStatus, SaleConfirmationStatus.pending);
+      expect(s.confirmedPoints, isNull);
       expect(s.synced, false);
       expect(s.createdAt, DateTime.fromMillisecondsSinceEpoch(1700000000000));
     });
@@ -29,24 +31,50 @@ void main() {
       expect(s.amount, isA<double>());
     });
 
-    test('synced=1 → true', () => expect(saleFromMap({...baseMap, 'synced': 1}).synced, true));
-    test('null synced → false', () => expect(saleFromMap({...baseMap, 'synced': null}).synced, false));
+    test('synced=1 → true',
+        () => expect(saleFromMap({...baseMap, 'synced': 1}).synced, true));
+    test('null synced → false',
+        () => expect(saleFromMap({...baseMap, 'synced': null}).synced, false));
   });
 
   group('toDbMap', () {
     test('produces all expected keys', () {
       final keys = saleFromMap(baseMap).toDbMap().keys;
-      expect(keys, containsAll(['id', 'customer_id', 'amount', 'points', 'created_at', 'synced']));
+      expect(
+          keys,
+          containsAll([
+            'id',
+            'customer_id',
+            'amount',
+            'points',
+            'created_at',
+            'synced'
+          ]));
     });
 
     test('synced bool → int', () {
       expect(saleFromMap({...baseMap, 'synced': 0}).toDbMap()['synced'], 0);
       expect(saleFromMap({...baseMap, 'synced': 1}).toDbMap()['synced'], 1);
     });
+
+    test('client sync excludes server-owned confirmation fields', () {
+      final sale = saleFromMap({
+        ...baseMap,
+        'confirmation_status': 'CONFIRMED',
+        'confirmed_points': 2,
+      });
+
+      final syncMap = sale.toClientSyncMap();
+
+      expect(syncMap['points'], 2);
+      expect(syncMap, isNot(contains('confirmation_status')));
+      expect(syncMap, isNot(contains('confirmed_points')));
+    });
   });
 
   group('points calculation (amount / pointsPerMzn).floor()', () {
-    int calcPoints(double amount) => (amount / AppConstants.pointsPerMzn).floor();
+    int calcPoints(double amount) =>
+        (amount / AppConstants.pointsPerMzn).floor();
 
     test('100 MZN → 1 pt', () => expect(calcPoints(100), 1));
     test('200 MZN → 2 pts', () => expect(calcPoints(200), 2));
@@ -57,4 +85,3 @@ void main() {
     test('1000 MZN → 10 pts', () => expect(calcPoints(1000), 10));
   });
 }
-

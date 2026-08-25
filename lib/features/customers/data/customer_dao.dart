@@ -5,7 +5,9 @@ import '../../../core/utils/moz_phone_utils.dart';
 import '../domain/customer.dart';
 
 class CustomerDao {
-  CustomerDao(this._db, {this.merchantId});
+  CustomerDao(this._db, {required this.merchantId});
+
+  CustomerDao.unscoped(this._db) : merchantId = null;
 
   final AppDatabase _db;
   final String? merchantId;
@@ -89,6 +91,19 @@ class CustomerDao {
     return customerFromMap(rows.first);
   }
 
+  Future<Customer?> findByCanonicalCustomerId(
+      String canonicalCustomerId) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'customers',
+      where: _withMerchantScope('canonical_customer_id = ?'),
+      whereArgs: _withMerchantArgs([canonicalCustomerId]),
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return customerFromMap(rows.first);
+  }
+
   Future<List<Customer>> getAll() async {
     final db = await _db.database;
     final rows = await db.query(
@@ -118,6 +133,7 @@ class CustomerDao {
     final normalizedPhone = MozPhoneUtils.normalizeToLocal(phone);
     final customer = Customer(
       id: _uuid.v4(),
+      merchantId: merchantId,
       name: name.isNotEmpty ? name : phone,
       phone: normalizedPhone,
       createdAt: now,
@@ -162,6 +178,28 @@ class CustomerDao {
       where: _withMerchantScope('id = ?'),
       whereArgs: _withMerchantArgs([id]),
     );
+  }
+
+  Future<void> updateConsent(
+    String id, {
+    required CustomerConsentStatus marketing,
+    required CustomerConsentStatus whatsapp,
+  }) async {
+    final db = await _db.database;
+    final updated = await db.update(
+      'customers',
+      {
+        'marketing_consent_status': marketing.storageValue,
+        'whatsapp_consent_status': whatsapp.storageValue,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'synced': 0,
+      },
+      where: _withMerchantScope('id = ?'),
+      whereArgs: _withMerchantArgs([id]),
+    );
+    if (updated != 1) {
+      throw StateError('Customer not found in the active merchant');
+    }
   }
 
   Future<void> markSynced(String id) async {

@@ -10,6 +10,7 @@ Future<Database> _openDb({required int version}) async {
     inMemoryDatabasePath,
     options: OpenDatabaseOptions(
       version: version,
+      singleInstance: false,
       onCreate: (db, createdVersion) async {
         await AppMigrations.migrate(
           db,
@@ -61,5 +62,132 @@ void main() {
 
     final syncQueueCols = await _columns(db, 'sync_queue');
     expect(syncQueueCols.contains('last_error'), isTrue);
+  });
+
+  test('v23 adds general appointment details', () async {
+    final db = await _openDb(version: 22);
+
+    await AppMigrations.migrate(db, fromVersion: 22, toVersion: 23);
+
+    final cols = await _columns(db, 'appointments');
+    expect(cols, contains('merchant_item_id'));
+    expect(cols, contains('staff_app_user_id'));
+    expect(cols, contains('duration_minutes'));
+    expect(cols, contains('notes'));
+  });
+
+  test('v24 adds Customer Core projection and preserves customers', () async {
+    final db = await _openDb(version: 23);
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+
+    await AppMigrations.migrate(db, fromVersion: 23, toVersion: 24);
+
+    final cols = await _columns(db, 'customers');
+    expect(
+      cols,
+      containsAll(<String>[
+        'canonical_customer_id',
+        'account_state',
+        'relationship_status',
+        'lifecycle_stage',
+        'retention_status',
+        'first_visit_at',
+        'last_visit_at',
+        'total_visits',
+        'total_spent',
+        'average_spend',
+        'average_visit_interval_days',
+        'marketing_consent_status',
+        'whatsapp_consent_status',
+        'schema_version',
+      ]),
+    );
+
+    final row = (await db.query(
+      'customers',
+      where: 'id = ?',
+      whereArgs: ['c1'],
+    ))
+        .single;
+    expect(row['name'], 'Ana');
+    expect(row['account_state'], 'UNCLAIMED');
+    expect(row['lifecycle_stage'], 'NEW');
+    expect(row['retention_status'], 'HEALTHY');
+    expect(row['total_visits'], 0);
+  });
+
+  test('v25 adds loyalty ledger and confirmation projections', () async {
+    final db = await _openDb(version: 24);
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    await db.insert('sales', {
+      'id': 's1',
+      'merchant_id': 'm1',
+      'customer_id': 'c1',
+      'amount': 200,
+      'points': 2,
+      'created_at': 10,
+      'synced': 0,
+    });
+
+    await AppMigrations.migrate(db, fromVersion: 24, toVersion: 25);
+
+    expect(
+      await _columns(db, 'customers'),
+      contains('confirmed_points'),
+    );
+    expect(
+      await _columns(db, 'sales'),
+      containsAll(<String>[
+        'updated_at',
+        'confirmation_status',
+        'confirmed_points',
+        'confirmed_at',
+        'confirmation_error_code',
+        'loyalty_policy_version',
+      ]),
+    );
+    expect(
+      await _columns(db, 'loyalty_ledger'),
+      containsAll(<String>[
+        'customer_id',
+        'entry_type',
+        'points_delta',
+        'source_type',
+        'source_id',
+        'balance_after',
+      ]),
+    );
+    expect(
+      await _columns(db, 'redemption_requests'),
+      containsAll(<String>[
+        'customer_id',
+        'reward_id',
+        'points_required',
+        'status',
+        'last_error',
+      ]),
+    );
+
+    final sale = (await db.query('sales')).single;
+    expect(sale['updated_at'], 10);
+    expect(sale['confirmation_status'], 'PENDING');
   });
 }

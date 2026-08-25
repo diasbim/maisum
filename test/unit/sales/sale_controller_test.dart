@@ -60,7 +60,7 @@ void main() {
 
   setUp(() async {
     await setUpTestDatabase();
-    customerDao = CustomerDao(AppDatabase.instance);
+    customerDao = CustomerDao.unscoped(AppDatabase.instance);
     syncDao = SyncDao(AppDatabase.instance);
     saleDao = SaleDao(AppDatabase.instance);
   });

@@ -35,7 +35,10 @@ class _FakeSyncController extends SyncController {
 
 class _FakeCustomerRepository extends CustomerRepository {
   _FakeCustomerRepository(this.customersCount)
-      : super(CustomerDao(AppDatabase.instance), SyncDao(AppDatabase.instance));
+      : super(
+          CustomerDao.unscoped(AppDatabase.instance),
+          SyncDao(AppDatabase.instance),
+        );
 
   final int customersCount;
 
@@ -115,15 +118,26 @@ void main() {
       expect(find.text(AppStrings.dashboardSaleCta), findsOneWidget);
     });
 
-    testWidgets('shows only Clientes and Recompensas shortcuts',
-        (tester) async {
+    testWidgets('shows retention outcomes and core shortcuts', (tester) async {
       await tester.pumpWidget(
-        const DashboardStats(totalCustomers: 3).buildDashboard(),
+        const DashboardStats(
+          totalCustomers: 10,
+          returningCustomers: 6,
+          regularCustomers: 3,
+          atRiskCustomers: 2,
+          inactiveCustomers: 1,
+          retentionRate: 0.6,
+          averageVisitsPerCustomer: 4.2,
+        ).buildDashboard(),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text(AppStrings.clientes), findsOneWidget);
+      expect(find.text(AppStrings.clientes), findsWidgets);
       expect(find.text(AppStrings.recompensas), findsOneWidget);
+      expect(find.text('Retencao de clientes'), findsOneWidget);
+      expect(find.text('60%'), findsOneWidget);
+      expect(find.text('4.2'), findsOneWidget);
+      expect(find.text('Retencao'), findsOneWidget);
       expect(find.text(AppStrings.historicoVendas), findsNothing);
       expect(find.textContaining(AppStrings.pendentes), findsNothing);
     });

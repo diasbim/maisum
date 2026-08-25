@@ -23,6 +23,8 @@ import '../../rewards/domain/reward.dart';
 import '../../rewards/domain/reward_progress.dart';
 import '../../rewards/presentation/reward_progress_provider.dart';
 import '../../appointments/providers/appointments_providers.dart';
+import '../../engage/domain/engage_models.dart';
+import '../../engage/providers/engage_providers.dart';
 import '../../sales/domain/sale.dart';
 import '../../sales/presentation/new_sale_screen.dart';
 import '../../subscription/domain/feature_keys.dart';
@@ -104,14 +106,20 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           final sales = salesAsync.valueOrNull ?? const <Sale>[];
           final initials =
               customer.name.isNotEmpty ? customer.name[0].toUpperCase() : '?';
-          final isActive = _isActiveCustomer(customer, sales);
-          final statusLabel =
-              isActive ? AppStrings.clienteAtivo : AppStrings.clienteInativo;
-          final statusColor = isActive ? AppColors.green : AppColors.amber;
+          final lifecycleLabel = _lifecycleLabel(customer.lifecycleStage);
+          final retentionLabel = _retentionLabel(customer.retentionStatus);
+          final retentionColor = _retentionColor(customer.retentionStatus);
           final phoneLabel = customer.phone.isEmpty
               ? AppStrings.phoneRequired
               : MozPhoneUtils.maskForDisplay(customer.phone);
-          final approxValue = _formatApproxMzn(customer.totalPoints);
+          final pendingPoints = sales
+              .where((sale) =>
+                  sale.confirmationStatus == SaleConfirmationStatus.pending)
+              .fold<int>(0, (sum, sale) => sum + sale.points);
+          final displayedPoints = customer.confirmedPoints == null
+              ? customer.totalPoints
+              : customer.confirmedPoints! + pendingPoints;
+          final approxValue = _formatApproxMzn(displayedPoints);
           final totalSpent = sales.fold<double>(
             0,
             (sum, sale) => sum + sale.amount,
@@ -226,9 +234,19 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                         ),
                                       ),
                                       const SizedBox(height: 10),
-                                      _StatusChip(
-                                        label: statusLabel,
-                                        color: statusColor,
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 6,
+                                        children: [
+                                          _StatusChip(
+                                            label: lifecycleLabel,
+                                            color: AppColors.secondary,
+                                          ),
+                                          _StatusChip(
+                                            label: retentionLabel,
+                                            color: retentionColor,
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -237,7 +255,9 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                             ),
                             const SizedBox(height: 16),
                             _PointsSummaryCard(
-                              points: customer.totalPoints,
+                              points: displayedPoints,
+                              confirmedPoints: customer.confirmedPoints,
+                              pendingPoints: pendingPoints,
                               approxValue: approxValue,
                             ),
                             const SizedBox(height: 12),
@@ -342,11 +362,19 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                   expand: false,
                                   width: itemWidth,
                                   onTap: () => _scheduleNextHaircut(
-                                      context, ref, customer),
+                                    context,
+                                    ref,
+                                    customer,
+                                  ),
                                 ),
                               ],
                             );
                           },
+                        ),
+                        const SizedBox(height: 16),
+                        _RecommendationCard(
+                          title: _recommendedAction(customer),
+                          explanation: _recommendationExplanation(customer),
                         ),
                         const SizedBox(height: 16),
                         rewardProgressAsync.when(
@@ -549,6 +577,14 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     WidgetRef ref,
     Customer customer,
   ) async {
+    if (customer.whatsappConsentStatus != CustomerConsentStatus.granted) {
+      AppFeedback.showMessage(
+        context,
+        message: AppStrings.whatsappConsentRequired,
+        isError: true,
+      );
+      return;
+    }
     final connectivity = ref.read(connectivityServiceProvider);
     final gate = ref.read(featureGateProvider);
     final decision = await gate.check(
@@ -601,10 +637,17 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     );
     if (!connectivity.isOnline) {
       await ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
+            customerId: customer.id,
             phone: number,
             message: draft.message,
             source: 'customer_detail',
           );
+      await _recordWhatsAppAction(
+        ref,
+        customer.id,
+        messageType: draft.type.name,
+        queued: true,
+      );
       try {
         await ref.read(analyticsServiceProvider).record(
           eventType: 'whatsapp_sent',
@@ -636,6 +679,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       return;
     }
     if (launched) {
+      await _recordWhatsAppAction(
+        ref,
+        customer.id,
+        messageType: draft.type.name,
+        queued: false,
+      );
       try {
         await ref.read(usageTrackerProvider).record(
           metricKey: UsageMetrics.whatsappMessages,
@@ -657,6 +706,31 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     }
   }
 
+  Future<void> _recordWhatsAppAction(
+    WidgetRef ref,
+    String customerId, {
+    required String messageType,
+    required bool queued,
+  }) async {
+    try {
+      await ref.read(engageRepositoryProvider).logRecoveryAction(
+        customerId: customerId,
+        actionType: RecoveryActionType.whatsapp,
+        payload: {
+          'source': 'customer_detail',
+          'message_type': messageType,
+          'delivery_mode': queued ? 'queued' : 'business_assisted',
+        },
+      );
+    } catch (error, stackTrace) {
+      AppErrorReporter.report(
+        error,
+        stackTrace,
+        hint: 'customer_detail_whatsapp_attribution',
+      );
+    }
+  }
+
   DateTime _lastActivity(Customer customer, List<Sale>? sales) {
     if (sales != null && sales.isNotEmpty) {
       return sales
@@ -666,10 +740,60 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     return customer.updatedAt ?? customer.createdAt;
   }
 
-  bool _isActiveCustomer(Customer customer, List<Sale>? sales) {
-    final lastActivity = _lastActivity(customer, sales);
-    final days = DateTime.now().difference(lastActivity).inDays;
-    return days <= 30;
+  String _lifecycleLabel(CustomerLifecycleStage stage) => switch (stage) {
+        CustomerLifecycleStage.newCustomer => 'Novo',
+        CustomerLifecycleStage.active => 'Ativo',
+        CustomerLifecycleStage.returning => 'Retornou',
+        CustomerLifecycleStage.regular => 'Regular',
+        CustomerLifecycleStage.loyal => 'Fiel',
+        CustomerLifecycleStage.vip => 'VIP',
+        CustomerLifecycleStage.advocate => 'Promotor',
+      };
+
+  String _retentionLabel(CustomerRetentionStatus status) => switch (status) {
+        CustomerRetentionStatus.healthy => 'Saudável',
+        CustomerRetentionStatus.atRisk => 'Em risco',
+        CustomerRetentionStatus.inactive => 'Inativo',
+        CustomerRetentionStatus.lost => 'Perdido',
+      };
+
+  Color _retentionColor(CustomerRetentionStatus status) => switch (status) {
+        CustomerRetentionStatus.healthy => AppColors.green,
+        CustomerRetentionStatus.atRisk => AppColors.amber,
+        CustomerRetentionStatus.inactive => AppColors.amber,
+        CustomerRetentionStatus.lost => AppColors.error,
+      };
+
+  String _recommendedAction(Customer customer) {
+    return switch (customer.retentionStatus) {
+      CustomerRetentionStatus.lost => 'Criar uma oferta de retorno',
+      CustomerRetentionStatus.inactive => 'Contactar para recuperar',
+      CustomerRetentionStatus.atRisk => 'Enviar um lembrete no momento certo',
+      CustomerRetentionStatus.healthy => switch (customer.lifecycleStage) {
+          CustomerLifecycleStage.newCustomer => 'Incentivar a segunda visita',
+          CustomerLifecycleStage.active ||
+          CustomerLifecycleStage.returning =>
+            'Recompensar a proxima visita',
+          CustomerLifecycleStage.regular ||
+          CustomerLifecycleStage.loyal ||
+          CustomerLifecycleStage.vip =>
+            'Reconhecer a fidelidade',
+          CustomerLifecycleStage.advocate => 'Pedir uma recomendacao',
+        },
+    };
+  }
+
+  String _recommendationExplanation(Customer customer) {
+    return switch (customer.retentionStatus) {
+      CustomerRetentionStatus.lost =>
+        'Este cliente ultrapassou o limite de inatividade. Use uma razao pessoal e relevante para voltar.',
+      CustomerRetentionStatus.inactive =>
+        'O cliente esta inativo. Um contacto consentido pode recuperar a relacao.',
+      CustomerRetentionStatus.atRisk =>
+        'A frequencia caiu. Contacte antes de a inatividade aumentar.',
+      CustomerRetentionStatus.healthy =>
+        'A proxima acao deve ajudar este cliente a avancar no ciclo de retencao.',
+    };
   }
 
   String _formatApproxMzn(int points) {
@@ -742,9 +866,16 @@ class _StatusChip extends StatelessWidget {
 }
 
 class _PointsSummaryCard extends StatelessWidget {
-  const _PointsSummaryCard({required this.points, required this.approxValue});
+  const _PointsSummaryCard({
+    required this.points,
+    required this.confirmedPoints,
+    required this.pendingPoints,
+    required this.approxValue,
+  });
 
   final int points;
+  final int? confirmedPoints;
+  final int pendingPoints;
   final String approxValue;
 
   @override
@@ -798,6 +929,67 @@ class _PointsSummaryCard extends StatelessWidget {
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                   color: Colors.white.withValues(alpha: 0.7),
                 ),
+          ),
+          if (confirmedPoints != null && pendingPoints > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              '$confirmedPoints confirmados + $pendingPoints pendentes',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Colors.white.withValues(alpha: 0.82),
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _RecommendationCard extends StatelessWidget {
+  const _RecommendationCard({
+    required this.title,
+    required this.explanation,
+  });
+
+  final String title;
+  final String explanation;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaisUmSurface(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      radius: 16,
+      backgroundColor: AppColors.secondaryLight,
+      borderColor: AppColors.secondary.withValues(alpha: 0.35),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.lightbulb_rounded, color: AppColors.secondaryDark),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Proxima acao recomendada',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(explanation, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ),
         ],
       ),
@@ -1167,6 +1359,16 @@ class _SaleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayedPoints = sale.confirmedPoints ?? sale.points;
+    final (statusLabel, statusColor) = switch (sale.confirmationStatus) {
+      SaleConfirmationStatus.pending => ('A confirmar', AppColors.amber),
+      SaleConfirmationStatus.confirmed => ('Confirmado', AppColors.green),
+      SaleConfirmationStatus.rejected => ('Rejeitado', AppColors.error),
+      SaleConfirmationStatus.baselineRequired => (
+          'Sincronização necessária',
+          AppColors.amber,
+        ),
+    };
     return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       radius: 16,
@@ -1202,6 +1404,14 @@ class _SaleCard extends StatelessWidget {
                   PtDateFormat.dayMonthYearTime(sale.createdAt),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  statusLabel,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: statusColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
                 if (sale.items.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
@@ -1227,9 +1437,12 @@ class _SaleCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              '+${sale.points} ${AppStrings.pontosAbrev}',
-              style: const TextStyle(
-                color: AppColors.secondaryDark,
+              '+$displayedPoints ${AppStrings.pontosAbrev}',
+              style: TextStyle(
+                color:
+                    sale.confirmationStatus == SaleConfirmationStatus.rejected
+                        ? AppColors.error
+                        : AppColors.secondaryDark,
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
               ),
@@ -1253,6 +1466,8 @@ class _EditCustomerSheet extends ConsumerStatefulWidget {
 class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _phoneCtrl;
+  late CustomerConsentStatus _marketingConsent;
+  late CustomerConsentStatus _whatsappConsent;
   bool _saving = false;
 
   @override
@@ -1260,6 +1475,8 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.customer.name);
     _phoneCtrl = TextEditingController(text: widget.customer.phone);
+    _marketingConsent = widget.customer.marketingConsentStatus;
+    _whatsappConsent = widget.customer.whatsappConsentStatus;
   }
 
   @override
@@ -1282,9 +1499,13 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
     }
     setState(() => _saving = true);
     try {
-      await ref
-          .read(customersControllerProvider.notifier)
-          .updateCustomer(widget.customerId, name: name, phone: phone);
+      await ref.read(customersControllerProvider.notifier).updateCustomer(
+            widget.customerId,
+            name: name,
+            phone: phone,
+            marketingConsent: _marketingConsent,
+            whatsappConsent: _whatsappConsent,
+          );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
@@ -1302,7 +1523,7 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
         20,
         16,
@@ -1343,6 +1564,25 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
               prefixIcon: Icon(Icons.phone_outlined),
             ),
           ),
+          const SizedBox(height: 20),
+          Text(
+            'Preferências de contacto',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _ConsentField(
+            label: 'WhatsApp',
+            value: _whatsappConsent,
+            onChanged: (value) => setState(() => _whatsappConsent = value),
+          ),
+          const SizedBox(height: 12),
+          _ConsentField(
+            label: 'Marketing',
+            value: _marketingConsent,
+            onChanged: (value) => setState(() => _marketingConsent = value),
+          ),
           const SizedBox(height: 24),
           PrimaryButton(
             label: AppStrings.guardar,
@@ -1353,4 +1593,45 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
       ),
     );
   }
+}
+
+class _ConsentField extends StatelessWidget {
+  const _ConsentField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final CustomerConsentStatus value;
+  final ValueChanged<CustomerConsentStatus> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<CustomerConsentStatus>(
+      initialValue: value,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: const Icon(Icons.privacy_tip_outlined),
+      ),
+      items: CustomerConsentStatus.values
+          .map(
+            (status) => DropdownMenuItem<CustomerConsentStatus>(
+              value: status,
+              child: Text(_consentLabel(status)),
+            ),
+          )
+          .toList(growable: false),
+      onChanged: (status) {
+        if (status != null) onChanged(status);
+      },
+    );
+  }
+
+  String _consentLabel(CustomerConsentStatus status) => switch (status) {
+        CustomerConsentStatus.unknown => 'Não registado',
+        CustomerConsentStatus.granted => 'Autorizado',
+        CustomerConsentStatus.denied => 'Recusado',
+        CustomerConsentStatus.revoked => 'Revogado',
+      };
 }

@@ -21,11 +21,11 @@ class CustomerMatchEngine {
       }
     }
 
-    final recent = await _customerDao.getRecent(limit: 1);
-    if (recent.isNotEmpty) {
-      return CustomerMatch(customer: recent.first, reason: 'recent');
-    }
-
     return const CustomerMatch(customer: null, reason: 'none');
+  }
+
+  Future<Customer?> suggestMostRecent() async {
+    final recent = await _customerDao.getRecent(limit: 1);
+    return recent.isEmpty ? null : recent.first;
   }
 }

@@ -58,7 +58,10 @@ class _FakeSaleController extends SaleController {
 
 class _FakeCustomerRepository extends CustomerRepository {
   _FakeCustomerRepository(this.customers)
-      : super(CustomerDao(AppDatabase.instance), SyncDao(AppDatabase.instance));
+      : super(
+          CustomerDao.unscoped(AppDatabase.instance),
+          SyncDao(AppDatabase.instance),
+        );
 
   final List<Customer> customers;
 

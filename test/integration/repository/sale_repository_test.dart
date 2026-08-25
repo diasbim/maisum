@@ -1,4 +1,6 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+﻿import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/database/app_database.dart';
 import 'package:maisum/features/catalog/data/merchant_catalog_dao.dart';
 import 'package:maisum/features/catalog/data/merchant_catalog_repository.dart';
@@ -96,6 +98,20 @@ void main() {
           .firstWhere((item) => item.entityType == 'sale')
           .payload;
       expect(payload, contains(sale.id));
+    });
+
+    test('sale payload excludes server-owned confirmation fields', () async {
+      await repo.createSale(customerId: customerId, amount: 200);
+      final payload = jsonDecode(
+        (await syncDao.getPending())
+            .firstWhere((item) => item.entityType == 'sale')
+            .payload,
+      ) as Map<String, dynamic>;
+
+      expect(payload['updated_at'], isNotNull);
+      expect(payload, isNot(contains('confirmation_status')));
+      expect(payload, isNot(contains('confirmed_points')));
+      expect(payload, isNot(contains('confirmed_at')));
     });
 
     test('registers sale with item snapshot and queues sale item after sale',

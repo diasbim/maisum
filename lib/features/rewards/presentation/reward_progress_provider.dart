@@ -10,9 +10,11 @@ final rewardProgressProvider = FutureProvider.family<RewardProgress, String>(
     if (customer == null) {
       return RewardProgress.empty();
     }
+    final balance =
+        await ref.read(loyaltyLedgerDaoProvider).getCustomerBalance(customerId);
     final rewards = await ref.read(rewardRepositoryProvider).getRewards();
     return RewardProgress.fromRewards(
-      currentPoints: customer.totalPoints,
+      currentPoints: balance.projectedPoints,
       rewards: rewards,
     );
   },

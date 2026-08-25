@@ -1,6 +1,9 @@
-# LoyaltyOS
+# MaisUm
 
-Offline-first loyalty app for barbershops in Maputo, Mozambique. Barbers register sales in under 5 seconds, on low-end Android devices, with or without internet.
+MaisUm is an offline-first Customer Retention Platform for small businesses:
+**turn customers into regulars**. The existing Business Owner application is
+the operational core; loyalty, rewards, engagement, and future customer
+interfaces all build on one Customer Core.
 
 ## Product Governance
 
@@ -81,17 +84,22 @@ static const apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '
 points = floor(amount_mzn / 100)
 ```
 
-Configurable via `AppConstants.pointsPerMzn = 100`. 200 MZN haircut → 2 points.
+Configured by the active business profile, with a default of 1 point per 100 MZN. A 200 MZN sale earns 2 points with that default.
 
 ## Offline Behaviour
 
-1. Every write goes to SQLite first (immediate, always succeeds).
+1. Customer creation, visits, sales, and points earning go to SQLite first.
 2. A `SyncItem` is enqueued in `sync_queue`.
 3. `SyncService.processQueue()` runs when:
    - App returns to foreground
    - Connectivity changes from offline → online
 4. Max 3 retries per item. Failed items are marked `status='failed'` and left for manual review.
 5. The dashboard shows a pending-sync count badge on the sync indicator.
+
+Final reward redemption is intentionally online-only. It is confirmed by a
+server transaction against the canonical loyalty ledger so two devices cannot
+overspend the same balance. Notification delivery is never part of the loyalty
+transaction.
 
 ## Auth (MVP)
 
@@ -114,6 +122,27 @@ POST /auth/otp/verify    { phone, code } → { token, userId }
 Sync writes are enqueued locally and then applied as direct Firestore upserts
 under `businesses/{businessUid}/{collection}/{entityId}` using merge semantics.
 Deletes are mapped to Firestore document deletes.
+
+### Customer Core and Retention
+
+Authenticated business commands use:
+
+```
+POST /customer-core/identities/lookup
+POST /customer-core/business-customers/link
+POST /customer-core/business-customers/backfill
+POST /loyalty/ledger/backfill
+POST /loyalty/ledger/reconcile
+POST /loyalty/redemptions
+POST /retention/policies
+POST /retention/classifications/scan
+```
+
+Firestore is authoritative for canonical identities, loyalty ledger entries,
+domain events, lifecycle transitions, policies, and recommendations. Immutable
+domain events are projected asynchronously and idempotently into PostgreSQL
+`retention_domain_events` for analytics; PostgreSQL availability never
+participates in the canonical customer or loyalty transaction.
 
 ## Android Build
 
@@ -162,9 +191,11 @@ flutter build ios --release --dart-define=API_BASE_URL=https://api.example.com
 
 ## Database
 
-SQLite version 2. Tables: `customers`, `sales`, `rewards`, `sync_queue`.
-
-**Migration from v1**: `onUpgrade` drops and recreates the `customers` table (renames `nome→name`, `telefone→phone`) and creates the new tables.
+SQLite schema version 25 is migrated additively. The existing merchant-scoped
+`customers` table is the offline BusinessCustomer projection and links to a
+canonical Firestore customer identity. Sales remain offline-first; confirmed
+balances are projected from the server-owned `loyalty_ledger`. Legacy
+`total_points` remains a compatibility projection during rollout.
 
 ## Testing
 
@@ -180,4 +211,8 @@ Customer detail screen includes a "Enviar WhatsApp" button that opens:
 https://wa.me/258{phone}?text=Olá%20{name}%2C...
 ```
 
-No API key required — uses `url_launcher` deep link.
+No API key is required for business-assisted delivery through `url_launcher`.
+WhatsApp actions require recorded customer consent and are attributed as
+retention actions. Offline messages use an idempotent customer-scoped queue;
+the server rechecks tenant access, consent, and the customer phone before
+accepting delivery.

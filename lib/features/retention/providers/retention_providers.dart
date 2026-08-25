@@ -41,8 +41,7 @@ class RetentionDashboardController
   }
 
   Future<void> recalculate() async {
-    await ref.read(retentionRepositoryProvider).calculateRetention();
-    ref.read(syncServiceProvider).processQueue();
+    await ref.read(syncServiceProvider).processQueue();
     state = await AsyncValue.guard(_load);
   }
 

@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/database/app_database.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
 import 'package:maisum/features/sales/data/sale_dao.dart';
@@ -12,18 +12,39 @@ void main() {
   setUp(() async {
     await setUpTestDatabase();
     saleDao = SaleDao(AppDatabase.instance);
-    final c = await CustomerDao(AppDatabase.instance).create(name: 'Test', phone: '840000099');
+    final c = await CustomerDao.unscoped(AppDatabase.instance)
+        .create(name: 'Test', phone: '840000099');
     customerId = c.id;
   });
 
   tearDown(tearDownTestDatabase);
 
   group('create — points calculation', () {
-    test('200 MZN → 2 pts', () async => expect((await saleDao.create(customerId: customerId, amount: 200)).points, 2));
-    test('100 MZN → 1 pt', () async => expect((await saleDao.create(customerId: customerId, amount: 100)).points, 1));
-    test('150 MZN → 1 pt (floor)', () async => expect((await saleDao.create(customerId: customerId, amount: 150)).points, 1));
-    test('99 MZN → 0 pts', () async => expect((await saleDao.create(customerId: customerId, amount: 99)).points, 0));
-    test('500 MZN → 5 pts', () async => expect((await saleDao.create(customerId: customerId, amount: 500)).points, 5));
+    test(
+        '200 MZN → 2 pts',
+        () async => expect(
+            (await saleDao.create(customerId: customerId, amount: 200)).points,
+            2));
+    test(
+        '100 MZN → 1 pt',
+        () async => expect(
+            (await saleDao.create(customerId: customerId, amount: 100)).points,
+            1));
+    test(
+        '150 MZN → 1 pt (floor)',
+        () async => expect(
+            (await saleDao.create(customerId: customerId, amount: 150)).points,
+            1));
+    test(
+        '99 MZN → 0 pts',
+        () async => expect(
+            (await saleDao.create(customerId: customerId, amount: 99)).points,
+            0));
+    test(
+        '500 MZN → 5 pts',
+        () async => expect(
+            (await saleDao.create(customerId: customerId, amount: 500)).points,
+            5));
 
     test('inserts with synced=false and non-empty id', () async {
       final s = await saleDao.create(customerId: customerId, amount: 200);
@@ -89,4 +110,3 @@ void main() {
     });
   });
 }
-

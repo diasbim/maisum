@@ -11,7 +11,7 @@ void main() {
 
   setUp(() async {
     await setUpTestDatabase();
-    dao = CustomerDao(AppDatabase.instance);
+    dao = CustomerDao.unscoped(AppDatabase.instance);
     engine = CustomerMatchEngine(dao);
   });
 
@@ -24,10 +24,11 @@ void main() {
     expect(match.reason, 'phone');
   });
 
-  test('falls back to recent customer', () async {
-    await dao.create(name: 'Maria', phone: '841111111');
+  test('does not infer identity from the most recent customer', () async {
+    final recent = await dao.create(name: 'Maria', phone: '841111111');
     final match = await engine.match(phone: '000000000');
-    expect(match.customer, isNotNull);
-    expect(match.reason, 'recent');
+    expect(match.customer, isNull);
+    expect(match.reason, 'none');
+    expect((await engine.suggestMostRecent())?.id, recent.id);
   });
 }

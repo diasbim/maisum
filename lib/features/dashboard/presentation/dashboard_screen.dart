@@ -272,6 +272,8 @@ class _DashboardBody extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: AppSpacing.xl),
+        _RetentionOverviewCard(stats: stats),
+        const SizedBox(height: AppSpacing.xl),
         const _SectionLabel('Atalhos'),
         const SizedBox(height: AppSpacing.md),
         LayoutBuilder(
@@ -311,11 +313,110 @@ class _DashboardBody extends ConsumerWidget {
                     onTap: () => context.push('/rewards'),
                   ),
                 ),
+                SizedBox(
+                  width: tileWidth,
+                  child: _MiniActionTile(
+                    label: 'Retencao',
+                    subtitle: 'Clientes em risco e recorrentes',
+                    icon: Icons.insights_rounded,
+                    onTap: () => context.push('/retention'),
+                  ),
+                ),
               ],
             );
           },
         ),
       ],
+    );
+  }
+}
+
+class _RetentionOverviewCard extends StatelessWidget {
+  const _RetentionOverviewCard({required this.stats});
+
+  final DashboardStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final metrics = [
+      ('Clientes', '${stats.totalCustomers}'),
+      ('Recorrentes', '${stats.returningCustomers}'),
+      ('Regulares', '${stats.regularCustomers}'),
+      ('Em risco', '${stats.atRiskCustomers}'),
+      ('Inativos', '${stats.inactiveCustomers}'),
+      ('Taxa de retorno', '${(stats.retentionRate * 100).toStringAsFixed(0)}%'),
+      ('Visitas / cliente', stats.averageVisitsPerCustomer.toStringAsFixed(1)),
+    ];
+    return MaisUmSurface(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      radius: AppRadius.lg,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.insights_rounded, color: AppColors.secondary),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Retencao de clientes',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.push('/retention'),
+                child: const Text('Ver detalhes'),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 520 ? 4 : 2;
+              final width =
+                  (constraints.maxWidth - (AppSpacing.sm * (columns - 1))) /
+                      columns;
+              return Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  for (final metric in metrics)
+                    SizedBox(
+                      width: width,
+                      child: Container(
+                        padding: const EdgeInsets.all(AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerLow,
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              metric.$2,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              metric.$1,
+                              maxLines: 2,
+                              style: Theme.of(context).textTheme.labelSmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }

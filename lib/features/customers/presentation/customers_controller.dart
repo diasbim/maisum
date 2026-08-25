@@ -53,6 +53,8 @@ class CustomersController extends AsyncNotifier<List<Customer>> {
     String id, {
     required String name,
     required String phone,
+    CustomerConsentStatus? marketingConsent,
+    CustomerConsentStatus? whatsappConsent,
   }) async {
     final trimmedName = name.trim();
     final trimmedPhone = phone.trim();
@@ -62,6 +64,13 @@ class CustomersController extends AsyncNotifier<List<Customer>> {
       await ref
           .read(customerRepositoryProvider)
           .updateCustomer(id, name: trimmedName, phone: trimmedPhone);
+      if (marketingConsent != null && whatsappConsent != null) {
+        await ref.read(customerRepositoryProvider).updateConsent(
+              id,
+              marketing: marketingConsent,
+              whatsapp: whatsappConsent,
+            );
+      }
     } on sqflite.DatabaseException catch (e) {
       final raw = e.toString().toLowerCase();
       if (raw.contains('idx_customers_scope_phone') ||

@@ -28,10 +28,11 @@ CustomerWhatsAppDraft buildCustomerWhatsAppDraft({
 }) {
   final referenceTime = now ?? DateTime.now();
   final firstName = _firstName(customer.name);
+  final confirmedPoints = customer.confirmedPoints ?? customer.totalPoints;
   final sortedRewards = [...rewards]
     ..sort((a, b) => a.pointsRequired.compareTo(b.pointsRequired));
   final eligibleRewards = sortedRewards
-      .where((reward) => reward.pointsRequired <= customer.totalPoints)
+      .where((reward) => reward.pointsRequired <= confirmedPoints)
       .toList();
 
   if (eligibleRewards.isNotEmpty) {
@@ -45,14 +46,14 @@ CustomerWhatsAppDraft buildCustomerWhatsAppDraft({
 
   Reward? nextReward;
   for (final reward in sortedRewards) {
-    if (reward.pointsRequired > customer.totalPoints) {
+    if (reward.pointsRequired > confirmedPoints) {
       nextReward = reward;
       break;
     }
   }
 
   if (nextReward != null) {
-    final pointsLeft = nextReward.pointsRequired - customer.totalPoints;
+    final pointsLeft = nextReward.pointsRequired - confirmedPoints;
     if (pointsLeft <= _nearRewardThresholdPoints) {
       return CustomerWhatsAppDraft(
         type: CustomerWhatsAppMessageType.nearReward,
@@ -72,18 +73,18 @@ CustomerWhatsAppDraft buildCustomerWhatsAppDraft({
     return CustomerWhatsAppDraft(
       type: CustomerWhatsAppMessageType.inactive,
       message:
-          '$firstName, sentimos a tua falta. Os teus ${customer.totalPoints} pontos continuam guardados. Passa aqui esta semana.',
+          '$firstName, sentimos a tua falta. Os teus $confirmedPoints pontos confirmados continuam guardados. Passa aqui esta semana.',
     );
   }
 
   if (lastSale != null) {
     final nextStep = nextReward != null
-        ? 'Faltam ${nextReward.pointsRequired - customer.totalPoints} pontos para ${nextReward.name}.'
+        ? 'Faltam ${nextReward.pointsRequired - confirmedPoints} pontos para ${nextReward.name}.'
         : 'Continua assim.';
     return CustomerWhatsAppDraft(
       type: CustomerWhatsAppMessageType.repeatVisit,
       message:
-          'Obrigado, $firstName. Já tens ${customer.totalPoints} pontos. $nextStep',
+          'Obrigado, $firstName. Já tens $confirmedPoints pontos confirmados. $nextStep',
     );
   }
 

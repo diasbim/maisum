@@ -39,10 +39,11 @@ class _SyncEntityConfig {
 const _syncEntities = [
   _SyncEntityConfig(entityType: 'customer', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'merchant_item', cursorField: 'updated_at'),
-  _SyncEntityConfig(entityType: 'sale', cursorField: 'created_at'),
+  _SyncEntityConfig(entityType: 'sale', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'sale_item', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'reward', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'redemption', cursorField: 'redeemed_at'),
+  _SyncEntityConfig(entityType: 'loyalty_ledger', cursorField: 'created_at'),
   _SyncEntityConfig(entityType: 'appointment', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'retention_metric', cursorField: 'updated_at'),
   _SyncEntityConfig(
@@ -444,6 +445,8 @@ class SyncService {
         return _applyReward(txn, remote);
       case 'redemption':
         return _applyRedemption(txn, remote);
+      case 'loyalty_ledger':
+        return _applyLoyaltyLedger(txn, remote);
       case 'appointment':
         return _applyAppointment(txn, remote);
       case 'retention_metric':
@@ -568,7 +571,7 @@ class SyncService {
       whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
+    final incoming = _normalizedCustomerIncoming(remote)..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('customers', incoming);
@@ -583,6 +586,18 @@ class SyncService {
         local['updated_at'] == incoming['updated_at'];
 
     if (!localSynced && !sameData) {
+      final serverProjection = <String, dynamic>{
+        for (final key in _customerServerProjectionFields)
+          if (incoming.containsKey(key)) key: incoming[key],
+      };
+      if (serverProjection.isNotEmpty) {
+        await txn.update(
+          'customers',
+          serverProjection,
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([id]),
+        );
+      }
       return;
     }
 
@@ -604,8 +619,7 @@ class SyncService {
       whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = _normalizedIncoming(remote, includeDevice: true)
-      ..['synced'] = 1;
+    final incoming = _normalizedSaleIncoming(remote)..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('sales', incoming);
@@ -616,8 +630,21 @@ class SyncService {
     final sameData = local['customer_id'] == incoming['customer_id'] &&
         local['amount'] == incoming['amount'] &&
         local['points'] == incoming['points'] &&
-        local['created_at'] == incoming['created_at'];
+        local['created_at'] == incoming['created_at'] &&
+        local['updated_at'] == incoming['updated_at'];
     if ((local['synced'] as int? ?? 0) == 0 && !sameData) {
+      final serverProjection = <String, dynamic>{
+        for (final key in _saleServerProjectionFields)
+          if (incoming.containsKey(key)) key: incoming[key],
+      };
+      if (serverProjection.isNotEmpty) {
+        await txn.update(
+          'sales',
+          serverProjection,
+          where: _entityWhereClause('id = ?'),
+          whereArgs: _entityWhereArgs([id]),
+        );
+      }
       return;
     }
 
@@ -820,6 +847,23 @@ class SyncService {
     );
   }
 
+  Future<void> _applyLoyaltyLedger(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final incoming = _filterKeys(remote, _loyaltyLedgerColumns);
+    final id = incoming['id'] as String?;
+    if (id == null) return;
+    if (incoming['merchant_id'] == null && _syncDao.merchantId != null) {
+      incoming['merchant_id'] = _syncDao.merchantId;
+    }
+    await txn.insert(
+      'loyalty_ledger',
+      incoming,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<void> _applyAppointment(
     dynamic txn,
     Map<String, dynamic> remote,
@@ -841,6 +885,10 @@ class SyncService {
       'status',
       'source',
       'reminder_sent',
+      'merchant_item_id',
+      'staff_app_user_id',
+      'duration_minutes',
+      'notes',
       'created_at',
       'updated_at',
       'synced',
@@ -1734,6 +1782,107 @@ class SyncService {
     return incoming;
   }
 
+  Map<String, dynamic> _normalizedCustomerIncoming(
+    Map<String, dynamic> remote,
+  ) {
+    final normalized = Map<String, dynamic>.from(remote);
+    _copyIfAbsent(normalized, 'merchant_id', 'merchantId');
+    _copyIfAbsent(
+      normalized,
+      'canonical_customer_id',
+      'canonicalCustomerId',
+    );
+    _copyIfAbsent(normalized, 'total_points', 'totalPoints');
+    _copyIfAbsent(normalized, 'confirmed_points', 'confirmedPoints');
+    _copyIfAbsent(normalized, 'account_state', 'accountState');
+    _copyIfAbsent(
+      normalized,
+      'relationship_status',
+      'relationshipStatus',
+    );
+    _copyIfAbsent(normalized, 'lifecycle_stage', 'lifecycleStage');
+    _copyIfAbsent(normalized, 'retention_status', 'retentionStatus');
+    _copyIfAbsent(normalized, 'first_visit_at', 'firstVisitAt');
+    _copyIfAbsent(normalized, 'last_visit_at', 'lastVisitAt');
+    _copyIfAbsent(normalized, 'total_visits', 'totalVisits');
+    _copyIfAbsent(normalized, 'total_spent', 'totalSpent');
+    _copyIfAbsent(normalized, 'average_spend', 'averageSpend');
+    _copyIfAbsent(
+      normalized,
+      'average_visit_interval_days',
+      'averageVisitIntervalDays',
+    );
+    _copyIfAbsent(
+      normalized,
+      'marketing_consent_status',
+      'marketingConsentStatus',
+    );
+    _copyIfAbsent(
+      normalized,
+      'whatsapp_consent_status',
+      'whatsappConsentStatus',
+    );
+    _copyIfAbsent(normalized, 'schema_version', 'schemaVersion');
+    _copyIfAbsent(normalized, 'created_at', 'createdAt');
+    _copyIfAbsent(normalized, 'updated_at', 'updatedAt');
+
+    if (normalized['merchant_id'] == null && _syncDao.merchantId != null) {
+      normalized['merchant_id'] = _syncDao.merchantId;
+    }
+
+    return <String, dynamic>{
+      for (final key in _customerLocalColumns)
+        if (normalized.containsKey(key)) key: normalized[key],
+    };
+  }
+
+  Map<String, dynamic> _normalizedSaleIncoming(
+    Map<String, dynamic> remote,
+  ) {
+    final normalized = Map<String, dynamic>.from(remote);
+    _copyIfAbsent(normalized, 'merchant_id', 'merchantId');
+    _copyIfAbsent(normalized, 'customer_id', 'customerId');
+    _copyIfAbsent(normalized, 'device_id', 'deviceId');
+    _copyIfAbsent(normalized, 'created_at', 'createdAt');
+    _copyIfAbsent(normalized, 'updated_at', 'updatedAt');
+    _copyIfAbsent(
+      normalized,
+      'confirmation_status',
+      'confirmationStatus',
+    );
+    _copyIfAbsent(normalized, 'confirmed_points', 'confirmedPoints');
+    _copyIfAbsent(normalized, 'confirmed_at', 'confirmedAt');
+    _copyIfAbsent(
+      normalized,
+      'confirmation_error_code',
+      'confirmationErrorCode',
+    );
+    _copyIfAbsent(
+      normalized,
+      'loyalty_policy_version',
+      'loyaltyPolicyVersion',
+    );
+    _copyIfAbsent(
+      normalized,
+      'created_by_app_user_id',
+      'createdByAppUserId',
+    );
+    _copyIfAbsent(
+      normalized,
+      'updated_by_app_user_id',
+      'updatedByAppUserId',
+    );
+    if (normalized['merchant_id'] == null && _syncDao.merchantId != null) {
+      normalized['merchant_id'] = _syncDao.merchantId;
+    }
+    if (normalized['device_id'] == null && _syncDao.deviceId != null) {
+      normalized['device_id'] = _syncDao.deviceId;
+    }
+    normalized['updated_at'] ??= normalized['created_at'];
+    normalized['confirmation_status'] ??= 'PENDING';
+    return _filterKeys(normalized, _saleLocalColumns);
+  }
+
   void _copyIfAbsent(
     Map<String, dynamic> target,
     String targetKey,
@@ -1750,6 +1899,91 @@ class SyncService {
       target[key] = value ? 1 : 0;
     }
   }
+
+  static const Set<String> _customerLocalColumns = <String>{
+    'id',
+    'merchant_id',
+    'device_id',
+    'canonical_customer_id',
+    'name',
+    'phone',
+    'total_points',
+    'confirmed_points',
+    'account_state',
+    'relationship_status',
+    'lifecycle_stage',
+    'retention_status',
+    'first_visit_at',
+    'last_visit_at',
+    'total_visits',
+    'total_spent',
+    'average_spend',
+    'average_visit_interval_days',
+    'marketing_consent_status',
+    'whatsapp_consent_status',
+    'schema_version',
+    'created_at',
+    'updated_at',
+    'synced',
+  };
+
+  static const Set<String> _customerServerProjectionFields = <String>{
+    'canonical_customer_id',
+    'confirmed_points',
+    'account_state',
+    'relationship_status',
+    'lifecycle_stage',
+    'retention_status',
+    'first_visit_at',
+    'last_visit_at',
+    'total_visits',
+    'total_spent',
+    'average_spend',
+    'average_visit_interval_days',
+    'schema_version',
+  };
+
+  static const Set<String> _saleLocalColumns = <String>{
+    'id',
+    'merchant_id',
+    'customer_id',
+    'amount',
+    'points',
+    'created_at',
+    'updated_at',
+    'confirmation_status',
+    'confirmed_points',
+    'confirmed_at',
+    'confirmation_error_code',
+    'loyalty_policy_version',
+    'synced',
+    'device_id',
+    'created_by_app_user_id',
+    'updated_by_app_user_id',
+  };
+
+  static const Set<String> _saleServerProjectionFields = <String>{
+    'updated_at',
+    'confirmation_status',
+    'confirmed_points',
+    'confirmed_at',
+    'confirmation_error_code',
+    'loyalty_policy_version',
+  };
+
+  static const Set<String> _loyaltyLedgerColumns = <String>{
+    'id',
+    'merchant_id',
+    'customer_id',
+    'entry_type',
+    'points_delta',
+    'source_type',
+    'source_id',
+    'policy_version',
+    'occurred_at',
+    'created_at',
+    'balance_after',
+  };
 
   Map<String, dynamic> _filterKeys(
     Map<String, dynamic> source,

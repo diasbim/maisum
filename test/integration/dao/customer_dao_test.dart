@@ -1,6 +1,7 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/database/app_database.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
+import 'package:maisum/features/customers/domain/customer.dart';
 
 import '../../helpers/test_database.dart';
 
@@ -9,7 +10,7 @@ void main() {
 
   setUp(() async {
     await setUpTestDatabase();
-    dao = CustomerDao(AppDatabase.instance);
+    dao = CustomerDao.unscoped(AppDatabase.instance);
   });
 
   tearDown(tearDownTestDatabase);
@@ -42,6 +43,78 @@ void main() {
       final c = await dao.findByPhone('840000010');
       expect(c, isNotNull);
       expect(c!.name, 'Carlos');
+    });
+
+    group('Customer Core projection', () {
+      test('stores consent state and exposes it through the model', () async {
+        final customer = await dao.create(name: 'Celina', phone: '840000011');
+
+        await dao.updateConsent(
+          customer.id,
+          marketing: CustomerConsentStatus.granted,
+          whatsapp: CustomerConsentStatus.denied,
+        );
+
+        final updated = await dao.getById(customer.id);
+        expect(updated?.marketingConsentStatus, CustomerConsentStatus.granted);
+        expect(updated?.whatsappConsentStatus, CustomerConsentStatus.denied);
+        expect(updated?.synced, false);
+      });
+
+      test('finds a linked relationship by canonical customer id', () async {
+        final customer = await dao.create(name: 'Mateus', phone: '840000012');
+        final db = await AppDatabase.instance.database;
+        await db.update(
+          'customers',
+          {'canonical_customer_id': 'canonical-12'},
+          where: 'id = ?',
+          whereArgs: [customer.id],
+        );
+
+        final linked = await dao.findByCanonicalCustomerId('canonical-12');
+        expect(linked?.id, customer.id);
+      });
+
+      test('keeps the same canonical customer isolated by merchant', () async {
+        final merchantOne = CustomerDao(
+          AppDatabase.instance,
+          merchantId: 'merchant-1',
+        );
+        final merchantTwo = CustomerDao(
+          AppDatabase.instance,
+          merchantId: 'merchant-2',
+        );
+        final first = await merchantOne.create(
+          name: 'Same Person',
+          phone: '840000013',
+        );
+        final second = await merchantTwo.create(
+          name: 'Same Person',
+          phone: '840000013',
+        );
+        final db = await AppDatabase.instance.database;
+        await db.update(
+          'customers',
+          {'canonical_customer_id': 'canonical-13'},
+          where: 'id = ?',
+          whereArgs: [first.id],
+        );
+        await db.update(
+          'customers',
+          {'canonical_customer_id': 'canonical-13'},
+          where: 'id = ?',
+          whereArgs: [second.id],
+        );
+
+        expect(
+          (await merchantOne.findByCanonicalCustomerId('canonical-13'))?.id,
+          first.id,
+        );
+        expect(
+          (await merchantTwo.findByCanonicalCustomerId('canonical-13'))?.id,
+          second.id,
+        );
+      });
     });
 
     test('returns null for unknown phone', () async {

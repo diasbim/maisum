@@ -112,6 +112,21 @@ class AppMigrations {
       name: 'merchant catalog + sale items',
       up: _createV22Schema,
     ),
+    const MigrationStep(
+      version: 23,
+      name: 'general appointment details',
+      up: _createV23Schema,
+    ),
+    const MigrationStep(
+      version: 24,
+      name: 'customer core projection',
+      up: _createV24Schema,
+    ),
+    const MigrationStep(
+      version: 25,
+      name: 'loyalty ledger and confirmations',
+      up: _createV25Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -212,6 +227,21 @@ class _SchemaVerifier {
       'synced',
       'merchant_id',
       'device_id',
+      'canonical_customer_id',
+      'account_state',
+      'relationship_status',
+      'lifecycle_stage',
+      'retention_status',
+      'first_visit_at',
+      'last_visit_at',
+      'total_visits',
+      'total_spent',
+      'average_spend',
+      'average_visit_interval_days',
+      'marketing_consent_status',
+      'whatsapp_consent_status',
+      'schema_version',
+      'confirmed_points',
     },
     'sales': {
       'id',
@@ -222,6 +252,12 @@ class _SchemaVerifier {
       'synced',
       'merchant_id',
       'device_id',
+      'updated_at',
+      'confirmation_status',
+      'confirmed_points',
+      'confirmed_at',
+      'confirmation_error_code',
+      'loyalty_policy_version',
     },
     'rewards': {
       'id',
@@ -270,6 +306,10 @@ class _SchemaVerifier {
       'updated_at',
       'synced',
       'device_id',
+      'merchant_item_id',
+      'staff_app_user_id',
+      'duration_minutes',
+      'notes',
     },
     'retention_metrics': {
       'id',
@@ -403,6 +443,30 @@ class _SchemaVerifier {
       'updated_at',
       'synced',
     },
+    'loyalty_ledger': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'entry_type',
+      'points_delta',
+      'source_type',
+      'source_id',
+      'policy_version',
+      'occurred_at',
+      'created_at',
+      'balance_after',
+    },
+    'redemption_requests': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'reward_id',
+      'points_required',
+      'status',
+      'created_at',
+      'updated_at',
+      'last_error',
+    },
   };
 
   Future<bool> needsRepair(Database db) async {
@@ -444,6 +508,9 @@ class _SchemaVerifier {
       await _createV20Schema(txn);
       await _createV21Schema(txn);
       await _createV22Schema(txn);
+      await _createV23Schema(txn);
+      await _createV24Schema(txn);
+      await _createV25Schema(txn);
     });
   }
 
@@ -1269,6 +1336,165 @@ Future<void> _createV22Schema(DatabaseExecutor db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_sale_items_synced ON sale_items(merchant_id, synced)',
   );
+}
+
+Future<void> _createV23Schema(DatabaseExecutor db) async {
+  await _addColumnIfMissing(db, 'appointments', 'merchant_item_id TEXT');
+  await _addColumnIfMissing(db, 'appointments', 'staff_app_user_id TEXT');
+  await _addColumnIfMissing(db, 'appointments', 'duration_minutes INTEGER');
+  await _addColumnIfMissing(db, 'appointments', 'notes TEXT');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_appointments_merchant_item ON appointments(merchant_id, merchant_item_id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_appointments_staff_date ON appointments(merchant_id, staff_app_user_id, scheduled_date)',
+  );
+}
+
+Future<void> _createV24Schema(DatabaseExecutor db) async {
+  await _addColumnIfMissing(db, 'customers', 'canonical_customer_id TEXT');
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    "account_state TEXT NOT NULL DEFAULT 'UNCLAIMED'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    "relationship_status TEXT NOT NULL DEFAULT 'ACTIVE'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    "lifecycle_stage TEXT NOT NULL DEFAULT 'NEW'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    "retention_status TEXT NOT NULL DEFAULT 'HEALTHY'",
+  );
+  await _addColumnIfMissing(db, 'customers', 'first_visit_at INTEGER');
+  await _addColumnIfMissing(db, 'customers', 'last_visit_at INTEGER');
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'total_visits INTEGER NOT NULL DEFAULT 0',
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'total_spent REAL NOT NULL DEFAULT 0',
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'average_spend REAL NOT NULL DEFAULT 0',
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'average_visit_interval_days INTEGER',
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    "marketing_consent_status TEXT NOT NULL DEFAULT 'UNKNOWN'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    "whatsapp_consent_status TEXT NOT NULL DEFAULT 'UNKNOWN'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'schema_version INTEGER NOT NULL DEFAULT 1',
+  );
+
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_merchant_canonical '
+    'ON customers(merchant_id, canonical_customer_id) '
+    'WHERE canonical_customer_id IS NOT NULL',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_customers_merchant_lifecycle '
+    'ON customers(merchant_id, lifecycle_stage, retention_status)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_customers_merchant_last_visit '
+    'ON customers(merchant_id, last_visit_at)',
+  );
+}
+
+Future<void> _createV25Schema(DatabaseExecutor db) async {
+  await _addColumnIfMissing(db, 'customers', 'confirmed_points INTEGER');
+  await _addColumnIfMissing(
+    db,
+    'sales',
+    'updated_at INTEGER NOT NULL DEFAULT 0',
+  );
+  await db.execute(
+    'UPDATE sales SET updated_at = created_at '
+    'WHERE updated_at = 0 OR updated_at IS NULL',
+  );
+  await _addColumnIfMissing(
+    db,
+    'sales',
+    "confirmation_status TEXT NOT NULL DEFAULT 'PENDING'",
+  );
+  await _addColumnIfMissing(db, 'sales', 'confirmed_points INTEGER');
+  await _addColumnIfMissing(db, 'sales', 'confirmed_at INTEGER');
+  await _addColumnIfMissing(db, 'sales', 'confirmation_error_code TEXT');
+  await _addColumnIfMissing(db, 'sales', 'loyalty_policy_version INTEGER');
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS loyalty_ledger (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      entry_type TEXT NOT NULL,
+      points_delta INTEGER NOT NULL,
+      source_type TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      policy_version INTEGER NOT NULL,
+      occurred_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      balance_after INTEGER NOT NULL,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_loyalty_ledger_source '
+    'ON loyalty_ledger(merchant_id, source_type, source_id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_ledger_customer_time '
+    'ON loyalty_ledger(merchant_id, customer_id, occurred_at DESC)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_loyalty_ledger_created '
+    'ON loyalty_ledger(merchant_id, created_at, id)',
+  );
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS redemption_requests (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      reward_id TEXT NOT NULL,
+      points_required INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      last_error TEXT,
+      FOREIGN KEY (customer_id) REFERENCES customers(id),
+      FOREIGN KEY (reward_id) REFERENCES rewards(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_redemption_requests_pending '
+    'ON redemption_requests(merchant_id, customer_id, reward_id, status)',
+  );
+  await db.delete('sync_state', where: 'entity_type = ?', whereArgs: ['sale']);
 }
 
 Future<void> _addColumnIfMissing(

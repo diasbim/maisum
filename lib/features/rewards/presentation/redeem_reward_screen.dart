@@ -5,10 +5,13 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../design_system/design_system.dart';
 import '../../customers/domain/customer.dart';
+import '../../engage/domain/engage_models.dart';
+import '../../engage/providers/engage_providers.dart';
 import '../domain/reward.dart';
 import 'rewards_controller.dart';
 
@@ -56,7 +59,16 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
     }
   }
 
-  void _openWhatsApp() {
+  Future<void> _openWhatsApp() async {
+    if (widget.customer.whatsappConsentStatus !=
+        CustomerConsentStatus.granted) {
+      AppFeedback.showMessage(
+        context,
+        message: AppStrings.whatsappConsentRequired,
+        isError: true,
+      );
+      return;
+    }
     final connectivity = ref.read(connectivityServiceProvider);
     final clean = widget.customer.phone.replaceAll(RegExp(r'\D'), '');
     final number = clean.startsWith('258') ? clean : '258$clean';
@@ -65,13 +77,15 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
       'Código: $_redemptionCode. Obrigado por fazer parte do programa MaisUm!',
     );
     if (!connectivity.isOnline) {
-      ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
+      await ref.read(notificationQueueServiceProvider).enqueueWhatsApp(
+            customerId: widget.customer.id,
             phone: number,
             message: Uri.decodeComponent(msg),
             source: 'reward_redemption',
           );
+      await _recordWhatsAppAction(queued: true);
       try {
-        ref.read(analyticsServiceProvider).record(
+        await ref.read(analyticsServiceProvider).record(
           eventType: 'whatsapp_sent',
           source: 'whatsapp',
           properties: {'queued': true, 'source': 'reward_redemption'},
@@ -85,17 +99,48 @@ class _RedeemRewardSheetState extends ConsumerState<RedeemRewardSheet> {
       }
       return;
     }
-    launchUrl(
+    final launched = await launchUrl(
       Uri.parse('https://wa.me/$number?text=$msg'),
       mode: LaunchMode.externalApplication,
     );
+    if (!launched) {
+      if (mounted) {
+        AppFeedback.showMessage(
+          context,
+          message: AppStrings.erroGenericoAcao,
+          isError: true,
+        );
+      }
+      return;
+    }
+    await _recordWhatsAppAction(queued: false);
     try {
-      ref.read(analyticsServiceProvider).record(
+      await ref.read(analyticsServiceProvider).record(
         eventType: 'whatsapp_sent',
         source: 'whatsapp',
         properties: {'queued': false, 'source': 'reward_redemption'},
       );
     } catch (_) {}
+  }
+
+  Future<void> _recordWhatsAppAction({required bool queued}) async {
+    try {
+      await ref.read(engageRepositoryProvider).logRecoveryAction(
+        customerId: widget.customer.id,
+        actionType: RecoveryActionType.whatsapp,
+        payload: {
+          'source': 'reward_redemption',
+          'message_type': 'reward_redemption',
+          'delivery_mode': queued ? 'queued' : 'business_assisted',
+        },
+      );
+    } catch (error, stackTrace) {
+      AppErrorReporter.report(
+        error,
+        stackTrace,
+        hint: 'reward_redemption_whatsapp_attribution',
+      );
+    }
   }
 
   Widget _buildConfirmation(BuildContext context, ThemeData theme) {

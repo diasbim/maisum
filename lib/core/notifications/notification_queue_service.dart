@@ -43,11 +43,13 @@ class NotificationQueueService {
   }
 
   Future<void> enqueueWhatsApp({
+    required String customerId,
     required String phone,
     required String message,
     String? source,
   }) async {
     final payload = {
+      'customer_id': customerId,
       'phone': phone,
       'message': message,
       if (source != null) 'source': source,
@@ -95,6 +97,8 @@ class NotificationQueueService {
             headers: headers,
             bearerToken: token,
             body: {
+              'notification_id': item.id,
+              'merchant_id': merchantId,
               'channel': item.channel,
               'payload': item.payload,
               'scheduled_at': item.scheduledAt.toIso8601String(),

@@ -29,6 +29,8 @@ import '../features/customers/data/customer_dao.dart';
 import '../features/customers/data/customer_repository.dart';
 import '../features/rewards/data/redemption_dao.dart';
 import '../features/rewards/data/redemption_repository.dart';
+import '../features/rewards/data/loyalty_ledger_dao.dart';
+import '../features/rewards/data/loyalty_redemption_api.dart';
 import '../features/rewards/data/reward_dao.dart';
 import '../features/rewards/data/reward_repository.dart';
 import '../features/retention/data/retention_dao.dart';
@@ -173,10 +175,16 @@ final notificationQueueServiceProvider =
 // ── DAOs ──────────────────────────────────────────────────────────────────────
 
 final customerDaoProvider = Provider<CustomerDao>(
-  (ref) => CustomerDao(
-    ref.read(appDatabaseProvider),
-    merchantId: ref.watch(activeMerchantIdProvider),
-  ),
+  (ref) {
+    final merchantId = ref.watch(activeMerchantIdProvider);
+    if (merchantId == null || merchantId.isEmpty) {
+      throw StateError('Customer data requires an active merchant');
+    }
+    return CustomerDao(
+      ref.read(appDatabaseProvider),
+      merchantId: merchantId,
+    );
+  },
 );
 
 final saleDaoProvider = Provider<SaleDao>(
@@ -205,6 +213,19 @@ final rewardDaoProvider = Provider<RewardDao>(
     ref.read(appDatabaseProvider),
     merchantId: ref.watch(activeMerchantIdProvider),
   ),
+);
+
+final loyaltyLedgerDaoProvider = Provider<LoyaltyLedgerDao>(
+  (ref) {
+    final merchantId = ref.watch(activeMerchantIdProvider);
+    if (merchantId == null || merchantId.isEmpty) {
+      throw StateError('Loyalty ledger requires an active merchant');
+    }
+    return LoyaltyLedgerDao(
+      ref.read(appDatabaseProvider),
+      merchantId: merchantId,
+    );
+  },
 );
 
 final syncDaoProvider = Provider<SyncDao>(
@@ -307,18 +328,43 @@ final rewardRepositoryProvider = Provider<RewardRepository>(
 );
 
 final redemptionDaoProvider = Provider<RedemptionDao>(
-  (ref) => RedemptionDao(
-    ref.read(appDatabaseProvider),
-    merchantId: ref.watch(activeMerchantIdProvider),
+  (ref) {
+    final merchantId = ref.watch(activeMerchantIdProvider);
+    if (merchantId == null || merchantId.isEmpty) {
+      throw StateError('Redemption requires an active merchant');
+    }
+    return RedemptionDao(
+      ref.read(appDatabaseProvider),
+      merchantId: merchantId,
+    );
+  },
+);
+
+final loyaltyRedemptionApiProvider = Provider<LoyaltyRedemptionApi>(
+  (ref) => LoyaltyRedemptionApi(
+    ref.read(cloudFunctionsApiClientProvider),
   ),
 );
 
 final redemptionRepositoryProvider = Provider<RedemptionRepository>(
-  (ref) => RedemptionRepository(
-    ref.read(redemptionDaoProvider),
-    ref.read(customerDaoProvider),
-    ref.read(syncDaoProvider),
-  ),
+  (ref) {
+    final merchantId = ref.watch(activeMerchantIdProvider);
+    if (merchantId == null || merchantId.isEmpty) {
+      throw StateError('Redemption requires an active merchant');
+    }
+    return RedemptionRepository(
+      ref.read(redemptionDaoProvider),
+      ref.read(customerDaoProvider),
+      ref.read(loyaltyRedemptionApiProvider),
+      ref.read(connectivityServiceProvider),
+      merchantId: merchantId,
+      resolveBearerToken: () async {
+        final token = await ref.read(secureStorageServiceProvider).getToken();
+        if (token != null && token.isNotEmpty) return token;
+        return ref.read(firebaseAuthInstanceProvider).currentUser?.getIdToken();
+      },
+    );
+  },
 );
 
 final appointmentRepositoryProvider = Provider<AppointmentRepository>(

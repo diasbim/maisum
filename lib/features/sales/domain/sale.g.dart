@@ -12,6 +12,18 @@ _$SaleImpl _$$SaleImplFromJson(Map<String, dynamic> json) => _$SaleImpl(
       amount: (json['amount'] as num).toDouble(),
       points: (json['points'] as num).toInt(),
       createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: json['updatedAt'] == null
+          ? null
+          : DateTime.parse(json['updatedAt'] as String),
+      confirmationStatus: $enumDecodeNullable(
+              _$SaleConfirmationStatusEnumMap, json['confirmationStatus']) ??
+          SaleConfirmationStatus.pending,
+      confirmedPoints: (json['confirmedPoints'] as num?)?.toInt(),
+      confirmedAt: json['confirmedAt'] == null
+          ? null
+          : DateTime.parse(json['confirmedAt'] as String),
+      confirmationErrorCode: json['confirmationErrorCode'] as String?,
+      loyaltyPolicyVersion: (json['loyaltyPolicyVersion'] as num?)?.toInt(),
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => SaleItem.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -26,6 +38,20 @@ Map<String, dynamic> _$$SaleImplToJson(_$SaleImpl instance) =>
       'amount': instance.amount,
       'points': instance.points,
       'createdAt': instance.createdAt.toIso8601String(),
+      'updatedAt': instance.updatedAt?.toIso8601String(),
+      'confirmationStatus':
+          _$SaleConfirmationStatusEnumMap[instance.confirmationStatus]!,
+      'confirmedPoints': instance.confirmedPoints,
+      'confirmedAt': instance.confirmedAt?.toIso8601String(),
+      'confirmationErrorCode': instance.confirmationErrorCode,
+      'loyaltyPolicyVersion': instance.loyaltyPolicyVersion,
       'items': instance.items,
       'synced': instance.synced,
     };
+
+const _$SaleConfirmationStatusEnumMap = {
+  SaleConfirmationStatus.pending: 'pending',
+  SaleConfirmationStatus.confirmed: 'confirmed',
+  SaleConfirmationStatus.rejected: 'rejected',
+  SaleConfirmationStatus.baselineRequired: 'baselineRequired',
+};

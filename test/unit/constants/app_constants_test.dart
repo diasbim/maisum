@@ -5,7 +5,7 @@ void main() {
   group('AppConstants values', () {
     test('pointsPerMzn is 100', () => expect(AppConstants.pointsPerMzn, 100));
     test('maxSyncRetries is 3', () => expect(AppConstants.maxSyncRetries, 3));
-    test('dbVersion is 22', () => expect(AppConstants.dbVersion, 22));
+    test('dbVersion is 25', () => expect(AppConstants.dbVersion, 25));
     test(
       'backend auth is disabled by default',
       () => expect(AppConstants.enableBackendAuth, false),

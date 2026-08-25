@@ -23,6 +23,9 @@ class CustomerRepository {
 
   Future<Customer?> getById(String id) => _dao.getById(id);
 
+  Future<Customer?> findByCanonicalCustomerId(String canonicalCustomerId) =>
+      _dao.findByCanonicalCustomerId(canonicalCustomerId);
+
   Future<List<Customer>> getAll() => _dao.getAll();
 
   Future<List<Customer>> getRecent({int limit = 6}) =>
@@ -69,6 +72,32 @@ class CustomerRepository {
     }
   }
 
+  Future<void> updateConsent(
+    String id, {
+    required CustomerConsentStatus marketing,
+    required CustomerConsentStatus whatsapp,
+  }) async {
+    await _dao.updateConsent(
+      id,
+      marketing: marketing,
+      whatsapp: whatsapp,
+    );
+    final customer = await _dao.getById(id);
+    if (customer == null) {
+      throw StateError('Customer not found after consent update');
+    }
+    await _syncDao.enqueue(
+      SyncItem(
+        id: _uuid.v4(),
+        operation: 'update',
+        entityType: 'customer',
+        entityId: id,
+        payload: jsonEncode(_customerPayload(customer)),
+        createdAt: DateTime.now(),
+      ),
+    );
+  }
+
   Future<void> addPoints(String customerId, int points) async {
     final customer = await _dao.getById(customerId);
     if (customer == null) return;
@@ -77,7 +106,7 @@ class CustomerRepository {
   }
 
   Map<String, dynamic> _customerPayload(Customer customer) => {
-        ...customer.toDbMap(),
+        ...customer.toClientSyncMap(),
         'merchant_id': _dao.merchantId,
       };
 }

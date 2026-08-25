@@ -58,16 +58,35 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "appointments",
+      "collectionGroup": "sales",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "merchant_id",
+          "fieldPath": "updated_at",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "scheduled_date",
+          "fieldPath": "id",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "domain_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "event_type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "recorded_at",
+          "order": "DESCENDING"
         },
         {
           "fieldPath": "__name__",
@@ -76,16 +95,16 @@
       ]
     },
     {
-      "collectionGroup": "retention_metrics",
+      "collectionGroup": "customer_transitions",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "merchant_id",
+          "fieldPath": "business_customer_id",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "risk_level",
-          "order": "ASCENDING"
+          "fieldPath": "occurred_at",
+          "order": "DESCENDING"
         },
         {
           "fieldPath": "__name__",
@@ -94,16 +113,52 @@
       ]
     },
     {
-      "collectionGroup": "retention_metrics",
+      "collectionGroup": "customer_recommendations",
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "merchant_id",
+          "fieldPath": "retention_status",
           "order": "ASCENDING"
         },
         {
-          "fieldPath": "last_visit_at",
+          "fieldPath": "priority",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
           "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "retention_policies",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "effective_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "customers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "retention_status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "classification_updated_at",
+          "order": "DESCENDING"
         },
         {
           "fieldPath": "__name__",
