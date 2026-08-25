@@ -49,7 +49,7 @@ class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Nao foi possivel carregar a localizacao.')),
+          body: ErrorCard(message: 'Não foi possível carregar a localização.')),
       data: (state) {
         _syncController(_addressController, state.draft.address ?? '');
         _syncController(_referenceController, state.draft.reference ?? '');
@@ -60,9 +60,9 @@ class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
         }
         return OnboardingScaffold(
           step: MerchantOnboardingStep.location,
-          title: 'Onde esta o seu negocio?',
+          title: 'Onde está o seu negócio?',
           subtitle:
-              'Esta localizacao sera usada para que os clientes o encontrem mais facilmente.',
+              'Esta localização será usada para que os clientes o encontrem mais facilmente.',
           errorMessage: state.errorMessage,
           primaryLabel: 'Continuar',
           onPrimaryPressed: () async {
@@ -86,7 +86,7 @@ class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
               child: Center(
                 child: Semantics(
                   label:
-                      'Mapa indisponivel. Insira as coordenadas manualmente.',
+                      'Mapa indisponível. Introduza as coordenadas manualmente.',
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -129,7 +129,7 @@ class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
             MaisUmTextField(
               controller: _addressController,
               textCapitalization: TextCapitalization.words,
-              label: 'Endereco selecionado *',
+              label: 'Endereço selecionado *',
               prefixIcon: const Icon(Icons.map_rounded),
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.streetAddressLine1],
@@ -174,7 +174,7 @@ class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
             MaisUmTextField(
               controller: _referenceController,
               textCapitalization: TextCapitalization.sentences,
-              label: 'Ponto de referencia (opcional)',
+              label: 'Ponto de referência (opcional)',
               prefixIcon: const Icon(Icons.flag_rounded),
               textInputAction: TextInputAction.done,
               useFloatingLabel: true,
@@ -182,7 +182,7 @@ class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
             ),
             const SizedBox(height: AppSpacing.lg),
             const ErrorCard(
-              message: 'Mapa interativo indisponivel nesta versao.',
+              message: 'Mapa interativo indisponível nesta versão.',
             ),
           ],
         );

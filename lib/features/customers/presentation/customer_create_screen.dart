@@ -216,8 +216,8 @@ class _CustomerCreateScreenState extends ConsumerState<CustomerCreateScreen> {
         if (existing != null) {
           final openProfile = await MaisUmModal.confirm(
             context: context,
-            title: 'Cliente ja existe',
-            message: 'Este numero ja esta registado.\n\nDeseja abrir o perfil?',
+            title: 'O cliente já existe',
+            message: 'Este número já está registado.\n\nDeseja abrir o perfil?',
             primaryLabel: 'Ver Cliente',
             secondaryLabel: 'Cancelar',
           );

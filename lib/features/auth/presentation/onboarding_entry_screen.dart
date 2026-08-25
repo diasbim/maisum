@@ -27,7 +27,7 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
 
   void _continue() {
     if (_selectedIntent == null) {
-      const message = 'Selecione uma opcao para continuar.';
+      const message = 'Selecione uma opção para continuar.';
       setState(() => _errorMessage = message);
       SemanticsService.sendAnnouncement(
         View.of(context),
@@ -44,7 +44,7 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
       context.go(route);
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'onboarding_entry_continue');
-      const message = 'Nao foi possivel continuar. Tente novamente.';
+      const message = 'Não foi possível continuar. Tente novamente.';
       setState(() => _errorMessage = message);
       SemanticsService.sendAnnouncement(
         View.of(context),
@@ -91,7 +91,7 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
           ),
           const SizedBox(height: AppSpacing.lg),
           Text(
-            'Escolha uma opcao para continuar.',
+            'Escolha uma opção para continuar.',
             style: theme.textTheme.bodyLarge,
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -100,11 +100,11 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
             intent: _OnboardingIntent.joinExisting,
             isSelected: _selectedIntent == _OnboardingIntent.joinExisting,
             onSelected: _selectIntent,
-            title: 'Entrar em negocio existente',
-            subtitle: 'Usar codigo do negocio.',
-            semanticsLabel: 'Entrar em negocio existente',
+            title: 'Entrar num negócio existente',
+            subtitle: 'Usar o código do negócio.',
+            semanticsLabel: 'Entrar num negócio existente',
             semanticsHint:
-                'Abre o fluxo para vincular este dispositivo com codigo.',
+                'Abre o fluxo para associar este dispositivo por código.',
           ),
           const SizedBox(height: AppSpacing.md),
           _IntentCard(
@@ -112,10 +112,10 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
             intent: _OnboardingIntent.createNew,
             isSelected: _selectedIntent == _OnboardingIntent.createNew,
             onSelected: _selectIntent,
-            title: 'Criar novo negocio',
-            subtitle: 'Iniciar uma nova configuracao de negocio.',
-            semanticsLabel: 'Criar novo negocio',
-            semanticsHint: 'Abre o fluxo de criacao do negocio.',
+            title: 'Criar novo negócio',
+            subtitle: 'Iniciar uma nova configuração de negócio.',
+            semanticsLabel: 'Criar novo negócio',
+            semanticsHint: 'Abre o fluxo de criação do negócio.',
           ),
           if (_errorMessage != null) ...[
             const SizedBox(height: AppSpacing.md),
@@ -141,7 +141,7 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
           const SizedBox(height: AppSpacing.lg),
           Semantics(
             button: true,
-            label: 'Continuar para o proximo passo',
+            label: 'Continuar para o próximo passo',
             hint: 'Abre o fluxo escolhido.',
             child: MaisUmButton(
               label: 'Continuar',

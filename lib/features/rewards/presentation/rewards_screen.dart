@@ -523,7 +523,7 @@ class _QuickTemplateSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Templates rapidos',
+          'Modelos rápidos',
           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: AppColors.onSurface,

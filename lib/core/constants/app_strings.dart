@@ -56,8 +56,8 @@ class AppStrings {
   static const String dashboardStreakStatusRisk = 'Em risco';
   static const String dashboardStreakStatusStable = 'Estável';
   static const String dashboardSaleCardSubtitle =
-      'Registrar venda em menos de 5 segundos';
-  static const String dashboardSaleCta = 'Registrar Venda';
+      'Registar uma venda em menos de 5 segundos';
+  static const String dashboardSaleCta = 'Registar venda';
   static const String subscriptionNoStatus = 'Sem estado';
   static const String syncRetrying = 'A tentar novamente';
 
@@ -67,7 +67,8 @@ class AppStrings {
   static const String confirmar = 'Confirmar';
   static const String resumo = 'Resumo';
   static const String valorStep = 'Valor';
-  static const String nomeOuTelefoneCliente = 'Nome ou telefone do cliente';
+  static const String nomeOuTelefoneCliente =
+      'Nome ou número de telemóvel do cliente';
   static const String outroValor = 'Outro valor';
   static const String ultimo = 'Último';
   static const String clienteGanhara = 'O cliente ganhará';
@@ -75,7 +76,7 @@ class AppStrings {
       'Os pontos serão adicionados após confirmação da venda.';
   static const String por = 'por';
   static const String selecionarCliente = 'Selecionar cliente';
-  static const String buscarTelefone = 'Buscar por telefone';
+  static const String buscarTelefone = 'Procurar por telemóvel';
   static const String novoCliente = 'Novo cliente';
   static const String valor = 'Valor (MZN)';
   static const String valorHint = 'Ex: 350';
@@ -95,7 +96,7 @@ class AppStrings {
   static const String resgatarRecompensa = 'Resgatar recompensa';
   static const String resgateRegistado = 'Resgate registado com sucesso!';
   static const String clientesTitle = 'Clientes';
-  static const String buscarCliente = 'Buscar cliente...';
+  static const String buscarCliente = 'Procurar cliente...';
   static const String semClientes = 'Nenhum cliente ainda';
   static const String adicionarCliente = 'Adicionar cliente';
   static const String totalPontos = 'Total de pontos';
@@ -107,7 +108,7 @@ class AppStrings {
   static const String pontos = 'pontos';
   static const String pontosAbrev = 'pts';
   static const String clienteNaoEncontrado = 'Cliente não encontrado';
-  static const String clienteAtivo = 'Cliente activo';
+  static const String clienteAtivo = 'Cliente ativo';
   static const String clienteInativo = 'Cliente inativo';
   static const String saldoPontos = 'Saldo de pontos';
   static const String aproxPrefix = '~';
@@ -118,7 +119,7 @@ class AppStrings {
   static const String verTudo = 'Ver tudo';
   static const String progressoProximaRecompensa =
       'Progresso para próxima recompensa';
-  static const String semRecompensasAtivas = 'Sem recompensas activas';
+  static const String semRecompensasAtivas = 'Sem recompensas ativas';
   static const String recompensaPronta = 'Recompensa pronta';
   static const String faltam = 'Faltam';
   static const String para = 'para';
@@ -228,7 +229,7 @@ class AppStrings {
   // SMS permission
   static const String smsPermissionTitle = 'Permitir SMS de pagamentos';
   static const String smsPermissionBody =
-      'MaisUm usa SMS apenas para detectar pagamentos M-Pesa/eMola '
+      'O MaisUm usa SMS apenas para detetar pagamentos M-Pesa/eMola '
       'e sugerir vendas rapidamente. Nenhuma mensagem pessoal é lida.';
   static const String smsPermissionAllow = 'Permitir SMS';
   static const String smsPermissionSkip = 'Continuar sem SMS';

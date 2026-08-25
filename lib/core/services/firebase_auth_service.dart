@@ -118,31 +118,32 @@ class FirebaseAuthService {
       throw _AuthUiException(e, _mapGoogleAuthError(e.code));
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'auth_sign_in_with_google_unknown');
-      throw Exception('Nao foi possivel autenticar com Google.');
+      throw Exception('Não foi possível autenticar com o Google.');
     }
   }
 
   Future<void> signOut() => _auth.signOut();
 
   String _mapAuthError(String code) => switch (code) {
-    'invalid-phone-number' => 'Número de telemóvel inválido.',
-    'too-many-requests' => 'Demasiadas tentativas. Tente mais tarde.',
-    'quota-exceeded' => 'Quota de SMS excedida.',
-    'network-request-failed' =>
-      'Sem internet. Verifique a ligação e tente novamente.',
-    'operation-not-allowed' =>
-      'O login por telemóvel não está ativado no Firebase.',
-    'app-not-authorized' => 'Esta app Android não está autorizada no Firebase.',
-    'missing-client-identifier' =>
-      'A configuração Android do Firebase está incompleta para autenticação por telefone.',
-    'invalid-app-credential' =>
-      'A verificação da app falhou. Confirme a configuração do Android no Firebase.',
-    'captcha-check-failed' =>
-      'Falha na verificação reCAPTCHA. Complete o desafio no Chrome e volte para a app.',
-    'invalid-verification-code' => 'Código de verificação inválido.',
-    'session-expired' => 'Código expirado. Solicite um novo.',
-    _ => 'Erro de autenticação. Tente novamente.',
-  };
+        'invalid-phone-number' => 'Número de telemóvel inválido.',
+        'too-many-requests' => 'Demasiadas tentativas. Tente mais tarde.',
+        'quota-exceeded' => 'Quota de SMS excedida.',
+        'network-request-failed' =>
+          'Sem internet. Verifique a ligação e tente novamente.',
+        'operation-not-allowed' =>
+          'O login por telemóvel não está ativado no Firebase.',
+        'app-not-authorized' =>
+          'Esta app Android não está autorizada no Firebase.',
+        'missing-client-identifier' =>
+          'A configuração Android do Firebase está incompleta para autenticação por telemóvel.',
+        'invalid-app-credential' =>
+          'A verificação da app falhou. Confirme a configuração do Android no Firebase.',
+        'captcha-check-failed' =>
+          'Falha na verificação reCAPTCHA. Complete o desafio no Chrome e volte para a app.',
+        'invalid-verification-code' => 'Código de verificação inválido.',
+        'session-expired' => 'Código expirado. Solicite um novo.',
+        _ => 'Erro de autenticação. Tente novamente.',
+      };
 
   String _mapAuthException(FirebaseAuthException e) {
     final mapped = _mapAuthError(e.code);
@@ -159,16 +160,17 @@ class FirebaseAuthService {
   }
 
   String _mapGoogleAuthError(String code) => switch (code) {
-    'account-exists-with-different-credential' =>
-      'Esta conta ja existe com outro metodo de login.',
-    'invalid-credential' => 'Credenciais Google invalidas.',
-    'operation-not-allowed' => 'Login Google nao esta ativado no Firebase.',
-    'user-disabled' => 'Conta desativada. Contacte o suporte.',
-    'network-request-failed' =>
-      'Sem internet. Verifique a ligacao e tente novamente.',
-    'web-context-cancelled' => 'Login cancelado.',
-    _ => 'Nao foi possivel autenticar com Google.',
-  };
+        'account-exists-with-different-credential' =>
+          'Esta conta já existe com outro método de início de sessão.',
+        'invalid-credential' => 'Credenciais do Google inválidas.',
+        'operation-not-allowed' =>
+          'O início de sessão com o Google não está ativado no Firebase.',
+        'user-disabled' => 'Conta desativada. Contacte o suporte.',
+        'network-request-failed' =>
+          'Sem internet. Verifique a ligação e tente novamente.',
+        'web-context-cancelled' => 'Login cancelado.',
+        _ => 'Não foi possível autenticar com o Google.',
+      };
 
   void _recordPhoneAuthStage(String stage, {String? errorCode}) {
     AppErrorReporter.setCustomKey('phone_auth_stage', stage);

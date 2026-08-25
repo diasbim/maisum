@@ -26,7 +26,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gestao de Staff'),
+        title: const Text('Gestão da equipa'),
       ),
       body: RefreshIndicator(
         onRefresh: _refresh,
@@ -36,7 +36,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               Text(
-                'Nao foi possivel carregar a equipa.',
+                'Não foi possível carregar a equipa.',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
@@ -67,7 +67,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                 children: [
                   MaisUmButton(
                     onPressed: _actionInProgress ? null : _inviteStaff,
-                    label: 'Convidar por telefone',
+                    label: 'Convidar por telemóvel',
                     leadingIcon: Icons.mark_email_unread_rounded,
                     variant: MaisUmButtonVariant.outlined,
                     fullWidth: false,
@@ -86,7 +86,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 28),
                   child: Text(
-                    'Ainda sem staff registado.',
+                    'Ainda não há membros da equipa registados.',
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                 ),
@@ -154,7 +154,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
 
   Future<void> _inviteStaff() async {
     final phone = await _askPhone(
-      title: 'Convidar staff',
+      title: 'Convidar membro da equipa',
       confirmLabel: 'Convidar',
     );
     if (phone == null || !mounted) return;
@@ -184,7 +184,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
 
   Future<void> _createStaff() async {
     final phone = await _askPhone(
-      title: 'Criar staff manualmente',
+      title: 'Criar membro da equipa manualmente',
       confirmLabel: 'Criar',
     );
     if (phone == null || !mounted) return;
@@ -198,7 +198,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
       if (!mounted) return;
       AppFeedback.showMessage(
         context,
-        message: 'Staff criado com sucesso.',
+        message: 'Membro da equipa criado com sucesso.',
       );
     } catch (error) {
       if (!mounted) return;
@@ -223,7 +223,9 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
       if (!mounted) return;
       AppFeedback.showMessage(
         context,
-        message: isActive ? 'Staff ativado.' : 'Staff desativado.',
+        message: isActive
+            ? 'Membro da equipa ativado.'
+            : 'Membro da equipa desativado.',
       );
     } catch (error) {
       if (!mounted) return;
@@ -256,7 +258,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
             controller: controller,
             keyboardType: TextInputType.phone,
             decoration: const InputDecoration(
-              labelText: 'Telefone',
+              labelText: 'Telemóvel',
               hintText: '+258 84 000 0000',
             ),
           ),
@@ -297,7 +299,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
         if (mounted) {
           AppFeedback.showMessage(
             context,
-            message: 'Telefone invalido.',
+            message: 'Número de telemóvel inválido.',
             isError: true,
           );
         }

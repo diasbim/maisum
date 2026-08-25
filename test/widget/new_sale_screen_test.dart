@@ -209,7 +209,7 @@ void main() {
 
       expect(find.text('Nenhum cliente registado'), findsOneWidget);
       expect(
-        find.text('Para registrar uma venda, adicione primeiro um cliente.'),
+        find.text('Para registar uma venda, adicione primeiro um cliente.'),
         findsOneWidget,
       );
       expect(find.text('Adicionar Cliente'), findsWidgets);

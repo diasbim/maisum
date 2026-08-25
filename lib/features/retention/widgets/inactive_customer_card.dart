@@ -23,7 +23,8 @@ class InactiveCustomerCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _riskColor(customer.riskLevel).withValues(alpha: 0.4)),
+        border: Border.all(
+            color: _riskColor(customer.riskLevel).withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -65,11 +66,11 @@ class InactiveCustomerCard extends StatelessWidget {
             value: '${customer.daysInactive}',
           ),
           _MetricRow(
-            label: 'Ultima visita',
+            label: 'Última visita',
             value: _formatDate(customer.lastVisitAt),
           ),
           _MetricRow(
-            label: 'Ticket medio',
+            label: 'Valor médio',
             value: '${customer.averageTicket.toStringAsFixed(0)} MZN',
           ),
           const SizedBox(height: AppSpacing.sm),

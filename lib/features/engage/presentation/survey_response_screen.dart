@@ -41,7 +41,7 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
-        title: const Text('Enviar Survey'),
+        title: const Text('Enviar questionário'),
         backgroundColor: AppColors.offWhite,
         elevation: 0,
       ),
@@ -50,19 +50,19 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
           child: CircularProgressIndicator(color: AppColors.secondary),
         ),
         error: (_, __) => const EmptyState(
-          title: 'Nao foi possivel validar acesso',
+          title: 'Não foi possível validar o acesso',
           subtitle: 'Tente novamente em alguns segundos.',
         ),
         data: (access) {
           if (!access.canManageSurveys) {
             return EmptyState(
-              title: 'Envio de surveys indisponivel',
+              title: 'Envio de questionários indisponível',
               subtitle: 'Funcionalidade exclusiva do plano Business.',
               actionLabel: 'Falar no WhatsApp',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageSurveys,
-                  featureName: 'Submeter resposta de survey',
+                  featureName: 'Submeter resposta ao questionário',
                   reason: 'plan_restricted',
                 ),
               ),
@@ -74,14 +74,14 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
               child: CircularProgressIndicator(color: AppColors.secondary),
             ),
             error: (_, __) => const EmptyState(
-              title: 'Nao foi possivel carregar surveys',
+              title: 'Não foi possível carregar os questionários',
               subtitle: 'Atualize e tente novamente.',
             ),
             data: (surveys) {
               if (surveys.isEmpty) {
                 return const EmptyState(
-                  title: 'Nenhum survey ativo',
-                  subtitle: 'Crie um survey antes de enviar respostas.',
+                  title: 'Nenhum questionário ativo',
+                  subtitle: 'Crie um questionário antes de enviar respostas.',
                 );
               }
 
@@ -98,7 +98,8 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
                 children: [
                   DropdownButtonFormField<String>(
                     initialValue: _selectedSurveyId,
-                    decoration: const InputDecoration(labelText: 'Survey'),
+                    decoration:
+                        const InputDecoration(labelText: 'Questionário'),
                     items: surveys
                         .map(
                           (survey) => DropdownMenuItem(
@@ -186,7 +187,7 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
           decoration: InputDecoration(labelText: label),
           items: const [
             DropdownMenuItem(value: true, child: Text('Sim')),
-            DropdownMenuItem(value: false, child: Text('Nao')),
+            DropdownMenuItem(value: false, child: Text('Não')),
           ],
           onChanged: (selected) =>
               setState(() => _answers[question.id] = selected),

@@ -46,7 +46,7 @@ class _BusinessInfoPageState extends ConsumerState<BusinessInfoPage> {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Nao foi possivel carregar os dados.')),
+          body: ErrorCard(message: 'Não foi possível carregar os dados.')),
       data: (state) {
         _syncController(_nameController, state.draft.businessName ?? '');
         _syncController(_phoneController, state.draft.phone ?? '');
@@ -55,8 +55,8 @@ class _BusinessInfoPageState extends ConsumerState<BusinessInfoPage> {
 
         return OnboardingScaffold(
           step: MerchantOnboardingStep.businessInfo,
-          title: 'Dados do negocio',
-          subtitle: 'Conte-nos mais sobre o seu negocio.',
+          title: 'Dados do negócio',
+          subtitle: 'Conte-nos mais sobre o seu negócio.',
           errorMessage: state.errorMessage,
           primaryLabel: 'Continuar',
           onPrimaryPressed: () async {
@@ -72,7 +72,7 @@ class _BusinessInfoPageState extends ConsumerState<BusinessInfoPage> {
             MaisUmTextField(
               controller: _nameController,
               textCapitalization: TextCapitalization.words,
-              label: 'Nome do negocio *',
+              label: 'Nome do negócio *',
               prefixIcon: const Icon(Icons.storefront_rounded),
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.organizationName],
@@ -83,7 +83,7 @@ class _BusinessInfoPageState extends ConsumerState<BusinessInfoPage> {
             MaisUmTextField(
               controller: _phoneController,
               readOnly: true,
-              label: 'Telefone verificado',
+              label: 'Telemóvel verificado',
               prefixIcon: const Icon(Icons.phone_rounded),
               autofillHints: const [AutofillHints.telephoneNumber],
               useFloatingLabel: true,

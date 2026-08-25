@@ -18,7 +18,7 @@ class ReviewPage extends ConsumerWidget {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Nao foi possivel carregar a revisao.')),
+          body: ErrorCard(message: 'Não foi possível carregar a revisão.')),
       data: (state) => OnboardingScaffold(
         step: MerchantOnboardingStep.review,
         title: 'Confirme os dados',
@@ -44,7 +44,7 @@ class ReviewPage extends ConsumerWidget {
         },
         children: [
           ReviewCard(
-            title: 'Negocio',
+            title: 'Negócio',
             icon: Icons.storefront_rounded,
             onEdit: () => context.go(MerchantOnboardingStep.businessInfo.route),
             child: Text(
@@ -52,14 +52,14 @@ class ReviewPage extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           ReviewCard(
-            title: 'Localizacao',
+            title: 'Localização',
             icon: Icons.location_on_rounded,
             onEdit: () => context.go(MerchantOnboardingStep.location.route),
             child: Text(state.draft.address ?? '-'),
           ),
           const SizedBox(height: AppSpacing.md),
           ReviewCard(
-            title: 'Horarios',
+            title: 'Horários',
             icon: Icons.schedule_rounded,
             onEdit: () => context.go(MerchantOnboardingStep.workingHours.route),
             child: Text(
@@ -67,7 +67,7 @@ class ReviewPage extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           ReviewCard(
-            title: 'Servicos',
+            title: 'Serviços',
             icon: Icons.design_services_rounded,
             onEdit: () => context.go(MerchantOnboardingStep.services.route),
             child: Text(

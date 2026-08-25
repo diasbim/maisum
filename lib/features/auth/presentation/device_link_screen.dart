@@ -64,7 +64,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vincular dispositivo'),
+        title: const Text('Associar dispositivo'),
         leading: IconButton(
           tooltip: MaterialLocalizations.of(context).backButtonTooltip,
           icon: const Icon(Icons.arrow_back_rounded),
@@ -82,14 +82,14 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
             ),
             children: [
               Text(
-                'Entrar em um negocio existente',
+                'Entrar num negócio existente',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Insira o codigo do negocio para conectar este dispositivo a conta existente. Este fluxo tambem funciona para contas staff.',
+                'Introduza o código do negócio para associar este dispositivo à conta existente. Este fluxo também funciona para membros da equipa.',
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.xl),
@@ -98,7 +98,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
                 focusNode: _codeFocusNode,
                 enabled: !_isSubmitting,
                 autofocus: true,
-                label: 'Codigo do negocio',
+                label: 'Código do negócio',
                 hintText: 'ABCD-1234',
                 prefixIcon: const Icon(Icons.link_rounded),
                 textCapitalization: TextCapitalization.characters,
@@ -119,14 +119,14 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
               Semantics(
                 liveRegion: _isSubmitting,
                 label: _isSubmitting
-                    ? 'Vinculando dispositivo'
-                    : 'Vincular dispositivo',
+                    ? 'A associar o dispositivo'
+                    : 'Associar dispositivo',
                 button: true,
                 enabled: _canSubmit,
                 child: MaisUmButton(
                   onPressed: _canSubmit ? _submit : null,
                   isLoading: _isSubmitting,
-                  label: 'Vincular dispositivo',
+                  label: 'Associar dispositivo',
                   loadingLabel: 'Vinculando...',
                   leadingIcon: Icons.sync_rounded,
                 ),
@@ -136,7 +136,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
                 onPressed: _isSubmitting
                     ? null
                     : () => context.go(merchantOnboardingStartRoute),
-                label: 'Criar novo negocio',
+                label: 'Criar novo negócio',
                 variant: MaisUmButtonVariant.outlined,
                 leadingIcon: Icons.storefront_rounded,
               ),
@@ -146,7 +146,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
                 radius: AppRadius.md,
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Text(
-                  'Dica: o owner encontra este codigo em Definicoes > Codigo do negocio.',
+                  'Dica: o responsável encontra este código em Definições > Código do negócio.',
                   style: theme.textTheme.bodySmall,
                 ),
               ),
@@ -167,8 +167,8 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
       AppFeedback.showMessage(
         context,
         message: rawCode.isEmpty
-            ? 'Insira o codigo do negocio.'
-            : 'Codigo do negocio invalido.',
+            ? 'Introduza o código do negócio.'
+            : 'Código do negócio inválido.',
         isError: true,
       );
       return;
@@ -193,7 +193,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
 
       AppFeedback.showSuccessToast(
         context,
-        message: 'Dispositivo vinculado com sucesso',
+        message: 'Dispositivo associado com sucesso',
       );
 
       final route = await resolvePostAuthRoute(ref.read);
@@ -212,7 +212,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
       if (!mounted) return;
       AppFeedback.showMessage(
         context,
-        message: 'Codigo do negocio invalido.',
+        message: 'Código do negócio inválido.',
         isError: true,
       );
     } on StateError catch (e, st) {
@@ -249,7 +249,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
   String _mapFirebaseLinkError(FirebaseException error) {
     return switch (error.code) {
       'permission-denied' =>
-        'Não tem autorização para vincular este dispositivo.',
+        'Não tem autorização para associar este dispositivo.',
       'not-found' => 'Código do negócio inválido.',
       'unavailable' => 'Sem ligação à internet.',
       'deadline-exceeded' => 'A operação demorou demasiado tempo.',

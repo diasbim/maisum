@@ -82,7 +82,7 @@ class AuthRepository {
     final userCredential = await _firebaseAuth.signInWithGoogle();
     final user = userCredential.user;
     if (user == null) {
-      throw StateError('Nao foi possivel autenticar com Google.');
+      throw StateError('Não foi possível autenticar com o Google.');
     }
     final phone = (user.phoneNumber ?? '').trim();
     return _sessionFromUser(user, phone);
@@ -224,7 +224,7 @@ class AuthRepository {
   }) async {
     final firestore = _firestore;
     if (firestore == null) {
-      throw StateError('Vinculacao por codigo indisponivel neste ambiente.');
+      throw StateError('Associação por código indisponível neste ambiente.');
     }
 
     final firebaseUser = _firebaseAuth.currentUser;
@@ -240,7 +240,7 @@ class AuthRepository {
     final currentSession =
         await _readStoredSession() ?? await getStoredSession();
     if (currentSession == null) {
-      throw StateError('Sessao invalida para vincular dispositivo.');
+      throw StateError('Sessão inválida para associar o dispositivo.');
     }
 
     final business = await _findMerchantByLinkCode(
@@ -250,7 +250,7 @@ class AuthRepository {
     );
 
     if (business == null) {
-      throw StateError('Codigo do negocio invalido ou expirado.');
+      throw StateError('Código do negócio inválido ou expirado.');
     }
 
     final merchantId = business.key;

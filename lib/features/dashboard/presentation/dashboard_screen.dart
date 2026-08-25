@@ -298,8 +298,8 @@ class _DashboardBody extends ConsumerWidget {
                 SizedBox(
                   width: tileWidth,
                   child: _MiniActionTile(
-                    label: 'Produtos e Servicos',
-                    subtitle: 'Catalogo para enriquecer vendas',
+                    label: 'Produtos e serviços',
+                    subtitle: 'Catálogo para enriquecer vendas',
                     icon: Icons.inventory_2_rounded,
                     onTap: () => context.push('/catalog'),
                   ),
@@ -316,7 +316,7 @@ class _DashboardBody extends ConsumerWidget {
                 SizedBox(
                   width: tileWidth,
                   child: _MiniActionTile(
-                    label: 'Retencao',
+                    label: 'Retenção',
                     subtitle: 'Clientes em risco e recorrentes',
                     icon: Icons.insights_rounded,
                     onTap: () => context.push('/retention'),
@@ -359,7 +359,7 @@ class _RetentionOverviewCard extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
-                  'Retencao de clientes',
+                  'Retenção de clientes',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -446,7 +446,7 @@ Future<void> _handleNewSaleEntry(BuildContext context, WidgetRef ref) async {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Nenhum cliente registado'),
         content: const Text(
-          'Para registrar uma venda,\nprimeiro precisa adicionar um cliente.',
+          'Para registar uma venda,\nprimeiro precisa de adicionar um cliente.',
         ),
         actions: [
           MaisUmButton(

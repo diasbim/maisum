@@ -26,10 +26,10 @@ class MerchantCatalogScreen extends ConsumerWidget {
             onPressed: () =>
                 context.canPop() ? context.pop() : context.go('/dashboard'),
           ),
-          title: const Text('Produtos e Servicos'),
+          title: const Text('Produtos e serviços'),
           bottom: const TabBar(
             tabs: [
-              Tab(text: 'Servicos'),
+              Tab(text: 'Serviços'),
               Tab(text: 'Produtos'),
             ],
           ),
@@ -57,7 +57,7 @@ class _CatalogTab extends ConsumerWidget {
           ? merchantCatalogServicesProvider
           : merchantCatalogProductsProvider,
     );
-    final title = type == MerchantItemType.service ? 'Servico' : 'Produto';
+    final title = type == MerchantItemType.service ? 'Serviço' : 'Produto';
 
     return itemsAsync.when(
       data: (items) => RefreshIndicator(
@@ -154,7 +154,7 @@ class _CatalogTab extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Apagar item'),
-        content: Text('Apagar "${item.name}" do catalogo?'),
+        content: Text('Apagar "${item.name}" do catálogo?'),
         actions: [
           MaisUmButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -183,7 +183,7 @@ class _CatalogTab extends ConsumerWidget {
       context,
       message: deleted
           ? 'Item apagado.'
-          : 'Item ja usado em vendas. Desative em vez de apagar.',
+          : 'Item já usado em vendas. Desative-o em vez de o apagar.',
       isError: !deleted,
     );
   }
@@ -211,7 +211,7 @@ class _CatalogItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final price = item.defaultPrice == null
-        ? 'Sem preco padrao'
+        ? 'Sem preço padrão'
         : '${item.defaultPrice!.toStringAsFixed(0)} ${AppStrings.moedaMzn}';
     return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -354,7 +354,7 @@ class _CatalogItemSheetState extends ConsumerState<_CatalogItemSheet> {
             controller: _priceCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: const InputDecoration(
-              labelText: 'Preco padrao opcional',
+              labelText: 'Preço padrão opcional',
               suffixText: AppStrings.moedaMzn,
               border: OutlineInputBorder(),
             ),
@@ -393,7 +393,7 @@ class _CatalogItemSheetState extends ConsumerState<_CatalogItemSheet> {
     if (priceText.isNotEmpty && price == null) {
       AppFeedback.showMessage(
         context,
-        message: 'Preco invalido.',
+        message: 'Preço inválido.',
         isError: true,
       );
       return;

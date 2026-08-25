@@ -39,7 +39,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
-        title: const Text('Survey Builder'),
+        title: const Text('Criar questionário'),
         backgroundColor: AppColors.offWhite,
         elevation: 0,
       ),
@@ -48,19 +48,20 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
           child: CircularProgressIndicator(color: AppColors.secondary),
         ),
         error: (_, __) => const EmptyState(
-          title: 'Nao foi possivel validar acesso',
+          title: 'Não foi possível validar o acesso',
           subtitle: 'Tente novamente em alguns segundos.',
         ),
         data: (access) {
           if (!access.canManageSurveys) {
             return EmptyState(
-              title: 'Surveys indisponiveis no seu plano',
-              subtitle: 'Criacao de surveys e exclusiva do plano Business.',
+              title: 'Questionários indisponíveis no seu plano',
+              subtitle:
+                  'A criação de questionários é exclusiva do plano Business.',
               actionLabel: 'Falar no WhatsApp',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageSurveys,
-                  featureName: 'Criar survey',
+                  featureName: 'Criar questionário',
                   reason: 'plan_restricted',
                 ),
               ),
@@ -71,7 +72,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
             padding: const EdgeInsets.all(AppSpacing.xl),
             children: [
               const Text(
-                'Template rapido',
+                'Modelo rápido',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -91,8 +92,8 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
               TextField(
                 controller: _titleController,
                 decoration: const InputDecoration(
-                  labelText: 'Titulo',
-                  hintText: 'Ex.: Porque voce nao voltou?',
+                  labelText: 'Título',
+                  hintText: 'Ex.: Porque não voltou?',
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -100,7 +101,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
                 controller: _descriptionController,
                 maxLines: 2,
                 decoration: const InputDecoration(
-                  labelText: 'Descricao (opcional)',
+                  labelText: 'Descrição (opcional)',
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
@@ -145,7 +146,9 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.publish_outlined),
-                label: Text(_submitting ? 'Publicando...' : 'Publicar Survey'),
+                label: Text(
+                  _submitting ? 'A publicar...' : 'Publicar questionário',
+                ),
               ),
             ],
           );
@@ -180,7 +183,10 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
   Future<void> _publish() async {
     final title = _titleController.text.trim();
     if (title.isEmpty) {
-      AppFeedback.showMessage(context, message: 'Informe o titulo do survey.');
+      AppFeedback.showMessage(
+        context,
+        message: 'Indique o título do questionário.',
+      );
       return;
     }
     if (_questions.isEmpty) {
@@ -193,7 +199,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
     if (_questions.length > 5) {
       AppFeedback.showMessage(
         context,
-        message: 'Cada survey suporta no maximo 5 perguntas.',
+        message: 'Cada questionário suporta no máximo 5 perguntas.',
       );
       return;
     }
@@ -242,7 +248,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
       if (!mounted) return;
       AppFeedback.showSuccessToast(
         context,
-        message: 'Survey publicado com sucesso',
+        message: 'Questionário publicado com sucesso',
       );
       Navigator.of(context).pop();
     } catch (error) {
@@ -324,7 +330,7 @@ class _QuestionCard extends StatelessWidget {
               TextFormField(
                 initialValue: value.options.join(', '),
                 decoration: const InputDecoration(
-                  labelText: 'Opcoes (separadas por virgula)',
+                  labelText: 'Opções (separadas por vírgulas)',
                 ),
                 onChanged: (text) {
                   final options = text
@@ -386,16 +392,16 @@ class _SurveyTemplate {
 const List<_SurveyTemplate> _templates = [
   _SurveyTemplate(
     title: 'Why Didn\'t You Return?',
-    description: 'Entender principais razoes de inatividade.',
+    description: 'Compreender os principais motivos de inatividade.',
     questions: [
       _DraftQuestion(
-        questionText: 'Qual foi o principal motivo para nao voltar?',
+        questionText: 'Qual foi o principal motivo para não voltar?',
         questionType: SurveyQuestionType.multipleChoice,
         isRequired: true,
-        options: ['Preco', 'Atendimento', 'Localizacao', 'Horario', 'Outro'],
+        options: ['Preço', 'Atendimento', 'Localização', 'Horário', 'Outro'],
       ),
       _DraftQuestion(
-        questionText: 'O que faria voce voltar?',
+        questionText: 'O que faria o cliente voltar?',
         questionType: SurveyQuestionType.shortText,
         isRequired: false,
         options: [],
@@ -404,16 +410,16 @@ const List<_SurveyTemplate> _templates = [
   ),
   _SurveyTemplate(
     title: 'Customer Satisfaction',
-    description: 'Medir satisfacao geral com a experiencia.',
+    description: 'Medir a satisfação geral com a experiência.',
     questions: [
       _DraftQuestion(
-        questionText: 'Como voce avalia sua experiencia?',
+        questionText: 'Como avalia a sua experiência?',
         questionType: SurveyQuestionType.rating,
         isRequired: true,
         options: [],
       ),
       _DraftQuestion(
-        questionText: 'Recomendaria nosso servico?',
+        questionText: 'Recomendaria o nosso serviço?',
         questionType: SurveyQuestionType.yesNo,
         isRequired: true,
         options: [],
@@ -421,7 +427,7 @@ const List<_SurveyTemplate> _templates = [
     ],
   ),
   _SurveyTemplate(
-    title: 'Staff Evaluation',
+    title: 'Avaliação da equipa',
     description: 'Avaliar atendimento da equipa.',
     questions: [
       _DraftQuestion(
@@ -440,16 +446,16 @@ const List<_SurveyTemplate> _templates = [
   ),
   _SurveyTemplate(
     title: 'Promotion Interest',
-    description: 'Identificar interesse em promocoes.',
+    description: 'Identificar o interesse em promoções.',
     questions: [
       _DraftQuestion(
-        questionText: 'Que tipo de promocao prefere?',
+        questionText: 'Que tipo de promoção prefere?',
         questionType: SurveyQuestionType.multipleChoice,
         isRequired: true,
         options: ['Desconto', 'Pontos extras', 'Brinde', 'Pacote especial'],
       ),
       _DraftQuestion(
-        questionText: 'Aceita receber promocoes no WhatsApp?',
+        questionText: 'Aceita receber promoções no WhatsApp?',
         questionType: SurveyQuestionType.yesNo,
         isRequired: true,
         options: [],
@@ -461,7 +467,7 @@ const List<_SurveyTemplate> _templates = [
     description: 'Coletar feedback aberto do cliente.',
     questions: [
       _DraftQuestion(
-        questionText: 'Como podemos melhorar sua experiencia?',
+        questionText: 'Como podemos melhorar a sua experiência?',
         questionType: SurveyQuestionType.shortText,
         isRequired: true,
         options: [],

@@ -24,7 +24,7 @@ class RetentionDashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
-        title: const Text('Retencao inteligente'),
+        title: const Text('Retenção inteligente'),
         backgroundColor: AppColors.offWhite,
         foregroundColor: AppColors.onSurface,
         iconTheme: const IconThemeData(color: AppColors.onSurface),
@@ -48,22 +48,22 @@ class RetentionDashboardScreen extends ConsumerWidget {
           child: CircularProgressIndicator(color: AppColors.secondary),
         ),
         error: (_, __) => EmptyState(
-          title: 'Nao foi possivel validar o plano',
-          subtitle: 'Verifique a ligacao e tente novamente.',
+          title: 'Não foi possível validar o plano',
+          subtitle: 'Verifique a ligação e tente novamente.',
           actionLabel: 'Tentar de novo',
           onAction: () => ref.invalidate(retentionPremiumAccessProvider),
         ),
         data: (hasAccess) {
           if (!hasAccess) {
             return EmptyState(
-              title: 'Retencao indisponivel no seu plano',
+              title: 'Retenção indisponível no seu plano',
               subtitle:
                   'Funcionalidade premium. Atualize para Pro ou Business para desbloquear.',
               actionLabel: 'Falar no WhatsApp',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageViewRisk,
-                  featureName: 'Retencao inteligente',
+                  featureName: 'Retenção inteligente',
                   reason: 'plan_restricted',
                 ),
               ),
@@ -75,8 +75,8 @@ class RetentionDashboardScreen extends ConsumerWidget {
               child: CircularProgressIndicator(color: AppColors.secondary),
             ),
             error: (_, __) => EmptyState(
-              title: 'Nao foi possivel carregar a retencao',
-              subtitle: 'Verifique a ligacao e tente novamente.',
+              title: 'Não foi possível carregar a retenção',
+              subtitle: 'Verifique a ligação e tente novamente.',
               actionLabel: 'Tentar de novo',
               onAction: () =>
                   ref.read(retentionDashboardProvider.notifier).refresh(),
@@ -130,7 +130,8 @@ class _RecurringTab extends StatelessWidget {
     if (customers.isEmpty) {
       return const EmptyState(
         title: 'Sem clientes recorrentes',
-        subtitle: 'Assim que houver padrao de retorno, eles aparecerao aqui.',
+        subtitle:
+            'Assim que houver um padrão de retorno, os clientes aparecerão aqui.',
       );
     }
 
@@ -176,7 +177,7 @@ class _InactiveTab extends ConsumerWidget {
     if (customers.isEmpty) {
       return const EmptyState(
         title: 'Sem clientes em risco',
-        subtitle: 'Bom trabalho. A base esta saudavel neste momento.',
+        subtitle: 'Bom trabalho. A base está saudável neste momento.',
       );
     }
 

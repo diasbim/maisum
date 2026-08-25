@@ -132,7 +132,7 @@ class _PinEntryScreenState extends ConsumerState<PinEntryScreen>
       builder: (ctx) => AlertDialog(
         title: const Text('Repor acesso'),
         content: const Text(
-            'Isto irá apagar o PIN e terminar a sessão. Terá de fazer login novamente.'),
+            'Isto irá apagar o PIN e terminar a sessão. Terá de iniciar sessão novamente.'),
         actions: [
           MaisUmButton(
             onPressed: () => Navigator.pop(ctx, false),

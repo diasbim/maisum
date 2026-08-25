@@ -1,11 +1,12 @@
 {
-    "name": "MaisUm",
+    "name": "Portal de gestão MaisUm",
     "short_name": "MaisUm",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#001944",
     "theme_color": "#102A5E",
-    "description": "MaisUm admin portal and merchant self-service.",
+    "description": "Portal MaisUm para gestão de negócios, planos, equipa e operações.",
+    "lang": "pt-MZ",
     "orientation": "any",
     "prefer_related_applications": false,
     "icons": [

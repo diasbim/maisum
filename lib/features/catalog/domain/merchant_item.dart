@@ -10,7 +10,7 @@ extension MerchantItemTypeX on MerchantItemType {
       };
 
   String get label => switch (this) {
-        MerchantItemType.service => 'Servico',
+        MerchantItemType.service => 'Serviço',
         MerchantItemType.product => 'Produto',
       };
 }

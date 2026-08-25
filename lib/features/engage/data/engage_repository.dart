@@ -368,7 +368,7 @@ class EngageRepository {
       throw StateError('Limite de 10 surveys ativos atingido.');
     }
     if (questions.length > 5) {
-      throw StateError('Cada survey suporta no maximo 5 perguntas.');
+      throw StateError('Cada questionário suporta no máximo 5 perguntas.');
     }
 
     final survey = await _dao.createSurvey(

@@ -20,7 +20,7 @@ class SurveyAnalyticsScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
-        title: const Text('Analytics de Surveys'),
+        title: const Text('Análise de questionários'),
         backgroundColor: AppColors.offWhite,
         elevation: 0,
       ),
@@ -29,20 +29,20 @@ class SurveyAnalyticsScreen extends ConsumerWidget {
           child: CircularProgressIndicator(color: AppColors.secondary),
         ),
         error: (_, __) => const EmptyState(
-          title: 'Nao foi possivel validar acesso',
+          title: 'Não foi possível validar o acesso',
           subtitle: 'Tente novamente em alguns segundos.',
         ),
         data: (access) {
           if (!access.canManageSurveys) {
             return EmptyState(
-              title: 'Analytics indisponivel no seu plano',
+              title: 'Análises indisponíveis no seu plano',
               subtitle:
-                  'Visualizacao completa de surveys e exclusiva do Business.',
+                  'A análise completa dos questionários é exclusiva do plano Business.',
               actionLabel: 'Falar no WhatsApp',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageSurveys,
-                  featureName: 'Analytics de surveys',
+                  featureName: 'Análise de questionários',
                   reason: 'plan_restricted',
                 ),
               ),
@@ -54,7 +54,7 @@ class SurveyAnalyticsScreen extends ConsumerWidget {
               child: CircularProgressIndicator(color: AppColors.secondary),
             ),
             error: (_, __) => EmptyState(
-              title: 'Nao foi possivel carregar analytics',
+              title: 'Não foi possível carregar as análises',
               subtitle: 'Atualize para tentar novamente.',
               actionLabel: 'Atualizar',
               onAction: () =>
@@ -64,32 +64,32 @@ class SurveyAnalyticsScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(AppSpacing.xl),
               children: [
                 _MetricCard(
-                  title: 'Response Rate',
+                  title: 'Taxa de resposta',
                   value: '${analytics.responseRate.toStringAsFixed(1)}%',
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 _MetricCard(
-                  title: 'Customer Satisfaction',
+                  title: 'Satisfação dos clientes',
                   value: analytics.customerSatisfaction.toStringAsFixed(1),
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 _MetricCard(
-                  title: 'Total Responses',
+                  title: 'Total de respostas',
                   value: '${analytics.responsesTotal}',
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 _ListCard(
-                  title: 'Top Reasons Not Returning',
+                  title: 'Principais motivos para não voltar',
                   items: analytics.topChurnReasons,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 _ListCard(
-                  title: 'Recovery Drivers',
+                  title: 'Motivos que promovem o regresso',
                   items: analytics.topRecoveryIncentives,
                 ),
                 const SizedBox(height: AppSpacing.md),
                 _ListCard(
-                  title: 'Staff Performance',
+                  title: 'Desempenho da equipa',
                   items: analytics.staffRatings,
                 ),
               ],

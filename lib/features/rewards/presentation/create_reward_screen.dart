@@ -140,7 +140,7 @@ class _CreateRewardScreenState extends ConsumerState<CreateRewardScreen> {
       return AppStrings.pointsRequired;
     }
     if (!_hasValidPoints(value)) {
-      return 'Valor invalido';
+      return 'Valor inválido';
     }
     return null;
   }
@@ -229,7 +229,7 @@ class _CreateRewardScreenState extends ConsumerState<CreateRewardScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Escolha um template rapido ou personalize os campos.',
+                    'Escolha um modelo rápido ou personalize os campos.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: AppColors.onSurfaceVariant,
                         ),

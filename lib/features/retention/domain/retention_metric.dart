@@ -161,7 +161,7 @@ class RecurringCustomerSummary {
 
   String get badge {
     if (totalSpent >= 5000) return 'VIP';
-    if (totalVisits >= 10) return 'Campeao';
+    if (totalVisits >= 10) return 'Campeão';
     return 'Frequente';
   }
 }

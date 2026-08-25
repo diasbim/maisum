@@ -401,7 +401,7 @@ class _CustomerHeader extends StatelessWidget {
                     ),
                     const SizedBox(width: 10),
                     _FilterChip(
-                      label: 'Top clientes',
+                      label: 'Principais clientes',
                       icon: Icons.emoji_events_rounded,
                       active: filter == _CustomerFilter.top,
                       onTap: () => onFilterChanged(_CustomerFilter.top),

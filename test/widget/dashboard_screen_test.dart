@@ -134,10 +134,10 @@ void main() {
 
       expect(find.text(AppStrings.clientes), findsWidgets);
       expect(find.text(AppStrings.recompensas), findsOneWidget);
-      expect(find.text('Retencao de clientes'), findsOneWidget);
+      expect(find.text('Retenção de clientes'), findsOneWidget);
       expect(find.text('60%'), findsOneWidget);
       expect(find.text('4.2'), findsOneWidget);
-      expect(find.text('Retencao'), findsOneWidget);
+      expect(find.text('Retenção'), findsOneWidget);
       expect(find.text(AppStrings.historicoVendas), findsNothing);
       expect(find.textContaining(AppStrings.pendentes), findsNothing);
     });
@@ -192,7 +192,7 @@ void main() {
       expect(find.text('Nenhum cliente registado'), findsOneWidget);
       expect(
         find.text(
-            'Para registrar uma venda,\nprimeiro precisa adicionar um cliente.'),
+            'Para registar uma venda,\nprimeiro precisa de adicionar um cliente.'),
         findsOneWidget,
       );
       expect(find.text('Adicionar Cliente'), findsOneWidget);

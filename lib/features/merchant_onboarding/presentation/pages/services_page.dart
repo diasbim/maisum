@@ -33,7 +33,7 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Nao foi possivel carregar os servicos.')),
+          body: ErrorCard(message: 'Não foi possível carregar os serviços.')),
       data: (state) {
         final profile = BusinessProfiles.resolve(state.draft.businessType);
         final suggestions =
@@ -42,17 +42,17 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
             profile.capabilities.products && !profile.capabilities.services
                 ? 'produto'
                 : profile.capabilities.products && profile.capabilities.services
-                    ? 'produto ou servico'
-                    : 'servico';
+                    ? 'produto ou serviço'
+                    : 'serviço';
 
         return OnboardingScaffold(
           step: MerchantOnboardingStep.services,
           title: profile.capabilities.products && profile.capabilities.services
-              ? 'Produtos e servicos'
+              ? 'Produtos e serviços'
               : profile.capabilities.products
                   ? 'Produtos vendidos'
-                  : 'Servicos oferecidos',
-          subtitle: 'Adicione agora ou configure o catalogo mais tarde.',
+                  : 'Serviços oferecidos',
+          subtitle: 'Adicione agora ou configure o catálogo mais tarde.',
           errorMessage: state.errorMessage,
           primaryLabel: 'Continuar',
           onPrimaryPressed: () async {
@@ -70,7 +70,7 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.add_rounded),
-                tooltip: 'Adicionar servico',
+                tooltip: 'Adicionar serviço',
                 onPressed: () => _addCustom(state, profile),
               ),
               textCapitalization: TextCapitalization.sentences,

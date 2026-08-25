@@ -68,11 +68,11 @@ class MerchantOnboardingState {
     switch (step) {
       case MerchantOnboardingStep.verifyPhone:
         return (draft.phone ?? '').trim().isEmpty
-            ? 'Telefone verificado obrigatorio.'
+            ? 'Telemóvel verificado obrigatório.'
             : null;
       case MerchantOnboardingStep.businessType:
         return (draft.businessType ?? '').trim().isEmpty
-            ? 'Selecione o tipo do seu negocio.'
+            ? 'Selecione o tipo do seu negócio.'
             : null;
       case MerchantOnboardingStep.businessInfo:
         final name = (draft.businessName ?? '').trim();
@@ -83,15 +83,15 @@ class MerchantOnboardingState {
           return 'Informe a cidade.';
         }
         if ((draft.phone ?? '').trim().isEmpty) {
-          return 'Telefone verificado obrigatorio.';
+          return 'Telemóvel verificado obrigatório.';
         }
         return null;
       case MerchantOnboardingStep.location:
         if (draft.location == null) {
-          return 'Selecione a localizacao do negocio.';
+          return 'Selecione a localização do negócio.';
         }
         if ((draft.address ?? '').trim().isEmpty) {
-          return 'Informe o endereco do negocio.';
+          return 'Indique o endereço do negócio.';
         }
         return null;
       case MerchantOnboardingStep.workingHours:
@@ -116,7 +116,7 @@ class MerchantOnboardingController
   Future<MerchantOnboardingState> build() async {
     final session = await ref.watch(authControllerProvider.future);
     if (session == null) {
-      throw StateError('Sem sessao ativa.');
+      throw StateError('Sem sessão ativa.');
     }
 
     final role = await ref.read(secureStorageServiceProvider).getAppUserRole();
@@ -274,7 +274,7 @@ class MerchantOnboardingController
     state = AsyncData(current.copyWith(isSaving: true, clearError: true));
     try {
       var session = await ref.read(authControllerProvider.future);
-      if (session == null) throw StateError('Sem sessao ativa.');
+      if (session == null) throw StateError('Sem sessão ativa.');
 
       final authController = ref.read(authControllerProvider.notifier);
       final onboardingRepository =
@@ -293,7 +293,7 @@ class MerchantOnboardingController
       final firebaseUid = session.firebaseUid ??
           ref.read(firebaseAuthInstanceProvider).currentUser?.uid;
       if (firebaseUid == null || firebaseUid.isEmpty) {
-        throw StateError('Sessao Firebase invalida para criar comerciante.');
+        throw StateError('Sessão Firebase inválida para criar comerciante.');
       }
 
       await onboardingRepository.saveMerchant(
@@ -335,7 +335,7 @@ class MerchantOnboardingController
       );
       state = AsyncData(current.copyWith(
         isSaving: false,
-        errorMessage: 'Nao foi possivel criar o negocio. Tente novamente.',
+        errorMessage: 'Não foi possível criar o negócio. Tente novamente.',
       ));
       rethrow;
     }

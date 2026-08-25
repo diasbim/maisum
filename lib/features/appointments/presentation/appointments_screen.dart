@@ -438,7 +438,7 @@ class _AppointmentsViewSwitcher extends StatelessWidget {
           ),
           Expanded(
             child: _SwitcherButton(
-              label: 'Calendario',
+              label: 'Calendário',
               icon: Icons.calendar_month_rounded,
               isActive: mode == _AppointmentsViewMode.calendar,
               onTap: () => onModeChanged(_AppointmentsViewMode.calendar),

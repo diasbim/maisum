@@ -63,7 +63,7 @@ class _RecoveryActionsScreenState extends ConsumerState<RecoveryActionsScreen> {
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageRecovery,
-                  featureName: 'Acoes de recuperacao',
+                  featureName: 'Ações de recuperação',
                   reason: 'plan_restricted',
                 ),
               ),
@@ -74,7 +74,7 @@ class _RecoveryActionsScreenState extends ConsumerState<RecoveryActionsScreen> {
             padding: const EdgeInsets.all(AppSpacing.xl),
             children: [
               const Text(
-                'Registrar ação',
+                'Registar ação',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -127,7 +127,7 @@ class _RecoveryActionsScreenState extends ConsumerState<RecoveryActionsScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.save_outlined),
-                label: Text(_submitting ? 'A gravar...' : 'Salvar ação'),
+                label: Text(_submitting ? 'A gravar...' : 'Guardar ação'),
               ),
             ],
           );
@@ -159,7 +159,7 @@ class _RecoveryActionsScreenState extends ConsumerState<RecoveryActionsScreen> {
       if (!mounted) return;
       AppFeedback.showSuccessToast(
         context,
-        message: 'Ação registrada',
+        message: 'Ação registada',
         subtitle: _actionType,
       );
       _notesController.clear();

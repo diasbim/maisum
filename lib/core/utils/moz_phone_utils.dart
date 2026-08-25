@@ -27,7 +27,7 @@ class MozPhoneUtils {
     }
 
     throw const FormatException(
-        'Número de telefone inválido. Use: 8X XXX XXXX');
+        'Número de telemóvel inválido. Use: 8X XXX XXXX');
   }
 
   /// Normalises a raw phone input to local 9-digit format (8XXXXXXXX).
@@ -64,7 +64,7 @@ class MozPhoneUtils {
   /// Returns an error string or null — suitable for [TextFormField.validator].
   static String? validatorMessage(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'Insira o numero de telefone';
+      return 'Introduza o número de telemóvel';
     }
     try {
       normalizeToE164(value.trim());

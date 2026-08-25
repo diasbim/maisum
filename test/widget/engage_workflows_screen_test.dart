@@ -50,7 +50,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Salvar ação'), findsOneWidget);
+      expect(find.text('Guardar ação'), findsOneWidget);
       expect(find.byType(TextField), findsNWidgets(3));
     });
 
@@ -89,7 +89,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Salvar relatório'), findsOneWidget);
+      expect(find.text('Guardar relatório'), findsOneWidget);
       expect(find.byType(CheckboxListTile), findsOneWidget);
     });
   });

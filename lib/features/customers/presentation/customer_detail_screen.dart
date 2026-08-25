@@ -80,8 +80,6 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final appointmentsEnabled = businessProfile.capabilities.appointments;
 
     final isCompact = MediaQuery.of(context).size.width < 360;
-    // Keep enough room for identity, status, and metric cards in the hero section.
-    final expandedHeight = isCompact ? 400.0 : 360.0;
 
     final customer = customerAsync.valueOrNull;
 
@@ -123,6 +121,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           final displayedPoints = customer.confirmedPoints == null
               ? customer.totalPoints
               : customer.confirmedPoints! + pendingPoints;
+          final expandedHeight =
+              (isCompact ? 400.0 : 360.0) + (pendingPoints > 0 ? 28 : 0);
           final approxValue = _formatApproxMzn(
             displayedPoints,
             businessProfile.loyalty.pointsPerMzn,
@@ -283,7 +283,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: _HeroMetricTile(
-                                    label: 'Ultima atividade',
+                                    label: 'Última atividade',
                                     value: _formatDayMonthYear(lastActivity),
                                     icon: Icons.schedule_rounded,
                                   ),
@@ -312,7 +312,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Acoes rapidas',
+                          'Ações rápidas',
                           style:
                               Theme.of(context).textTheme.titleSmall?.copyWith(
                                     color: AppColors.onSurface,
@@ -330,7 +330,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                               children: [
                                 _ActionShortcut(
                                   icon: Icons.add_rounded,
-                                  label: AppStrings.adicionarPontos,
+                                  label: AppStrings.novaVenda,
                                   isPrimary: true,
                                   expand: false,
                                   width: itemWidth,
@@ -805,12 +805,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           CustomerLifecycleStage.newCustomer => 'Incentivar a segunda visita',
           CustomerLifecycleStage.active ||
           CustomerLifecycleStage.returning =>
-            'Recompensar a proxima visita',
+            'Recompensar a próxima visita',
           CustomerLifecycleStage.regular ||
           CustomerLifecycleStage.loyal ||
           CustomerLifecycleStage.vip =>
             'Reconhecer a fidelidade',
-          CustomerLifecycleStage.advocate => 'Pedir uma recomendacao',
+          CustomerLifecycleStage.advocate => 'Pedir uma recomendação',
         },
     };
   }
@@ -818,13 +818,13 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   String _recommendationExplanation(Customer customer) {
     return switch (customer.retentionStatus) {
       CustomerRetentionStatus.lost =>
-        'Este cliente ultrapassou o limite de inatividade. Use uma razao pessoal e relevante para voltar.',
+        'Este cliente ultrapassou o limite de inatividade. Use uma razão pessoal e relevante para voltar.',
       CustomerRetentionStatus.inactive =>
-        'O cliente esta inativo. Um contacto consentido pode recuperar a relacao.',
+        'O cliente está inativo. Um contacto consentido pode recuperar a relação.',
       CustomerRetentionStatus.atRisk =>
-        'A frequencia caiu. Contacte antes de a inatividade aumentar.',
+        'A frequência caiu. Contacte antes de a inatividade aumentar.',
       CustomerRetentionStatus.healthy =>
-        'A proxima acao deve ajudar este cliente a avancar no ciclo de retencao.',
+        'A próxima ação deve ajudar este cliente a avançar no ciclo de retenção.',
     };
   }
 
@@ -962,10 +962,12 @@ class _PointsSummaryCard extends StatelessWidget {
                   color: Colors.white.withValues(alpha: 0.7),
                 ),
           ),
-          if (confirmedPoints != null && pendingPoints > 0) ...[
+          if (pendingPoints > 0) ...[
             const SizedBox(height: 4),
             Text(
-              '$confirmedPoints confirmados + $pendingPoints pendentes',
+              confirmedPoints == null
+                  ? 'Inclui $pendingPoints pendentes de confirmação'
+                  : '$confirmedPoints confirmados + $pendingPoints pendentes',
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: Colors.white.withValues(alpha: 0.82),
                     fontWeight: FontWeight.w600,
@@ -1005,7 +1007,7 @@ class _RecommendationCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Proxima acao recomendada',
+                  'Próxima ação recomendada',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: AppColors.onSurfaceVariant,
                         fontWeight: FontWeight.w700,

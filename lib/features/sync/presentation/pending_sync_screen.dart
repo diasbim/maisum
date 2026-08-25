@@ -87,7 +87,7 @@ class _PendingSyncScreenState extends ConsumerState<PendingSyncScreen> {
             return const EmptyState(
               title: 'Fila limpa e pronta.',
               subtitle:
-                  'Guardado offline e sincronização automática activa quando houver internet.',
+                  'Guardado offline, com sincronização automática ativa quando houver internet.',
             );
           }
           return RefreshIndicator(
@@ -200,7 +200,7 @@ class _SyncItemTile extends StatelessWidget {
                   ),
                 if (showNextAttempt)
                   Text(
-                    'Proxima tentativa: ${PtDateFormat.dayMonthTime(nextAttempt)}',
+                    'Próxima tentativa: ${PtDateFormat.dayMonthTime(nextAttempt)}',
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: AppColors.onSurfaceVariant),
                   ),

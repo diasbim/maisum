@@ -78,8 +78,8 @@ const _paidSettingsFeatures = [
   _PaidSettingsFeature(
     icon: Icons.analytics_outlined,
     iconColor: AppColors.green,
-    title: 'Relatorios de vendas',
-    subtitle: 'Historico e analise do negocio',
+    title: 'Relatórios de vendas',
+    subtitle: 'Histórico e análise do negócio',
     route: '/sales',
     featureKey: FeatureKeys.analytics,
     requiredPlanLabel: 'Starter ou superior',
@@ -87,7 +87,7 @@ const _paidSettingsFeatures = [
   _PaidSettingsFeature(
     icon: Icons.favorite_border_rounded,
     iconColor: AppColors.primaryDark,
-    title: 'Retencao inteligente',
+    title: 'Retenção inteligente',
     subtitle: 'Clientes recorrentes e em risco',
     route: '/retention',
     featureKey: FeatureKeys.engageViewRisk,
@@ -97,7 +97,7 @@ const _paidSettingsFeatures = [
     icon: Icons.auto_graph_rounded,
     iconColor: AppColors.primaryDark,
     title: 'MaisUm Engage',
-    subtitle: 'Risco, recuperacao e surveys',
+    subtitle: 'Risco, recuperação e questionários',
     route: '/engage',
     featureKey: FeatureKeys.engageViewRisk,
     requiredPlanLabel: 'Pro ou Business',
@@ -105,8 +105,8 @@ const _paidSettingsFeatures = [
   _PaidSettingsFeature(
     icon: Icons.playlist_add_check_circle_outlined,
     iconColor: AppColors.primaryDark,
-    title: 'Recuperacao de clientes',
-    subtitle: 'Fila de acoes premium',
+    title: 'Recuperação de clientes',
+    subtitle: 'Fila de ações premium',
     route: '/engage/actions',
     featureKey: FeatureKeys.engageManageRecovery,
     requiredPlanLabel: 'Business',
@@ -114,8 +114,8 @@ const _paidSettingsFeatures = [
   _PaidSettingsFeature(
     icon: Icons.assignment_turned_in_outlined,
     iconColor: AppColors.primaryDark,
-    title: 'Relatorios de visitas',
-    subtitle: 'Visitas e resultados de recuperacao',
+    title: 'Relatórios de visitas',
+    subtitle: 'Visitas e resultados de recuperação',
     route: '/engage/visit-report',
     featureKey: FeatureKeys.engageManageVisits,
     requiredPlanLabel: 'Business',
@@ -123,8 +123,8 @@ const _paidSettingsFeatures = [
   _PaidSettingsFeature(
     icon: Icons.insights_outlined,
     iconColor: AppColors.green,
-    title: 'Analytics de surveys',
-    subtitle: 'Insights de respostas e satisfacao',
+    title: 'Análise de questionários',
+    subtitle: 'Análises de respostas e satisfação',
     route: '/engage/surveys/analytics',
     featureKey: FeatureKeys.engageManageSurveys,
     requiredPlanLabel: 'Business',
@@ -186,8 +186,8 @@ class SettingsScreen extends ConsumerWidget {
               _SettingsTile(
                 icon: Icons.qr_code_rounded,
                 iconColor: AppColors.amber,
-                title: 'Codigo do negocio',
-                subtitle: businessLinkCode ?? 'A gerar codigo...',
+                title: 'Código do negócio',
+                subtitle: businessLinkCode ?? 'A gerar código...',
                 trailing: const Icon(
                   Icons.content_copy_rounded,
                   color: AppColors.g300,
@@ -198,7 +198,7 @@ class SettingsScreen extends ConsumerWidget {
                   if (code == null || code.trim().isEmpty) {
                     AppFeedback.showMessage(
                       context,
-                      message: 'Codigo indisponivel neste momento.',
+                      message: 'Código indisponível neste momento.',
                       isError: true,
                     );
                     return;
@@ -207,7 +207,7 @@ class SettingsScreen extends ConsumerWidget {
                   if (!context.mounted) return;
                   AppFeedback.showMessage(
                     context,
-                    message: 'Codigo copiado: $code',
+                    message: 'Código copiado: $code',
                   );
                 },
               ),
@@ -215,8 +215,8 @@ class SettingsScreen extends ConsumerWidget {
               _SettingsTile(
                 icon: Icons.link_rounded,
                 iconColor: AppColors.amber,
-                title: 'Vincular dispositivo',
-                subtitle: 'Entrar por codigo do negocio',
+                title: 'Associar dispositivo',
+                subtitle: 'Entrar com o código do negócio',
                 trailing: const Icon(
                   Icons.chevron_right_rounded,
                   color: AppColors.g300,
@@ -251,12 +251,12 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 onTap: () => context.push('/subscription-admin'),
               ),
-            const _Section('Negocio'),
+            const _Section('Negócio'),
             if (isOwner)
               _SettingsTile(
                 icon: Icons.groups_rounded,
                 iconColor: AppColors.amber,
-                title: 'Gestao de Staff',
+                title: 'Gestão da equipa',
                 subtitle: 'Convidar, criar e ativar/desativar membros',
                 trailing: const Icon(
                   Icons.chevron_right_rounded,
@@ -268,8 +268,8 @@ class SettingsScreen extends ConsumerWidget {
             _SettingsTile(
               icon: Icons.inventory_2_rounded,
               iconColor: AppColors.amber,
-              title: 'Produtos e Servicos',
-              subtitle: 'Ordenar, desativar e gerir itens do catalogo',
+              title: 'Produtos e serviços',
+              subtitle: 'Ordenar, desativar e gerir itens do catálogo',
               trailing: const Icon(
                 Icons.chevron_right_rounded,
                 color: AppColors.g300,
@@ -341,7 +341,7 @@ class SettingsScreen extends ConsumerWidget {
             icon: Icons.support_agent_rounded,
             iconColor: AppColors.g500,
             title: 'Support & Diagnostics',
-            subtitle: 'IDs, sessao e versao da app',
+            subtitle: 'IDs, sessão e versão da app',
             trailing: const Icon(
               Icons.chevron_right_rounded,
               color: AppColors.g300,
@@ -349,7 +349,7 @@ class SettingsScreen extends ConsumerWidget {
             ),
             onTap: () => context.push('/settings/support-diagnostics'),
           ),
-          const _Section('Sessao'),
+          const _Section('Sessão'),
           _SettingsTile(
             icon: Icons.logout_rounded,
             iconColor: AppColors.error,
@@ -386,7 +386,7 @@ class SettingsScreen extends ConsumerWidget {
     if (merchantId == null || merchantId.isEmpty) {
       AppFeedback.showMessage(
         context,
-        message: 'Sessao invalida.',
+        message: 'Sessão inválida.',
         isError: true,
       );
       return;
@@ -399,7 +399,7 @@ class SettingsScreen extends ConsumerWidget {
       if (planOffers.isEmpty) {
         AppFeedback.showMessage(
           context,
-          message: 'Nenhum plano disponivel no momento.',
+          message: 'Nenhum plano disponível neste momento.',
           isError: true,
         );
         return;
@@ -521,7 +521,7 @@ class SettingsScreen extends ConsumerWidget {
       if (selectedPlan == snapshot.plan) {
         AppFeedback.showMessage(
           context,
-          message: 'Este plano ja esta ativo.',
+          message: 'Este plano já está ativo.',
           isError: false,
         );
         return;
@@ -547,7 +547,7 @@ class SettingsScreen extends ConsumerWidget {
       if (!context.mounted) return;
       AppFeedback.showMessage(
         context,
-        message: 'Nao foi possivel atualizar o plano.',
+        message: 'Não foi possível atualizar o plano.',
         isError: true,
       );
     }
@@ -649,7 +649,7 @@ String _formatExpiry(DateTime expiry) {
 String _diagnosticValue(String? value) {
   final normalized = value?.trim();
   if (normalized == null || normalized.isEmpty) {
-    return 'Indisponivel';
+    return 'Indisponível';
   }
   return normalized;
 }
@@ -661,7 +661,7 @@ String _buildDiagnosticsText({
   required String appUserRole,
   required DateTime? expiresAt,
 }) {
-  final expiry = expiresAt == null ? 'Indisponivel' : _formatExpiry(expiresAt);
+  final expiry = expiresAt == null ? 'Indisponível' : _formatExpiry(expiresAt);
   return [
     'Merchant ID: ${_diagnosticValue(merchantId)}',
     'App User ID: ${_diagnosticValue(appUserId)}',
@@ -701,7 +701,7 @@ Future<void> _openPaidFeature(
     if (!context.mounted) return;
     AppFeedback.showMessage(
       context,
-      message: 'Nao foi possivel validar o plano. Tente novamente.',
+      message: 'Não foi possível validar o plano. Tente novamente.',
       isError: true,
     );
   }
@@ -782,7 +782,7 @@ class SupportDiagnosticsScreen extends ConsumerWidget {
                 ? _diagnosticValue(null)
                 : _formatExpiry(session.expiresAt),
           ),
-          const _Section('Aplicacao'),
+          const _Section('Aplicação'),
           const _SettingsTile(
             icon: Icons.verified_rounded,
             iconColor: AppColors.g500,
@@ -799,7 +799,7 @@ class SupportDiagnosticsScreen extends ConsumerWidget {
             icon: Icons.content_copy_rounded,
             iconColor: AppColors.g500,
             title: 'Copy Diagnostics',
-            subtitle: 'Copiar informacao tecnica',
+            subtitle: 'Copiar informação técnica',
             trailing: const Icon(
               Icons.content_copy_rounded,
               color: AppColors.g300,
@@ -810,7 +810,7 @@ class SupportDiagnosticsScreen extends ConsumerWidget {
               if (!context.mounted) return;
               AppFeedback.showMessage(
                 context,
-                message: 'Diagnostico copiado.',
+                message: 'Diagnóstico copiado.',
               );
             },
           ),
@@ -822,7 +822,7 @@ class SupportDiagnosticsScreen extends ConsumerWidget {
 
 String _formatPlanPrice(int? priceCents, {String? currency}) {
   if (priceCents == null || priceCents < 0) {
-    return 'Preco sob consulta';
+    return 'Preço sob consulta';
   }
   final symbol = (currency?.toUpperCase() ?? 'BRL') == 'BRL'
       ? 'R\$'

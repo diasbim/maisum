@@ -20,7 +20,7 @@ class AppErrorMapper {
     if (error is FirebaseAuthException) {
       final detail = _firebaseDetail(error);
       return AppErrorInfo(
-        title: 'Sessao expirada',
+        title: 'Sessão expirada',
         message: detail ?? AppStrings.erroAuth,
       );
     }
@@ -30,19 +30,19 @@ class AppErrorMapper {
       switch (error.code) {
         case 'failed-precondition':
           return AppErrorInfo(
-            title: 'Sincronizacao pendente',
+            title: 'Sincronização pendente',
             message: detail ?? AppStrings.syncIndiceFaltando,
           );
         case 'permission-denied':
           return AppErrorInfo(
-            title: 'Sem permissao',
-            message: detail ?? 'Permissao negada no Firebase (${error.code}).',
+            title: 'Sem permissão',
+            message: detail ?? 'Permissão negada no Firebase (${error.code}).',
           );
         case 'unavailable':
         case 'deadline-exceeded':
         case 'resource-exhausted':
           return AppErrorInfo(
-            title: 'Sem ligacao',
+            title: 'Sem ligação',
             message: detail ?? AppStrings.erroRede,
           );
         default:
@@ -55,7 +55,7 @@ class AppErrorMapper {
 
     if (error is FormatException) {
       return const AppErrorInfo(
-        title: 'Dados invalidos',
+        title: 'Dados inválidos',
         message: AppStrings.erroGenerico,
       );
     }

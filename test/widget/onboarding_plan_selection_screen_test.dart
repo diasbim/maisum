@@ -102,7 +102,7 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -260));
     await tester.pumpAndSettle();
 
-    expect(find.text('Comecar gratis'), findsOneWidget);
+    expect(find.text('Começar grátis'), findsOneWidget);
     expect(find.text('Escolher Plano'), findsOneWidget);
     expect(find.textContaining('Falar'), findsOneWidget);
   });

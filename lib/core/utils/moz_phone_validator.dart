@@ -9,11 +9,11 @@ class MozPhoneValidator {
   static String? validationMessage(String? input) {
     final value = input?.trim() ?? '';
     if (value.isEmpty) {
-      return 'Insira o numero de telefone';
+      return 'Introduza o número de telemóvel';
     }
 
     if (!isValidLocalPhone(value)) {
-      return 'Numero invalido. Use prefixos 82-87 e 9 digitos.';
+      return 'Número inválido. Use os prefixos 82–87 e 9 dígitos.';
     }
 
     return null;

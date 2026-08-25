@@ -491,7 +491,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                           const SizedBox(height: 12),
                           MaisUmButton(
                             onPressed: isBusy ? null : _openSaleItemsSelector,
-                            label: 'Adicionar produtos e servicos',
+                            label: 'Adicionar produtos e serviços',
                             leadingIcon: Icons.add_rounded,
                             variant: MaisUmButtonVariant.outlined,
                             foregroundColor: AppColors.primary,
@@ -554,7 +554,7 @@ class _NoCustomersState extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         const Text(
-          'Para registrar uma venda, adicione primeiro um cliente.',
+          'Para registar uma venda, adicione primeiro um cliente.',
           style: TextStyle(
             color: AppColors.onSurfaceVariant,
             fontSize: 14,
@@ -789,7 +789,7 @@ class _SaleItemsSelectionSheetState
                 children: [
                   Expanded(
                     child: Text(
-                      'Produtos e Servicos',
+                      'Produtos e serviços',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                             color: AppColors.onSurface,
                             fontWeight: FontWeight.w800,
@@ -863,9 +863,9 @@ class _SaleItemsSelectionSheetState
             padding: const EdgeInsets.symmetric(vertical: 28),
             child: EmptyState(
               title:
-                  items.isEmpty ? 'Catalogo vazio' : 'Nenhum item encontrado',
+                  items.isEmpty ? 'Catálogo vazio' : 'Nenhum item encontrado',
               subtitle: items.isEmpty
-                  ? 'Crie produtos e servicos no catalogo para usa-los aqui.'
+                  ? 'Crie produtos e serviços no catálogo para os usar aqui.'
                   : null,
             ),
           ),
@@ -883,7 +883,7 @@ class _SaleItemsSelectionSheetState
     return ListView(
       children: [
         if (services.isNotEmpty) ...[
-          const _SaleItemSectionLabel('SERVICOS'),
+          const _SaleItemSectionLabel('SERVIÇOS'),
           ...services.map(_itemTile),
         ],
         if (products.isNotEmpty) ...[

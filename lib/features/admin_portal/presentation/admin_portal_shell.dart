@@ -8,6 +8,7 @@ import '../../../core/widgets/error_state.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../settings/domain/staff_member.dart';
 import '../../subscription/domain/subscription_snapshot.dart';
+import '../../subscription/domain/usage_quota.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../domain/admin_audit_event.dart';
 import '../domain/admin_merchant_summary.dart';
@@ -122,7 +123,7 @@ class _AdminNavigationRail extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Text(
-                'Maisum Admin',
+                'Administração MaisUm',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: AppColors.white,
                       fontWeight: FontWeight.w800,
@@ -140,7 +141,7 @@ class _AdminNavigationRail extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            'Internal ops and merchant self-service shell',
+            'Painel de operações internas e autoatendimento do negócio',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: AppColors.g300,
                   height: 1.4,
@@ -220,7 +221,7 @@ class _AdminTopBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Admin portal',
+                  'Portal de administração',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: AppColors.onSurface,
                         fontWeight: FontWeight.w800,
@@ -228,7 +229,7 @@ class _AdminTopBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Internal operations and merchant owner self-service',
+                  'Operações internas e autoatendimento do responsável do negócio',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppColors.onSurfaceVariant,
                       ),
@@ -239,12 +240,12 @@ class _AdminTopBar extends StatelessWidget {
           const SizedBox(width: 16),
           _AdminContextPill(
             icon: Icons.badge_outlined,
-            label: roleLabel,
+            label: _translateUserRole(roleLabel),
           ),
           const SizedBox(width: 8),
           _AdminContextPill(
             icon: Icons.storefront_outlined,
-            label: merchantId ?? 'No merchant scope',
+            label: merchantId ?? 'Sem âmbito de negócio',
           ),
         ],
       ),
@@ -334,7 +335,7 @@ class _AdminOverviewSection extends ConsumerWidget {
       padding: const EdgeInsets.all(24),
       children: [
         Text(
-          'Admin overview',
+          'Visão geral da administração',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: AppColors.onSurface,
                 fontWeight: FontWeight.w800,
@@ -342,16 +343,17 @@ class _AdminOverviewSection extends ConsumerWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          'Live control surface for internal Maisum operations and merchant owner self-service.',
+          'Painel em tempo real para operações internas da MaisUm e autoatendimento do responsável do negócio.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.onSurfaceVariant,
               ),
         ),
         const SizedBox(height: 20),
         summary.when(
-          loading: () => const _AdminLoadingPanel(title: 'Overview metrics'),
+          loading: () =>
+              const _AdminLoadingPanel(title: 'Métricas da visão geral'),
           error: (error, _) => _AdminErrorPanel(
-            title: 'Overview metrics',
+            title: 'Métricas da visão geral',
             error: error,
             onRetry: () => ref.invalidate(adminOperationsSummaryProvider),
           ),
@@ -361,28 +363,28 @@ class _AdminOverviewSection extends ConsumerWidget {
             children: [
               _AdminMetricCard(
                 metric: _AdminMetric(
-                  label: 'Merchants',
+                  label: 'Negócios',
                   value: '${value.merchantCount}',
                   icon: Icons.storefront_outlined,
                 ),
               ),
               _AdminMetricCard(
                 metric: _AdminMetric(
-                  label: 'Active subscriptions',
+                  label: 'Subscrições ativas',
                   value: '${value.activeSubscriptionCount}',
                   icon: Icons.verified_outlined,
                 ),
               ),
               _AdminMetricCard(
                 metric: _AdminMetric(
-                  label: 'Usage events 24h',
+                  label: 'Eventos de utilização (24h)',
                   value: '${value.usageEvents24h}',
                   icon: Icons.bolt_outlined,
                 ),
               ),
               _AdminMetricCard(
                 metric: _AdminMetric(
-                  label: 'Last admin audit',
+                  label: 'Última auditoria administrativa',
                   value: _formatOptionalDate(value.lastAdminAuditAt),
                   icon: Icons.manage_history_outlined,
                 ),
@@ -397,9 +399,10 @@ class _AdminOverviewSection extends ConsumerWidget {
           crossAxisAlignment: WrapCrossAlignment.start,
           children: [
             plans.when(
-              loading: () => const _AdminLoadingPanel(title: 'Plan catalog'),
+              loading: () =>
+                  const _AdminLoadingPanel(title: 'Catálogo de planos'),
               error: (error, _) => _AdminErrorPanel(
-                title: 'Plan catalog',
+                title: 'Catálogo de planos',
                 error: error,
                 onRetry: () => ref.invalidate(adminPlanCatalogProvider),
               ),
@@ -420,19 +423,19 @@ class _AdminOverviewSection extends ConsumerWidget {
                           .length,
                 );
                 return _AdminDetailPanel(
-                  title: 'Plan catalog',
+                  title: 'Catálogo de planos',
                   rows: [
-                    _AdminDetailRow(label: 'Plans', value: '${items.length}'),
+                    _AdminDetailRow(label: 'Planos', value: '${items.length}'),
                     _AdminDetailRow(
-                      label: 'Active plans',
+                      label: 'Planos ativos',
                       value: '$activePlans',
                     ),
                     _AdminDetailRow(
-                      label: 'Active prices',
+                      label: 'Preços ativos',
                       value: '$activePrices',
                     ),
                     _AdminDetailRow(
-                      label: 'Enabled features',
+                      label: 'Funcionalidades ativadas',
                       value: '$enabledFeatures',
                     ),
                   ],
@@ -444,17 +447,19 @@ class _AdminOverviewSection extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         auditEvents.when(
-          loading: () => const _AdminLoadingPanel(title: 'Recent admin audit'),
+          loading: () => const _AdminLoadingPanel(
+            title: 'Auditoria administrativa recente',
+          ),
           error: (error, _) => _AdminErrorPanel(
-            title: 'Recent admin audit',
+            title: 'Auditoria administrativa recente',
             error: error,
             onRetry: () => ref.invalidate(adminAuditEventsProvider(null)),
           ),
           data: (items) => _AdminAuditEventTable(
             events: items.take(5).toList(growable: false),
-            emptyTitle: 'No audit events yet',
+            emptyTitle: 'Ainda não há eventos de auditoria',
             emptySubtitle:
-                'Plan, pricing, feature, and entitlement changes will appear here.',
+                'As alterações de planos, preços, funcionalidades e permissões aparecerão aqui.',
           ),
         ),
       ],
@@ -507,7 +512,7 @@ class _MerchantDirectorySectionState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Merchant directory',
+                      'Diretório de negócios',
                       style:
                           Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 color: AppColors.onSurface,
@@ -516,7 +521,7 @@ class _MerchantDirectorySectionState
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Search and inspect merchant tenancy, plan, staff, and usage summary state.',
+                      'Pesquisar e consultar o negócio, o plano, a equipa e o resumo de utilização.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                             color: AppColors.onSurfaceVariant,
                           ),
@@ -539,9 +544,9 @@ class _MerchantDirectorySectionState
                               setState(() => _search = '');
                             },
                             icon: const Icon(Icons.close_rounded),
-                            tooltip: 'Clear search',
+                            tooltip: 'Limpar pesquisa',
                           ),
-                    hintText: 'Search by name, phone, or ID',
+                    hintText: 'Pesquisar por nome, telefone ou ID',
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 12,
@@ -573,8 +578,9 @@ class _MerchantSummaryTable extends StatelessWidget {
   Widget build(BuildContext context) {
     if (merchants.isEmpty) {
       return const _AdminEmptyPanel(
-        title: 'No merchants found',
-        subtitle: 'The admin API returned an empty merchant directory.',
+        title: 'Nenhum negócio encontrado',
+        subtitle:
+            'A API administrativa devolveu um diretório de negócios vazio.',
       );
     }
 
@@ -591,13 +597,13 @@ class _MerchantSummaryTable extends StatelessWidget {
           headingRowColor:
               WidgetStateProperty.all(AppColors.surfaceContainerLow),
           columns: const [
-            DataColumn(label: Text('Merchant')),
-            DataColumn(label: Text('Phone')),
-            DataColumn(label: Text('Plan')),
-            DataColumn(label: Text('Status')),
-            DataColumn(label: Text('Staff')),
-            DataColumn(label: Text('Usage rows')),
-            DataColumn(label: Text('Updated')),
+            DataColumn(label: Text('Negócio')),
+            DataColumn(label: Text('Telefone')),
+            DataColumn(label: Text('Plano')),
+            DataColumn(label: Text('Estado')),
+            DataColumn(label: Text('Equipa')),
+            DataColumn(label: Text('Registos de utilização')),
+            DataColumn(label: Text('Atualizado')),
           ],
           rows: merchants.map((merchant) {
             return DataRow(
@@ -613,7 +619,7 @@ class _MerchantSummaryTable extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        merchant.name,
+                        _translateMerchantName(merchant.name),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       Text(
@@ -626,7 +632,10 @@ class _MerchantSummaryTable extends StatelessWidget {
                   ),
                 ),
                 DataCell(Text(merchant.phone)),
-                DataCell(Text(merchant.planName ?? merchant.planCode ?? '-')),
+                DataCell(
+                  Text(_translatePlanName(
+                      merchant.planName ?? merchant.planCode ?? '-')),
+                ),
                 DataCell(_StatusBadge(
                     label: merchant.subscriptionStatus ?? 'Unknown')),
                 DataCell(
@@ -670,7 +679,7 @@ class _MerchantDetailSection extends ConsumerWidget {
               child: TextButton.icon(
                 onPressed: () => context.go('/admin/merchants'),
                 icon: const Icon(Icons.arrow_back_rounded),
-                label: const Text('Merchant directory'),
+                label: const Text('Diretório de negócios'),
               ),
             ),
             const SizedBox(height: 10),
@@ -682,7 +691,7 @@ class _MerchantDetailSection extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        summary.name,
+                        _translateMerchantName(summary.name),
                         style:
                             Theme.of(context).textTheme.headlineSmall?.copyWith(
                                   color: AppColors.onSurface,
@@ -691,7 +700,7 @@ class _MerchantDetailSection extends ConsumerWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Read-only tenant health, subscription, usage, and configuration snapshot.',
+                        'Resumo apenas de leitura da saúde do negócio, da subscrição, da utilização e da configuração.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: AppColors.onSurfaceVariant,
                             ),
@@ -710,28 +719,28 @@ class _MerchantDetailSection extends ConsumerWidget {
               children: [
                 _AdminMetricCard(
                   metric: _AdminMetric(
-                    label: 'Active staff',
+                    label: 'Equipa ativa',
                     value: '${summary.activeStaffCount}/${summary.staffCount}',
                     icon: Icons.group_outlined,
                   ),
                 ),
                 _AdminMetricCard(
                   metric: _AdminMetric(
-                    label: 'Usage balances',
+                    label: 'Saldos de utilização',
                     value: '${summary.usageBalanceCount}',
                     icon: Icons.data_usage_outlined,
                   ),
                 ),
                 _AdminMetricCard(
                   metric: _AdminMetric(
-                    label: 'Usage consumed',
+                    label: 'Utilização consumida',
                     value: '${detail.usageUsedTotal}',
                     icon: Icons.speed_outlined,
                   ),
                 ),
                 _AdminMetricCard(
                   metric: _AdminMetric(
-                    label: 'Entitlements',
+                    label: 'Permissões',
                     value: '${detail.entitlementCount}',
                     icon: Icons.key_outlined,
                   ),
@@ -744,24 +753,24 @@ class _MerchantDetailSection extends ConsumerWidget {
               runSpacing: 12,
               children: [
                 _AdminDetailPanel(
-                  title: 'Tenant',
+                  title: 'Negócio',
                   rows: [
                     _AdminDetailRow(
-                      label: 'Merchant ID',
+                      label: 'ID do negócio',
                       value: summary.id,
                       selectable: true,
                     ),
-                    _AdminDetailRow(label: 'Phone', value: summary.phone),
+                    _AdminDetailRow(label: 'Telefone', value: summary.phone),
                     _AdminDetailRow(
-                      label: 'Created',
+                      label: 'Criado em',
                       value: _formatDate(summary.createdAt),
                     ),
                     _AdminDetailRow(
-                      label: 'Updated',
+                      label: 'Atualizado em',
                       value: _formatDate(summary.updatedAt),
                     ),
                     _AdminDetailRow(
-                      label: 'Last operational update',
+                      label: 'Última atualização operacional',
                       value: _formatOptionalDate(
                         summary.lastOperationalUpdateAt,
                       ),
@@ -769,62 +778,63 @@ class _MerchantDetailSection extends ConsumerWidget {
                   ],
                 ),
                 _AdminDetailPanel(
-                  title: 'Subscription',
+                  title: 'Subscrição',
                   rows: [
                     _AdminDetailRow(
-                      label: 'Plan',
-                      value: _formatOptionalText(
-                        summary.planName ?? summary.planCode,
+                      label: 'Plano',
+                      value: _translatePlanName(
+                        _formatOptionalText(
+                            summary.planName ?? summary.planCode),
                       ),
                     ),
                     _AdminDetailRow(
-                      label: 'Plan version',
+                      label: 'Versão do plano',
                       value: _formatOptionalNumber(detail.planVersion),
                     ),
                     _AdminDetailRow(
-                      label: 'Pricing version',
+                      label: 'Versão do preço',
                       value: _formatOptionalNumber(detail.pricingVersion),
                     ),
                     _AdminDetailRow(
-                      label: 'Trial ends',
+                      label: 'Fim do teste',
                       value: _formatOptionalDate(detail.trialEndsAt),
                     ),
                     _AdminDetailRow(
-                      label: 'Grace ends',
+                      label: 'Fim do período de tolerância',
                       value: _formatOptionalDate(detail.graceEndsAt),
                     ),
                     _AdminDetailRow(
-                      label: 'Period',
+                      label: 'Período',
                       value:
                           '${_formatOptionalDate(detail.periodStart)} - ${_formatOptionalDate(detail.periodEnd)}',
                     ),
                   ],
                 ),
                 _AdminDetailPanel(
-                  title: 'Operations',
+                  title: 'Operações',
                   rows: [
                     _AdminDetailRow(
-                      label: 'Last staff login',
+                      label: 'Último início de sessão da equipa',
                       value: _formatOptionalDate(detail.lastStaffLoginAt),
                     ),
                     _AdminDetailRow(
-                      label: 'Usage events',
+                      label: 'Eventos de utilização',
                       value: '${detail.usageEventCount}',
                     ),
                     _AdminDetailRow(
-                      label: 'Last usage event',
+                      label: 'Último evento de utilização',
                       value: _formatOptionalDate(detail.lastUsageEventAt),
                     ),
                     _AdminDetailRow(
-                      label: 'Usage updated',
+                      label: 'Utilização atualizada em',
                       value: _formatOptionalDate(detail.usageUpdatedAt),
                     ),
                     _AdminDetailRow(
-                      label: 'Feature flags',
+                      label: 'Indicadores de funcionalidade',
                       value: '${detail.featureFlagCount}',
                     ),
                     _AdminDetailRow(
-                      label: 'Remote config rows',
+                      label: 'Registos de configuração remota',
                       value: '${detail.remoteConfigCount}',
                     ),
                   ],
@@ -836,12 +846,12 @@ class _MerchantDetailSection extends ConsumerWidget {
             const SizedBox(height: 20),
             _AdminAuditEventSection(
               merchantId: summary.id,
-              title: 'Merchant audit trail',
+              title: 'Histórico de auditoria do negócio',
               description:
-                  'Tenant-scoped admin changes for the merchant currently under review.',
-              emptyTitle: 'No merchant audit events yet',
+                  'Alterações administrativas no âmbito do negócio atualmente em análise.',
+              emptyTitle: 'Ainda não há eventos de auditoria deste negócio',
               emptySubtitle:
-                  'Entitlement overrides and future support actions for this merchant will appear here.',
+                  'Os ajustes de permissões e futuras ações de suporte deste negócio aparecerão aqui.',
             ),
           ],
         );
@@ -864,7 +874,7 @@ class _OwnerSelfServiceSection extends ConsumerWidget {
       padding: const EdgeInsets.all(24),
       children: [
         Text(
-          'Merchant self-service',
+          'Autoatendimento do responsável',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: AppColors.onSurface,
                 fontWeight: FontWeight.w800,
@@ -872,7 +882,7 @@ class _OwnerSelfServiceSection extends ConsumerWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          'Owner view for plan status, team access, and sync health for the current merchant scope.',
+          'Vista do responsável sobre o estado do plano, o acesso da equipa e a saúde da sincronização no âmbito atual do negócio.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.onSurfaceVariant,
               ),
@@ -884,23 +894,22 @@ class _OwnerSelfServiceSection extends ConsumerWidget {
           children: [
             _AdminMetricCard(
               metric: _AdminMetric(
-                label: 'Merchant scope',
+                label: 'Âmbito do negócio',
                 value: merchantId ?? '-',
                 icon: Icons.storefront_outlined,
               ),
             ),
             _AdminMetricCard(
               metric: _AdminMetric(
-                label: 'Sync queue',
-                value:
-                    '${syncStatus.pendingCount} pending / ${syncStatus.failedCount} failed',
+                label: 'Fila de sincronização',
+                value: _formatSyncQueue(syncStatus),
                 icon: Icons.sync_rounded,
               ),
             ),
             _AdminMetricCard(
               metric: _AdminMetric(
-                label: 'Connectivity',
-                value: syncStatus.isOnline ? 'Online' : 'Offline',
+                label: 'Conectividade',
+                value: syncStatus.isOnline ? 'Ligado' : 'Sem ligação',
                 icon: syncStatus.isOnline
                     ? Icons.cloud_done_outlined
                     : Icons.cloud_off_outlined,
@@ -934,9 +943,9 @@ class _OwnerSubscriptionPanel extends ConsumerWidget {
     return SizedBox(
       width: 430,
       child: snapshot.when(
-        loading: () => const _AdminLoadingPanel(title: 'Subscription'),
+        loading: () => const _AdminLoadingPanel(title: 'Subscrição'),
         error: (error, _) => _AdminErrorPanel(
-          title: 'Subscription',
+          title: 'Subscrição',
           error: error,
           onRetry: () => ref.invalidate(subscriptionSnapshotProvider),
         ),
@@ -944,36 +953,36 @@ class _OwnerSubscriptionPanel extends ConsumerWidget {
           final state = value.state;
           final quota = value.whatsappQuota;
           return _AdminDetailPanel(
-            title: 'Subscription',
+            title: 'Subscrição',
             rows: [
               _AdminDetailRow(
-                label: 'Plan',
-                value: state?.resolvedPlanName ?? value.plan.displayName,
+                label: 'Plano',
+                value: _translatePlanName(
+                  state?.resolvedPlanName ?? value.plan.displayName,
+                ),
               ),
               _AdminDetailRow(
-                label: 'Status',
-                value: value.status.code,
+                label: 'Estado',
+                value: _translateStatusLabel(value.status.code),
               ),
               _AdminDetailRow(
-                label: 'Plan version',
+                label: 'Versão do plano',
                 value: _formatOptionalNumber(state?.planVersion),
               ),
               _AdminDetailRow(
-                label: 'Pricing version',
+                label: 'Versão do preço',
                 value: _formatOptionalNumber(state?.pricingVersion),
               ),
               _AdminDetailRow(
-                label: 'WhatsApp quota',
-                value: quota.limit == null
-                    ? '${quota.used} used / unlimited'
-                    : '${quota.used}/${quota.limit} used',
+                label: 'Quota do WhatsApp',
+                value: _formatQuota(quota),
               ),
               _AdminDetailRow(
-                label: 'Quota resets',
+                label: 'Reposição da quota',
                 value: _formatDate(quota.resetAt),
               ),
               _AdminDetailRow(
-                label: 'Updated',
+                label: 'Atualizado em',
                 value: _formatOptionalDate(state?.updatedAt),
               ),
             ],
@@ -1004,7 +1013,7 @@ class _OwnerSyncPanel extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Sync health',
+              'Estado da sincronização',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: AppColors.onSurface,
                     fontWeight: FontWeight.w800,
@@ -1012,29 +1021,32 @@ class _OwnerSyncPanel extends ConsumerWidget {
             ),
             const SizedBox(height: 14),
             _AdminDetailRowView(
-              row: _AdminDetailRow(label: 'Phase', value: status.phase.name),
+              row: _AdminDetailRow(
+                label: 'Fase',
+                value: _translateSyncPhase(status.phase.name),
+              ),
             ),
             _AdminDetailRowView(
               row: _AdminDetailRow(
-                label: 'Pending',
+                label: 'Pendentes',
                 value: '${status.pendingCount}',
               ),
             ),
             _AdminDetailRowView(
               row: _AdminDetailRow(
-                label: 'Failed',
+                label: 'Falhas',
                 value: '${status.failedCount}',
               ),
             ),
             _AdminDetailRowView(
               row: _AdminDetailRow(
-                label: 'Last sync',
+                label: 'Última sincronização',
                 value: _formatOptionalDate(status.lastSyncAt),
               ),
             ),
             if (status.lastError != null)
               _AdminDetailRowView(
-                row: _AdminDetailRow(label: 'Error', value: status.lastError!),
+                row: _AdminDetailRow(label: 'Erro', value: status.lastError!),
               ),
             const SizedBox(height: 8),
             FilledButton.icon(
@@ -1042,7 +1054,7 @@ class _OwnerSyncPanel extends ConsumerWidget {
                   ? null
                   : () => ref.read(syncControllerProvider.notifier).sync(),
               icon: const Icon(Icons.sync_rounded),
-              label: const Text('Sync now'),
+              label: const Text('Sincronizar agora'),
             ),
           ],
         ),
@@ -1061,9 +1073,9 @@ class _OwnerStaffPanel extends ConsumerWidget {
     return SizedBox(
       width: 640,
       child: staff.when(
-        loading: () => const _AdminLoadingPanel(title: 'Team access'),
+        loading: () => const _AdminLoadingPanel(title: 'Acesso da equipa'),
         error: (error, _) => _AdminErrorPanel(
-          title: 'Team access',
+          title: 'Acesso da equipa',
           error: error,
           onRetry: () => ref.invalidate(staffMembersProvider),
         ),
@@ -1082,8 +1094,9 @@ class _OwnerStaffTable extends StatelessWidget {
   Widget build(BuildContext context) {
     if (members.isEmpty) {
       return const _AdminEmptyPanel(
-        title: 'No staff members',
-        subtitle: 'Invite staff from the mobile owner settings screen.',
+        title: 'Sem membros da equipa',
+        subtitle:
+            'Convide a equipa no ecrã móvel de definições do responsável.',
       );
     }
 
@@ -1099,16 +1112,16 @@ class _OwnerStaffTable extends StatelessWidget {
           headingRowColor:
               WidgetStateProperty.all(AppColors.surfaceContainerLow),
           columns: const [
-            DataColumn(label: Text('Phone')),
-            DataColumn(label: Text('Role')),
-            DataColumn(label: Text('Status')),
-            DataColumn(label: Text('Last login')),
-            DataColumn(label: Text('Updated')),
+            DataColumn(label: Text('Telefone')),
+            DataColumn(label: Text('Perfil')),
+            DataColumn(label: Text('Estado')),
+            DataColumn(label: Text('Último início de sessão')),
+            DataColumn(label: Text('Atualizado')),
           ],
           rows: members.map((member) {
             return DataRow(cells: [
               DataCell(Text(member.phone)),
-              DataCell(Text(member.role)),
+              DataCell(Text(_translateUserRole(member.role))),
               DataCell(_StatusBadge(label: member.status)),
               DataCell(Text(_formatOptionalDate(member.lastLoginAt))),
               DataCell(Text(_formatDate(member.updatedAt))),
@@ -1191,7 +1204,7 @@ class _AdminErrorPanel extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: onRetry,
             icon: const Icon(Icons.refresh_rounded),
-            label: const Text('Retry'),
+            label: const Text('Tentar novamente'),
           ),
         ],
       ),
@@ -1215,7 +1228,7 @@ class _EntitlementOverridePanelState
   bool _isEnabled = true;
   AsyncValue<void> _submission = const AsyncData(null);
   final _limitController = TextEditingController();
-  final _unitController = TextEditingController(text: 'monthly');
+  final _unitController = TextEditingController(text: 'mensal');
 
   @override
   void dispose() {
@@ -1240,7 +1253,7 @@ class _EntitlementOverridePanelState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Entitlement override',
+            'Ajuste de permissão',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: AppColors.onSurface,
                   fontWeight: FontWeight.w800,
@@ -1248,7 +1261,7 @@ class _EntitlementOverridePanelState
           ),
           const SizedBox(height: 6),
           Text(
-            'Applies one merchant-scoped feature override and records it in the admin audit log.',
+            'Aplica um ajuste de funcionalidade no âmbito do negócio e regista-o no histórico de auditoria administrativa.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppColors.onSurfaceVariant,
                 ),
@@ -1263,7 +1276,8 @@ class _EntitlementOverridePanelState
                 width: 280,
                 child: DropdownButtonFormField<String>(
                   initialValue: _featureKey,
-                  decoration: const InputDecoration(labelText: 'Feature'),
+                  decoration:
+                      const InputDecoration(labelText: 'Funcionalidade'),
                   items: FeatureKeys.all
                       .map(
                         (featureKey) => DropdownMenuItem(
@@ -1285,7 +1299,7 @@ class _EntitlementOverridePanelState
                 width: 150,
                 child: SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Enabled'),
+                  title: const Text('Ativado'),
                   value: _isEnabled,
                   onChanged: isSaving
                       ? null
@@ -1298,7 +1312,7 @@ class _EntitlementOverridePanelState
                   controller: _limitController,
                   enabled: !isSaving,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Limit'),
+                  decoration: const InputDecoration(labelText: 'Limite'),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
@@ -1307,7 +1321,7 @@ class _EntitlementOverridePanelState
                 child: TextField(
                   controller: _unitController,
                   enabled: !isSaving,
-                  decoration: const InputDecoration(labelText: 'Unit'),
+                  decoration: const InputDecoration(labelText: 'Unidade'),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
@@ -1320,7 +1334,7 @@ class _EntitlementOverridePanelState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.key_outlined),
-                label: const Text('Apply override'),
+                label: const Text('Aplicar ajuste'),
               ),
             ],
           ),
@@ -1358,7 +1372,7 @@ class _EntitlementOverridePanelState
             limitValue: _readLimit(),
             unit: _unitController.text.trim().isEmpty
                 ? null
-                : _unitController.text.trim(),
+                : _normalizeUnitInput(_unitController.text),
           );
       ref.invalidate(adminMerchantDetailProvider(widget.merchantId));
       ref.invalidate(adminAuditEventsProvider(null));
@@ -1374,7 +1388,7 @@ class _EntitlementOverridePanelState
     }
     if (!mounted) return;
     messenger.showSnackBar(
-      const SnackBar(content: Text('Entitlement override applied')),
+      const SnackBar(content: Text('Ajuste de permissão aplicado')),
     );
   }
 }
@@ -1390,7 +1404,7 @@ class _AdminOperationsSection extends ConsumerWidget {
       padding: const EdgeInsets.all(24),
       children: [
         Text(
-          'Operations',
+          'Operações',
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 color: AppColors.onSurface,
                 fontWeight: FontWeight.w800,
@@ -1398,16 +1412,16 @@ class _AdminOperationsSection extends ConsumerWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          'System-wide tenant, subscription, usage, recovery, and audit health.',
+          'Saúde geral de negócios, subscrições, utilização, recuperação e auditoria.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: AppColors.onSurfaceVariant,
               ),
         ),
         const SizedBox(height: 20),
         summary.when(
-          loading: () => const _AdminLoadingPanel(title: 'Operations summary'),
+          loading: () => const _AdminLoadingPanel(title: 'Resumo operacional'),
           error: (error, _) => _AdminErrorPanel(
-            title: 'Operations summary',
+            title: 'Resumo operacional',
             error: error,
             onRetry: () => ref.invalidate(adminOperationsSummaryProvider),
           ),
@@ -1415,12 +1429,12 @@ class _AdminOperationsSection extends ConsumerWidget {
         ),
         const SizedBox(height: 20),
         const _AdminAuditEventSection(
-          title: 'Operations audit log',
+          title: 'Histórico de auditoria das operações',
           description:
-              'Audited admin changes across plans, pricing, features, and tenant overrides.',
-          emptyTitle: 'No audit events yet',
+              'Alterações administrativas auditadas em planos, preços, funcionalidades e ajustes por negócio.',
+          emptyTitle: 'Ainda não há eventos de auditoria',
           emptySubtitle:
-              'Admin mutations will appear here once audited endpoints run.',
+              'As alterações administrativas aparecerão aqui quando os endpoints auditados forem executados.',
           embedded: true,
         ),
       ],
@@ -1441,84 +1455,84 @@ class _OperationsSummaryGrid extends StatelessWidget {
       children: [
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Merchants',
+            label: 'Negócios',
             value: '${summary.merchantCount}',
             icon: Icons.storefront_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Active subscriptions',
+            label: 'Subscrições ativas',
             value: '${summary.activeSubscriptionCount}',
             icon: Icons.verified_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Trial subscriptions',
+            label: 'Subscrições em teste',
             value: '${summary.trialSubscriptionCount}',
             icon: Icons.hourglass_bottom_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Needs attention',
+            label: 'Precisam de atenção',
             value: '${summary.attentionSubscriptionCount}',
             icon: Icons.report_problem_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Active staff',
+            label: 'Equipa ativa',
             value: '${summary.activeStaffCount}',
             icon: Icons.group_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Usage events 24h',
+            label: 'Eventos de utilização (24h)',
             value: '${summary.usageEvents24h}',
             icon: Icons.bolt_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Open recovery tasks',
+            label: 'Tarefas de recuperação abertas',
             value: '${summary.openRecoveryTaskCount}',
             icon: Icons.assignment_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Visit reports 24h',
+            label: 'Relatórios de visita (24h)',
             value: '${summary.visitReports24h}',
             icon: Icons.fact_check_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Surveys 24h',
+            label: 'Respostas a inquéritos (24h)',
             value: '${summary.surveyResponses24h}',
             icon: Icons.rate_review_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Admin audit 24h',
+            label: 'Auditoria administrativa (24h)',
             value: '${summary.adminAuditEvents24h}',
             icon: Icons.history_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Last admin audit',
+            label: 'Última auditoria administrativa',
             value: _formatOptionalDate(summary.lastAdminAuditAt),
             icon: Icons.manage_history_outlined,
           ),
         ),
         _AdminMetricCard(
           metric: _AdminMetric(
-            label: 'Last usage event',
+            label: 'Último evento de utilização',
             value: _formatOptionalDate(summary.lastUsageEventAt),
             icon: Icons.timeline_outlined,
           ),
@@ -1547,7 +1561,7 @@ class _AdminPlansSection extends ConsumerWidget {
         padding: const EdgeInsets.all(24),
         children: [
           Text(
-            'Plans catalog',
+            'Catálogo de planos',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: AppColors.onSurface,
                   fontWeight: FontWeight.w800,
@@ -1555,7 +1569,7 @@ class _AdminPlansSection extends ConsumerWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Manage plan versions and active prices used by merchant onboarding and subscription state.',
+            'Gerir versões de planos e preços ativos usados no registo de negócios e no estado da subscrição.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: AppColors.onSurfaceVariant,
                 ),
@@ -1588,8 +1602,8 @@ class _AdminPlanCatalogTable extends StatelessWidget {
   Widget build(BuildContext context) {
     if (plans.isEmpty) {
       return const _AdminEmptyPanel(
-        title: 'No plans configured',
-        subtitle: 'Create a plan version to start building the catalog.',
+        title: 'Nenhum plano configurado',
+        subtitle: 'Crie uma versão de plano para começar a compor o catálogo.',
       );
     }
 
@@ -1605,12 +1619,12 @@ class _AdminPlanCatalogTable extends StatelessWidget {
           headingRowColor:
               WidgetStateProperty.all(AppColors.surfaceContainerLow),
           columns: const [
-            DataColumn(label: Text('Plan')),
-            DataColumn(label: Text('Version')),
-            DataColumn(label: Text('Status')),
-            DataColumn(label: Text('Active prices')),
-            DataColumn(label: Text('Features')),
-            DataColumn(label: Text('Updated')),
+            DataColumn(label: Text('Plano')),
+            DataColumn(label: Text('Versão')),
+            DataColumn(label: Text('Estado')),
+            DataColumn(label: Text('Preços ativos')),
+            DataColumn(label: Text('Funcionalidades')),
+            DataColumn(label: Text('Atualizado')),
           ],
           rows: plans.map((plan) {
             final activePrices = plan.prices
@@ -1629,7 +1643,7 @@ class _AdminPlanCatalogTable extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        plan.name,
+                        _translatePlanName(plan.name),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       Text(
@@ -1643,12 +1657,14 @@ class _AdminPlanCatalogTable extends StatelessWidget {
                 ),
                 DataCell(Text('${plan.version}')),
                 DataCell(_StatusBadge(
-                  label: plan.isActive ? 'ACTIVE' : 'INACTIVE',
+                  label: _translateStatusLabel(
+                    plan.isActive ? 'ACTIVE' : 'INACTIVE',
+                  ),
                 )),
                 DataCell(Text(activePrices.isEmpty ? '-' : activePrices)),
                 DataCell(Text(
                   enabledFeatures.isEmpty
-                      ? '${plan.features.length} configured'
+                      ? '${plan.features.length} configuradas'
                       : enabledFeatures.join(', '),
                 )),
                 DataCell(Text(_formatDate(plan.updatedAt))),
@@ -1688,22 +1704,22 @@ class _PlanUpsertPanelState extends ConsumerState<_PlanUpsertPanel> {
     final isSaving = _submission.isLoading;
     return _AdminMutationPanel(
       width: 430,
-      title: 'Create or update plan',
+      title: 'Criar ou atualizar plano',
       description:
-          'Upsert one catalog plan version and optionally mark it active.',
+          'Cria ou atualiza uma versão do plano no catálogo e, opcionalmente, marca-a como ativa.',
       error: _submission.error,
       children: [
         TextField(
           controller: _planCodeController,
           enabled: !isSaving,
-          decoration: const InputDecoration(labelText: 'Plan code'),
+          decoration: const InputDecoration(labelText: 'Código do plano'),
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _nameController,
           enabled: !isSaving,
-          decoration: const InputDecoration(labelText: 'Display name'),
+          decoration: const InputDecoration(labelText: 'Nome visível'),
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
@@ -1714,7 +1730,7 @@ class _PlanUpsertPanelState extends ConsumerState<_PlanUpsertPanel> {
                 controller: _versionController,
                 enabled: !isSaving,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Version'),
+                decoration: const InputDecoration(labelText: 'Versão'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -1722,7 +1738,7 @@ class _PlanUpsertPanelState extends ConsumerState<_PlanUpsertPanel> {
             Expanded(
               child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Active'),
+                title: const Text('Ativo'),
                 value: _isActive,
                 onChanged: isSaving
                     ? null
@@ -1743,7 +1759,7 @@ class _PlanUpsertPanelState extends ConsumerState<_PlanUpsertPanel> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.library_add_outlined),
-            label: const Text('Save plan'),
+            label: const Text('Guardar plano'),
           ),
         ),
       ],
@@ -1755,7 +1771,7 @@ class _PlanUpsertPanelState extends ConsumerState<_PlanUpsertPanel> {
     final version = int.tryParse(_versionController.text.trim());
     if (version == null) {
       setState(() => _submission = AsyncError(
-            ArgumentError('Version must be a number.'),
+            ArgumentError('A versão deve ser um número.'),
             StackTrace.current,
           ));
       return;
@@ -1782,7 +1798,7 @@ class _PlanUpsertPanelState extends ConsumerState<_PlanUpsertPanel> {
     }
     if (!mounted) return;
     messenger.showSnackBar(
-      const SnackBar(content: Text('Plan saved')),
+      const SnackBar(content: Text('Plano guardado')),
     );
   }
 }
@@ -1799,7 +1815,7 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
   final _pricingVersionController = TextEditingController(text: '1');
   final _currencyController = TextEditingController(text: 'MZN');
   final _amountController = TextEditingController();
-  final _billingPeriodController = TextEditingController(text: 'monthly');
+  final _billingPeriodController = TextEditingController(text: 'mensal');
   bool _isActive = true;
   AsyncValue<void> _submission = const AsyncData(null);
 
@@ -1818,14 +1834,15 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
     final isSaving = _submission.isLoading;
     return _AdminMutationPanel(
       width: 430,
-      title: 'Create or update price',
-      description: 'Upsert one price version for a plan and currency.',
+      title: 'Criar ou atualizar preço',
+      description:
+          'Cria ou atualiza uma versão de preço para um plano e uma moeda.',
       error: _submission.error,
       children: [
         TextField(
           controller: _planCodeController,
           enabled: !isSaving,
-          decoration: const InputDecoration(labelText: 'Plan code'),
+          decoration: const InputDecoration(labelText: 'Código do plano'),
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
@@ -1836,7 +1853,7 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
                 controller: _pricingVersionController,
                 enabled: !isSaving,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Pricing version'),
+                decoration: const InputDecoration(labelText: 'Versão do preço'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -1845,7 +1862,7 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
               child: TextField(
                 controller: _currencyController,
                 enabled: !isSaving,
-                decoration: const InputDecoration(labelText: 'Currency'),
+                decoration: const InputDecoration(labelText: 'Moeda'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -1859,7 +1876,7 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
                 controller: _amountController,
                 enabled: !isSaving,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Amount'),
+                decoration: const InputDecoration(labelText: 'Montante'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -1868,7 +1885,8 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
               child: TextField(
                 controller: _billingPeriodController,
                 enabled: !isSaving,
-                decoration: const InputDecoration(labelText: 'Billing period'),
+                decoration:
+                    const InputDecoration(labelText: 'Período de faturação'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -1877,7 +1895,7 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
         const SizedBox(height: 12),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Active'),
+          title: const Text('Ativo'),
           value: _isActive,
           onChanged:
               isSaving ? null : (value) => setState(() => _isActive = value),
@@ -1894,7 +1912,7 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.sell_outlined),
-            label: const Text('Save price'),
+            label: const Text('Guardar preço'),
           ),
         ),
       ],
@@ -1907,7 +1925,9 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
     final amount = int.tryParse(_amountController.text.trim());
     if (pricingVersion == null || amount == null) {
       setState(() => _submission = AsyncError(
-            ArgumentError('Pricing version and amount must be numbers.'),
+            ArgumentError(
+              'A versão do preço e o montante devem ser números.',
+            ),
             StackTrace.current,
           ));
       return;
@@ -1920,7 +1940,7 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
             pricingVersion: pricingVersion,
             currency: _currencyController.text.trim(),
             amount: amount,
-            billingPeriod: _billingPeriodController.text.trim(),
+            billingPeriod: _normalizeUnitInput(_billingPeriodController.text),
             isActive: _isActive,
           );
       ref.invalidate(adminPlanCatalogProvider);
@@ -1936,7 +1956,7 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
     }
     if (!mounted) return;
     messenger.showSnackBar(
-      const SnackBar(content: Text('Price saved')),
+      const SnackBar(content: Text('Preço guardado')),
     );
   }
 }
@@ -1954,7 +1974,7 @@ class _PlanFeatureUpsertPanelState
   final _planCodeController = TextEditingController();
   final _planVersionController = TextEditingController(text: '1');
   final _limitController = TextEditingController();
-  final _unitController = TextEditingController(text: 'monthly');
+  final _unitController = TextEditingController(text: 'mensal');
   String _featureKey = FeatureKeys.whatsappAutomation;
   bool _isEnabled = true;
   AsyncValue<void> _submission = const AsyncData(null);
@@ -1973,14 +1993,15 @@ class _PlanFeatureUpsertPanelState
     final isSaving = _submission.isLoading;
     return _AdminMutationPanel(
       width: 430,
-      title: 'Create or update feature',
-      description: 'Configure one feature gate for a specific plan version.',
+      title: 'Criar ou atualizar funcionalidade',
+      description:
+          'Configura uma funcionalidade para uma versão específica do plano.',
       error: _submission.error,
       children: [
         TextField(
           controller: _planCodeController,
           enabled: !isSaving,
-          decoration: const InputDecoration(labelText: 'Plan code'),
+          decoration: const InputDecoration(labelText: 'Código do plano'),
           onChanged: (_) => setState(() {}),
         ),
         const SizedBox(height: 12),
@@ -1991,7 +2012,7 @@ class _PlanFeatureUpsertPanelState
                 controller: _planVersionController,
                 enabled: !isSaving,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Plan version'),
+                decoration: const InputDecoration(labelText: 'Versão do plano'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -1999,7 +2020,7 @@ class _PlanFeatureUpsertPanelState
             Expanded(
               child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Enabled'),
+                title: const Text('Ativado'),
                 value: _isEnabled,
                 onChanged: isSaving
                     ? null
@@ -2011,7 +2032,7 @@ class _PlanFeatureUpsertPanelState
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           initialValue: _featureKey,
-          decoration: const InputDecoration(labelText: 'Feature'),
+          decoration: const InputDecoration(labelText: 'Funcionalidade'),
           items: FeatureKeys.all
               .map(
                 (featureKey) => DropdownMenuItem(
@@ -2036,7 +2057,7 @@ class _PlanFeatureUpsertPanelState
                 controller: _limitController,
                 enabled: !isSaving,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Limit'),
+                decoration: const InputDecoration(labelText: 'Limite'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -2045,7 +2066,7 @@ class _PlanFeatureUpsertPanelState
               child: TextField(
                 controller: _unitController,
                 enabled: !isSaving,
-                decoration: const InputDecoration(labelText: 'Unit'),
+                decoration: const InputDecoration(labelText: 'Unidade'),
                 onChanged: (_) => setState(() {}),
               ),
             ),
@@ -2063,7 +2084,7 @@ class _PlanFeatureUpsertPanelState
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.rule_outlined),
-            label: const Text('Save feature'),
+            label: const Text('Guardar funcionalidade'),
           ),
         ),
       ],
@@ -2079,7 +2100,9 @@ class _PlanFeatureUpsertPanelState
     if (planVersion == null ||
         (_limitController.text.trim().isNotEmpty && limitValue == null)) {
       setState(() => _submission = AsyncError(
-            ArgumentError('Plan version and limit must be numbers.'),
+            ArgumentError(
+              'A versão do plano e o limite devem ser números.',
+            ),
             StackTrace.current,
           ));
       return;
@@ -2095,7 +2118,7 @@ class _PlanFeatureUpsertPanelState
             limitValue: limitValue,
             unit: _unitController.text.trim().isEmpty
                 ? null
-                : _unitController.text.trim(),
+                : _normalizeUnitInput(_unitController.text),
           );
       ref.invalidate(adminPlanCatalogProvider);
       ref.invalidate(adminAuditEventsProvider(null));
@@ -2110,7 +2133,7 @@ class _PlanFeatureUpsertPanelState
     }
     if (!mounted) return;
     messenger.showSnackBar(
-      const SnackBar(content: Text('Plan feature saved')),
+      const SnackBar(content: Text('Funcionalidade do plano guardada')),
     );
   }
 }
@@ -2271,11 +2294,11 @@ class _AdminAuditEventTable extends StatelessWidget {
           headingRowColor:
               WidgetStateProperty.all(AppColors.surfaceContainerLow),
           columns: const [
-            DataColumn(label: Text('Time')),
-            DataColumn(label: Text('Action')),
-            DataColumn(label: Text('Target')),
-            DataColumn(label: Text('Actor')),
-            DataColumn(label: Text('Merchant')),
+            DataColumn(label: Text('Hora')),
+            DataColumn(label: Text('Ação')),
+            DataColumn(label: Text('Alvo')),
+            DataColumn(label: Text('Responsável')),
+            DataColumn(label: Text('Negócio')),
           ],
           rows: events.map((event) {
             return DataRow(
@@ -2401,10 +2424,11 @@ class _StatusBadge extends StatelessWidget {
     final normalized = label.trim().toUpperCase();
     final color = switch (normalized) {
       'ACTIVE' => AppColors.green,
-      'TRIAL' => AppColors.amber,
-      'PAST_DUE' || 'CANCELLED' => AppColors.red,
+      'TRIAL' || 'GRACE' || 'INVITED' => AppColors.amber,
+      'PAST_DUE' || 'CANCELED' || 'CANCELLED' || 'SUSPENDED' => AppColors.red,
       _ => AppColors.g500,
     };
+    final displayLabel = _translateStatusLabel(normalized);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -2413,7 +2437,7 @@ class _StatusBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        normalized,
+        displayLabel,
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: color,
               fontWeight: FontWeight.w800,
@@ -2489,7 +2513,97 @@ String _formatOptionalNumber(int? value) {
 }
 
 String _formatPrice(AdminPlanPrice price) {
-  return '${price.amount} ${price.currency} / ${price.billingPeriod}';
+  return '${price.amount} ${price.currency} / ${_translateUnitLabel(price.billingPeriod)}';
+}
+
+String _translateMerchantName(String value) {
+  final trimmed = value.trim();
+  if (trimmed.toUpperCase() == 'MERCHANT') {
+    return 'Negócio';
+  }
+  return trimmed.isEmpty ? value : trimmed;
+}
+
+String _translatePlanName(String value) {
+  final trimmed = value.trim();
+  if (trimmed.toUpperCase() == 'PLAN') {
+    return 'Plano';
+  }
+  return trimmed;
+}
+
+String _translateUserRole(String value) {
+  final normalized = value.trim().toUpperCase();
+  return switch (normalized) {
+    'OWNER' => 'Responsável',
+    'STAFF' => 'Equipa',
+    'ADMIN' || 'INTERNAL_ADMIN' => 'Administrador interno',
+    _ => value,
+  };
+}
+
+String _translateStatusLabel(String value) {
+  final normalized = value.trim().toUpperCase();
+  return switch (normalized) {
+    'ACTIVE' => 'ATIVO',
+    'TRIAL' => 'TESTE',
+    'GRACE' => 'TOLERÂNCIA',
+    'PAST_DUE' => 'EM ATRASO',
+    'CANCELED' || 'CANCELLED' => 'CANCELADO',
+    'SUSPENDED' => 'SUSPENSO',
+    'INACTIVE' => 'INATIVO',
+    'INVITED' => 'CONVIDADO',
+    'PENDING' => 'PENDENTE',
+    'FAILED' => 'FALHA',
+    'UNKNOWN' => 'DESCONHECIDO',
+    _ => normalized,
+  };
+}
+
+String _translateSyncPhase(String value) {
+  final normalized = value.trim().toLowerCase();
+  return switch (normalized) {
+    'synced' => 'Sincronizado',
+    'syncing' => 'A sincronizar',
+    'offline' => 'Sem ligação',
+    'pendingchanges' => 'Alterações pendentes',
+    'syncfailed' => 'Sincronização com falha',
+    'retrying' => 'A tentar novamente',
+    _ => value,
+  };
+}
+
+String _translateUnitLabel(String value) {
+  final normalized = value.trim().toLowerCase();
+  return switch (normalized) {
+    'monthly' || 'mensal' => 'mensal',
+    'weekly' || 'semanal' => 'semanal',
+    'daily' || 'diário' || 'diario' => 'diário',
+    'yearly' || 'annual' || 'anual' => 'anual',
+    _ => value.trim(),
+  };
+}
+
+String _normalizeUnitInput(String value) {
+  final normalized = value.trim().toLowerCase();
+  return switch (normalized) {
+    'monthly' || 'mensal' => 'monthly',
+    'weekly' || 'semanal' => 'weekly',
+    'daily' || 'diário' || 'diario' => 'daily',
+    'yearly' || 'annual' || 'anual' => 'yearly',
+    _ => value.trim(),
+  };
+}
+
+String _formatSyncQueue(SyncStatus status) {
+  return '${status.pendingCount} pendentes / ${status.failedCount} falhas';
+}
+
+String _formatQuota(UsageQuotaSummary quota) {
+  if (quota.limit == null) {
+    return '${quota.used} usados / ilimitado';
+  }
+  return '${quota.used}/${quota.limit} usados';
 }
 
 class _AdminMetricCard extends StatelessWidget {
@@ -2553,7 +2667,7 @@ class _AdminOverviewLinksPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Admin workbench',
+              'Área administrativa',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: AppColors.onSurface,
                     fontWeight: FontWeight.w800,
@@ -2561,7 +2675,7 @@ class _AdminOverviewLinksPanel extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Jump directly into operational areas with live data and audited mutations.',
+              'Entre diretamente nas áreas operacionais com dados em tempo real e alterações auditadas.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.onSurfaceVariant,
                   ),
@@ -2572,17 +2686,17 @@ class _AdminOverviewLinksPanel extends StatelessWidget {
               runSpacing: 10,
               children: [
                 _AdminOverviewLinkButton(
-                  label: 'Merchants',
+                  label: 'Negócios',
                   icon: Icons.store_mall_directory_outlined,
                   path: '/admin/merchants',
                 ),
                 _AdminOverviewLinkButton(
-                  label: 'Plans',
+                  label: 'Planos',
                   icon: Icons.sell_outlined,
                   path: '/admin/plans',
                 ),
                 _AdminOverviewLinkButton(
-                  label: 'Operations',
+                  label: 'Operações',
                   icon: Icons.monitor_heart_outlined,
                   path: '/admin/operations',
                 ),
@@ -2619,31 +2733,31 @@ class _AdminOverviewLinkButton extends StatelessWidget {
 enum _AdminPortalDestination {
   overview(
     section: AdminPortalSection.overview,
-    label: 'Overview',
+    label: 'Visão geral',
     path: '/admin',
     icon: Icons.dashboard_outlined,
   ),
   merchants(
     section: AdminPortalSection.merchants,
-    label: 'Merchants',
+    label: 'Negócios',
     path: '/admin/merchants',
     icon: Icons.store_mall_directory_outlined,
   ),
   plans(
     section: AdminPortalSection.plans,
-    label: 'Plans and pricing',
+    label: 'Planos e preços',
     path: '/admin/plans',
     icon: Icons.sell_outlined,
   ),
   operations(
     section: AdminPortalSection.operations,
-    label: 'Operations',
+    label: 'Operações',
     path: '/admin/operations',
     icon: Icons.monitor_heart_outlined,
   ),
   selfService(
     section: AdminPortalSection.selfService,
-    label: 'Owner self-service',
+    label: 'Autoatendimento do responsável',
     path: '/admin/self-service',
     icon: Icons.manage_accounts_outlined,
   );

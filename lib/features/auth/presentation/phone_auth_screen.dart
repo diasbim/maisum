@@ -174,7 +174,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
             setState(() => _isSendingCode = false);
             AppFeedback.showSuccessToast(
               context,
-              message: 'Codigo de verificacao enviado com sucesso',
+              message: 'Código de verificação enviado com sucesso',
             );
             context.push('/otp',
                 extra: OtpScreenArgs(
@@ -218,7 +218,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
               AppFeedback.showMessage(
                 context,
                 message: message.isEmpty
-                    ? 'Nao foi possivel autenticar automaticamente. Digite o codigo SMS.'
+                    ? 'Não foi possível autenticar automaticamente. Introduza o código por SMS.'
                     : message,
                 isError: true,
               );
@@ -259,7 +259,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
       AppFeedback.showMessage(
         context,
         message: message.isEmpty
-            ? 'Nao foi possivel autenticar com Google. Tente novamente.'
+            ? 'Não foi possível autenticar com o Google. Tente novamente.'
             : message,
         isError: true,
       );
@@ -373,7 +373,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                               ),
                               const SizedBox(height: AppSpacing.xs),
                               Text(
-                                'Entre com o seu numero\npara continuar.',
+                                'Introduza o seu número\npara continuar.',
                                 textAlign: TextAlign.center,
                                 style: (compact
                                         ? theme.textTheme.bodySmall
@@ -386,7 +386,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                               ),
                               SizedBox(height: sectionSpacing),
                               Text(
-                                'Numero de telefone',
+                                'Número de telemóvel',
                                 style: theme.textTheme.labelLarge?.copyWith(
                                   color: AppColors.onSurface,
                                   fontWeight: FontWeight.w700,
@@ -439,7 +439,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                       ),
                                       const SizedBox(width: AppSpacing.xs),
                                       Text(
-                                        'Login seguro via SMS',
+                                        'Acesso por SMS',
                                         style: theme.textTheme.labelSmall
                                             ?.copyWith(
                                           color: AppColors.primaryDarker,
@@ -459,7 +459,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                     _canSubmit,
                                 isLoading: _isSendingCode,
                                 label: 'CONTINUAR',
-                                loadingLabel: 'A enviar codigo...',
+                                loadingLabel: 'A enviar código...',
                                 radius: AppRadius.lg,
                                 backgroundColor: AppColors.primaryDarker,
                               ),
@@ -534,7 +534,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                             'Ao continuar, concorda com os nossos ',
                                       ),
                                       TextSpan(
-                                        text: 'Termos de Servico',
+                                        text: 'Termos de Serviço',
                                         recognizer: _termsRecognizer,
                                         style:
                                             theme.textTheme.bodySmall?.copyWith(
@@ -547,7 +547,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                       ),
                                       const TextSpan(text: ' e '),
                                       TextSpan(
-                                        text: 'Politica de Privacidade',
+                                        text: 'Política de Privacidade',
                                         recognizer: _privacyRecognizer,
                                         style:
                                             theme.textTheme.bodySmall?.copyWith(
@@ -1032,7 +1032,7 @@ class _WelcomeTerms extends StatelessWidget {
               GestureDetector(
                 onTap: onTerms,
                 child: Text(
-                  'Termos de Servico',
+                  'Termos de Serviço',
                   style: TextStyle(
                     color: _brandAccent,
                     decoration: TextDecoration.underline,
@@ -1053,7 +1053,7 @@ class _WelcomeTerms extends StatelessWidget {
               GestureDetector(
                 onTap: onPrivacy,
                 child: Text(
-                  'Politica de Privacidade.',
+                  'Política de Privacidade.',
                   style: TextStyle(
                     color: _brandAccent,
                     decoration: TextDecoration.underline,
@@ -1164,7 +1164,7 @@ class _WelcomeBusinessFallback extends StatelessWidget {
 class AuthStepProgress extends StatelessWidget {
   final int currentStep;
   const AuthStepProgress({super.key, required this.currentStep});
-  static const _labels = ['Telefone', 'Verificar', 'PIN', 'Pronto'];
+  static const _labels = ['Telemóvel', 'Verificar', 'PIN', 'Pronto'];
 
   @override
   Widget build(BuildContext context) {
@@ -1198,14 +1198,18 @@ class AuthStepProgress extends StatelessWidget {
             return Expanded(
               child: Padding(
                 padding: EdgeInsets.only(right: i < 3 ? 6 : 0),
-                child: Text(
-                  _labels[i],
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: isCurrent
-                        ? AppColors.primaryLight
-                        : AppColors.onSurfaceVariant.withValues(alpha: 0.75),
-                    fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
-                    letterSpacing: 0,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _labels[i],
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: isCurrent
+                          ? AppColors.primaryLight
+                          : AppColors.onSurfaceVariant.withValues(alpha: 0.75),
+                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w400,
+                      letterSpacing: 0,
+                    ),
                   ),
                 ),
               ),

@@ -31,15 +31,15 @@ class EngageDashboardScreen extends ConsumerWidget {
           child: CircularProgressIndicator(color: AppColors.secondary),
         ),
         error: (_, __) => EmptyState(
-          title: 'Nao foi possivel carregar o Engage',
-          subtitle: 'Verifique a ligacao e tente novamente.',
+          title: 'Não foi possível carregar o Engage',
+          subtitle: 'Verifique a ligação e tente novamente.',
           actionLabel: 'Tentar de novo',
           onAction: () => ref.invalidate(engageAccessProvider),
         ),
         data: (access) {
           if (access.isBlocked) {
             return EmptyState(
-              title: 'Engage indisponivel no seu plano',
+              title: 'Engage indisponível no seu plano',
               subtitle:
                   'Atualize para Pro ou Business para acompanhar risco e recuperar clientes.',
               actionLabel: 'Falar no WhatsApp',
@@ -58,7 +58,7 @@ class EngageDashboardScreen extends ConsumerWidget {
               child: CircularProgressIndicator(color: AppColors.secondary),
             ),
             error: (_, __) => EmptyState(
-              title: 'Nao foi possivel carregar os dados do Engage',
+              title: 'Não foi possível carregar os dados do Engage',
               subtitle: 'Tente novamente para atualizar risco e fila.',
               actionLabel: 'Atualizar',
               onAction: () =>
@@ -79,12 +79,12 @@ class EngageDashboardScreen extends ConsumerWidget {
                   if (access.isReadOnly)
                     const _ReadOnlyBanner(
                       text:
-                          'Plano Pro: visualizacao ativa. Acoes de recuperacao e visitas exigem Business.',
+                          'Plano Pro: visualização ativa. Ações de recuperação e visitas exigem o plano Business.',
                     )
                   else
                     const _ReadOnlyBanner(
                       text:
-                          'Plano Business: acesso completo a recuperacao, visitas e surveys Engage.',
+                          'Plano Business: acesso completo a recuperação, visitas e questionários do Engage.',
                       isSuccess: true,
                     ),
                   const SizedBox(height: AppSpacing.lg),
@@ -97,7 +97,7 @@ class EngageDashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _KpiCard(
-                    title: 'Clientes criticos',
+                    title: 'Clientes críticos',
                     value: '${overview.dashboard.criticalCustomers}',
                     subtitle:
                         'Receita em risco: ${_formatMoney(overview.dashboard.revenueAtRisk)}',
@@ -112,9 +112,9 @@ class EngageDashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   _ActionCard(
-                    title: 'Fila de recuperacao',
+                    title: 'Fila de recuperação',
                     subtitle: access.canManageRecovery
-                        ? 'Criar e executar tarefas de recuperacao.'
+                        ? 'Criar e executar tarefas de recuperação.'
                         : 'Somente leitura no plano atual.',
                     icon: Icons.playlist_add_check_circle_outlined,
                     enabled: access.canManageRecovery,
@@ -122,69 +122,70 @@ class EngageDashboardScreen extends ConsumerWidget {
                         ? context.push('/engage/actions')
                         : context.push(featureUpsellLocation(
                             featureKey: FeatureKeys.engageManageRecovery,
-                            featureName: 'Fila de recuperacao',
+                            featureName: 'Fila de recuperação',
                             reason: 'plan_restricted',
                           )),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
-                    title: 'Relatorios de visitas',
+                    title: 'Relatórios de visitas',
                     subtitle: access.canManageVisits
-                        ? 'Registar visitas e resultados de recuperacao.'
-                        : 'Disponivel apenas no plano Business.',
+                        ? 'Registar visitas e resultados de recuperação.'
+                        : 'Disponível apenas no plano Business.',
                     icon: Icons.assignment_turned_in_outlined,
                     enabled: access.canManageVisits,
                     onTap: () => access.canManageVisits
                         ? context.push('/engage/visit-report')
                         : context.push(featureUpsellLocation(
                             featureKey: FeatureKeys.engageManageVisits,
-                            featureName: 'Relatorios de visitas',
+                            featureName: 'Relatórios de visitas',
                             reason: 'plan_restricted',
                           )),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
-                    title: 'Criar survey',
+                    title: 'Criar questionário',
                     subtitle: access.canManageSurveys
-                        ? 'Builder rapido com templates e maximo de 5 perguntas.'
-                        : 'Disponivel apenas no plano Business.',
+                        ? 'Criação rápida com modelos e um máximo de 5 perguntas.'
+                        : 'Disponível apenas no plano Business.',
                     icon: Icons.quiz_outlined,
                     enabled: access.canManageSurveys,
                     onTap: () => access.canManageSurveys
                         ? context.push('/engage/surveys/new')
                         : context.push(featureUpsellLocation(
                             featureKey: FeatureKeys.engageManageSurveys,
-                            featureName: 'Criar survey',
+                            featureName: 'Criar questionário',
                             reason: 'plan_restricted',
                           )),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
-                    title: 'Submeter resposta de survey',
+                    title: 'Submeter resposta ao questionário',
                     subtitle: access.canManageSurveys
-                        ? 'Envio manual para fluxo de recuperacao e acompanhamento.'
-                        : 'Disponivel apenas no plano Business.',
+                        ? 'Envio manual para o fluxo de recuperação e acompanhamento.'
+                        : 'Disponível apenas no plano Business.',
                     icon: Icons.send_outlined,
                     enabled: access.canManageSurveys,
                     onTap: () => access.canManageSurveys
                         ? context.push('/engage/surveys/respond')
                         : context.push(featureUpsellLocation(
                             featureKey: FeatureKeys.engageManageSurveys,
-                            featureName: 'Submeter resposta de survey',
+                            featureName: 'Submeter resposta ao questionário',
                             reason: 'plan_restricted',
                           )),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
-                    title: 'Analytics de surveys',
-                    subtitle: 'Response rate, satisfacao e top motivos.',
+                    title: 'Análise de questionários',
+                    subtitle:
+                        'Taxa de resposta, satisfação e principais motivos.',
                     icon: Icons.insights_outlined,
                     enabled: access.canManageSurveys,
                     onTap: () => access.canManageSurveys
                         ? context.push('/engage/surveys/analytics')
                         : context.push(featureUpsellLocation(
                             featureKey: FeatureKeys.engageManageSurveys,
-                            featureName: 'Analytics de surveys',
+                            featureName: 'Análise de questionários',
                             reason: 'plan_restricted',
                           )),
                   ),
@@ -229,7 +230,7 @@ class EngageDashboardScreen extends ConsumerWidget {
                                 if (context.mounted) {
                                   AppFeedback.showSuccessToast(
                                     context,
-                                    message: 'Tarefa de recuperacao criada',
+                                    message: 'Tarefa de recuperação criada',
                                     subtitle: first.customerName,
                                   );
                                 }

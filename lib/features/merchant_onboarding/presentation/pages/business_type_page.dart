@@ -36,7 +36,9 @@ class _BusinessTypePageState extends ConsumerState<BusinessTypePage> {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Nao foi possivel carregar o onboarding.')),
+          body: ErrorCard(
+        message: 'Não foi possível carregar a configuração inicial.',
+      )),
       data: (state) {
         final types = state.config.businessTypes;
 
@@ -204,7 +206,7 @@ class _BusinessTypeShellState extends State<_BusinessTypeShell> {
                       if (widget.types.isEmpty)
                         const ErrorCard(
                           message:
-                              'As categorias de negocio ainda nao foram configuradas no Firestore.',
+                              'As categorias de negócio ainda não foram configuradas no Firestore.',
                         )
                       else ...[
                         _BusinessTypeGrid(

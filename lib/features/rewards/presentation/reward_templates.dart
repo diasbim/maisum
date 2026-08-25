@@ -24,7 +24,7 @@ const genericRewardTemplatePresets = <RewardTemplatePreset>[
     label: 'Desconto 10%',
     rewardName: 'Desconto de 10%',
     pointsRequired: 500,
-    description: 'Aplique 10% de desconto na proxima compra.',
+    description: 'Aplique 10% de desconto na próxima compra.',
     icon: Icons.percent_rounded,
   ),
   RewardTemplatePreset(
@@ -32,7 +32,7 @@ const genericRewardTemplatePresets = <RewardTemplatePreset>[
     label: 'Desconto 20%',
     rewardName: 'Desconto de 20%',
     pointsRequired: 800,
-    description: 'Aplique 20% de desconto na proxima compra.',
+    description: 'Aplique 20% de desconto na próxima compra.',
     icon: Icons.percent_rounded,
   ),
   RewardTemplatePreset(
@@ -40,7 +40,7 @@ const genericRewardTemplatePresets = <RewardTemplatePreset>[
     label: 'Brinde',
     rewardName: 'Brinde especial',
     pointsRequired: 600,
-    description: 'Ofereca um brinde escolhido pelo negocio.',
+    description: 'Ofereça um brinde escolhido pelo negócio.',
     icon: Icons.card_giftcard_rounded,
   ),
 ];
@@ -48,10 +48,10 @@ const genericRewardTemplatePresets = <RewardTemplatePreset>[
 const barberRewardTemplatePresets = <RewardTemplatePreset>[
   RewardTemplatePreset(
     code: 'corte_gratis',
-    label: 'Corte gratis',
-    rewardName: 'Corte gratis',
+    label: 'Corte grátis',
+    rewardName: 'Corte grátis',
     pointsRequired: 1000,
-    description: 'Ganhe um corte completo apos juntar os pontos.',
+    description: 'Ganhe um corte completo após juntar os pontos.',
     icon: Icons.content_cut_rounded,
   ),
   RewardTemplatePreset(
@@ -64,10 +64,10 @@ const barberRewardTemplatePresets = <RewardTemplatePreset>[
   ),
   RewardTemplatePreset(
     code: 'combo_lavagem',
-    label: 'Lavagem + finalizacao',
-    rewardName: 'Lavagem + finalizacao',
+    label: 'Lavagem + finalização',
+    rewardName: 'Lavagem + finalização',
     pointsRequired: 850,
-    description: 'Resgate um combo rapido de lavagem e finalizacao.',
+    description: 'Resgate um conjunto rápido de lavagem e finalização.',
     icon: Icons.shower_rounded,
   ),
 ];

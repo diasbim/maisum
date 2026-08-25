@@ -105,7 +105,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('Numero invalido. Use prefixos 82-87 e 9 digitos.'),
+      find.text('Número inválido. Use os prefixos 82–87 e 9 dígitos.'),
       findsNothing,
     );
 
@@ -117,7 +117,7 @@ void main() {
     await tester.pump();
 
     expect(
-      find.text('Numero invalido. Use prefixos 82-87 e 9 digitos.'),
+      find.text('Número inválido. Use os prefixos 82–87 e 9 dígitos.'),
       findsOneWidget,
     );
   });

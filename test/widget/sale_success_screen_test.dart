@@ -120,7 +120,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Agendar proximo corte?'), findsOneWidget);
+      expect(find.text('Agendar próximo corte?'), findsOneWidget);
     });
   });
 

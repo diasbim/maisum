@@ -137,7 +137,7 @@ class _OnboardingPlanSelectionScreenState
     if (merchantId == null || merchantId.isEmpty) {
       AppFeedback.showMessage(
         context,
-        message: 'Nao foi possivel confirmar o plano. Tente novamente.',
+        message: 'Não foi possível confirmar o plano. Tente novamente.',
         isError: true,
       );
       return;
@@ -187,7 +187,7 @@ class _OnboardingPlanSelectionScreenState
       }
       AppFeedback.showMessage(
         context,
-        message: 'Nao foi possivel confirmar o plano. Tente novamente.',
+        message: 'Não foi possível confirmar o plano. Tente novamente.',
         isError: true,
       );
     } finally {
@@ -235,7 +235,7 @@ class _OnboardingPlanSelectionScreenState
                   const SizedBox(height: 14),
                   _NextStepOption(
                     icon: Icons.groups_rounded,
-                    label: 'Convidar staff agora',
+                    label: 'Convidar a equipa agora',
                     highlighted: true,
                     onTap: () => Navigator.of(ctx).pop('/staff-management'),
                   ),
@@ -248,7 +248,7 @@ class _OnboardingPlanSelectionScreenState
                   const SizedBox(height: 8),
                   _NextStepOption(
                     icon: Icons.dashboard_rounded,
-                    label: 'Ir para dashboard',
+                    label: 'Ir para o painel',
                     onTap: () => Navigator.of(ctx).pop('/dashboard'),
                   ),
                 ],
@@ -684,17 +684,17 @@ String _planTitle(Plan plan) {
 List<_PlanBenefitData> _planBenefits(Plan plan) {
   return switch (plan) {
     Plan.free => const [
-        _PlanBenefitData(label: 'WhatsApp automatico'),
+        _PlanBenefitData(label: 'WhatsApp automático'),
       ],
     Plan.starter => const [
         _PlanBenefitData(label: 'Clientes'),
-        _PlanBenefitData(label: 'Fidelizacao'),
+        _PlanBenefitData(label: 'Fidelização'),
         _PlanBenefitData(label: 'Recompensas'),
       ],
     Plan.business => const [
         _PlanBenefitData(label: 'Tudo do Starter'),
         _PlanBenefitData(label: 'Campanhas'),
-        _PlanBenefitData(label: 'Relatorios'),
+        _PlanBenefitData(label: 'Relatórios'),
       ],
     _ => const [
         _PlanBenefitData(label: 'Recursos premium'),
@@ -704,7 +704,7 @@ List<_PlanBenefitData> _planBenefits(Plan plan) {
 
 String _planPrimaryCta(Plan plan) {
   return switch (plan) {
-    Plan.free => 'Comecar gratis',
+    Plan.free => 'Começar grátis',
     Plan.starter => 'Escolher Plano',
     Plan.business => 'Falar Connosco',
     _ => 'Selecionar',
@@ -713,7 +713,7 @@ String _planPrimaryCta(Plan plan) {
 
 String _formatPrice(int? priceCents, {String? currency}) {
   if (priceCents == null || priceCents < 0) {
-    return 'Preco sob consulta';
+    return 'Preço sob consulta';
   }
   final symbol = (currency?.toUpperCase() ?? 'BRL') == 'BRL'
       ? 'R\$'

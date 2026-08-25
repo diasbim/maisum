@@ -87,7 +87,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
             _verificationId = newVerificationId;
             AppFeedback.showSuccessToast(
               context,
-              message: 'Codigo de verificacao reenviado',
+              message: 'Código de verificação reenviado',
             );
           },
           onError: (error) {
@@ -106,7 +106,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       if (!mounted) return;
       AppFeedback.showMessage(
         context,
-        message: 'Por favor, insira o codigo completo',
+        message: 'Introduza o código completo',
         isError: true,
       );
       return;
@@ -144,7 +144,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       AppFeedback.showMessage(
         context,
         message: message.isEmpty
-            ? 'Nao foi possivel validar o codigo. Tente novamente.'
+            ? 'Não foi possível validar o código. Tente novamente.'
             : message,
         isError: true,
       );

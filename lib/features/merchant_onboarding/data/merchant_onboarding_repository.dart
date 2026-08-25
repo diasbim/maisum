@@ -68,7 +68,7 @@ class MerchantOnboardingRepository {
   }) async {
     final merchantId = session.resolvedMerchantId;
     if (merchantId.isEmpty) {
-      throw StateError('Sessao invalida para criar comerciante.');
+      throw StateError('Sessão inválida para criar comerciante.');
     }
 
     final now = DateTime.now().millisecondsSinceEpoch;

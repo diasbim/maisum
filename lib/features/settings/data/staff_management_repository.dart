@@ -77,12 +77,12 @@ class StaffManagementRepository {
       limit: 1,
     );
     if (existingRows.isEmpty) {
-      throw StateError('Staff não encontrado.');
+      throw StateError('Membro da equipa não encontrado.');
     }
 
     final existing = StaffMember.fromMap(existingRows.first);
     if (existing.isOwner) {
-      throw StateError('Não é permitido desativar conta OWNER.');
+      throw StateError('Não é permitido desativar a conta do responsável.');
     }
 
     final now = DateTime.now();
@@ -166,7 +166,9 @@ class StaffManagementRepository {
     } else {
       final existing = StaffMember.fromMap(existingRows.first);
       if (existing.isOwner) {
-        throw StateError('Conta OWNER não pode ser alterada por este fluxo.');
+        throw StateError(
+          'A conta do responsável não pode ser alterada por este fluxo.',
+        );
       }
 
       entityId = existing.id;
@@ -213,7 +215,7 @@ class StaffManagementRepository {
       limit: 1,
     );
     if (rows.isEmpty) {
-      throw StateError('Staff não encontrado.');
+      throw StateError('Membro da equipa não encontrado.');
     }
     return rows.first;
   }
@@ -238,7 +240,7 @@ class StaffManagementRepository {
   String _requireMerchantId() {
     final scopedMerchantId = merchantId?.trim();
     if (scopedMerchantId == null || scopedMerchantId.isEmpty) {
-      throw StateError('Sessão inválida para gestão de staff.');
+      throw StateError('Sessão inválida para a gestão da equipa.');
     }
     return scopedMerchantId;
   }

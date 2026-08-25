@@ -15,6 +15,10 @@
     "/^flutter test test\\\\unit\\\\business_profile\\\\business_profile_test\\.dart$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^firebase deploy --project loyaltyos-fc4dd --only \"functions,firestore:rules,firestore:indexes\" --non-interactive$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   },
   "java.configuration.updateBuildConfiguration": "interactive"

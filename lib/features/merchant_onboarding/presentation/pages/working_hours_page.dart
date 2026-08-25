@@ -20,7 +20,7 @@ class WorkingHoursPage extends ConsumerWidget {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Nao foi possivel carregar os horarios.')),
+          body: ErrorCard(message: 'Não foi possível carregar os horários.')),
       data: (state) {
         final hours = state.draft.workingHours.isEmpty
             ? state.config.defaultWorkingHours
@@ -47,7 +47,7 @@ class WorkingHoursPage extends ConsumerWidget {
             if (!hasConfig)
               const ErrorCard(
                 message:
-                    'Os horarios padrao ainda nao foram configurados no Firestore.',
+                    'Os horários padrão ainda não foram configurados no Firestore.',
               )
             else ...[
               Row(

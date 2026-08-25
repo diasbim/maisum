@@ -63,11 +63,11 @@ class RecurringCustomerCard extends StatelessWidget {
             value: '${customer.totalVisits}',
           ),
           _MetricRow(
-            label: 'Ultima visita',
+            label: 'Última visita',
             value: _formatDate(customer.lastVisitAt),
           ),
           _MetricRow(
-            label: 'Frequencia',
+            label: 'Frequência',
             value: customer.averageVisitInterval <= 0
                 ? '-'
                 : '${customer.averageVisitInterval} dias',

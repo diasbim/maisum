@@ -755,10 +755,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Barbearia'), findsOneWidget);
-      expect(find.text('Salao de beleza'), findsOneWidget);
+      expect(find.text('Salão de beleza'), findsOneWidget);
       expect(
         find.text(
-          'As categorias de negocio ainda nao foram configuradas no Firestore.',
+          'As categorias de negócio ainda não foram configuradas no Firestore.',
         ),
         findsNothing,
       );
@@ -795,7 +795,9 @@ void main() {
 
       expect(find.text('Barbearia'), findsOneWidget);
       expect(
-          find.text('Nao foi possivel carregar o onboarding.'), findsNothing);
+        find.text('Não foi possível carregar a configuração inicial.'),
+        findsNothing,
+      );
       expect(tester.takeException(), isNull);
     });
 
@@ -828,9 +830,9 @@ void main() {
       await tester.pumpAndSettle();
       await _tapVisibleText(tester, 'Continuar');
 
-      expect(find.text('Dados do negocio'), findsOneWidget);
+      expect(find.text('Dados do negócio'), findsOneWidget);
       expect(
-          find.widgetWithText(TextField, 'Nome do negocio *'), findsOneWidget);
+          find.widgetWithText(TextField, 'Nome do negócio *'), findsOneWidget);
     });
 
     testWidgets('business type continue ignores stale incomplete location step',
@@ -868,8 +870,8 @@ void main() {
 
       await _tapVisibleText(tester, 'Continuar');
 
-      expect(find.text('Dados do negocio'), findsOneWidget);
-      expect(find.text('Selecione a localizacao do negocio.'), findsNothing);
+      expect(find.text('Dados do negócio'), findsOneWidget);
+      expect(find.text('Selecione a localização do negócio.'), findsNothing);
     });
 
     testWidgets('new flow loads config and saves merchant profile in Firestore',
@@ -904,7 +906,7 @@ void main() {
       await _tapVisibleText(tester, 'Continuar');
 
       await tester.enterText(
-        find.widgetWithText(TextField, 'Nome do negocio *'),
+        find.widgetWithText(TextField, 'Nome do negócio *'),
         'Barbearia Firebase',
       );
       await tester.enterText(
@@ -915,7 +917,7 @@ void main() {
       await _tapVisibleText(tester, 'Continuar');
 
       await tester.enterText(
-        find.widgetWithText(TextField, 'Endereco selecionado *'),
+        find.widgetWithText(TextField, 'Endereço selecionado *'),
         'Rua Firebase 123',
       );
       await tester.enterText(
@@ -1104,7 +1106,7 @@ void main() {
       await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Selecione uma opcao para continuar.'), findsOneWidget);
+      expect(find.text('Selecione uma opção para continuar.'), findsOneWidget);
       expect(find.text('link-device-route'), findsNothing);
       expect(find.text('merchant-config-route'), findsNothing);
     });
@@ -1121,7 +1123,7 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.bySemanticsLabel('Continuar para o proximo passo'),
+          find.bySemanticsLabel('Continuar para o próximo passo'),
           findsOneWidget,
         );
       } finally {
@@ -1134,7 +1136,7 @@ void main() {
       await tester.pumpWidget(_buildOnboardingEntryFlow());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Entrar em negocio existente'));
+      await tester.tap(find.text('Entrar num negócio existente'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();
@@ -1164,7 +1166,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Criar novo negocio'));
+      await tester.tap(find.text('Criar novo negócio'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();

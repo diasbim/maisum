@@ -63,7 +63,7 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageVisits,
-                  featureName: 'Relatorios de visitas',
+                  featureName: 'Relatórios de visitas',
                   reason: 'plan_restricted',
                 ),
               ),
@@ -74,7 +74,7 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
             padding: const EdgeInsets.all(AppSpacing.xl),
             children: [
               const Text(
-                'Registrar visita',
+                'Registar visita',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -136,7 +136,7 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.assignment_turned_in_outlined),
-                label: Text(_submitting ? 'A gravar...' : 'Salvar relatório'),
+                label: Text(_submitting ? 'A gravar...' : 'Guardar relatório'),
               ),
             ],
           );

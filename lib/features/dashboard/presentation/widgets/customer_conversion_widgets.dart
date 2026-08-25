@@ -265,7 +265,7 @@ class QuickSaleButton extends StatelessWidget {
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
         icon: const Icon(Icons.point_of_sale_rounded, size: 18),
-        label: const Text('Registrar venda'),
+        label: const Text('Registar venda'),
       ),
     );
   }

@@ -16,12 +16,12 @@ class BusinessItemPreset {
 
 class BusinessTerminology {
   const BusinessTerminology({
-    this.business = 'negocio',
-    this.businessCode = 'Codigo do negocio',
+    this.business = 'negócio',
+    this.businessCode = 'Código do negócio',
     this.transaction = 'venda',
-    this.appointment = 'marcacao',
-    this.appointments = 'marcacoes',
-    this.nextVisit = 'proxima visita',
+    this.appointment = 'marcação',
+    this.appointments = 'marcações',
+    this.nextVisit = 'próxima visita',
   });
 
   final String business;
@@ -181,7 +181,7 @@ class BusinessProfiles {
 
   static const generic = BusinessProfile(
     id: 'other',
-    label: 'Outro negocio local',
+    label: 'Outro negócio local',
     iconKey: 'store',
     capabilities: BusinessCapabilities(
       services: true,
@@ -204,7 +204,7 @@ class BusinessProfiles {
       terminology: BusinessTerminology(
         appointment: 'corte',
         appointments: 'cortes',
-        nextVisit: 'proximo corte',
+        nextVisit: 'próximo corte',
       ),
       retention: BusinessRetentionDefaults(
         activeDays: 14,
@@ -235,7 +235,7 @@ class BusinessProfiles {
     ),
     BusinessProfile(
       id: 'salon',
-      label: 'Salao de beleza',
+      label: 'Salão de beleza',
       iconKey: 'salon',
       capabilities: BusinessCapabilities(
         services: true,
@@ -264,7 +264,7 @@ class BusinessProfiles {
     ),
     BusinessProfile(
       id: 'spa',
-      label: 'Spa e estetica',
+      label: 'Spa e estética',
       iconKey: 'spa',
       capabilities: BusinessCapabilities(
         services: true,
@@ -293,7 +293,7 @@ class BusinessProfiles {
     ),
     BusinessProfile(
       id: 'retail',
-      label: 'Loja e comercio',
+      label: 'Loja e comércio',
       iconKey: 'store',
       capabilities: BusinessCapabilities(
         services: false,
@@ -323,7 +323,7 @@ class BusinessProfiles {
       itemPresets: [
         BusinessItemPreset(
           id: 'meal',
-          name: 'Refeicao',
+          name: 'Refeição',
           kind: BusinessItemKind.product,
           iconKey: 'restaurant',
         ),
@@ -337,7 +337,7 @@ class BusinessProfiles {
     ),
     BusinessProfile(
       id: 'cafe',
-      label: 'Cafe e pastelaria',
+      label: 'Café e pastelaria',
       iconKey: 'cafe',
       capabilities: BusinessCapabilities(
         services: false,
@@ -366,7 +366,7 @@ class BusinessProfiles {
     ),
     BusinessProfile(
       id: 'clinic',
-      label: 'Clinica e saude',
+      label: 'Clínica e saúde',
       iconKey: 'clinic',
       capabilities: BusinessCapabilities(
         services: true,
@@ -408,7 +408,7 @@ class BusinessProfiles {
     ),
     BusinessProfile(
       id: 'workshop',
-      label: 'Oficina e reparacoes',
+      label: 'Oficina e reparações',
       iconKey: 'workshop',
       capabilities: BusinessCapabilities(
         services: true,
@@ -424,13 +424,13 @@ class BusinessProfiles {
       itemPresets: [
         BusinessItemPreset(
           id: 'repair',
-          name: 'Reparacao',
+          name: 'Reparação',
           kind: BusinessItemKind.service,
           iconKey: 'workshop',
         ),
         BusinessItemPreset(
           id: 'maintenance',
-          name: 'Manutencao',
+          name: 'Manutenção',
           kind: BusinessItemKind.service,
           iconKey: 'workshop',
         ),
@@ -438,7 +438,7 @@ class BusinessProfiles {
     ),
     BusinessProfile(
       id: 'professional_services',
-      label: 'Servicos profissionais',
+      label: 'Serviços profissionais',
       iconKey: 'services',
       capabilities: BusinessCapabilities(
         services: true,

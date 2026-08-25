@@ -151,7 +151,7 @@ class _FeatureUpsellScreenState extends ConsumerState<FeatureUpsellScreen> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     MaisUmButton(
-                      label: 'Ver subscricao',
+                      label: 'Ver subscrição',
                       variant: MaisUmButtonVariant.ghost,
                       onPressed: () => context.push('/subscription-admin'),
                     ),
@@ -183,7 +183,7 @@ class _FeatureUpsellScreenState extends ConsumerState<FeatureUpsellScreen> {
       if (!launched && mounted) {
         AppFeedback.showMessage(
           context,
-          message: 'Nao foi possivel abrir o WhatsApp neste dispositivo.',
+          message: 'Não foi possível abrir o WhatsApp neste dispositivo.',
           isError: true,
         );
       }
@@ -197,9 +197,9 @@ class _FeatureUpsellScreenState extends ConsumerState<FeatureUpsellScreen> {
 
 String _titleForReason(String? reason) {
   return switch (reason) {
-    'trial_expired' => 'O periodo de teste terminou',
+    'trial_expired' => 'O período de teste terminou',
     'quota_exceeded' => 'O limite do plano foi atingido',
-    'subscription_inactive' || 'grace_expired' => 'Subscricao inativa',
+    'subscription_inactive' || 'grace_expired' => 'Subscrição inativa',
     _ => 'Funcionalidade paga',
   };
 }
@@ -207,12 +207,12 @@ String _titleForReason(String? reason) {
 String _subtitleForReason(String? reason) {
   return switch (reason) {
     'trial_expired' =>
-      'O teste de 30 dias deu acesso a todas as funcionalidades. Para continuar a usar esta area, fale com a equipa MaisUm no WhatsApp.',
+      'O teste de 30 dias deu acesso a todas as funcionalidades. Para continuar a usar esta área, fale com a equipa MaisUm no WhatsApp.',
     'quota_exceeded' =>
       'O plano atual chegou ao limite desta funcionalidade. A equipa MaisUm pode ajudar a desbloquear mais capacidade.',
     'subscription_inactive' ||
     'grace_expired' =>
-      'Regularize a subscricao para voltar a usar as funcionalidades pagas do MaisUm.',
+      'Regularize a subscrição para voltar a usar as funcionalidades pagas do MaisUm.',
     _ =>
       'Esta funcionalidade faz parte dos recursos pagos do MaisUm. Fale connosco no WhatsApp para desbloquear o acesso.',
   };
@@ -222,8 +222,8 @@ String _reasonLabel(String? reason) {
   return switch (reason) {
     'trial_expired' => 'teste terminado',
     'quota_exceeded' => 'limite atingido',
-    'subscription_inactive' => 'subscricao inativa',
-    'grace_expired' => 'periodo de graca terminado',
+    'subscription_inactive' => 'subscrição inativa',
+    'grace_expired' => 'período de graça terminado',
     'flag_disabled' => 'funcionalidade desativada',
     _ => 'funcionalidade paga',
   };
