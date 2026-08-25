@@ -19,11 +19,19 @@ class AppointmentRepository {
     required String customerId,
     required DateTime scheduledDate,
     String source = 'post_sale_flow',
+    String? merchantItemId,
+    String? staffAppUserId,
+    int? durationMinutes,
+    String? notes,
   }) async {
     final appointment = await _dao.create(
       customerId: customerId,
       scheduledDate: scheduledDate,
       source: source,
+      merchantItemId: merchantItemId,
+      staffAppUserId: staffAppUserId,
+      durationMinutes: durationMinutes,
+      notes: notes,
       appUserId: appUserId,
     );
 
@@ -46,12 +54,20 @@ class AppointmentRepository {
     DateTime? scheduledDate,
     String? status,
     bool? reminderSent,
+    String? merchantItemId,
+    String? staffAppUserId,
+    int? durationMinutes,
+    String? notes,
   }) async {
     await _dao.update(
       id,
       scheduledDate: scheduledDate,
       status: status,
       reminderSent: reminderSent,
+      merchantItemId: merchantItemId,
+      staffAppUserId: staffAppUserId,
+      durationMinutes: durationMinutes,
+      notes: notes,
       appUserId: appUserId,
     );
 

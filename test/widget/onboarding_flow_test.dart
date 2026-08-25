@@ -945,6 +945,7 @@ void main() {
       expect(data, isNotNull);
       expect(data, containsPair('merchant_name', 'Barbearia Firebase'));
       expect(data, containsPair('business_type', 'barber_from_firestore'));
+      expect(data, containsPair('business_profile_version', 1));
       expect(data, containsPair('city', 'Matola'));
       expect(data, containsPair('address', 'Rua Firebase 123'));
       expect(data, containsPair('owner_user_id', 'user-1'));
@@ -955,6 +956,13 @@ void main() {
       expect(data?['services'], [
         containsPair('id', 'cut_from_firestore'),
       ]);
+      final catalogItem = await firestore
+          .collection('businesses')
+          .doc('merchant-1')
+          .collection('merchant_items')
+          .doc('cut_from_firestore')
+          .get();
+      expect(catalogItem.data(), containsPair('type', 'SERVICE'));
       expect(subscriptionRepository.trialMerchantId, 'merchant-1');
       expect(find.text('dashboard-route'), findsOneWidget);
     });
@@ -1126,7 +1134,7 @@ void main() {
       await tester.pumpWidget(_buildOnboardingEntryFlow());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Entrar em barbearia existente'));
+      await tester.tap(find.text('Entrar em negocio existente'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();
@@ -1156,7 +1164,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Criar nova barbearia'));
+      await tester.tap(find.text('Criar novo negocio'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Continuar'));
       await tester.pumpAndSettle();

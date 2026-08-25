@@ -11,6 +11,7 @@ import 'package:maisum/core/constants/app_strings.dart';
 import 'package:maisum/core/services/connectivity_service.dart';
 import 'package:maisum/features/appointments/domain/appointment.dart';
 import 'package:maisum/features/appointments/providers/appointments_providers.dart';
+import 'package:maisum/features/business_profile/domain/business_profile.dart';
 import 'package:maisum/features/customers/domain/customer.dart';
 import 'package:maisum/features/rewards/domain/reward.dart';
 import 'package:maisum/features/rewards/presentation/rewards_controller.dart';
@@ -71,7 +72,9 @@ SaleResult _saleResult() => SaleResult(
       customer: _customer(),
     );
 
-Widget _buildScreen() {
+Widget _buildScreen({
+  BusinessProfile profile = BusinessProfiles.generic,
+}) {
   final connectivity = ConnectivityService(
     initialOnline: true,
     onConnectivityChanged: const Stream<List<ConnectivityResult>>.empty(),
@@ -88,6 +91,7 @@ Widget _buildScreen() {
         _FakeFeatureGate(delay: const Duration(milliseconds: 250)),
       ),
       connectivityServiceProvider.overrideWithValue(connectivity),
+      activeBusinessProfileProvider.overrideWith((_) async => profile),
     ],
     child: MaterialApp(
       home: SaleSuccessScreen(args: SaleSuccessArgs(result: _saleResult())),
@@ -97,6 +101,28 @@ Widget _buildScreen() {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  group('SaleSuccessScreen business capabilities', () {
+    testWidgets('hides appointments for a business without that capability', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_buildScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Agendar proxima visita?'), findsNothing);
+    });
+
+    testWidgets('keeps haircut scheduling in the barbershop preset', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _buildScreen(profile: BusinessProfiles.resolve('barbershop')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Agendar proximo corte?'), findsOneWidget);
+    });
+  });
 
   group('SaleSuccessScreen — WhatsApp lock', () {
     testWidgets('double tap triggers a single send path while loading', (

@@ -14,6 +14,10 @@ class AppointmentDao {
     required String customerId,
     required DateTime scheduledDate,
     required String source,
+    String? merchantItemId,
+    String? staffAppUserId,
+    int? durationMinutes,
+    String? notes,
     String? appUserId,
   }) async {
     final db = await _db.database;
@@ -25,6 +29,10 @@ class AppointmentDao {
       status: AppointmentStatus.scheduled,
       source: source,
       reminderSent: false,
+      merchantItemId: merchantItemId,
+      staffAppUserId: staffAppUserId,
+      durationMinutes: durationMinutes,
+      notes: notes,
       createdAt: now,
       updatedAt: now,
       synced: false,
@@ -57,6 +65,10 @@ class AppointmentDao {
     DateTime? scheduledDate,
     String? status,
     bool? reminderSent,
+    String? merchantItemId,
+    String? staffAppUserId,
+    int? durationMinutes,
+    String? notes,
     String? appUserId,
   }) async {
     final db = await _db.database;
@@ -72,6 +84,18 @@ class AppointmentDao {
     }
     if (reminderSent != null) {
       payload['reminder_sent'] = reminderSent ? 1 : 0;
+    }
+    if (merchantItemId != null) {
+      payload['merchant_item_id'] = merchantItemId;
+    }
+    if (staffAppUserId != null) {
+      payload['staff_app_user_id'] = staffAppUserId;
+    }
+    if (durationMinutes != null) {
+      payload['duration_minutes'] = durationMinutes;
+    }
+    if (notes != null) {
+      payload['notes'] = notes;
     }
     if (appUserId != null && appUserId.trim().isNotEmpty) {
       payload['updated_by_app_user_id'] = appUserId.trim();

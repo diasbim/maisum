@@ -1,4 +1,4 @@
-﻿import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
+import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -308,8 +308,7 @@ service cloud.firestore {
   });
 
   group('AuthRepository.linkDeviceToMerchantByCode', () {
-    test('links staff session to existing merchant by barbershop code',
-        () async {
+    test('links staff session to existing merchant by business code', () async {
       await storage.seedSession(
         userId: 'staff-1',
         appUserId: 'staff-1',

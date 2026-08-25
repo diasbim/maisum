@@ -1,3 +1,5 @@
+import '../../business_profile/domain/business_profile.dart';
+
 enum MerchantOnboardingStep {
   verifyPhone,
   businessType,
@@ -94,18 +96,21 @@ class MerchantService {
     required this.id,
     required this.name,
     this.iconKey,
+    this.itemKind = BusinessItemKind.service,
     this.isCustom = false,
   });
 
   final String id;
   final String name;
   final String? iconKey;
+  final BusinessItemKind itemKind;
   final bool isCustom;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'name': name,
         if (iconKey != null) 'icon_key': iconKey,
+        'item_type': itemKind.name,
         'is_custom': isCustom,
       };
 
@@ -114,8 +119,15 @@ class MerchantService {
       id: (json['id'] as String?) ?? '',
       name: (json['name'] as String?) ?? '',
       iconKey: json['icon_key'] as String?,
+      itemKind: _readItemKind(json['item_type'] ?? json['type']),
       isCustom: (json['is_custom'] as bool?) ?? false,
     );
+  }
+
+  static BusinessItemKind _readItemKind(Object? raw) {
+    return raw?.toString().trim().toLowerCase() == 'product'
+        ? BusinessItemKind.product
+        : BusinessItemKind.service;
   }
 }
 
@@ -149,70 +161,70 @@ class MerchantOnboardingConfig {
   const MerchantOnboardingConfig({
     this.businessTypes = const [],
     this.serviceSuggestions = const [],
+    this.itemSuggestionsByBusinessType = const {},
     this.defaultWorkingHours = const {},
     this.weekdayLabels = const {},
   });
 
   final List<MerchantBusinessType> businessTypes;
   final List<MerchantService> serviceSuggestions;
+  final Map<String, List<MerchantService>> itemSuggestionsByBusinessType;
   final Map<int, WorkingHours> defaultWorkingHours;
   final Map<int, String> weekdayLabels;
 
-  static const fallback = MerchantOnboardingConfig(
+  static final fallback = MerchantOnboardingConfig(
     businessTypes: [
-      MerchantBusinessType(
-        id: 'barbershop',
-        label: 'Barbearia',
-        iconKey: 'barbershop',
-      ),
-      MerchantBusinessType(
-        id: 'salon',
-        label: 'Salao de beleza',
-        iconKey: 'salon',
-      ),
-      MerchantBusinessType(
-        id: 'spa',
-        label: 'Spa e estetica',
-        iconKey: 'spa',
-      ),
+      for (final profile in BusinessProfiles.all)
+        MerchantBusinessType(
+          id: profile.id,
+          label: profile.label,
+          iconKey: profile.iconKey,
+        ),
     ],
-    serviceSuggestions: [
-      MerchantService(id: 'haircut', name: 'Corte', iconKey: 'cut'),
-      MerchantService(id: 'beard', name: 'Barba', iconKey: 'cut'),
-      MerchantService(id: 'hair_treatment', name: 'Tratamento', iconKey: 'spa'),
-    ],
+    itemSuggestionsByBusinessType: {
+      for (final profile in BusinessProfiles.all)
+        profile.id: [
+          for (final item in profile.itemPresets)
+            MerchantService(
+              id: item.id,
+              name: item.name,
+              iconKey: item.iconKey,
+              itemKind: item.kind,
+            ),
+        ],
+    },
     defaultWorkingHours: {
-      1: WorkingHours(
+      1: const WorkingHours(
         weekday: 1,
         openTime: '09:00',
         closeTime: '18:00',
         isOpen: true,
       ),
-      2: WorkingHours(
+      2: const WorkingHours(
         weekday: 2,
         openTime: '09:00',
         closeTime: '18:00',
         isOpen: true,
       ),
-      3: WorkingHours(
+      3: const WorkingHours(
         weekday: 3,
         openTime: '09:00',
         closeTime: '18:00',
         isOpen: true,
       ),
-      4: WorkingHours(
+      4: const WorkingHours(
         weekday: 4,
         openTime: '09:00',
         closeTime: '18:00',
         isOpen: true,
       ),
-      5: WorkingHours(
+      5: const WorkingHours(
         weekday: 5,
         openTime: '09:00',
         closeTime: '18:00',
         isOpen: true,
       ),
-      6: WorkingHours(
+      6: const WorkingHours(
         weekday: 6,
         openTime: '09:00',
         closeTime: '16:00',
@@ -235,9 +247,53 @@ class MerchantOnboardingConfig {
       businessTypes: _readBusinessTypes(json['business_types']),
       serviceSuggestions:
           _readServices(json['service_suggestions'] ?? json['services']),
+      itemSuggestionsByBusinessType: _readServicesByBusinessType(
+        json['item_suggestions_by_business_type'] ??
+            json['service_suggestions_by_business_type'],
+      ),
       defaultWorkingHours: _readWorkingHours(json['default_working_hours']),
       weekdayLabels: _readWeekdayLabels(json['weekday_labels']),
     );
+  }
+
+  MerchantOnboardingConfig withBuiltInProfiles() {
+    final knownIds = businessTypes.map((type) => type.id).toSet();
+    return MerchantOnboardingConfig(
+      businessTypes: [
+        ...businessTypes,
+        ...fallback.businessTypes.where((type) => !knownIds.contains(type.id)),
+      ],
+      serviceSuggestions: serviceSuggestions,
+      itemSuggestionsByBusinessType: {
+        ...fallback.itemSuggestionsByBusinessType,
+        ...itemSuggestionsByBusinessType,
+      },
+      defaultWorkingHours: defaultWorkingHours.isEmpty
+          ? fallback.defaultWorkingHours
+          : defaultWorkingHours,
+      weekdayLabels:
+          weekdayLabels.isEmpty ? fallback.weekdayLabels : weekdayLabels,
+    );
+  }
+
+  List<MerchantService> suggestionsForBusinessType(String? businessType) {
+    final normalizedType = businessType?.trim() ?? '';
+    final configured = itemSuggestionsByBusinessType[normalizedType];
+    if (configured != null) return configured;
+
+    final profile = BusinessProfiles.resolve(normalizedType);
+    if (profile.id != BusinessProfiles.generic.id) {
+      return [
+        for (final item in profile.itemPresets)
+          MerchantService(
+            id: item.id,
+            name: item.name,
+            iconKey: item.iconKey,
+            itemKind: item.kind,
+          ),
+      ];
+    }
+    return serviceSuggestions;
   }
 
   static List<MerchantBusinessType> _readBusinessTypes(Object? raw) {
@@ -258,6 +314,17 @@ class MerchantOnboardingConfig {
         .map(MerchantService.fromJson)
         .where((service) => service.id.isNotEmpty && service.name.isNotEmpty)
         .toList();
+  }
+
+  static Map<String, List<MerchantService>> _readServicesByBusinessType(
+    Object? raw,
+  ) {
+    if (raw is! Map) return const {};
+    return {
+      for (final entry in raw.entries)
+        if (entry.key.toString().trim().isNotEmpty)
+          entry.key.toString().trim(): _readServices(entry.value),
+    };
   }
 
   static Map<int, WorkingHours> _readWorkingHours(Object? raw) {

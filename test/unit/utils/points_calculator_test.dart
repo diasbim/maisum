@@ -15,5 +15,11 @@ void main() {
       expect(calculator.calculate(0), 0);
       expect(calculator.calculate(-10), 0);
     });
+
+    test('uses the rate configured for the business', () {
+      const calculator = PointsCalculator(pointsPerMzn: 50);
+
+      expect(calculator.calculate(200), 4);
+    });
   });
 }

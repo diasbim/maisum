@@ -250,7 +250,7 @@ class AuthRepository {
     );
 
     if (business == null) {
-      throw StateError('Codigo da barbearia invalido ou expirado.');
+      throw StateError('Codigo do negocio invalido ou expirado.');
     }
 
     final merchantId = business.key;

@@ -2,6 +2,7 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
@@ -24,6 +25,9 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> {
   @override
   Widget build(BuildContext context) {
     final rewards = ref.watch(rewardsControllerProvider);
+    final profileId =
+        ref.watch(activeBusinessProfileProvider).valueOrNull?.id ?? 'other';
+    final rewardTemplates = rewardTemplatesForProfile(profileId);
 
     return Scaffold(
       backgroundColor: AppColors.primaryDarker,
@@ -110,6 +114,7 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> {
                       ),
                       const SizedBox(height: 16),
                       _QuickTemplateSection(
+                        templates: rewardTemplates,
                         onSelect: (template) {
                           context
                               .push('/rewards/new?template=${template.code}');
@@ -119,8 +124,6 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> {
                       if (list.isEmpty)
                         EmptyState(
                           title: AppStrings.semRecompensas,
-                          assetPath: 'assets/images/empty_state.png',
-                          assetHeight: 200,
                           actionLabel: AppStrings.criarRecompensa,
                           onAction: () => context.push('/rewards/new'),
                         )
@@ -437,12 +440,12 @@ class _RewardTile extends StatelessWidget {
   IconData _rewardIcon(String name) {
     final seed = name.trim().toLowerCase().hashCode;
     const icons = [
-      Icons.content_cut_rounded,
       Icons.percent_rounded,
-      Icons.shower_rounded,
       Icons.local_cafe_rounded,
       Icons.card_giftcard_rounded,
       Icons.star_rounded,
+      Icons.shopping_bag_rounded,
+      Icons.workspace_premium_rounded,
     ];
     return icons[seed.abs() % icons.length];
   }
@@ -506,8 +509,12 @@ class _InsightBanner extends StatelessWidget {
 }
 
 class _QuickTemplateSection extends StatelessWidget {
-  const _QuickTemplateSection({required this.onSelect});
+  const _QuickTemplateSection({
+    required this.templates,
+    required this.onSelect,
+  });
 
+  final List<RewardTemplatePreset> templates;
   final ValueChanged<RewardTemplatePreset> onSelect;
 
   @override
@@ -527,10 +534,10 @@ class _QuickTemplateSection extends StatelessWidget {
           height: 38,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            itemCount: rewardTemplatePresets.length,
+            itemCount: templates.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (_, index) {
-              final template = rewardTemplatePresets[index];
+              final template = templates[index];
               return ActionChip(
                 key: Key('quick_reward_template_${template.code}'),
                 avatar: Icon(

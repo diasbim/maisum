@@ -66,7 +66,7 @@ Scoring formula:
 ### 5. Full WhatsApp campaign calendar inside the app
 
 - Gate: yes on retention and WhatsApp engagement.
-- Why it still loses: too much complexity for the barber persona, high implementation risk, and too much distance from the front-counter flow.
+- Why it still loses: too much complexity for the local-business operator, high implementation risk, and too much distance from the front-counter flow.
 - Simplified MVP version: keep message templates and one-tap send actions, but do not build a campaign management surface.
 
 ## Calibration Result

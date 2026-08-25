@@ -54,7 +54,7 @@ class _StaffManagementScreenState extends ConsumerState<StaffManagementScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
               Text(
-                'Adiciona e controla os membros da tua barbearia.',
+                'Adiciona e controla os membros da tua equipa.',
                 style: Theme.of(context)
                     .textTheme
                     .bodyMedium

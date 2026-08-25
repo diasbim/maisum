@@ -1,12 +1,17 @@
+import '../../business_profile/domain/business_profile.dart';
 import '../domain/engage_models.dart';
 
 class EngageRiskService {
-  const EngageRiskService();
+  const EngageRiskService({
+    this.retentionDefaults = BusinessProfiles.genericRetention,
+  });
+
+  final BusinessRetentionDefaults retentionDefaults;
 
   String riskLevelFromDays(int days) {
-    if (days <= 15) return EngageRiskLevel.green;
-    if (days <= 30) return EngageRiskLevel.yellow;
-    if (days <= 45) return EngageRiskLevel.orange;
+    if (days <= retentionDefaults.activeDays) return EngageRiskLevel.green;
+    if (days <= retentionDefaults.attentionDays) return EngageRiskLevel.yellow;
+    if (days <= retentionDefaults.riskDays) return EngageRiskLevel.orange;
     return EngageRiskLevel.red;
   }
 
@@ -25,18 +30,18 @@ class EngageRiskService {
     final spentWeight = totalSpent >= 5000
         ? 15
         : totalSpent >= 2000
-        ? 10
-        : totalSpent >= 500
-        ? 5
-        : 0;
+            ? 10
+            : totalSpent >= 500
+                ? 5
+                : 0;
 
     final pointsWeight = totalPoints >= 5000
         ? 10
         : totalPoints >= 2000
-        ? 6
-        : totalPoints >= 500
-        ? 3
-        : 0;
+            ? 6
+            : totalPoints >= 500
+                ? 3
+                : 0;
 
     return riskWeight + spentWeight + pointsWeight;
   }

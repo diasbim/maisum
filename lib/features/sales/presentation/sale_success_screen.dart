@@ -21,6 +21,7 @@ import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/domain/usage_metrics.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../../appointments/providers/appointments_providers.dart';
+import '../../business_profile/domain/business_profile.dart';
 import 'sale_controller.dart';
 
 class SaleSuccessArgs {
@@ -81,6 +82,9 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     final sale = widget.args.result.sale;
     final customer = widget.args.result.customer;
     final createAppointmentState = ref.watch(createAppointmentProvider);
+    final businessProfile =
+        ref.watch(activeBusinessProfileProvider).valueOrNull ??
+            BusinessProfiles.generic;
 
     final rewardsAsync = ref.watch(rewardsControllerProvider);
     final rewards = rewardsAsync.valueOrNull ?? const <Reward>[];
@@ -193,17 +197,28 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                               _sendWhatsApp(customer, message),
                         ),
                         const SizedBox(height: 16),
-                        _ScheduleNextVisitCard(
-                          selectedDate: _scheduledDate,
-                          appointmentCreated: _appointmentCreated,
-                          isSaving: createAppointmentState.isLoading,
-                          onQuickSelect: (days) =>
-                              _handleQuickSchedule(customer.id, days),
-                          onPickDate: () =>
-                              _handleManualSchedule(customer.id),
-                          onViewAll: () => context.push('/appointments'),
-                        ),
-                        const SizedBox(height: 18),
+                        if (businessProfile.capabilities.appointments) ...[
+                          _ScheduleNextVisitCard(
+                            selectedDate: _scheduledDate,
+                            appointmentCreated: _appointmentCreated,
+                            isSaving: createAppointmentState.isLoading,
+                            nextVisitLabel:
+                                businessProfile.terminology.nextVisit,
+                            quickIntervals:
+                                businessProfile.appointmentIntervalsDays,
+                            onQuickSelect: (days) => _handleQuickSchedule(
+                              customer.id,
+                              days,
+                              businessProfile,
+                            ),
+                            onPickDate: () => _handleManualSchedule(
+                              customer.id,
+                              businessProfile,
+                            ),
+                            onViewAll: () => context.push('/appointments'),
+                          ),
+                          const SizedBox(height: 18),
+                        ],
                         MaisUmButton(
                           label: AppStrings.novaVenda,
                           leadingIcon: Icons.add_rounded,
@@ -419,13 +434,25 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
     }
   }
 
-  Future<void> _handleQuickSchedule(String customerId, int days) async {
+  Future<void> _handleQuickSchedule(
+    String customerId,
+    int days,
+    BusinessProfile businessProfile,
+  ) async {
     final now = DateTime.now();
-    final target = DateTime(now.year, now.month, now.day + days, 10);
+    final target = DateTime(
+      now.year,
+      now.month,
+      now.day + days,
+      businessProfile.defaultAppointmentHour,
+    );
     await _createAppointment(customerId, target);
   }
 
-  Future<void> _handleManualSchedule(String customerId) async {
+  Future<void> _handleManualSchedule(
+    String customerId,
+    BusinessProfile businessProfile,
+  ) async {
     final now = DateUtils.dateOnly(DateTime.now());
     final picked = await showDatePicker(
       context: context,
@@ -433,13 +460,30 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
       locale: const Locale('pt', 'PT'),
-      helpText: 'Escolher data do próximo corte',
+      helpText: 'Escolher data da ${businessProfile.terminology.nextVisit}',
       cancelText: 'Cancelar',
       confirmText: 'Guardar',
     );
     if (picked == null) return;
 
-    final target = DateTime(picked.year, picked.month, picked.day, 10);
+    if (!mounted) return;
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: businessProfile.defaultAppointmentHour,
+        minute: 0,
+      ),
+      helpText: 'Escolher hora',
+    );
+    if (pickedTime == null) return;
+
+    final target = DateTime(
+      picked.year,
+      picked.month,
+      picked.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
     await _createAppointment(customerId, target);
   }
 
@@ -460,7 +504,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
       });
       AppFeedback.showMessage(
         context,
-        message: 'Próximo corte agendado para ${_formatDate(scheduledDate)}.',
+        message: 'Agendamento guardado para ${_formatDate(scheduledDate)}.',
       );
     } catch (_) {
       if (!mounted) return;
@@ -866,6 +910,8 @@ class _ScheduleNextVisitCard extends StatelessWidget {
     required this.selectedDate,
     required this.appointmentCreated,
     required this.isSaving,
+    required this.nextVisitLabel,
+    required this.quickIntervals,
     required this.onQuickSelect,
     required this.onPickDate,
     required this.onViewAll,
@@ -874,6 +920,8 @@ class _ScheduleNextVisitCard extends StatelessWidget {
   final DateTime? selectedDate;
   final bool appointmentCreated;
   final bool isSaving;
+  final String nextVisitLabel;
+  final List<int> quickIntervals;
   final ValueChanged<int> onQuickSelect;
   final VoidCallback onPickDate;
   final VoidCallback onViewAll;
@@ -899,7 +947,7 @@ class _ScheduleNextVisitCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Agendar próximo corte?',
+                  'Agendar $nextVisitLabel?',
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w700,
@@ -938,7 +986,7 @@ class _ScheduleNextVisitCard extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final days in const [7, 14, 21, 30])
+              for (final days in quickIntervals)
                 _QuickDayActionButton(
                   days: days,
                   isSelected: selectedDay != null &&

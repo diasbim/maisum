@@ -116,9 +116,6 @@ class AppStrings {
   static const String verHistorico = 'Ver histórico';
   static const String historicoCompras = 'Histórico de compras';
   static const String verTudo = 'Ver tudo';
-  static const String agendarCorte = 'Agendar corte';
-  static const String escolherDataProximoCorte =
-      'Escolher data do próximo corte';
   static const String progressoProximaRecompensa =
       'Progresso para próxima recompensa';
   static const String semRecompensasAtivas = 'Sem recompensas activas';
@@ -204,7 +201,6 @@ class AppStrings {
   static const String deviceId = 'Device ID';
   static const String sessaoValidaAte = 'Sessão válida até';
   static const String taxaPontos = 'Taxa de pontos';
-  static const String taxaDesc = '1 ponto por cada 100 MZN';
   static const String versao = 'Versão';
   static const String confirmarLogout = 'Confirmar saída';
   static const String confirmarLogoutMsg = 'Tem a certeza que quer sair?';

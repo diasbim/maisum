@@ -22,6 +22,10 @@ class Appointment {
     required this.reminderSent,
     required this.createdAt,
     required this.updatedAt,
+    this.merchantItemId,
+    this.staffAppUserId,
+    this.durationMinutes,
+    this.notes,
     this.synced = false,
   });
 
@@ -33,6 +37,10 @@ class Appointment {
   final bool reminderSent;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? merchantItemId;
+  final String? staffAppUserId;
+  final int? durationMinutes;
+  final String? notes;
   final bool synced;
 
   Appointment copyWith({
@@ -44,6 +52,10 @@ class Appointment {
     bool? reminderSent,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Object? merchantItemId = _keep,
+    Object? staffAppUserId = _keep,
+    Object? durationMinutes = _keep,
+    Object? notes = _keep,
     bool? synced,
   }) {
     return Appointment(
@@ -55,6 +67,16 @@ class Appointment {
       reminderSent: reminderSent ?? this.reminderSent,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      merchantItemId: identical(merchantItemId, _keep)
+          ? this.merchantItemId
+          : merchantItemId as String?,
+      staffAppUserId: identical(staffAppUserId, _keep)
+          ? this.staffAppUserId
+          : staffAppUserId as String?,
+      durationMinutes: identical(durationMinutes, _keep)
+          ? this.durationMinutes
+          : durationMinutes as int?,
+      notes: identical(notes, _keep) ? this.notes : notes as String?,
       synced: synced ?? this.synced,
     );
   }
@@ -68,6 +90,10 @@ class Appointment {
         'reminder_sent': reminderSent ? 1 : 0,
         'created_at': createdAt.millisecondsSinceEpoch,
         'updated_at': updatedAt.millisecondsSinceEpoch,
+        'merchant_item_id': merchantItemId,
+        'staff_app_user_id': staffAppUserId,
+        'duration_minutes': durationMinutes,
+        'notes': notes,
         'synced': synced ? 1 : 0,
       };
 
@@ -84,6 +110,19 @@ class Appointment {
       reminderSent: _readBool(json, ['reminder_sent', 'reminderSent']),
       createdAt: _readDateTime(json, ['created_at', 'createdAt']),
       updatedAt: _readDateTime(json, ['updated_at', 'updatedAt']),
+      merchantItemId: _readOptionalString(
+        json,
+        ['merchant_item_id', 'merchantItemId'],
+      ),
+      staffAppUserId: _readOptionalString(
+        json,
+        ['staff_app_user_id', 'staffAppUserId'],
+      ),
+      durationMinutes: _readOptionalInt(
+        json,
+        ['duration_minutes', 'durationMinutes'],
+      ),
+      notes: _readOptionalString(json, ['notes']),
       synced: _readBool(json, ['synced']),
     );
   }
@@ -100,6 +139,10 @@ class Appointment {
         other.reminderSent == reminderSent &&
         other.createdAt == createdAt &&
         other.updatedAt == updatedAt &&
+        other.merchantItemId == merchantItemId &&
+        other.staffAppUserId == staffAppUserId &&
+        other.durationMinutes == durationMinutes &&
+        other.notes == notes &&
         other.synced == synced;
   }
 
@@ -114,10 +157,16 @@ class Appointment {
       reminderSent,
       createdAt,
       updatedAt,
+      merchantItemId,
+      staffAppUserId,
+      durationMinutes,
+      notes,
       synced,
     );
   }
 }
+
+const _keep = Object();
 
 Appointment appointmentFromMap(Map<String, dynamic> map) =>
     Appointment.fromJson(map);
@@ -130,6 +179,32 @@ String _readString(Map<String, dynamic> json, List<String> keys) {
     }
   }
   throw ArgumentError('Missing required string: ${keys.join('/')}');
+}
+
+String? _readOptionalString(
+  Map<String, dynamic> json,
+  List<String> keys,
+) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is String && value.trim().isNotEmpty) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+int? _readOptionalInt(Map<String, dynamic> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String && value.trim().isNotEmpty) {
+      final parsed = int.tryParse(value);
+      if (parsed != null) return parsed;
+    }
+  }
+  return null;
 }
 
 DateTime _readDateTime(Map<String, dynamic> json, List<String> keys) {

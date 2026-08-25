@@ -9,6 +9,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../design_system/design_system.dart';
 import '../domain/appointment.dart';
 import '../providers/appointments_providers.dart';
+import '../../business_profile/domain/business_profile.dart';
 
 enum _AppointmentsViewMode { list, calendar }
 
@@ -34,11 +35,14 @@ class _AppointmentsScreenState extends ConsumerState<AppointmentsScreen> {
   @override
   Widget build(BuildContext context) {
     final appointmentsAsync = ref.watch(appointmentsWithCustomerProvider);
+    final businessProfile =
+        ref.watch(activeBusinessProfileProvider).valueOrNull ??
+            BusinessProfiles.generic;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: AppBar(
-        title: const Text('Agenda de cortes'),
+        title: Text('Agenda de ${businessProfile.terminology.appointments}'),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
@@ -529,13 +533,13 @@ final appointmentsWithCustomerProvider =
   return items;
 });
 
-class _AppointmentTile extends StatelessWidget {
+class _AppointmentTile extends ConsumerWidget {
   const _AppointmentTile({required this.item});
 
   final AppointmentWithCustomer item;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final date = item.appointment.scheduledDate;
     final day = date.day.toString().padLeft(2, '0');
     final month = date.month.toString().padLeft(2, '0');
@@ -565,7 +569,7 @@ class _AppointmentTile extends StatelessWidget {
             ),
             alignment: Alignment.center,
             child: const Icon(
-              Icons.content_cut_rounded,
+              Icons.event_available_rounded,
               color: AppColors.secondaryDark,
               size: 22,
             ),

@@ -5322,6 +5322,10 @@ async function upsertAppointment(merchantId, payload, entityId) {
     const status = pickString(payload, 'status') ?? 'scheduled';
     const source = pickString(payload, 'source') ?? 'app';
     const reminderSent = pickBoolean(payload, 'reminder_sent') ?? pickBoolean(payload, 'reminderSent') ?? false;
+    const merchantItemId = pickString(payload, 'merchant_item_id') ?? pickString(payload, 'merchantItemId');
+    const staffAppUserId = pickString(payload, 'staff_app_user_id') ?? pickString(payload, 'staffAppUserId');
+    const durationMinutes = pickNumber(payload, 'duration_minutes') ?? pickNumber(payload, 'durationMinutes');
+    const notes = pickString(payload, 'notes');
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? createdAt;
     const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ?? pickString(payload, 'createdByAppUserId');
@@ -5338,11 +5342,15 @@ async function upsertAppointment(merchantId, payload, entityId) {
       status,
       source,
       reminder_sent,
+      merchant_item_id,
+      staff_app_user_id,
+      duration_minutes,
+      notes,
       created_at,
       updated_at,
       created_by_app_user_id,
       updated_by_app_user_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       customer_id = EXCLUDED.customer_id,
@@ -5350,6 +5358,10 @@ async function upsertAppointment(merchantId, payload, entityId) {
       status = EXCLUDED.status,
       source = EXCLUDED.source,
       reminder_sent = EXCLUDED.reminder_sent,
+      merchant_item_id = EXCLUDED.merchant_item_id,
+      staff_app_user_id = EXCLUDED.staff_app_user_id,
+      duration_minutes = EXCLUDED.duration_minutes,
+      notes = EXCLUDED.notes,
       created_at = LEAST(appointments.created_at, EXCLUDED.created_at),
       updated_at = EXCLUDED.updated_at,
       created_by_app_user_id = COALESCE(EXCLUDED.created_by_app_user_id, appointments.created_by_app_user_id),
@@ -5363,6 +5375,10 @@ async function upsertAppointment(merchantId, payload, entityId) {
         status,
         source,
         reminderSent,
+        merchantItemId,
+        staffAppUserId,
+        durationMinutes,
+        notes,
         createdAt,
         updatedAt,
         createdByAppUserId,

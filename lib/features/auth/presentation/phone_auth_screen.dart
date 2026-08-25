@@ -31,7 +31,6 @@ const _defaultCountryDialCode = '+258';
 const _brandNavy = Color(0xFF102A5E);
 const _brandAccent = Color(0xFFF4C542);
 const _welcomeLogoAsset = 'assets/images/logotypographi.png';
-const _welcomeBarberAsset = 'assets/images/welcome.png';
 
 class PhoneAuthScreen extends ConsumerStatefulWidget {
   const PhoneAuthScreen({super.key});
@@ -779,12 +778,7 @@ class _WelcomeHero extends StatelessWidget {
             bottom: compact ? -10 : -20,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(compact ? 26 : 34),
-              child: _WelcomeAssetImage(
-                assetName: _welcomeBarberAsset,
-                fit: BoxFit.cover,
-                alignment: Alignment.topCenter,
-                fallback: _WelcomeBarberFallback(height: heroHeight),
-              ),
+              child: _WelcomeBusinessFallback(height: heroHeight),
             ),
           ),
           Positioned(
@@ -1083,7 +1077,6 @@ class _WelcomeAssetImage extends StatelessWidget {
     required this.fallback,
     this.width,
     this.fit,
-    this.alignment = Alignment.center,
     this.semanticLabel,
   });
 
@@ -1091,7 +1084,6 @@ class _WelcomeAssetImage extends StatelessWidget {
   final Widget fallback;
   final double? width;
   final BoxFit? fit;
-  final AlignmentGeometry alignment;
   final String? semanticLabel;
 
   @override
@@ -1100,7 +1092,6 @@ class _WelcomeAssetImage extends StatelessWidget {
       assetName,
       width: width,
       fit: fit,
-      alignment: alignment,
       semanticLabel: semanticLabel,
       errorBuilder: (_, __, ___) => fallback,
     );
@@ -1140,8 +1131,8 @@ class _WelcomeLogoFallback extends StatelessWidget {
   }
 }
 
-class _WelcomeBarberFallback extends StatelessWidget {
-  const _WelcomeBarberFallback({required this.height});
+class _WelcomeBusinessFallback extends StatelessWidget {
+  const _WelcomeBusinessFallback({required this.height});
 
   final double height;
 

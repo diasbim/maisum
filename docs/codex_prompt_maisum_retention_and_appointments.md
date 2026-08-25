@@ -2,7 +2,7 @@
 
 ## Contexto do Produto
 
-Estou a construir uma aplicação mobile chamada +1 (MaisUM), focada em fidelização de clientes para barbearias e salões em Maputo, Moçambique.
+Estou a construir uma aplicação mobile chamada +1 (MaisUM), focada em gestão e fidelização de clientes para negócios locais em Maputo, Moçambique.
 
 O objectivo principal da app é:
 
@@ -505,7 +505,7 @@ A app deve continuar:
 
 - rápida;
 - leve;
-- fácil para barbeiros.
+- fácil para equipas de pequenos negócios.
 
 Não criar complexidade desnecessária.
 
@@ -515,4 +515,3 @@ Foco:
 - recorrência;
 - frequência;
 - uso diário.
-

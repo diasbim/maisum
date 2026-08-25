@@ -210,7 +210,15 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         completed: _showCompletedStepper,
       );
 
-  int get _points => (_amount / AppConstants.pointsPerMzn).floor();
+  int get _pointsPerMzn =>
+      ref
+          .read(activeBusinessProfileProvider)
+          .valueOrNull
+          ?.loyalty
+          .pointsPerMzn ??
+      AppConstants.pointsPerMzn;
+
+  int get _points => (_amount / _pointsPerMzn).floor();
 
   void _selectCustomer(Customer c) {
     setState(() {
@@ -309,8 +317,12 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         _initializationState == _SaleInitializationState.noCustomers;
     final isInitializing =
         _initializationState == _SaleInitializationState.loading;
-    const pointsBaseMzn = AppConstants.salePointsBaseMzn;
-    final pointsPerBase = (pointsBaseMzn / AppConstants.pointsPerMzn).floor();
+    final loyalty =
+        ref.watch(activeBusinessProfileProvider).valueOrNull?.loyalty;
+    final pointsBaseMzn =
+        loyalty?.pointsPerMzn ?? AppConstants.salePointsBaseMzn;
+    final pointsPerBase = (pointsBaseMzn / _pointsPerMzn).floor();
+    final quickAmounts = loyalty?.quickAmounts ?? AppConstants.saleQuickAmounts;
     final pointsPerBaseLabel = pointsPerBase == 1
         ? '1 ${AppStrings.pontosAbrev}'
         : '$pointsPerBase ${AppStrings.pontosAbrev}';
@@ -397,7 +409,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                           Wrap(
                             spacing: 12,
                             runSpacing: 12,
-                            children: AppConstants.saleQuickAmounts
+                            children: quickAmounts
                                 .map(
                                   (amt) => QuickAmountButton(
                                     amount: amt,

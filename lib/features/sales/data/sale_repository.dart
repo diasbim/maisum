@@ -19,7 +19,9 @@ class SaleRepository {
     this.deviceId,
     this.appUserId,
     SaleItemDao? saleItemDao,
+    int pointsPerMzn = 100,
   })  : _database = database,
+        _points = PointsCalculator(pointsPerMzn: pointsPerMzn),
         _saleItemDao =
             saleItemDao ?? SaleItemDao(database, merchantId: merchantId);
 
@@ -31,7 +33,7 @@ class SaleRepository {
   final String? deviceId;
   final String? appUserId;
   static const _uuid = Uuid();
-  static const _points = PointsCalculator();
+  final PointsCalculator _points;
 
   Future<Sale> createSale({
     required String customerId,

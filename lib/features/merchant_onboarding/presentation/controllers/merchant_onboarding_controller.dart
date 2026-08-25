@@ -99,9 +99,7 @@ class MerchantOnboardingState {
             draft.workingHours.values.where((hours) => hours.isOpen);
         return openDays.isEmpty ? 'Defina pelo menos um dia aberto.' : null;
       case MerchantOnboardingStep.services:
-        return draft.services.isEmpty
-            ? 'Selecione pelo menos um servico.'
-            : null;
+        return null;
       case MerchantOnboardingStep.review:
         for (final step in MerchantOnboardingStep.values.skip(1).take(5)) {
           final message = validate(step);
@@ -304,6 +302,7 @@ class MerchantOnboardingController
         firebaseUid: firebaseUid,
         wasProfileCompleteAtLoad: current.wasProfileCompleteAtLoad,
       );
+      ref.invalidate(activeBusinessProfileProvider);
 
       if (!current.wasProfileCompleteAtLoad) {
         final trialDays =

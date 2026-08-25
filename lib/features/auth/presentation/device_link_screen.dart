@@ -82,14 +82,14 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
             ),
             children: [
               Text(
-                'Entrar em uma barbearia existente',
+                'Entrar em um negocio existente',
                 style: theme.textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Insira o codigo da barbearia para conectar este dispositivo a conta existente. Este fluxo tambem funciona para contas staff.',
+                'Insira o codigo do negocio para conectar este dispositivo a conta existente. Este fluxo tambem funciona para contas staff.',
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.xl),
@@ -98,7 +98,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
                 focusNode: _codeFocusNode,
                 enabled: !_isSubmitting,
                 autofocus: true,
-                label: 'Codigo da barbearia',
+                label: 'Codigo do negocio',
                 hintText: 'ABCD-1234',
                 prefixIcon: const Icon(Icons.link_rounded),
                 textCapitalization: TextCapitalization.characters,
@@ -136,7 +136,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
                 onPressed: _isSubmitting
                     ? null
                     : () => context.go(merchantOnboardingStartRoute),
-                label: 'Criar nova barbearia',
+                label: 'Criar novo negocio',
                 variant: MaisUmButtonVariant.outlined,
                 leadingIcon: Icons.storefront_rounded,
               ),
@@ -146,7 +146,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
                 radius: AppRadius.md,
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: Text(
-                  'Dica: o owner encontra este codigo em Definicoes > Codigo da barbearia.',
+                  'Dica: o owner encontra este codigo em Definicoes > Codigo do negocio.',
                   style: theme.textTheme.bodySmall,
                 ),
               ),
@@ -167,8 +167,8 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
       AppFeedback.showMessage(
         context,
         message: rawCode.isEmpty
-            ? 'Insira o codigo da barbearia.'
-            : 'Codigo da barbearia invalido.',
+            ? 'Insira o codigo do negocio.'
+            : 'Codigo do negocio invalido.',
         isError: true,
       );
       return;
@@ -212,7 +212,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
       if (!mounted) return;
       AppFeedback.showMessage(
         context,
-        message: 'Codigo da barbearia invalido.',
+        message: 'Codigo do negocio invalido.',
         isError: true,
       );
     } on StateError catch (e, st) {
@@ -250,7 +250,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
     return switch (error.code) {
       'permission-denied' =>
         'Não tem autorização para vincular este dispositivo.',
-      'not-found' => 'Código da barbearia inválido.',
+      'not-found' => 'Código do negócio inválido.',
       'unavailable' => 'Sem ligação à internet.',
       'deadline-exceeded' => 'A operação demorou demasiado tempo.',
       'unknown' => 'Ocorreu um erro inesperado.',
@@ -264,7 +264,7 @@ class _DeviceLinkScreenState extends ConsumerState<DeviceLinkScreen> {
       return 'É necessário iniciar sessão.';
     }
     if (message.contains('codigo') || message.contains('código')) {
-      return 'Código da barbearia inválido.';
+      return 'Código do negócio inválido.';
     }
     return 'Ocorreu um erro inesperado.';
   }

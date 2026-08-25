@@ -2,7 +2,7 @@
 
 This framework governs every future feature in LoyaltyOS.
 
-The product only wins if it helps the barber register more sales, move faster at the counter, bring customers back, use WhatsApp better, or stay reliable offline.
+The product only wins if it helps a local-business team register more sales, move faster at the counter, bring customers back, use WhatsApp better, or stay reliable offline.
 
 If a feature does none of those things, it should not ship in the MVP path.
 
@@ -72,7 +72,7 @@ If a proposal materially improves the primary sale flow, offline trust, or low-e
 An enabler can move from `Delay` to `Build now` or `Simplify, then schedule` only if all of the following are true:
 
 1. It clearly improves friction or offline reliability.
-2. It directly protects the barber's daily-use workflow.
+2. It directly protects the local business's daily-use workflow.
 3. It does not add new user complexity.
 4. It fits within the roadmap mix rule for platform and reliability work.
 
@@ -85,7 +85,7 @@ Each score must cite one evidence level:
 | Level | Meaning |
 | --- | --- |
 | A | Measured usage data or experiment result |
-| B | Direct observed user pain in the barber workflow |
+| B | Direct observed user pain in a supported local-business workflow |
 | C | Strong product logic tied to the core loop |
 | D | Opinion only |
 
@@ -137,7 +137,7 @@ Prefer:
 - extensions to the sale or customer flow instead of new object types
 - fewer steps even if the first version is narrower
 
-Reject or cut scope if the feature adds too many decisions to the barber's hot path.
+Reject or cut scope if the feature adds too many decisions to the operator's hot path.
 
 ## MVP Governance Rules
 
@@ -191,7 +191,7 @@ Simplified MVP version:
 
 LoyaltyOS is not general business software.
 
-It is a daily-use, low-friction, offline-first loyalty tool for fast-moving barbershops in Maputo.
+It is a daily-use, low-friction, offline-first management and loyalty tool for fast-moving local businesses in Maputo.
 
 If a feature does not strengthen that identity, it should be rejected, delayed, or simplified.
 

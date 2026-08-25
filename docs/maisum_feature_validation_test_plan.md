@@ -555,9 +555,9 @@ New merchants can:
 
 ## Required
 
-Observe real barbers:
+Observe real local-business operators:
 
-- during haircut flow
+- during their highest-frequency sale or service flow
 - under noisy conditions
 - during busy periods
 
@@ -763,7 +763,7 @@ Before every release validate:
 
 Test with:
 
-- 2 barbershops
+- 2 businesses from different categories
 - 7 days
 
 ---
@@ -781,7 +781,7 @@ Test with:
 
 Test with:
 
-- 5–10 barbershops
+- 5–10 businesses across appointment and retail categories
 - 30 days
 
 ---
@@ -860,7 +860,7 @@ MaisUm is not only software.
 
 It is:
 
-A behaviour system operating inside real barbershops in Maputo.
+A behaviour system operating inside real local businesses in Maputo.
 
 Therefore testing MUST validate:
 
@@ -868,4 +868,3 @@ Therefore testing MUST validate:
 - habit formation,
 - operational simplicity,
 - and resilience under real-world conditions.
-

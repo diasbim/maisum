@@ -76,7 +76,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
               isSearching ? 'Sem resultados' : AppStrings.semClientes;
           final emptySubtitle = isSearching
               ? 'Nenhum cliente encontrado para "$searchText". Ajuste a pesquisa ou limpe o campo para ver todos.'
-              : 'Crie o primeiro cliente para começar a registar cortes e pontos sem complicação.';
+              : 'Crie o primeiro cliente para começar a registar vendas e pontos sem complicação.';
           return RefreshIndicator(
             color: AppColors.secondary,
             onRefresh: () =>

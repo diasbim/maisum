@@ -79,7 +79,7 @@ void main() {
 
     expect(find.byKey(const Key('welcome_start_button')), findsOneWidget);
     expect(assetNames, contains('assets/images/logotypographi.png'));
-    expect(assetNames, contains('assets/images/welcome.png'));
+    expect(assetNames, isNot(contains('assets/images/welcome.png')));
     expect(assetNames, isNot(contains('assets/images/welcomebg.png')));
     expect(assetNames, isNot(contains('assets/images/welcome_background.png')));
     expect(assetNames, isNot(contains('assets/images/welcome_barber.png')));

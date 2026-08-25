@@ -141,6 +141,12 @@ class SettingsScreen extends ConsumerWidget {
     final appUserRole = ref.watch(activeAppUserRoleProvider).valueOrNull ??
         AppConstants.appUserRoleOwner;
     final businessLinkCode = ref.watch(businessLinkCodeProvider).valueOrNull;
+    final appointmentsEnabled = ref
+            .watch(activeBusinessProfileProvider)
+            .valueOrNull
+            ?.capabilities
+            .appointments ??
+        false;
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
@@ -180,7 +186,7 @@ class SettingsScreen extends ConsumerWidget {
               _SettingsTile(
                 icon: Icons.qr_code_rounded,
                 iconColor: AppColors.amber,
-                title: 'Codigo da barbearia',
+                title: 'Codigo do negocio',
                 subtitle: businessLinkCode ?? 'A gerar codigo...',
                 trailing: const Icon(
                   Icons.content_copy_rounded,
@@ -210,7 +216,7 @@ class SettingsScreen extends ConsumerWidget {
                 icon: Icons.link_rounded,
                 iconColor: AppColors.amber,
                 title: 'Vincular dispositivo',
-                subtitle: 'Entrar por codigo da barbearia',
+                subtitle: 'Entrar por codigo do negocio',
                 trailing: const Icon(
                   Icons.chevron_right_rounded,
                   color: AppColors.g300,
@@ -271,18 +277,19 @@ class SettingsScreen extends ConsumerWidget {
               ),
               onTap: () => context.push('/catalog'),
             ),
-            _SettingsTile(
-              icon: Icons.calendar_month_rounded,
-              iconColor: AppColors.amber,
-              title: 'Agenda de clientes',
-              subtitle: 'Ver agendamentos em lista e abrir cliente',
-              trailing: const Icon(
-                Icons.chevron_right_rounded,
-                color: AppColors.g300,
-                size: 20,
+            if (appointmentsEnabled)
+              _SettingsTile(
+                icon: Icons.calendar_month_rounded,
+                iconColor: AppColors.amber,
+                title: 'Agenda de clientes',
+                subtitle: 'Ver agendamentos em lista e abrir cliente',
+                trailing: const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.g300,
+                  size: 20,
+                ),
+                onTap: () => context.push('/appointments'),
               ),
-              onTap: () => context.push('/appointments'),
-            ),
             const _Section('Premium'),
             ..._paidSettingsFeatures.map(
               (feature) => _SettingsTile(

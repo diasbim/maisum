@@ -18,7 +18,34 @@ class RewardTemplatePreset {
   final IconData icon;
 }
 
-const rewardTemplatePresets = <RewardTemplatePreset>[
+const genericRewardTemplatePresets = <RewardTemplatePreset>[
+  RewardTemplatePreset(
+    code: 'desconto_10',
+    label: 'Desconto 10%',
+    rewardName: 'Desconto de 10%',
+    pointsRequired: 500,
+    description: 'Aplique 10% de desconto na proxima compra.',
+    icon: Icons.percent_rounded,
+  ),
+  RewardTemplatePreset(
+    code: 'desconto_20',
+    label: 'Desconto 20%',
+    rewardName: 'Desconto de 20%',
+    pointsRequired: 800,
+    description: 'Aplique 20% de desconto na proxima compra.',
+    icon: Icons.percent_rounded,
+  ),
+  RewardTemplatePreset(
+    code: 'brinde',
+    label: 'Brinde',
+    rewardName: 'Brinde especial',
+    pointsRequired: 600,
+    description: 'Ofereca um brinde escolhido pelo negocio.',
+    icon: Icons.card_giftcard_rounded,
+  ),
+];
+
+const barberRewardTemplatePresets = <RewardTemplatePreset>[
   RewardTemplatePreset(
     code: 'corte_gratis',
     label: 'Corte gratis',
@@ -36,14 +63,6 @@ const rewardTemplatePresets = <RewardTemplatePreset>[
     icon: Icons.face_retouching_natural_rounded,
   ),
   RewardTemplatePreset(
-    code: 'desconto_20',
-    label: 'Desconto 20%',
-    rewardName: 'Desconto de 20%',
-    pointsRequired: 600,
-    description: 'Aplique 20% de desconto no proximo atendimento.',
-    icon: Icons.percent_rounded,
-  ),
-  RewardTemplatePreset(
     code: 'combo_lavagem',
     label: 'Lavagem + finalizacao',
     rewardName: 'Lavagem + finalizacao',
@@ -53,12 +72,22 @@ const rewardTemplatePresets = <RewardTemplatePreset>[
   ),
 ];
 
+List<RewardTemplatePreset> rewardTemplatesForProfile(String? profileId) {
+  return [
+    ...genericRewardTemplatePresets,
+    if (profileId == 'barbershop') ...barberRewardTemplatePresets,
+  ];
+}
+
 RewardTemplatePreset? rewardTemplateByCode(String? code) {
   final normalized = code?.trim();
   if (normalized == null || normalized.isEmpty) {
     return null;
   }
-  for (final template in rewardTemplatePresets) {
+  for (final template in [
+    ...genericRewardTemplatePresets,
+    ...barberRewardTemplatePresets,
+  ]) {
     if (template.code == normalized) {
       return template;
     }

@@ -23,7 +23,6 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resolvedAssetPath = assetPath ?? 'assets/images/empty_state.png';
     final theme = Theme.of(context);
 
     return Center(
@@ -51,11 +50,27 @@ class EmptyState extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset(
-                      resolvedAssetPath,
-                      height: assetHeight ?? 160,
-                      fit: BoxFit.contain,
-                    ),
+                    if (assetPath != null)
+                      Image.asset(
+                        assetPath!,
+                        height: assetHeight ?? 160,
+                        fit: BoxFit.contain,
+                      )
+                    else
+                      Container(
+                        width: assetHeight ?? 112,
+                        height: assetHeight ?? 112,
+                        decoration: const BoxDecoration(
+                          color: AppColors.secondaryLight,
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.inbox_rounded,
+                          size: 52,
+                          color: AppColors.secondaryDark,
+                        ),
+                      ),
                     const SizedBox(height: AppSpacing.lg),
                     Text(
                       title,

@@ -2,11 +2,13 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../app/providers.dart' as app_providers;
 import '../../auth/presentation/auth_controller.dart' as auth_providers;
+import '../../business_profile/domain/business_profile.dart';
 import '../../../features/subscription/domain/feature_keys.dart';
 import '../data/engage_api.dart';
 import '../data/engage_dao.dart';
 import '../data/engage_repository.dart';
 import '../domain/engage_models.dart';
+import '../services/engage_risk_service.dart';
 
 class EngageOverview {
   const EngageOverview({required this.dashboard, required this.queue});
@@ -20,6 +22,13 @@ final engageDaoProvider = Provider<EngageDao>(
     ref.read(app_providers.appDatabaseProvider),
     merchantId: ref.watch(auth_providers.activeMerchantIdProvider),
     appUserId: ref.watch(auth_providers.activeAppUserIdProvider),
+    riskService: EngageRiskService(
+      retentionDefaults: ref
+              .watch(app_providers.activeBusinessProfileProvider)
+              .valueOrNull
+              ?.retention ??
+          BusinessProfiles.genericRetention,
+    ),
   ),
 );
 

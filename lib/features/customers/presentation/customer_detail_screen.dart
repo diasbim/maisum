@@ -4,7 +4,6 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/providers.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/pt_date_format.dart';
@@ -23,6 +22,7 @@ import '../../rewards/domain/reward.dart';
 import '../../rewards/domain/reward_progress.dart';
 import '../../rewards/presentation/reward_progress_provider.dart';
 import '../../appointments/providers/appointments_providers.dart';
+import '../../business_profile/domain/business_profile.dart';
 import '../../engage/domain/engage_models.dart';
 import '../../engage/providers/engage_providers.dart';
 import '../../sales/domain/sale.dart';
@@ -74,6 +74,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final customerAsync = ref.watch(customerDetailProvider(widget.id));
     final salesAsync = ref.watch(customerSalesProvider(widget.id));
     final rewardProgressAsync = ref.watch(rewardProgressProvider(widget.id));
+    final businessProfile =
+        ref.watch(activeBusinessProfileProvider).valueOrNull ??
+            BusinessProfiles.generic;
+    final appointmentsEnabled = businessProfile.capabilities.appointments;
 
     final isCompact = MediaQuery.of(context).size.width < 360;
     // Keep enough room for identity, status, and metric cards in the hero section.
@@ -119,7 +123,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
           final displayedPoints = customer.confirmedPoints == null
               ? customer.totalPoints
               : customer.confirmedPoints! + pendingPoints;
-          final approxValue = _formatApproxMzn(displayedPoints);
+          final approxValue = _formatApproxMzn(
+            displayedPoints,
+            businessProfile.loyalty.pointsPerMzn,
+          );
           final totalSpent = sales.fold<double>(
             0,
             (sum, sale) => sum + sale.amount,
@@ -144,14 +151,16 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                   onPressed: _handleBackPressed,
                 ),
                 actions: [
-                  IconButton(
-                    icon: const Icon(
-                      Icons.calendar_month_rounded,
-                      color: Colors.white,
+                  if (appointmentsEnabled)
+                    IconButton(
+                      icon: const Icon(
+                        Icons.calendar_month_rounded,
+                        color: Colors.white,
+                      ),
+                      tooltip:
+                          'Ver ${businessProfile.terminology.appointments}',
+                      onPressed: () => context.push('/appointments'),
                     ),
-                    tooltip: 'Ver marcações',
-                    onPressed: () => context.push('/appointments'),
-                  ),
                   IconButton(
                     icon: const Icon(Icons.edit_rounded, color: Colors.white),
                     onPressed: () => _showEditSheet(context, ref, customer),
@@ -356,17 +365,20 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                                   onTap: () =>
                                       _showRedeemSheet(context, ref, customer),
                                 ),
-                                _ActionShortcut(
-                                  icon: Icons.calendar_month_rounded,
-                                  label: AppStrings.agendarCorte,
-                                  expand: false,
-                                  width: itemWidth,
-                                  onTap: () => _scheduleNextHaircut(
-                                    context,
-                                    ref,
-                                    customer,
+                                if (appointmentsEnabled)
+                                  _ActionShortcut(
+                                    icon: Icons.calendar_month_rounded,
+                                    label:
+                                        'Agendar ${businessProfile.terminology.appointment}',
+                                    expand: false,
+                                    width: itemWidth,
+                                    onTap: () => _scheduleNextVisit(
+                                      context,
+                                      ref,
+                                      customer,
+                                      businessProfile,
+                                    ),
                                   ),
-                                ),
                               ],
                             );
                           },
@@ -527,10 +539,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     });
   }
 
-  Future<void> _scheduleNextHaircut(
+  Future<void> _scheduleNextVisit(
     BuildContext context,
     WidgetRef ref,
     Customer customer,
+    BusinessProfile businessProfile,
   ) async {
     final now = DateUtils.dateOnly(DateTime.now());
     final picked = await showDatePicker(
@@ -539,7 +552,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
       locale: const Locale('pt', 'PT'),
-      helpText: AppStrings.escolherDataProximoCorte,
+      helpText: 'Escolher data da ${businessProfile.terminology.nextVisit}',
       cancelText: 'Cancelar',
       confirmText: 'Guardar',
     );
@@ -548,7 +561,25 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       return;
     }
 
-    final scheduledDate = DateTime(picked.year, picked.month, picked.day, 10);
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: businessProfile.defaultAppointmentHour,
+        minute: 0,
+      ),
+      helpText: 'Escolher hora',
+    );
+    if (pickedTime == null || !context.mounted) {
+      return;
+    }
+
+    final scheduledDate = DateTime(
+      picked.year,
+      picked.month,
+      picked.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
     try {
       await ref.read(createAppointmentProvider.notifier).createAppointment(
             customerId: customer.id,
@@ -561,10 +592,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       AppFeedback.showSuccessToast(
         context,
         message:
-            'Próximo corte agendado para ${_formatDateShort(scheduledDate)}.',
+            'Agendamento guardado para ${_formatDateShort(scheduledDate)}.',
       );
     } catch (e, st) {
-      AppErrorReporter.report(e, st, hint: 'customer_detail_schedule_haircut');
+      AppErrorReporter.report(e, st,
+          hint: 'customer_detail_schedule_next_visit');
       if (!context.mounted) {
         return;
       }
@@ -796,8 +828,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     };
   }
 
-  String _formatApproxMzn(int points) {
-    final approxValue = points * AppConstants.pointsPerMzn;
+  String _formatApproxMzn(int points, int pointsPerMzn) {
+    final approxValue = points * pointsPerMzn;
     return '${AppStrings.aproxPrefix} $approxValue ${AppStrings.moedaMzn} '
         '${AppStrings.comprasSuffix}';
   }

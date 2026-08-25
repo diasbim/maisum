@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_layout.dart';
 import '../../../../design_system/components/maisum_text_field.dart';
+import '../../../business_profile/domain/business_profile.dart';
 import '../../domain/merchant_onboarding_models.dart';
 import '../controllers/merchant_onboarding_controller.dart';
 import '../widgets/onboarding_widgets.dart';
@@ -34,12 +35,24 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
       error: (_, __) => const Scaffold(
           body: ErrorCard(message: 'Nao foi possivel carregar os servicos.')),
       data: (state) {
-        final suggestions = state.config.serviceSuggestions;
+        final profile = BusinessProfiles.resolve(state.draft.businessType);
+        final suggestions =
+            state.config.suggestionsForBusinessType(state.draft.businessType);
+        final itemLabel =
+            profile.capabilities.products && !profile.capabilities.services
+                ? 'produto'
+                : profile.capabilities.products && profile.capabilities.services
+                    ? 'produto ou servico'
+                    : 'servico';
 
         return OnboardingScaffold(
           step: MerchantOnboardingStep.services,
-          title: 'Serviços oferecidos',
-          subtitle: 'Selecione pelo menos um serviço.',
+          title: profile.capabilities.products && profile.capabilities.services
+              ? 'Produtos e servicos'
+              : profile.capabilities.products
+                  ? 'Produtos vendidos'
+                  : 'Servicos oferecidos',
+          subtitle: 'Adicione agora ou configure o catalogo mais tarde.',
           errorMessage: state.errorMessage,
           primaryLabel: 'Continuar',
           onPrimaryPressed: () async {
@@ -53,17 +66,17 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
           children: [
             MaisUmTextField(
               controller: _searchController,
-              label: 'Pesquisar servicos',
+              label: 'Pesquisar ou adicionar $itemLabel',
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.add_rounded),
                 tooltip: 'Adicionar servico',
-                onPressed: () => _addCustom(state),
+                onPressed: () => _addCustom(state, profile),
               ),
               textCapitalization: TextCapitalization.sentences,
               textInputAction: TextInputAction.done,
               useFloatingLabel: true,
-              onFieldSubmitted: (_) => _addCustom(state),
+              onFieldSubmitted: (_) => _addCustom(state, profile),
             ),
             const SizedBox(height: AppSpacing.xl),
             const SectionTitle('Sugestões'),
@@ -130,12 +143,18 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
         .updateServices(next);
   }
 
-  void _addCustom(MerchantOnboardingState state) {
+  void _addCustom(
+    MerchantOnboardingState state,
+    BusinessProfile profile,
+  ) {
     final name = _searchController.text.trim();
     if (name.isEmpty) return;
     final service = MerchantService(
       id: 'custom_${name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_')}',
       name: name,
+      itemKind: profile.capabilities.products && !profile.capabilities.services
+          ? BusinessItemKind.product
+          : BusinessItemKind.service,
       isCustom: true,
     );
     _searchController.clear();

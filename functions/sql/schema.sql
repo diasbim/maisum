@@ -228,6 +228,35 @@ CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id
 CREATE INDEX IF NOT EXISTS idx_sale_items_updated
   ON sale_items(merchant_id, updated_at, id);
 
+CREATE TABLE IF NOT EXISTS appointments (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  customer_id TEXT NOT NULL,
+  scheduled_date BIGINT NOT NULL,
+  status TEXT NOT NULL,
+  source TEXT NOT NULL,
+  reminder_sent BOOLEAN NOT NULL DEFAULT false,
+  merchant_item_id TEXT,
+  staff_app_user_id TEXT,
+  duration_minutes INTEGER,
+  notes TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  created_by_app_user_id TEXT,
+  updated_by_app_user_id TEXT
+);
+ALTER TABLE appointments
+  ADD COLUMN IF NOT EXISTS merchant_item_id TEXT,
+  ADD COLUMN IF NOT EXISTS staff_app_user_id TEXT,
+  ADD COLUMN IF NOT EXISTS duration_minutes INTEGER,
+  ADD COLUMN IF NOT EXISTS notes TEXT;
+CREATE INDEX IF NOT EXISTS idx_appointments_merchant_date
+  ON appointments(merchant_id, scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_appointments_merchant_item
+  ON appointments(merchant_id, merchant_item_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_staff_date
+  ON appointments(merchant_id, staff_app_user_id, scheduled_date);
+
 CREATE TABLE IF NOT EXISTS customer_risk_scores (
   id TEXT PRIMARY KEY,
   merchant_id TEXT NOT NULL REFERENCES merchants(id),

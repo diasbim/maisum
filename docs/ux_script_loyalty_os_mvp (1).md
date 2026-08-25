@@ -1,7 +1,7 @@
 # 📱 UX SCRIPT — LOYALTYOS (MVP)
 
 ## Contexto
-Aplicação mobile de fidelização para pequenas empresas (barbearias) em Maputo.
+Aplicação mobile de gestão e fidelização para pequenas empresas em Maputo.
 
 ## Core Loop
 Registrar venda → Atribuir pontos → Trazer cliente de volta
@@ -9,7 +9,7 @@ Registrar venda → Atribuir pontos → Trazer cliente de volta
 ---
 
 ## 🎯 Objectivo de UX
-Permitir que o barbeiro:
+Permitir que o operador do negócio:
 - Registe uma venda em < 5 segundos
 - Atribua pontos automaticamente
 - Incentive o retorno do cliente
@@ -27,7 +27,7 @@ Permitir que o barbeiro:
 ---
 
 ## 👤 Utilizador Principal
-Barbeiro / dono do negócio
+Operador / dono do negócio
 
 - Usa Android
 - Ambiente movimentado

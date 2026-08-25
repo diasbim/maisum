@@ -7,13 +7,13 @@
 4. Validar que a URL canonica escolhida e `https://maisum.tsintsivadigital.com/`.
 
 ## 2) Queries locais para monitorar
-- barbearia maputo
-- barbearia mocambique
+- negocio local maputo
+- gestao pequenos negocios mocambique
 - fidelizacao whatsapp mocambique
 - fidelizacao clientes maputo
-- app fidelizacao barbearia
-- software barbearia maputo
-- sistema de pontos barbearia
+- app fidelizacao negocio local
+- software pequenos negocios maputo
+- sistema de pontos para clientes
 
 ## 3) KPIs e metas
 - Impressoes: crescer semana contra semana.
@@ -29,15 +29,15 @@
 ## 5) Tabela de acompanhamento
 | Semana | Query | Impressoes | Cliques | CTR | Posicao media | Acao |
 |---|---:|---:|---:|---:|---:|---|
-| 0 (baseline) | barbearia maputo |  |  |  |  | |
+| 0 (baseline) | negocio local maputo |  |  |  |  | |
 | 0 (baseline) | fidelizacao whatsapp mocambique |  |  |  |  | |
-| 1 | barbearia maputo |  |  |  |  | |
+| 1 | negocio local maputo |  |  |  |  | |
 | 1 | fidelizacao whatsapp mocambique |  |  |  |  | |
-| 2 | barbearia maputo |  |  |  |  | |
+| 2 | negocio local maputo |  |  |  |  | |
 | 2 | fidelizacao whatsapp mocambique |  |  |  |  | |
-| 3 | barbearia maputo |  |  |  |  | |
+| 3 | negocio local maputo |  |  |  |  | |
 | 3 | fidelizacao whatsapp mocambique |  |  |  |  | |
-| 4 | barbearia maputo |  |  |  |  | |
+| 4 | negocio local maputo |  |  |  |  | |
 | 4 | fidelizacao whatsapp mocambique |  |  |  |  | |
 
 ## 6) Regras de decisao no fim da semana 2

@@ -23,6 +23,10 @@ class CreateAppointmentController extends AsyncNotifier<Appointment?> {
     required String customerId,
     required DateTime scheduledDate,
     String source = 'post_sale_flow',
+    String? merchantItemId,
+    String? staffAppUserId,
+    int? durationMinutes,
+    String? notes,
   }) async {
     state = const AsyncLoading();
     final appointment =
@@ -30,6 +34,10 @@ class CreateAppointmentController extends AsyncNotifier<Appointment?> {
               customerId: customerId,
               scheduledDate: scheduledDate,
               source: source,
+              merchantItemId: merchantItemId,
+              staffAppUserId: staffAppUserId,
+              durationMinutes: durationMinutes,
+              notes: notes,
             );
 
     ref.invalidate(appointmentsProvider);

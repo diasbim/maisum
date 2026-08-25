@@ -32,7 +32,7 @@ Covered modules:
 ### Module: appointments
 
 Feature name: Appointment list and customer follow-through
-Problem: Barbers need visibility of upcoming cuts to reduce no-shows and keep daily rhythm.
+Problem: Appointment-based businesses need visibility of upcoming bookings to reduce no-shows and keep daily rhythm.
 Target user moment: At opening and between services.
 
 Hard gate:

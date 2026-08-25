@@ -8,6 +8,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../core/constants/app_runtime_config.dart';
 import '../core/database/app_database.dart';
+import '../core/errors/app_error_reporter.dart';
 import '../core/network/json_api_client.dart';
 import '../core/services/connectivity_service.dart';
 import '../core/services/firebase_auth_service.dart';
@@ -22,6 +23,7 @@ import '../features/appointments/data/appointment_dao.dart';
 import '../features/appointments/data/appointment_repository.dart';
 import '../features/auth/data/auth_repository.dart';
 import '../features/auth/presentation/auth_controller.dart';
+import '../features/business_profile/domain/business_profile.dart';
 import '../features/catalog/data/merchant_catalog_dao.dart';
 import '../features/catalog/data/merchant_catalog_repository.dart';
 import '../features/catalog/domain/merchant_item.dart';
@@ -87,6 +89,34 @@ final businessUidProvider = Provider<String?>((ref) {
     return merchantId;
   }
   return ref.watch(authStateChangesProvider).valueOrNull?.uid;
+});
+
+final activeBusinessProfileProvider =
+    FutureProvider<BusinessProfile>((ref) async {
+  final merchantId = ref.watch(activeMerchantIdProvider);
+  if (merchantId == null || merchantId.isEmpty) {
+    return BusinessProfiles.generic;
+  }
+
+  try {
+    final doc = await ref
+        .read(firestoreInstanceProvider)
+        .collection('businesses')
+        .doc(merchantId)
+        .get();
+    final data = doc.data() ?? const <String, dynamic>{};
+    final profile = doc.exists
+        ? BusinessProfiles.resolveBusinessData(data)
+        : BusinessProfiles.generic;
+    return profile;
+  } catch (error, stackTrace) {
+    AppErrorReporter.report(
+      error,
+      stackTrace,
+      hint: 'active_business_profile_load',
+    );
+    return BusinessProfiles.generic;
+  }
 });
 
 final firestoreSyncServiceProvider = Provider<FirestoreSyncService?>((ref) {
@@ -191,6 +221,12 @@ final saleDaoProvider = Provider<SaleDao>(
   (ref) => SaleDao(
     ref.read(appDatabaseProvider),
     merchantId: ref.watch(activeMerchantIdProvider),
+    pointsPerMzn: ref
+            .watch(activeBusinessProfileProvider)
+            .valueOrNull
+            ?.loyalty
+            .pointsPerMzn ??
+        BusinessProfiles.generic.loyalty.pointsPerMzn,
   ),
 );
 
@@ -283,6 +319,9 @@ final retentionDaoProvider = Provider<RetentionDao>(
   (ref) => RetentionDao(
     ref.read(appDatabaseProvider),
     merchantId: ref.watch(activeMerchantIdProvider),
+    retentionDefaults:
+        ref.watch(activeBusinessProfileProvider).valueOrNull?.retention ??
+            BusinessProfiles.generic.retention,
   ),
 );
 
@@ -302,6 +341,12 @@ final saleRepositoryProvider = Provider<SaleRepository>(
     merchantId: ref.watch(activeMerchantIdProvider),
     deviceId: ref.watch(activeDeviceIdProvider),
     appUserId: ref.watch(activeAppUserIdProvider),
+    pointsPerMzn: ref
+            .watch(activeBusinessProfileProvider)
+            .valueOrNull
+            ?.loyalty
+            .pointsPerMzn ??
+        BusinessProfiles.generic.loyalty.pointsPerMzn,
     saleItemDao: ref.read(saleItemDaoProvider),
   ),
 );

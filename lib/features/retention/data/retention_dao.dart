@@ -1,13 +1,19 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../business_profile/domain/business_profile.dart';
 import '../domain/retention_metric.dart';
 
 class RetentionDao {
-  RetentionDao(this._db, {this.merchantId});
+  RetentionDao(
+    this._db, {
+    this.merchantId,
+    this.retentionDefaults = BusinessProfiles.genericRetention,
+  });
 
   final AppDatabase _db;
   final String? merchantId;
+  final BusinessRetentionDefaults retentionDefaults;
 
   Future<List<RecurringCustomerSummary>> getRecurringCustomers({
     int limit = 50,
@@ -256,9 +262,13 @@ class RetentionDao {
   }
 
   String _riskLevelForDays(int days) {
-    if (days <= 14) return RetentionRiskLevel.active;
-    if (days <= 29) return RetentionRiskLevel.attention;
-    if (days <= 59) return RetentionRiskLevel.risk;
+    if (days <= retentionDefaults.activeDays) {
+      return RetentionRiskLevel.active;
+    }
+    if (days <= retentionDefaults.attentionDays) {
+      return RetentionRiskLevel.attention;
+    }
+    if (days <= retentionDefaults.riskDays) return RetentionRiskLevel.risk;
     return RetentionRiskLevel.lost;
   }
 }

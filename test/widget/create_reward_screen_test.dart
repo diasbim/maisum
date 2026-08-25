@@ -24,7 +24,7 @@ void main() {
         tester.widget<TextFormField>(find.byType(TextFormField).at(1));
 
     expect(nameField.controller?.text, 'Desconto de 20%');
-    expect(pointsField.controller?.text, '600');
+    expect(pointsField.controller?.text, '800');
 
     final selectedTemplate = tester.widget<MaisUmSurface>(
       find.descendant(
@@ -39,7 +39,7 @@ void main() {
     await tester.pumpWidget(_buildScreen());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('reward_template_barba_premium')));
+    await tester.tap(find.byKey(const Key('reward_template_brinde')));
     await tester.pump();
 
     final nameField =
@@ -47,7 +47,7 @@ void main() {
     final pointsField =
         tester.widget<TextFormField>(find.byType(TextFormField).at(1));
 
-    expect(nameField.controller?.text, 'Barba premium');
-    expect(pointsField.controller?.text, '700');
+    expect(nameField.controller?.text, 'Brinde especial');
+    expect(pointsField.controller?.text, '600');
   });
 }

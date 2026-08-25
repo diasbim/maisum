@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
@@ -201,6 +202,9 @@ class _CreateRewardScreenState extends ConsumerState<CreateRewardScreen> {
   @override
   Widget build(BuildContext context) {
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final profileId =
+        ref.watch(activeBusinessProfileProvider).valueOrNull?.id ?? 'other';
+    final rewardTemplates = rewardTemplatesForProfile(profileId);
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
@@ -235,7 +239,7 @@ class _CreateRewardScreenState extends ConsumerState<CreateRewardScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      for (final template in rewardTemplatePresets)
+                      for (final template in rewardTemplates)
                         _RewardTemplateOption(
                           key: Key('reward_template_${template.code}'),
                           selected: _selectedTemplateCode == template.code,

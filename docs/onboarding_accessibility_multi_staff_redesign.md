@@ -17,7 +17,7 @@ This proposal is aligned with the current implementation and routing:
 
 - Plan confirmation is mandatory before dashboard for authenticated users.
 - Staff management exists but is separated from onboarding.
-- Staff can link a device by barbershop code.
+- Staff can link a device by business code.
 - Owner-only gating for staff management is enforced.
 
 ## External Best-Practice Inputs Used
@@ -42,14 +42,14 @@ This proposal is aligned with the current implementation and routing:
 
 User chooses one clear intent first:
 
-- Join existing barbershop
-- Create new barbershop
+- Join existing business
+- Create new business
 
 This reduces cognitive load and removes hidden branching.
 
-### Step 1A - Join existing barbershop (staff or owner)
+### Step 1A - Join existing business (staff or owner)
 
-- Primary action: enter barbershop code.
+- Primary action: enter business code.
 - Secondary action: QR scan (future enhancement).
 - Result: device linked to merchant; role resolved.
 
@@ -58,7 +58,7 @@ After linking:
 - Owner goes to Plan + Team Setup track.
 - Staff goes to PIN + Quick Start track.
 
-### Step 1B - Create new barbershop (owner)
+### Step 1B - Create new business (owner)
 
 - Minimal business profile form (only required fields).
 - Explain why each data point is requested.

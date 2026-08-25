@@ -6,12 +6,16 @@ import '../domain/sale.dart';
 import '../domain/sale_item.dart';
 
 class SaleDao {
-  SaleDao(this._db, {this.merchantId});
+  SaleDao(
+    this._db, {
+    this.merchantId,
+    int pointsPerMzn = 100,
+  }) : _points = PointsCalculator(pointsPerMzn: pointsPerMzn);
 
   final AppDatabase _db;
   final String? merchantId;
   static const _uuid = Uuid();
-  static const _points = PointsCalculator();
+  final PointsCalculator _points;
 
   Future<Sale> create({
     required String customerId,

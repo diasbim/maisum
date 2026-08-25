@@ -73,6 +73,9 @@ class _BusinessTypePageState extends ConsumerState<BusinessTypePage> {
       'cafe' => Icons.local_cafe_rounded,
       'clinic' => Icons.health_and_safety_rounded,
       'gym' => Icons.fitness_center_rounded,
+      'workshop' => Icons.build_rounded,
+      'services' => Icons.business_center_rounded,
+      'store' => Icons.storefront_rounded,
       _ => Icons.shopping_bag_rounded,
     };
   }

@@ -37,12 +37,10 @@ void main() {
         required int daysAgo,
         required double totalSpent,
       }) async {
-        final createdAt = now
-            .subtract(const Duration(days: 120))
-            .millisecondsSinceEpoch;
-        final saleAt = now
-            .subtract(Duration(days: daysAgo))
-            .millisecondsSinceEpoch;
+        final createdAt =
+            now.subtract(const Duration(days: 120)).millisecondsSinceEpoch;
+        final saleAt =
+            now.subtract(Duration(days: daysAgo)).millisecondsSinceEpoch;
 
         await db.insert('customers', {
           'id': id,
@@ -86,28 +84,28 @@ void main() {
         id: 'a',
         name: 'Cliente A',
         points: 100,
-        daysAgo: 20,
+        daysAgo: 45,
         totalSpent: 5000,
       );
       await seedCustomer(
         id: 'b',
         name: 'Cliente B',
         points: 9999,
-        daysAgo: 70,
+        daysAgo: 100,
         totalSpent: 2000,
       );
       await seedCustomer(
         id: 'c',
         name: 'Cliente C',
         points: 100,
-        daysAgo: 70,
+        daysAgo: 100,
         totalSpent: 1000,
       );
       await seedCustomer(
         id: 'd',
         name: 'Cliente D',
         points: 7000,
-        daysAgo: 20,
+        daysAgo: 45,
         totalSpent: 1000,
       );
 
@@ -156,9 +154,8 @@ void main() {
       expect(completed!.status, RecoveryTaskStatus.completed);
 
       final pending = await syncDao.getAllItems();
-      final recoveryItems = pending
-          .where((item) => item.entityType == 'recovery_task')
-          .toList();
+      final recoveryItems =
+          pending.where((item) => item.entityType == 'recovery_task').toList();
       expect(recoveryItems.length, 2);
       expect(recoveryItems.any((item) => item.operation == 'create'), isTrue);
       expect(recoveryItems.any((item) => item.operation == 'update'), isTrue);
