@@ -17,63 +17,69 @@ class QuickAmountButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: 86,
-        height: 78,
-        decoration: BoxDecoration(
-          color: selected ? AppColors.secondaryLight : AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? AppColors.secondary : AppColors.g100,
-            width: 1.5,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label == null ? '$amount meticais' : '$amount, $label',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 86,
+          height: 78,
+          decoration: BoxDecoration(
+            color: selected ? AppColors.secondaryLight : AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: selected ? AppColors.secondary : AppColors.g100,
+              width: 1.5,
+            ),
           ),
-        ),
-        child: Stack(
-          children: [
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$amount',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: selected
-                          ? AppColors.primary
-                          : AppColors.textPrimary,
-                    ),
-                  ),
-                  if (label != null) ...[
-                    const SizedBox(height: 2),
+          child: Stack(
+            children: [
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     Text(
-                      label!,
+                      '$amount',
                       style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
                         color: selected
                             ? AppColors.primary
-                            : AppColors.textSecondary,
+                            : AppColors.textPrimary,
                       ),
                     ),
+                    if (label != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        label!,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: selected
+                              ? AppColors.primary
+                              : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-            ),
-            if (selected)
-              const Positioned(
-                right: 6,
-                top: 6,
-                child: Icon(
-                  Icons.check_circle_rounded,
-                  size: 18,
-                  color: AppColors.secondaryDark,
                 ),
               ),
-          ],
+              if (selected)
+                const Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    size: 18,
+                    color: AppColors.secondaryDark,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

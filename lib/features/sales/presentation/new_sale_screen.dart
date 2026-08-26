@@ -628,12 +628,8 @@ class _CustomerSelectionSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Selecionar cliente',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.onSurface,
-                ),
+          const MaisUmSheetHeader(
+            title: 'Selecionar cliente',
           ),
           const SizedBox(height: 8),
           ConstrainedBox(

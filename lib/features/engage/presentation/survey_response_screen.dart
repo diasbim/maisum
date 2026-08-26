@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../design_system/components/maisum_app_bar.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
@@ -40,10 +41,9 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        title: const Text('Enviar questionário'),
-        backgroundColor: AppColors.offWhite,
-        elevation: 0,
+      appBar: const MaisUmAppBar(
+        title: 'Enviar questionário',
+        fallbackLocation: '/engage',
       ),
       body: accessAsync.when(
         loading: () => const Center(
@@ -58,7 +58,7 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
             return EmptyState(
               title: 'Envio de questionários indisponível',
               subtitle: 'Funcionalidade exclusiva do plano Business.',
-              actionLabel: 'Falar no WhatsApp',
+              actionLabel: 'Ver opções',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageSurveys,
@@ -233,6 +233,8 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
   }
 
   Future<void> _submit(EngageSurvey survey) async {
+    if (_submitting) return;
+
     for (final question in survey.questions) {
       if (!question.isRequired) continue;
       final value = _answers[question.id];
@@ -270,7 +272,9 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref.read(engageRepositoryProvider).submitSurveyResponse(
+      final result = await ref
+          .read(engageRepositoryProvider)
+          .submitSurveyResponseWithResult(
             SurveySubmissionInput(
               surveyId: survey.id,
               customerId: _customerIdController.text.trim().isEmpty
@@ -282,14 +286,29 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
               answers: answers,
             ),
           );
-      await ref.read(engageSurveyAnalyticsProvider.notifier).refresh();
+
+      try {
+        await ref.read(engageSurveyAnalyticsProvider.notifier).refresh();
+      } catch (_) {
+        // The submission result is still valid if the summary cannot refresh.
+      }
       if (!mounted) return;
       AppFeedback.showSuccessToast(
         context,
-        message: 'Resposta enviada com sucesso',
+        message: result.isQueued
+            ? 'Resposta guardada para sincronizar'
+            : 'Resposta enviada com sucesso',
       );
       _answers.clear();
       setState(() {});
+    } catch (_) {
+      if (!mounted) return;
+      AppFeedback.showRetryableError(
+        context,
+        message:
+            'Não foi possível guardar a resposta. Os dados continuam preenchidos.',
+        onRetry: () => _submit(survey),
+      );
     } finally {
       if (mounted) {
         setState(() => _submitting = false);

@@ -36,7 +36,14 @@ class ProgressHeader extends StatelessWidget {
                 width: AppControlSize.iconButton,
                 height: AppControlSize.iconButton,
                 child: IconButton(
-                  onPressed: onBack ?? () => context.pop(),
+                  onPressed: onBack ??
+                      () {
+                        if (context.canPop()) {
+                          context.pop();
+                          return;
+                        }
+                        context.go('/onboarding-entry');
+                      },
                   icon: const Icon(Icons.arrow_back_rounded),
                   color: AppColors.primary,
                   tooltip: 'Voltar',
@@ -102,6 +109,79 @@ class ProgressHeader extends StatelessWidget {
   }
 }
 
+class OnboardingStatusScaffold extends StatelessWidget {
+  const OnboardingStatusScaffold({
+    super.key,
+    required this.step,
+    required this.title,
+    required this.onBack,
+    this.errorMessage,
+    this.onRetry,
+  });
+
+  final MerchantOnboardingStep step;
+  final String title;
+  final VoidCallback onBack;
+  final String? errorMessage;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) onBack();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.offWhite,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xxl,
+              AppSpacing.lg,
+              AppSpacing.xxl,
+              AppSpacing.xxl,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ProgressHeader(
+                  step: step,
+                  title: title,
+                  onBack: onBack,
+                ),
+                Expanded(
+                  child: Center(
+                    child: errorMessage == null
+                        ? const CircularProgressIndicator(
+                            color: AppColors.secondary,
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ErrorCard(message: errorMessage!),
+                              if (onRetry != null) ...[
+                                const SizedBox(height: AppSpacing.lg),
+                                MaisUmButton(
+                                  label: 'Tentar novamente',
+                                  leadingIcon: Icons.refresh_rounded,
+                                  variant: MaisUmButtonVariant.outlined,
+                                  onPressed: onRetry,
+                                ),
+                              ],
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class OnboardingScaffold extends StatelessWidget {
   const OnboardingScaffold({
     super.key,
@@ -115,6 +195,8 @@ class OnboardingScaffold extends StatelessWidget {
     this.isLoading = false,
     this.errorMessage,
     this.onBack,
+    this.secondaryLabel,
+    this.onSecondaryPressed,
   });
 
   final MerchantOnboardingStep step;
@@ -127,71 +209,98 @@ class OnboardingScaffold extends StatelessWidget {
   final bool isLoading;
   final String? errorMessage;
   final VoidCallback? onBack;
+  final String? secondaryLabel;
+  final VoidCallback? onSecondaryPressed;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.offWhite,
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final maxWidth = constraints.maxWidth >= AppBreakpoints.tablet
-                ? AppLayout.formMaxWidth
-                : constraints.maxWidth;
+    final bottomContentPadding =
+        secondaryLabel == null ? 120.0 : AppSpacing.xxxxxxl * 3;
 
-            return Align(
-              alignment: Alignment.topCenter,
-              child: SizedBox(
-                width: maxWidth,
-                height: constraints.maxHeight,
-                child: Stack(
-                  children: [
-                    ListView(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.xxl,
-                        AppSpacing.lg,
-                        AppSpacing.xxl,
-                        120,
-                      ),
-                      children: [
-                        ProgressHeader(
-                          step: step,
-                          title: title,
-                          subtitle: subtitle,
-                          onBack: onBack,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          (onBack ?? () => context.go(step.previousRoute))();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.offWhite,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final maxWidth = constraints.maxWidth >= AppBreakpoints.tablet
+                  ? AppLayout.formMaxWidth
+                  : constraints.maxWidth;
+
+              return Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: maxWidth,
+                  height: constraints.maxHeight,
+                  child: Stack(
+                    children: [
+                      ListView(
+                        padding: EdgeInsets.fromLTRB(
+                          AppSpacing.xxl,
+                          AppSpacing.lg,
+                          AppSpacing.xxl,
+                          bottomContentPadding,
                         ),
-                        const SizedBox(height: AppSpacing.xxl),
-                        AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          child: errorMessage == null
-                              ? const SizedBox.shrink()
-                              : ErrorCard(message: errorMessage!),
-                        ),
-                        if (errorMessage != null)
-                          const SizedBox(height: AppSpacing.lg),
-                        ...children,
-                      ],
-                    ),
-                    Positioned(
-                      left: AppSpacing.xxl,
-                      right: AppSpacing.xxl,
-                      bottom: AppSpacing.lg,
-                      child: MaisUmButton(
-                        label: primaryLabel,
-                        isLoading: isLoading,
-                        enabled: primaryEnabled,
-                        onPressed: onPrimaryPressed,
-                        height: AppControlSize.buttonLarge,
-                        trailingIcon: Icons.arrow_forward_rounded,
-                        iconColor: AppColors.secondary,
+                        children: [
+                          ProgressHeader(
+                            step: step,
+                            title: title,
+                            subtitle: subtitle,
+                            onBack: onBack,
+                          ),
+                          const SizedBox(height: AppSpacing.xxl),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: errorMessage == null
+                                ? const SizedBox.shrink()
+                                : ErrorCard(message: errorMessage!),
+                          ),
+                          if (errorMessage != null)
+                            const SizedBox(height: AppSpacing.lg),
+                          ...children,
+                        ],
                       ),
-                    ),
-                    if (isLoading) const LoadingOverlay(),
-                  ],
+                      Positioned(
+                        left: AppSpacing.xxl,
+                        right: AppSpacing.xxl,
+                        bottom: AppSpacing.lg,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            MaisUmButton(
+                              label: primaryLabel,
+                              isLoading: isLoading,
+                              enabled: primaryEnabled,
+                              onPressed: onPrimaryPressed,
+                              height: AppControlSize.buttonLarge,
+                              trailingIcon: Icons.arrow_forward_rounded,
+                              iconColor: AppColors.secondary,
+                            ),
+                            if (secondaryLabel != null) ...[
+                              const SizedBox(height: AppSpacing.sm),
+                              MaisUmButton(
+                                label: secondaryLabel!,
+                                enabled: !isLoading,
+                                onPressed: onSecondaryPressed,
+                                variant: MaisUmButtonVariant.ghost,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (isLoading) const LoadingOverlay(),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -247,8 +356,9 @@ class BusinessCard extends StatelessWidget {
                   Icon(
                     icon,
                     size: compact ? 30 : 44,
-                    color:
-                        selected ? AppColors.secondary : AppColors.primaryDarker,
+                    color: selected
+                        ? AppColors.secondary
+                        : AppColors.primaryDarker,
                   ),
                   SizedBox(height: compact ? 4 : AppSpacing.md),
                   Text(

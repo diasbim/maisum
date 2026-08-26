@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
+import 'package:maisum/app/router.dart';
 import 'package:maisum/app/providers.dart';
 import 'package:maisum/core/constants/app_constants.dart';
 import 'package:maisum/core/storage/secure_storage.dart';
@@ -55,7 +56,7 @@ class _SpySecureStorageService extends SecureStorageService {
   final bool initialPlanConfirmed;
   final String appUserRole;
   final _drafts = <String, String>{};
-  int pendingPlanWrites = 0;
+  final planConfirmationWrites = <bool>[];
 
   @override
   Future<void> setOnboardingPlanConfirmed(
@@ -63,9 +64,7 @@ class _SpySecureStorageService extends SecureStorageService {
     String? merchantId,
     String? role,
   }) async {
-    if (!value) {
-      pendingPlanWrites += 1;
-    }
+    planConfirmationWrites.add(value);
   }
 
   @override
@@ -357,29 +356,45 @@ Widget _buildMerchantOnboardingFlow({
   required FakeFirebaseFirestore firestore,
   required _SpySecureStorageService storage,
   _SpySubscriptionRepository? subscriptionRepository,
+  String initialLocation = '/merchant-onboarding/type',
 }) {
   final router = GoRouter(
-    initialLocation: '/merchant-onboarding/type',
+    initialLocation: initialLocation,
     routes: [
       GoRoute(
+        path: '/onboarding-entry',
+        builder: (_, __) =>
+            const Scaffold(body: Text('onboarding-entry-route')),
+      ),
+      GoRoute(
         path: '/merchant-onboarding/type',
-        builder: (_, __) => const BusinessTypePage(),
+        builder: (_, state) => BusinessTypePage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/info',
-        builder: (_, __) => const BusinessInfoPage(),
+        builder: (_, state) => BusinessInfoPage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/location',
-        builder: (_, __) => const BusinessLocationPage(),
+        builder: (_, state) => BusinessLocationPage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/hours',
-        builder: (_, __) => const WorkingHoursPage(),
+        builder: (_, state) => WorkingHoursPage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/services',
-        builder: (_, __) => const ServicesPage(),
+        builder: (_, state) => ServicesPage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/review',
@@ -388,6 +403,12 @@ Widget _buildMerchantOnboardingFlow({
       GoRoute(
         path: '/dashboard',
         builder: (_, __) => const Scaffold(body: Text('dashboard-route')),
+      ),
+      GoRoute(
+        path: '/onboarding-plan',
+        builder: (_, __) => const Scaffold(
+          body: Text('onboarding-plan-route'),
+        ),
       ),
     ],
   );
@@ -555,6 +576,7 @@ Map<String, Object?> _completeBusinessData() {
     'merchant_name': 'Barbearia Z',
     'phone': '+258840000001',
     'city': 'Maputo',
+    'district': 'KaMpfumo',
     'business_type': 'barber_from_firestore',
     'address': 'Rua Completa 123',
     'location': {
@@ -835,6 +857,128 @@ void main() {
           find.widgetWithText(TextField, 'Nome do negócio *'), findsOneWidget);
     });
 
+    testWidgets('business info requires city and district', (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      await _seedMerchantOnboardingConfig(firestore);
+      final storage = _SpySecureStorageService(initialPlanConfirmed: true);
+      final session = AuthSession(
+        userId: 'user-required-location',
+        merchantId: 'merchant-required-location',
+        firebaseUid: 'firebase-required-location',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+
+      await tester.pumpWidget(
+        _buildMerchantOnboardingFlow(
+          session: session,
+          firestore: firestore,
+          storage: storage,
+          initialLocation: '/merchant-onboarding/info',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nome do negócio *'),
+        'Lavandaria Central',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Cidade *'),
+        'Maputo',
+      );
+      await _tapVisibleText(tester, 'Continuar');
+
+      expect(find.text('Informe o bairro ou distrito.'), findsOneWidget);
+      expect(find.text('Dados do negócio'), findsOneWidget);
+    });
+
+    testWidgets('system back follows the previous onboarding step',
+        (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      await _seedMerchantOnboardingConfig(firestore);
+      final storage = _SpySecureStorageService(initialPlanConfirmed: true);
+      final session = AuthSession(
+        userId: 'user-system-back',
+        merchantId: 'merchant-system-back',
+        firebaseUid: 'firebase-system-back',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+      const cases = {
+        '/merchant-onboarding/type': 'onboarding-entry-route',
+        '/merchant-onboarding/info': 'Qual é o tipo do negócio?',
+        '/merchant-onboarding/location': 'Dados do negócio',
+        '/merchant-onboarding/hours': 'Detalhes da localização',
+        '/merchant-onboarding/services': 'Horário de funcionamento',
+        '/merchant-onboarding/review': 'Produtos e serviços',
+      };
+
+      for (final entry in cases.entries) {
+        await tester.pumpWidget(
+          _buildMerchantOnboardingFlow(
+            session: session,
+            firestore: firestore,
+            storage: storage,
+            initialLocation: entry.key,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(entry.value),
+          findsOneWidget,
+          reason: 'System back failed from ${entry.key}',
+        );
+      }
+    });
+
+    testWidgets('toolbar back follows the previous onboarding step',
+        (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      await _seedMerchantOnboardingConfig(firestore);
+      final storage = _SpySecureStorageService(initialPlanConfirmed: true);
+      final session = AuthSession(
+        userId: 'user-toolbar-back',
+        merchantId: 'merchant-toolbar-back',
+        firebaseUid: 'firebase-toolbar-back',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+      const cases = {
+        '/merchant-onboarding/type': 'onboarding-entry-route',
+        '/merchant-onboarding/info': 'Qual é o tipo do negócio?',
+        '/merchant-onboarding/location': 'Dados do negócio',
+        '/merchant-onboarding/hours': 'Detalhes da localização',
+        '/merchant-onboarding/services': 'Horário de funcionamento',
+        '/merchant-onboarding/review': 'Produtos e serviços',
+      };
+
+      for (final entry in cases.entries) {
+        await tester.pumpWidget(
+          _buildMerchantOnboardingFlow(
+            session: session,
+            firestore: firestore,
+            storage: storage,
+            initialLocation: entry.key,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Voltar'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(entry.value),
+          findsOneWidget,
+          reason: 'Toolbar back failed from ${entry.key}',
+        );
+      }
+    });
+
     testWidgets('business type continue ignores stale incomplete location step',
         (tester) async {
       final firestore = FakeFirebaseFirestore();
@@ -874,11 +1018,11 @@ void main() {
       expect(find.text('Selecione a localização do negócio.'), findsNothing);
     });
 
-    testWidgets('new flow loads config and saves merchant profile in Firestore',
+    testWidgets('new flow starts trial and continues to plan selection',
         (tester) async {
       final firestore = FakeFirebaseFirestore();
       await _seedMerchantOnboardingConfig(firestore);
-      final storage = _SpySecureStorageService(initialPlanConfirmed: true);
+      final storage = _SpySecureStorageService(initialPlanConfirmed: false);
       final subscriptionRepository = _SpySubscriptionRepository();
       final session = AuthSession(
         userId: 'user-1',
@@ -913,30 +1057,22 @@ void main() {
         find.widgetWithText(TextField, 'Cidade *'),
         'Matola',
       );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Bairro ou distrito *'),
+        'Matola A',
+      );
       await tester.pumpAndSettle();
       await _tapVisibleText(tester, 'Continuar');
 
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Endereço selecionado *'),
-        'Rua Firebase 123',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Latitude *'),
-        '-25.95',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Longitude *'),
-        '32.58',
-      );
-      await tester.pumpAndSettle();
-      await _tapVisibleText(tester, 'Continuar');
+      expect(find.text('Latitude *'), findsNothing);
+      expect(find.text('Longitude *'), findsNothing);
+      await _tapVisibleText(tester, 'Adicionar depois');
 
       expect(find.text('Segunda Firestore'), findsOneWidget);
       expect(find.text('09:15 - 17:45'), findsOneWidget);
-      await _tapVisibleText(tester, 'Continuar');
+      await _tapVisibleText(tester, 'Configurar depois');
 
-      await _tapVisibleText(tester, 'Corte Firestore');
-      await _tapVisibleText(tester, 'Continuar');
+      await _tapVisibleText(tester, 'Configurar depois');
 
       await _tapVisibleText(tester, 'Criar conta');
       await tester.pumpAndSettle();
@@ -949,24 +1085,113 @@ void main() {
       expect(data, containsPair('business_type', 'barber_from_firestore'));
       expect(data, containsPair('business_profile_version', 1));
       expect(data, containsPair('city', 'Matola'));
-      expect(data, containsPair('address', 'Rua Firebase 123'));
+      expect(data, containsPair('district', 'Matola A'));
       expect(data, containsPair('owner_user_id', 'user-1'));
       expect(data, containsPair('firebase_uid', 'firebase-user-1'));
-      expect(data?['location'], containsPair('latitude', -25.95));
-      expect(data?['location'], containsPair('longitude', 32.58));
-      expect(data?['working_hours'], contains('1'));
-      expect(data?['services'], [
-        containsPair('id', 'cut_from_firestore'),
-      ]);
+      expect(data?.containsKey('address'), isFalse);
+      expect(data?.containsKey('location'), isFalse);
+      expect(data?.containsKey('working_hours'), isFalse);
+      expect(data?.containsKey('services'), isFalse);
       final catalogItem = await firestore
           .collection('businesses')
           .doc('merchant-1')
           .collection('merchant_items')
           .doc('cut_from_firestore')
           .get();
-      expect(catalogItem.data(), containsPair('type', 'SERVICE'));
+      expect(catalogItem.exists, isFalse);
       expect(subscriptionRepository.trialMerchantId, 'merchant-1');
-      expect(find.text('dashboard-route'), findsOneWidget);
+      expect(storage.planConfirmationWrites, isEmpty);
+      expect(
+        await storage.getMerchantOnboardingDraft(
+          merchantId: 'merchant-1',
+          role: AppConstants.appUserRoleOwner,
+        ),
+        isNull,
+      );
+      expect(find.text('onboarding-plan-route'), findsOneWidget);
+    });
+
+    testWidgets('editing business type from review returns to review',
+        (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      await _seedMerchantOnboardingConfig(firestore);
+      await firestore
+          .collection('businesses')
+          .doc('merchant-review-edit')
+          .set(_completeBusinessData());
+      final storage = _SpySecureStorageService(initialPlanConfirmed: true);
+      final session = AuthSession(
+        userId: 'user-review-edit',
+        merchantId: 'merchant-review-edit',
+        firebaseUid: 'firebase-review-edit',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+
+      await tester.pumpWidget(
+        _buildMerchantOnboardingFlow(
+          session: session,
+          firestore: firestore,
+          storage: storage,
+          initialLocation: '/merchant-onboarding/review',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Editar').first);
+      await tester.pumpAndSettle();
+      expect(find.text('Qual é o tipo do negócio?'), findsOneWidget);
+
+      await tester.tap(find.byKey(
+        const Key('business_type_option_salon_from_firestore'),
+      ));
+      await tester.pumpAndSettle();
+      await _tapVisibleText(tester, 'Continuar');
+
+      expect(find.text('Confirme os dados'), findsOneWidget);
+      expect(find.text('Salao Firestore'), findsOneWidget);
+    });
+
+    testWidgets('skipping location preserves existing coordinates',
+        (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      await _seedMerchantOnboardingConfig(firestore);
+      await firestore
+          .collection('businesses')
+          .doc('merchant-existing-location')
+          .set(_completeBusinessData());
+      final storage = _SpySecureStorageService(initialPlanConfirmed: true);
+      final session = AuthSession(
+        userId: 'user-existing-location',
+        merchantId: 'merchant-existing-location',
+        firebaseUid: 'firebase-existing-location',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+
+      await tester.pumpWidget(
+        _buildMerchantOnboardingFlow(
+          session: session,
+          firestore: firestore,
+          storage: storage,
+          initialLocation: '/merchant-onboarding/location',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Latitude *'), findsNothing);
+      expect(find.text('Longitude *'), findsNothing);
+      await _tapVisibleText(tester, 'Adicionar depois');
+      await _tapVisibleText(tester, 'Configurar depois');
+      await _tapVisibleText(tester, 'Configurar depois');
+      await _tapVisibleText(tester, 'Criar conta');
+
+      final saved = await firestore
+          .collection('businesses')
+          .doc('merchant-existing-location')
+          .get();
+      expect(saved.data()?['location'], containsPair('latitude', -25.95));
+      expect(saved.data()?['location'], containsPair('longitude', 32.58));
     });
 
     testWidgets('legacy merchant-config path redirects to new onboarding',
@@ -1031,6 +1256,23 @@ void main() {
   });
 
   group('Router onboarding guards', () {
+    test(
+        'production plan guard allows contact flow but not protected administration',
+        () {
+      expect(
+        canAccessWithoutOnboardingPlanConfirmation('/feature-upsell'),
+        isTrue,
+      );
+      expect(
+        canAccessWithoutOnboardingPlanConfirmation('/subscription-admin'),
+        isFalse,
+      );
+      expect(
+        canAccessWithoutOnboardingPlanConfirmation('/dashboard'),
+        isFalse,
+      );
+    });
+
     testWidgets('redirects staff away from onboarding plan', (tester) async {
       final firestore = FakeFirebaseFirestore();
       await firestore
@@ -1118,10 +1360,7 @@ void main() {
         await tester.pumpWidget(_buildOnboardingEntryFlow());
         await tester.pumpAndSettle();
 
-        expect(
-          find.bySemanticsLabel('Progresso do onboarding'),
-          findsOneWidget,
-        );
+        expect(find.text('Vamos começar'), findsOneWidget);
         expect(
           find.bySemanticsLabel('Continuar para o próximo passo'),
           findsOneWidget,

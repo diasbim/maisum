@@ -10,7 +10,9 @@ import '../controllers/merchant_onboarding_controller.dart';
 import '../widgets/onboarding_widgets.dart';
 
 class BusinessTypePage extends ConsumerStatefulWidget {
-  const BusinessTypePage({super.key});
+  const BusinessTypePage({super.key, this.returnRoute});
+
+  final String? returnRoute;
 
   @override
   ConsumerState<BusinessTypePage> createState() => _BusinessTypePageState();
@@ -31,36 +33,51 @@ class _BusinessTypePageState extends ConsumerState<BusinessTypePage> {
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(merchantOnboardingControllerProvider);
+    final backRoute =
+        widget.returnRoute ?? MerchantOnboardingStep.businessType.previousRoute;
 
     return asyncState.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => const Scaffold(
-          body: ErrorCard(
-        message: 'Não foi possível carregar a configuração inicial.',
-      )),
+      loading: () => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.businessType,
+        title: 'Escolha o tipo de negócio',
+        onBack: () => context.go(backRoute),
+      ),
+      error: (_, __) => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.businessType,
+        title: 'Escolha o tipo de negócio',
+        errorMessage: 'Não foi possível carregar a configuração inicial.',
+        onBack: () => context.go(backRoute),
+        onRetry: () => ref.invalidate(merchantOnboardingControllerProvider),
+      ),
       data: (state) {
         final types = state.config.businessTypes;
 
-        return _BusinessTypeShell(
-          types: types,
-          selectedType: state.draft.businessType,
-          errorMessage: state.errorMessage,
-          iconFor: _iconFor,
-          onBack: () => Navigator.of(context).maybePop(),
-          onSelect: (id) {
-            return ref
-                .read(merchantOnboardingControllerProvider.notifier)
-                .selectBusinessType(id);
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) context.go(backRoute);
           },
-          onContinue: () async {
-            final moved = await ref
-                .read(merchantOnboardingControllerProvider.notifier)
-                .continueFromStep(MerchantOnboardingStep.businessType);
-            if (moved && context.mounted) {
-              context.go(MerchantOnboardingStep.businessInfo.route);
-            }
-          },
+          child: _BusinessTypeShell(
+            types: types,
+            selectedType: state.draft.businessType,
+            errorMessage: state.errorMessage,
+            iconFor: _iconFor,
+            onBack: () => context.go(backRoute),
+            onSelect: (id) {
+              return ref
+                  .read(merchantOnboardingControllerProvider.notifier)
+                  .selectBusinessType(id);
+            },
+            onContinue: () async {
+              final moved = await ref
+                  .read(merchantOnboardingControllerProvider.notifier)
+                  .continueFromStep(MerchantOnboardingStep.businessType);
+              if (moved && context.mounted) {
+                context.go(widget.returnRoute ??
+                    MerchantOnboardingStep.businessInfo.route);
+              }
+            },
+          ),
         );
       },
     );
@@ -73,6 +90,13 @@ class _BusinessTypePageState extends ConsumerState<BusinessTypePage> {
       'spa' => Icons.spa_rounded,
       'restaurant' => Icons.restaurant_rounded,
       'cafe' => Icons.local_cafe_rounded,
+      'car_wash' => Icons.local_car_wash_rounded,
+      'laundry' => Icons.local_laundry_service_rounded,
+      'bakery' => Icons.bakery_dining_rounded,
+      'pharmacy' => Icons.local_pharmacy_rounded,
+      'pet_care' => Icons.pets_rounded,
+      'tailoring' => Icons.checkroom_rounded,
+      'phone_repair' => Icons.phone_android_rounded,
       'clinic' => Icons.health_and_safety_rounded,
       'gym' => Icons.fitness_center_rounded,
       'workshop' => Icons.build_rounded,

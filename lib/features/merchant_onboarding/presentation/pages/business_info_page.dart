@@ -9,7 +9,9 @@ import '../controllers/merchant_onboarding_controller.dart';
 import '../widgets/onboarding_widgets.dart';
 
 class BusinessInfoPage extends ConsumerStatefulWidget {
-  const BusinessInfoPage({super.key});
+  const BusinessInfoPage({super.key, this.returnRoute});
+
+  final String? returnRoute;
 
   @override
   ConsumerState<BusinessInfoPage> createState() => _BusinessInfoPageState();
@@ -42,11 +44,21 @@ class _BusinessInfoPageState extends ConsumerState<BusinessInfoPage> {
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(merchantOnboardingControllerProvider);
+    final backRoute =
+        widget.returnRoute ?? MerchantOnboardingStep.businessInfo.previousRoute;
     return asyncState.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Não foi possível carregar os dados.')),
+      loading: () => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.businessInfo,
+        title: 'Dados do negócio',
+        onBack: () => context.go(backRoute),
+      ),
+      error: (_, __) => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.businessInfo,
+        title: 'Dados do negócio',
+        errorMessage: 'Não foi possível carregar os dados.',
+        onBack: () => context.go(backRoute),
+        onRetry: () => ref.invalidate(merchantOnboardingControllerProvider),
+      ),
       data: (state) {
         _syncController(_nameController, state.draft.businessName ?? '');
         _syncController(_phoneController, state.draft.phone ?? '');
@@ -57,6 +69,7 @@ class _BusinessInfoPageState extends ConsumerState<BusinessInfoPage> {
           step: MerchantOnboardingStep.businessInfo,
           title: 'Dados do negócio',
           subtitle: 'Conte-nos mais sobre o seu negócio.',
+          onBack: () => context.go(backRoute),
           errorMessage: state.errorMessage,
           primaryLabel: 'Continuar',
           onPrimaryPressed: () async {
@@ -65,7 +78,8 @@ class _BusinessInfoPageState extends ConsumerState<BusinessInfoPage> {
                 .read(merchantOnboardingControllerProvider.notifier)
                 .continueFromStep(MerchantOnboardingStep.businessInfo);
             if (moved && context.mounted) {
-              context.go(MerchantOnboardingStep.location.route);
+              context.go(
+                  widget.returnRoute ?? MerchantOnboardingStep.location.route);
             }
           },
           children: [
@@ -103,7 +117,7 @@ class _BusinessInfoPageState extends ConsumerState<BusinessInfoPage> {
             MaisUmTextField(
               controller: _districtController,
               textCapitalization: TextCapitalization.words,
-              label: 'Bairro (opcional)',
+              label: 'Bairro ou distrito *',
               prefixIcon: const Icon(Icons.apartment_rounded),
               textInputAction: TextInputAction.done,
               useFloatingLabel: true,

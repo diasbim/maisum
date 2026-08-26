@@ -45,11 +45,7 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
   DateTime? _scheduledDate;
   bool _appointmentCreated = false;
 
-  void _handleBackPressed() {
-    if (context.canPop()) {
-      context.pop();
-      return;
-    }
+  void _closeSuccess() {
     context.go('/dashboard');
   }
 
@@ -138,9 +134,10 @@ class _SaleSuccessScreenState extends ConsumerState<SaleSuccessScreen> {
                         Row(
                           children: [
                             IconButton(
-                              onPressed: _handleBackPressed,
+                              onPressed: _closeSuccess,
+                              tooltip: 'Fechar',
                               icon: const Icon(
-                                Icons.arrow_back_rounded,
+                                Icons.close_rounded,
                                 color: Colors.white,
                               ),
                             ),

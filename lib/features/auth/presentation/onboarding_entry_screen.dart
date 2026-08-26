@@ -71,22 +71,11 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
           Semantics(
             header: true,
             child: Text(
-              'Passo 1 de 2',
+              'Vamos começar',
               style: theme.textTheme.labelLarge?.copyWith(
                 color: theme.colorScheme.primary,
                 fontWeight: FontWeight.w700,
               ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Semantics(
-            label: 'Progresso do onboarding',
-            value: '50 por cento, passo 1 de 2',
-            readOnly: true,
-            child: LinearProgressIndicator(
-              value: 0.5,
-              borderRadius: BorderRadius.circular(999),
-              minHeight: 8,
             ),
           ),
           const SizedBox(height: AppSpacing.lg),

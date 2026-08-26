@@ -11,16 +11,48 @@ import '../controllers/merchant_onboarding_controller.dart';
 import '../widgets/onboarding_widgets.dart';
 
 class WorkingHoursPage extends ConsumerWidget {
-  const WorkingHoursPage({super.key});
+  const WorkingHoursPage({super.key, this.returnRoute});
+
+  final String? returnRoute;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncState = ref.watch(merchantOnboardingControllerProvider);
+    final backRoute =
+        returnRoute ?? MerchantOnboardingStep.workingHours.previousRoute;
+    Future<void> continueFlow({required bool acceptHours}) async {
+      final current =
+          ref.read(merchantOnboardingControllerProvider).valueOrNull;
+      final controller =
+          ref.read(merchantOnboardingControllerProvider.notifier);
+      if (acceptHours && current != null) {
+        final hours = current.draft.workingHours.isEmpty
+            ? current.config.defaultWorkingHours
+            : current.draft.workingHours;
+        if (hours.isNotEmpty) {
+          await controller.updateWorkingHours(hours);
+        }
+      }
+      final moved = await controller
+          .continueFromStep(MerchantOnboardingStep.workingHours);
+      if (moved && context.mounted) {
+        context.go(returnRoute ?? MerchantOnboardingStep.services.route);
+      }
+    }
+
     return asyncState.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Não foi possível carregar os horários.')),
+      loading: () => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.workingHours,
+        title: 'Horário de funcionamento',
+        onBack: () => context.go(backRoute),
+      ),
+      error: (_, __) => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.workingHours,
+        title: 'Horário de funcionamento',
+        errorMessage: 'Não foi possível carregar os horários.',
+        onBack: () => context.go(backRoute),
+        onRetry: () => ref.invalidate(merchantOnboardingControllerProvider),
+      ),
       data: (state) {
         final hours = state.draft.workingHours.isEmpty
             ? state.config.defaultWorkingHours
@@ -32,17 +64,13 @@ class WorkingHoursPage extends ConsumerWidget {
           step: MerchantOnboardingStep.workingHours,
           title: 'Horário de funcionamento',
           subtitle: 'Escolha os dias em que atende clientes.',
+          onBack: () => context.go(backRoute),
           errorMessage: state.errorMessage,
-          primaryLabel: 'Continuar',
+          primaryLabel: 'Usar este horário',
           primaryEnabled: hasConfig,
-          onPrimaryPressed: () async {
-            final moved = await ref
-                .read(merchantOnboardingControllerProvider.notifier)
-                .continueFromStep(MerchantOnboardingStep.workingHours);
-            if (moved && context.mounted) {
-              context.go(MerchantOnboardingStep.services.route);
-            }
-          },
+          onPrimaryPressed: () => continueFlow(acceptHours: true),
+          secondaryLabel: 'Configurar depois',
+          onSecondaryPressed: () => continueFlow(acceptHours: false),
           children: [
             if (!hasConfig)
               const ErrorCard(

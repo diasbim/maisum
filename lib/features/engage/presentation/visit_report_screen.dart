@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../design_system/components/maisum_app_bar.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
@@ -40,10 +41,9 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        title: const Text('Relatório de Visita'),
-        backgroundColor: AppColors.offWhite,
-        elevation: 0,
+      appBar: const MaisUmAppBar(
+        title: 'Relatório de visita',
+        fallbackLocation: '/engage',
       ),
       body: accessAsync.when(
         loading: () => const Center(
@@ -59,7 +59,7 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
               title: 'Visitas indisponíveis no seu plano',
               subtitle:
                   'Relatórios de visita são exclusivos do plano Business.',
-              actionLabel: 'Falar no WhatsApp',
+              actionLabel: 'Ver opções',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageVisits,
@@ -146,6 +146,8 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
   }
 
   Future<void> _submit() async {
+    if (_submitting) return;
+
     final customerId = _customerIdController.text.trim();
     final taskId = _taskIdController.text.trim();
 
@@ -156,27 +158,85 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
 
     setState(() => _submitting = true);
     try {
-      await ref.read(engageRepositoryProvider).submitVisitReport(
-            customerId: customerId,
-            result: _result,
-            visitedAt: DateTime.now(),
-            taskId: taskId.isEmpty ? null : taskId,
-            notes: _notesController.text.trim().isEmpty
-                ? null
-                : _notesController.text.trim(),
-          );
+      final saveResult =
+          await ref.read(engageRepositoryProvider).submitVisitReportWithResult(
+                customerId: customerId,
+                result: _result,
+                visitedAt: DateTime.now(),
+                taskId: taskId.isEmpty ? null : taskId,
+                notes: _notesController.text.trim().isEmpty
+                    ? null
+                    : _notesController.text.trim(),
+              );
 
       if (_completeLinkedTask && taskId.isNotEmpty) {
-        await ref.read(engageRepositoryProvider).completeRecoveryTask(taskId);
+        try {
+          final completed = await ref
+              .read(engageRepositoryProvider)
+              .completeRecoveryTask(taskId);
+          if (completed == null) {
+            throw StateError('A tarefa vinculada não foi encontrada.');
+          }
+        } catch (_) {
+          if (!mounted) return;
+          AppFeedback.showRetryableError(
+            context,
+            message: saveResult.isQueued
+                ? 'Relatório guardado para sincronizar, mas a tarefa não foi concluída.'
+                : 'Relatório salvo, mas a tarefa não foi concluída.',
+            onRetry: () => _completeLinkedTaskAfterSave(taskId),
+          );
+          return;
+        }
       }
 
       if (!mounted) return;
       AppFeedback.showSuccessToast(
         context,
-        message: 'Relatório salvo',
+        message: saveResult.isQueued
+            ? 'Relatório guardado para sincronizar'
+            : 'Relatório salvo',
         subtitle: _result,
       );
       _notesController.clear();
+    } catch (_) {
+      if (!mounted) return;
+      AppFeedback.showRetryableError(
+        context,
+        message:
+            'Não foi possível guardar o relatório. Os dados continuam preenchidos.',
+        onRetry: _submit,
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  Future<void> _completeLinkedTaskAfterSave(String taskId) async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    try {
+      final completed =
+          await ref.read(engageRepositoryProvider).completeRecoveryTask(taskId);
+      if (completed == null) {
+        throw StateError('A tarefa vinculada não foi encontrada.');
+      }
+      if (!mounted) return;
+      AppFeedback.showSuccessToast(
+        context,
+        message: 'Tarefa vinculada concluída',
+      );
+      _notesController.clear();
+    } catch (_) {
+      if (!mounted) return;
+      AppFeedback.showRetryableError(
+        context,
+        message:
+            'Não foi possível concluir a tarefa vinculada. Tente novamente.',
+        onRetry: () => _completeLinkedTaskAfterSave(taskId),
+      );
     } finally {
       if (mounted) {
         setState(() => _submitting = false);

@@ -8,6 +8,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../design_system/design_system.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../services/remote_config_reader.dart';
 
 const featureUpsellRoutePath = '/feature-upsell';
@@ -81,16 +82,17 @@ class _FeatureUpsellScreenState extends ConsumerState<FeatureUpsellScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isOwner = ref.watch(isOwnerUserProvider).valueOrNull == true;
     final title = _titleForReason(widget.args.reason);
-    final subtitle = _subtitleForReason(widget.args.reason);
+    final subtitle = isOwner
+        ? _subtitleForReason(widget.args.reason)
+        : _staffSubtitleForReason(widget.args.reason);
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        title: const Text('Desbloquear funcionalidade'),
-        backgroundColor: AppColors.offWhite,
-        foregroundColor: AppColors.onSurface,
-        elevation: 0,
+      appBar: const MaisUmAppBar(
+        title: 'Desbloquear funcionalidade',
+        dismissal: MaisUmAppBarDismissal.close,
       ),
       body: SafeArea(
         child: Center(
@@ -150,11 +152,19 @@ class _FeatureUpsellScreenState extends ConsumerState<FeatureUpsellScreen> {
                       onPressed: _openWhatsApp,
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    MaisUmButton(
-                      label: 'Ver subscrição',
-                      variant: MaisUmButtonVariant.ghost,
-                      onPressed: () => context.push('/subscription-admin'),
-                    ),
+                    if (isOwner)
+                      MaisUmButton(
+                        label: 'Ver planos e subscrição',
+                        variant: MaisUmButtonVariant.ghost,
+                        onPressed: () => context.push('/subscription-admin'),
+                      )
+                    else
+                      MaisUmButton(
+                        label: 'Voltar ao painel',
+                        variant: MaisUmButtonVariant.ghost,
+                        leadingIcon: Icons.dashboard_outlined,
+                        onPressed: () => context.go('/dashboard'),
+                      ),
                   ],
                 ),
               ),
@@ -216,6 +226,20 @@ String _subtitleForReason(String? reason) {
     _ =>
       'Esta funcionalidade faz parte dos recursos pagos do MaisUm. Fale connosco no WhatsApp para desbloquear o acesso.',
   };
+}
+
+String _staffSubtitleForReason(String? reason) {
+  final issue = switch (reason) {
+    'trial_expired' => 'o período de teste terminou',
+    'quota_exceeded' => 'o limite do plano foi atingido',
+    'subscription_inactive' ||
+    'grace_expired' =>
+      'a subscrição precisa de ser regularizada',
+    _ => 'esta funcionalidade requer um plano pago',
+  };
+
+  return 'Apenas o proprietário do negócio pode gerir planos e a subscrição. '
+      'Peça-lhe para rever a subscrição, pois $issue.';
 }
 
 String _reasonLabel(String? reason) {

@@ -412,7 +412,7 @@ class SettingsScreen extends ConsumerWidget {
 
       final currentOffer = offerByPlan[snapshot.plan];
 
-      final selectedPlan = await showModalBottomSheet<Plan>(
+      final selection = await showModalBottomSheet<_PlanPickerSelection>(
         context: context,
         useSafeArea: true,
         isScrollControlled: true,
@@ -441,20 +441,13 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 14),
-                Text(
-                  'Escolher novo plano',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Plano atual: ${currentOffer?.displayName ?? PlanCatalog.forPlan(snapshot.plan).displayName}',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(sheetContext).textTheme.bodySmall?.copyWith(
-                        color: AppColors.onSurfaceVariant,
-                      ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: MaisUmSheetHeader(
+                    title: 'Escolher novo plano',
+                    subtitle:
+                        'Plano atual: ${currentOffer?.displayName ?? PlanCatalog.forPlan(snapshot.plan).displayName}',
+                  ),
                 ),
                 const SizedBox(height: 10),
                 ...plans.map(
@@ -462,6 +455,12 @@ class SettingsScreen extends ConsumerWidget {
                     final offer = offerByPlan[plan];
                     final planName = offer?.displayName ??
                         PlanCatalog.forPlan(plan).displayName;
+                    final price = _planPriceDetails(
+                      offer?.priceCents,
+                      currency: offer?.currency,
+                    );
+                    final period =
+                        _formatPlanBillingPeriod(offer?.billingInterval);
                     final selected = snapshot.plan == plan;
                     return MaisUmSurface(
                       margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -477,7 +476,9 @@ class SettingsScreen extends ConsumerWidget {
                       borderColor:
                           selected ? AppColors.secondary : AppColors.g100,
                       shadows: const [],
-                      onTap: () => Navigator.of(sheetContext).pop(plan),
+                      onTap: () => Navigator.of(sheetContext).pop(
+                        _PlanPickerSelection.review(plan),
+                      ),
                       child: Row(
                         children: [
                           Expanded(
@@ -487,10 +488,9 @@ class SettingsScreen extends ConsumerWidget {
                                 Text(planName),
                                 const SizedBox(height: 2),
                                 Text(
-                                  _formatPlanPrice(
-                                    offer?.priceCents,
-                                    currency: offer?.currency,
-                                  ),
+                                  price.isTrustworthy && period != null
+                                      ? '${price.label} $period'
+                                      : price.label,
                                   style: Theme.of(sheetContext)
                                       .textTheme
                                       .bodySmall
@@ -505,6 +505,16 @@ class SettingsScreen extends ConsumerWidget {
                             const Icon(
                               Icons.check_circle_rounded,
                               color: AppColors.green,
+                            )
+                          else if (plan == Plan.business)
+                            MaisUmButton(
+                              label: 'Falar Connosco',
+                              fullWidth: false,
+                              height: 40,
+                              variant: MaisUmButtonVariant.outlined,
+                              onPressed: () => Navigator.of(sheetContext).pop(
+                                _PlanPickerSelection.contact(plan),
+                              ),
                             ),
                         ],
                       ),
@@ -517,7 +527,16 @@ class SettingsScreen extends ConsumerWidget {
         },
       );
 
-      if (!context.mounted || selectedPlan == null) return;
+      if (!context.mounted || selection == null) return;
+      final selectedPlan = selection.plan;
+      final selectedOffer = offerByPlan[selectedPlan];
+      final planName = selectedOffer?.displayName ??
+          PlanCatalog.forPlan(selectedPlan).displayName;
+
+      if (selection.opensContact) {
+        _openPlanContact(context, planName);
+        return;
+      }
       if (selectedPlan == snapshot.plan) {
         AppFeedback.showMessage(
           context,
@@ -527,8 +546,18 @@ class SettingsScreen extends ConsumerWidget {
         return;
       }
 
+      final reviewAction = await _showPlanReviewSheet(
+        context,
+        offer: selectedOffer,
+        plan: selectedPlan,
+      );
+      if (!context.mounted || reviewAction == null) return;
+      if (reviewAction == _PlanReviewAction.contact) {
+        _openPlanContact(context, planName);
+        return;
+      }
+
       final session = ref.read(authControllerProvider).valueOrNull;
-      final selectedOffer = offerByPlan[selectedPlan];
       await ref.read(subscriptionRepositoryProvider).switchPlan(
             merchantId: merchantId,
             plan: selectedPlan,
@@ -566,12 +595,20 @@ class SettingsScreen extends ConsumerWidget {
       fallbackPlans.map((plan) async {
         final override = await reader.getPricingOverride(plan.code);
         final definition = PlanCatalog.forPlan(plan);
+        final configuredCurrency = override?.currency?.trim();
+        final hasInvalidConfiguredCurrency = configuredCurrency != null &&
+            configuredCurrency.isNotEmpty &&
+            !isValidPlanOfferCurrency(configuredCurrency);
         return PlanOffer(
           plan: plan,
           code: plan.code,
           displayName: definition.displayName,
-          priceCents: override?.priceCents,
-          currency: (override?.currency ?? 'BRL').toUpperCase(),
+          priceCents: hasInvalidConfiguredCurrency
+              ? null
+              : override?.priceCents ?? (plan == Plan.free ? 0 : null),
+          currency: isValidPlanOfferCurrency(configuredCurrency)
+              ? configuredCurrency!.toUpperCase()
+              : 'MZN',
           billingInterval: override?.billingInterval ?? 'monthly',
           features: definition.features,
           whatsappMonthlyLimit: definition.whatsappMonthlyLimit,
@@ -581,6 +618,115 @@ class SettingsScreen extends ConsumerWidget {
     );
 
     return fallbackEntries;
+  }
+
+  Future<_PlanReviewAction?> _showPlanReviewSheet(
+    BuildContext context, {
+    required Plan plan,
+    required PlanOffer? offer,
+  }) {
+    final planName =
+        offer?.displayName ?? PlanCatalog.forPlan(plan).displayName;
+    final price = _planPriceDetails(
+      offer?.priceCents,
+      currency: offer?.currency,
+    );
+    final period = _formatPlanBillingPeriod(offer?.billingInterval);
+    final canConfirm = price.isTrustworthy && period != null;
+
+    return showModalBottomSheet<_PlanReviewAction>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const MaisUmSheetHeader(
+              title: 'Rever alteração de plano',
+              subtitle: 'Confirme os detalhes antes de alterar a subscrição.',
+            ),
+            const SizedBox(height: 20),
+            MaisUmSurface(
+              padding: const EdgeInsets.all(16),
+              radius: 14,
+              borderColor: AppColors.g100,
+              shadows: const [],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    planName,
+                    style:
+                        Theme.of(sheetContext).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    canConfirm ? '${price.label} $period' : price.label,
+                    style: Theme.of(sheetContext).textTheme.bodyLarge?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (canConfirm) ...[
+              Text(
+                'Ao confirmar, a subscrição será alterada para $planName.',
+                style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              MaisUmButton(
+                label: 'Confirmar alteração',
+                onPressed: () =>
+                    Navigator.of(sheetContext).pop(_PlanReviewAction.confirm),
+              ),
+            ] else ...[
+              Text(
+                'Não há preço e período confirmados para este plano. Fale '
+                'connosco para receber uma proposta.',
+                style: Theme.of(sheetContext).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.onSurfaceVariant,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              MaisUmButton(
+                label: 'Falar Connosco',
+                variant: MaisUmButtonVariant.outlined,
+                onPressed: () =>
+                    Navigator.of(sheetContext).pop(_PlanReviewAction.contact),
+              ),
+            ],
+            const SizedBox(height: 8),
+            MaisUmButton(
+              label: 'Cancelar',
+              variant: MaisUmButtonVariant.ghost,
+              onPressed: () => Navigator.of(sheetContext).pop(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openPlanContact(BuildContext context, String planName) {
+    context.push(
+      featureUpsellLocation(
+        featureKey: 'plan_management',
+        featureName: 'Plano $planName',
+      ),
+    );
   }
 
   Future<void> _showPinVerifySheet(BuildContext context, WidgetRef ref) async {
@@ -820,20 +966,74 @@ class SupportDiagnosticsScreen extends ConsumerWidget {
   }
 }
 
-String _formatPlanPrice(int? priceCents, {String? currency}) {
+class _PlanPickerSelection {
+  const _PlanPickerSelection.review(this.plan) : opensContact = false;
+
+  const _PlanPickerSelection.contact(this.plan) : opensContact = true;
+
+  final Plan plan;
+  final bool opensContact;
+}
+
+enum _PlanReviewAction { confirm, contact }
+
+class _PlanPriceDetails {
+  const _PlanPriceDetails({
+    required this.label,
+    required this.isTrustworthy,
+  });
+
+  final String label;
+  final bool isTrustworthy;
+}
+
+_PlanPriceDetails _planPriceDetails(int? priceCents, {String? currency}) {
   if (priceCents == null || priceCents < 0) {
-    return 'Preço sob consulta';
+    return const _PlanPriceDetails(
+      label: 'Preço sob consulta',
+      isTrustworthy: false,
+    );
   }
-  final symbol = (currency?.toUpperCase() ?? 'BRL') == 'BRL'
-      ? 'R\$'
-      : (currency?.toUpperCase() ?? 'R\$');
+
+  final normalizedCurrency = currency?.trim().toUpperCase();
+  final resolvedCurrency =
+      normalizedCurrency == null || normalizedCurrency.isEmpty
+          ? 'MZN'
+          : normalizedCurrency;
+  if (!isValidPlanOfferCurrency(resolvedCurrency)) {
+    return const _PlanPriceDetails(
+      label: 'Preço sob consulta',
+      isTrustworthy: false,
+    );
+  }
+
   final major = priceCents ~/ 100;
   final minor = (priceCents % 100).abs();
   final majorLabel = major.toString();
   if (minor == 0) {
-    return '$symbol $majorLabel';
+    return _PlanPriceDetails(
+      label: '$resolvedCurrency $majorLabel',
+      isTrustworthy: true,
+    );
   }
-  return '$symbol $majorLabel,${minor.toString().padLeft(2, '0')}';
+  return _PlanPriceDetails(
+    label: '$resolvedCurrency $majorLabel,${minor.toString().padLeft(2, '0')}',
+    isTrustworthy: true,
+  );
+}
+
+String? _formatPlanBillingPeriod(String? billingInterval) {
+  final value = billingInterval?.trim().toLowerCase();
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  if (value.contains('month') || value.contains('mens')) {
+    return '/mês';
+  }
+  if (value.contains('year') || value.contains('anual')) {
+    return '/ano';
+  }
+  return null;
 }
 
 class _Section extends StatelessWidget {
@@ -1099,7 +1299,7 @@ class _PinVerifySheetState extends State<_PinVerifySheet>
             ),
           ),
           const SizedBox(height: 24),
-          Text('Verificar PIN atual', style: theme.textTheme.headlineSmall),
+          const MaisUmSheetHeader(title: 'Verificar PIN atual'),
           const SizedBox(height: 6),
           Text(
             'Introduza o PIN atual para continuar',

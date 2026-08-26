@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../design_system/components/maisum_app_bar.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
@@ -21,10 +22,8 @@ class EngageDashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        title: const Text('MaisUm Engage'),
-        backgroundColor: AppColors.offWhite,
-        elevation: 0,
+      appBar: const MaisUmAppBar(
+        title: 'MaisUm Engage',
       ),
       body: accessAsync.when(
         loading: () => const Center(
@@ -42,7 +41,7 @@ class EngageDashboardScreen extends ConsumerWidget {
               title: 'Engage indisponível no seu plano',
               subtitle:
                   'Atualize para Pro ou Business para acompanhar risco e recuperar clientes.',
-              actionLabel: 'Falar no WhatsApp',
+              actionLabel: 'Ver opções',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageViewRisk,
@@ -191,7 +190,33 @@ class EngageDashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   Text(
-                    'Fila Priorizada',
+                    'Tarefas pendentes',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  if (overview.pendingTasks.isEmpty)
+                    const EmptyState(
+                      title: 'Nenhuma tarefa pendente',
+                      subtitle:
+                          'Escolha um cliente prioritário para iniciar a recuperação.',
+                    )
+                  else
+                    ...overview.pendingTasks.take(5).map(
+                          (item) => Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpacing.sm),
+                            child: _PendingTaskTile(
+                              item: item,
+                              enabled: access.canManageRecovery,
+                              onTap: () => context.push('/engage/actions'),
+                            ),
+                          ),
+                        ),
+                  const SizedBox(height: AppSpacing.lg),
+                  Text(
+                    'Clientes em risco prioritários',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -199,7 +224,7 @@ class EngageDashboardScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.sm),
                   if (overview.queue.isEmpty)
                     const EmptyState(
-                      title: 'Sem clientes na fila agora',
+                      title: 'Sem clientes em risco agora',
                       subtitle:
                           'Quando houver risco amarelo/laranja/vermelho eles aparecem aqui.',
                     )
@@ -217,29 +242,13 @@ class EngageDashboardScreen extends ConsumerWidget {
                     onPressed:
                         (!access.canManageRecovery || overview.queue.isEmpty)
                             ? null
-                            : () async {
-                                final first = overview.queue.first;
-                                await ref
-                                    .read(engageRepositoryProvider)
-                                    .createRecoveryTask(
-                                      customerId: first.customerId,
-                                      priority: first.recommendedPriority,
-                                      notes:
-                                          'Criado automaticamente a partir da fila Engage.',
-                                    );
-                                if (context.mounted) {
-                                  AppFeedback.showSuccessToast(
-                                    context,
-                                    message: 'Tarefa de recuperação criada',
-                                    subtitle: first.customerName,
-                                  );
-                                }
-                                await ref
-                                    .read(engageOverviewProvider.notifier)
-                                    .softRefresh();
-                              },
+                            : () => _createRecoveryTask(
+                                  context,
+                                  ref,
+                                  overview,
+                                ),
                     icon: const Icon(Icons.add_task_rounded),
-                    label: const Text('Criar tarefa para o primeiro da fila'),
+                    label: const Text('Escolher cliente e criar tarefa'),
                   ),
                 ],
               ),
@@ -252,6 +261,169 @@ class EngageDashboardScreen extends ConsumerWidget {
 }
 
 String _formatMoney(double value) => '${value.toStringAsFixed(0)} MZN';
+
+Future<void> _createRecoveryTask(
+  BuildContext context,
+  WidgetRef ref,
+  EngageOverview overview,
+) async {
+  final openCustomerIds =
+      overview.pendingTasks.map((item) => item.task.customerId).toSet();
+  final available = overview.queue
+      .where((item) => !openCustomerIds.contains(item.customerId))
+      .toList();
+  if (available.isEmpty) {
+    AppFeedback.showMessage(
+      context,
+      message: 'Todos os clientes prioritários já têm uma tarefa pendente.',
+    );
+    return;
+  }
+
+  final selected = await showDialog<RecoveryQueueItem>(
+    context: context,
+    builder: (dialogContext) {
+      RecoveryQueueItem? choice;
+      return StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Escolher cliente'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView(
+              shrinkWrap: true,
+              children: available
+                  .map(
+                    (item) => ListTile(
+                      selected: choice == item,
+                      leading: Icon(
+                        choice == item
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: AppColors.primary,
+                      ),
+                      title: Text(item.customerName),
+                      subtitle: Text(
+                        'Risco ${item.riskLevel.toUpperCase()} • Prioridade ${_taskPriorityLabel(item.recommendedPriority)}',
+                      ),
+                      onTap: () => setDialogState(() => choice = item),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: choice == null
+                  ? null
+                  : () => Navigator.pop(dialogContext, choice),
+              child: const Text('Continuar'),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+  if (selected == null || !context.mounted) return;
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Confirmar nova tarefa'),
+      content: Text(
+        'Criar uma tarefa de prioridade ${_taskPriorityLabel(selected.recommendedPriority)} para ${selected.customerName}?',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext, false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, true),
+          child: const Text('Confirmar e criar'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return;
+
+  try {
+    final result =
+        await ref.read(engageRepositoryProvider).createRecoveryTaskWithResult(
+              customerId: selected.customerId,
+              priority: selected.recommendedPriority,
+              notes: 'Criado a partir da fila prioritária Engage.',
+            );
+    if (!context.mounted) return;
+    if (result.wasAlreadyOpen) {
+      AppFeedback.showMessage(
+        context,
+        message: 'Este cliente já tem uma tarefa pendente.',
+      );
+    } else {
+      AppFeedback.showSuccessToast(
+        context,
+        message: 'Tarefa de recuperação criada',
+        subtitle: selected.customerName,
+      );
+    }
+    await ref.read(engageOverviewProvider.notifier).softRefresh();
+  } on RecoveryTaskAlreadyOpenException {
+    if (context.mounted) {
+      AppFeedback.showMessage(
+        context,
+        message: 'Este cliente já tem uma tarefa pendente.',
+      );
+    }
+  } catch (_) {
+    if (context.mounted) {
+      AppFeedback.showMessage(
+        context,
+        message: 'Não foi possível criar a tarefa. Tente novamente.',
+        isError: true,
+      );
+    }
+  }
+}
+
+String _taskPriorityLabel(String priority) => switch (priority) {
+      RecoveryTaskPriority.high => 'alta',
+      RecoveryTaskPriority.low => 'baixa',
+      _ => 'média',
+    };
+
+class _PendingTaskTile extends StatelessWidget {
+  const _PendingTaskTile({
+    required this.item,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final RecoveryTaskQueueItem item;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 0,
+      child: ListTile(
+        onTap: enabled ? onTap : null,
+        title: Text(item.customerName),
+        subtitle: Text(
+          'Prioridade ${_taskPriorityLabel(item.task.priority)} • Pendente',
+        ),
+        trailing: Icon(
+          enabled ? Icons.chevron_right : Icons.lock_outline,
+          color: AppColors.primary,
+        ),
+      ),
+    );
+  }
+}
 
 class _RecoveryQueueTile extends StatelessWidget {
   const _RecoveryQueueTile({required this.item});

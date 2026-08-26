@@ -282,8 +282,30 @@ CREATE TABLE IF NOT EXISTS recovery_tasks (
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL,
   created_by_app_user_id TEXT,
-  updated_by_app_user_id TEXT
+  updated_by_app_user_id TEXT,
+  open_slot SMALLINT GENERATED ALWAYS AS (
+    CASE WHEN LOWER(status) = 'open' THEN 1 ELSE NULL END
+  ) STORED
 );
+ALTER TABLE recovery_tasks
+  ADD COLUMN IF NOT EXISTS open_slot SMALLINT GENERATED ALWAYS AS (
+    CASE WHEN LOWER(status) = 'open' THEN 1 ELSE NULL END
+  ) STORED;
+WITH ranked_open_tasks AS (
+  SELECT id,
+         ROW_NUMBER() OVER (
+           PARTITION BY merchant_id, customer_id
+           ORDER BY updated_at DESC, id DESC
+         ) AS open_rank
+  FROM recovery_tasks
+  WHERE LOWER(status) = 'open'
+)
+UPDATE recovery_tasks AS task
+SET status = 'superseded'
+FROM ranked_open_tasks AS ranked
+WHERE task.id = ranked.id AND ranked.open_rank > 1;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_tasks_one_open_customer
+  ON recovery_tasks(merchant_id, customer_id, open_slot);
 CREATE INDEX IF NOT EXISTS idx_recovery_tasks_merchant_status_due
   ON recovery_tasks(merchant_id, status, due_at);
 CREATE INDEX IF NOT EXISTS idx_recovery_tasks_merchant_priority

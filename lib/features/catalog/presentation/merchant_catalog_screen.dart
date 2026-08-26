@@ -333,12 +333,8 @@ class _CatalogItemSheetState extends ConsumerState<_CatalogItemSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.onSurface,
-                ),
+          MaisUmSheetHeader(
+            title: title,
           ),
           const SizedBox(height: 16),
           TextField(

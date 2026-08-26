@@ -85,6 +85,12 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
+      appBar: customer == null
+          ? const MaisUmAppBar(
+              title: 'Cliente',
+              fallbackLocation: '/customers',
+            )
+          : null,
       bottomNavigationBar: customer == null
           ? null
           : SafeArea(
@@ -100,9 +106,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       body: customerAsync.when(
         data: (customer) {
           if (customer == null) {
-            return const Scaffold(
-              body: EmptyState(title: AppStrings.clienteNaoEncontrado),
-            );
+            return const EmptyState(title: AppStrings.clienteNaoEncontrado);
           }
 
           final sales = salesAsync.valueOrNull ?? const <Sale>[];
@@ -485,20 +489,15 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             ],
           );
         },
-        loading: () => const Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(color: AppColors.secondary),
-          ),
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppColors.secondary),
         ),
-        error: (e, __) => Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ErrorState(
-                error: e,
-                onRetry: () =>
-                    ref.invalidate(customerDetailProvider(widget.id)),
-              ),
+        error: (e, __) => Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: ErrorState(
+              error: e,
+              onRetry: () => ref.invalidate(customerDetailProvider(widget.id)),
             ),
           ),
         ),
@@ -1579,7 +1578,7 @@ class _EditCustomerSheetState extends ConsumerState<_EditCustomerSheet> {
             ),
           ),
           const SizedBox(height: 20),
-          Text(AppStrings.editarCliente, style: theme.textTheme.headlineSmall),
+          const MaisUmSheetHeader(title: AppStrings.editarCliente),
           const SizedBox(height: 20),
           TextField(
             controller: _nameCtrl,

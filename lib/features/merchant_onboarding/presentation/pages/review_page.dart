@@ -15,14 +15,23 @@ class ReviewPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncState = ref.watch(merchantOnboardingControllerProvider);
     return asyncState.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Não foi possível carregar a revisão.')),
+      loading: () => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.review,
+        title: 'Confirme os dados',
+        onBack: () => context.go(MerchantOnboardingStep.services.route),
+      ),
+      error: (_, __) => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.review,
+        title: 'Confirme os dados',
+        errorMessage: 'Não foi possível carregar a revisão.',
+        onBack: () => context.go(MerchantOnboardingStep.services.route),
+        onRetry: () => ref.invalidate(merchantOnboardingControllerProvider),
+      ),
       data: (state) => OnboardingScaffold(
         step: MerchantOnboardingStep.review,
         title: 'Confirme os dados',
         subtitle: 'Revise antes de criar a conta.',
+        onBack: () => context.go(MerchantOnboardingStep.services.route),
         errorMessage: state.errorMessage,
         primaryLabel: 'Criar conta',
         isLoading: state.isSaving,
@@ -32,7 +41,7 @@ class ReviewPage extends ConsumerWidget {
                 .read(merchantOnboardingControllerProvider.notifier)
                 .createMerchant();
             if (!context.mounted) return;
-            context.go('/dashboard');
+            context.go('/onboarding-plan');
             AppFeedback.showSuccessToast(
               context,
               message: 'Conta criada no MaisUm',
@@ -44,35 +53,77 @@ class ReviewPage extends ConsumerWidget {
         },
         children: [
           ReviewCard(
-            title: 'Negócio',
-            icon: Icons.storefront_rounded,
-            onEdit: () => context.go(MerchantOnboardingStep.businessInfo.route),
-            child: Text(
-                '${state.draft.businessName ?? '-'}\n${state.draft.city ?? '-'}'),
+            title: 'Tipo de negócio',
+            icon: Icons.category_outlined,
+            onEdit: () => context.go(
+              merchantOnboardingStepLocation(
+                MerchantOnboardingStep.businessType,
+                returnTo: MerchantOnboardingStep.review.route,
+              ),
+            ),
+            child: Text(_businessTypeLabel(state) ?? 'Não selecionado'),
           ),
           const SizedBox(height: AppSpacing.md),
           ReviewCard(
-            title: 'Localização',
+            title: 'Negócio',
+            icon: Icons.storefront_rounded,
+            onEdit: () => context.go(
+              merchantOnboardingStepLocation(
+                MerchantOnboardingStep.businessInfo,
+                returnTo: MerchantOnboardingStep.review.route,
+              ),
+            ),
+            child: Text(
+              [
+                state.draft.businessName,
+                [state.draft.city, state.draft.district]
+                    .whereType<String>()
+                    .where((value) => value.trim().isNotEmpty)
+                    .join(' · '),
+              ].whereType<String>().join('\n'),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ReviewCard(
+            title: 'Endereço',
             icon: Icons.location_on_rounded,
-            onEdit: () => context.go(MerchantOnboardingStep.location.route),
-            child: Text(state.draft.address ?? '-'),
+            onEdit: () => context.go(
+              merchantOnboardingStepLocation(
+                MerchantOnboardingStep.location,
+                returnTo: MerchantOnboardingStep.review.route,
+              ),
+            ),
+            child: Text(_locationSummary(state.draft)),
           ),
           const SizedBox(height: AppSpacing.md),
           ReviewCard(
             title: 'Horários',
             icon: Icons.schedule_rounded,
-            onEdit: () => context.go(MerchantOnboardingStep.workingHours.route),
+            onEdit: () => context.go(
+              merchantOnboardingStepLocation(
+                MerchantOnboardingStep.workingHours,
+                returnTo: MerchantOnboardingStep.review.route,
+              ),
+            ),
             child: Text(
-                '${state.draft.workingHours.values.where((hours) => hours.isOpen).length} dias abertos'),
+              state.draft.workingHours.isEmpty
+                  ? 'Configurar depois'
+                  : '${state.draft.workingHours.values.where((hours) => hours.isOpen).length} dias abertos',
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
           ReviewCard(
             title: 'Serviços',
             icon: Icons.design_services_rounded,
-            onEdit: () => context.go(MerchantOnboardingStep.services.route),
+            onEdit: () => context.go(
+              merchantOnboardingStepLocation(
+                MerchantOnboardingStep.services,
+                returnTo: MerchantOnboardingStep.review.route,
+              ),
+            ),
             child: Text(
               state.draft.services.isEmpty
-                  ? '-'
+                  ? 'Adicionar depois'
                   : state.draft.services
                       .map((service) => service.name)
                       .join(', '),
@@ -81,5 +132,21 @@ class ReviewPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String? _businessTypeLabel(MerchantOnboardingState state) {
+    final selectedId = state.draft.businessType;
+    for (final type in state.config.businessTypes) {
+      if (type.id == selectedId) return type.label;
+    }
+    return selectedId;
+  }
+
+  String _locationSummary(MerchantDraft draft) {
+    final details = [
+      draft.address?.trim(),
+      draft.reference?.trim(),
+    ].whereType<String>().where((value) => value.isNotEmpty).toList();
+    return details.isEmpty ? 'Adicionar depois' : details.join('\n');
   }
 }

@@ -16,43 +16,69 @@ import '../data/firestore_plan_offers.dart';
 import '../domain/plan.dart';
 import '../domain/plan_catalog.dart';
 import '../domain/subscription_snapshot.dart';
+import '../services/remote_config_reader.dart';
+import 'feature_upsell_screen.dart';
 
 final onboardingPlanOffersProvider =
     FutureProvider.autoDispose<List<PlanOffer>>((ref) async {
   try {
     final firestore = ref.read(firestoreInstanceProvider);
-    final offers = await fetchActivePlanOffers(firestore);
-    if (offers.isNotEmpty) {
-      return offers;
-    }
-
-    // Keep onboarding functional if the Firestore catalog is empty.
     final reader = ref.read(remoteConfigReaderProvider);
-    final fallbackPlans = Plan.values.where((plan) => plan != Plan.growth);
-    final fallbackEntries = await Future.wait(
-      fallbackPlans.map((plan) async {
-        final override = await reader.getPricingOverride(plan.code);
-        final definition = PlanCatalog.forPlan(plan);
-        return PlanOffer(
-          plan: plan,
-          code: plan.code,
-          displayName: definition.displayName,
-          priceCents: override?.priceCents,
-          currency: (override?.currency ?? 'BRL').toUpperCase(),
-          billingInterval: override?.billingInterval ?? 'monthly',
-          features: definition.features,
-          whatsappMonthlyLimit: definition.whatsappMonthlyLimit,
-          sortOrder: 999,
-        );
-      }),
+    return resolveOnboardingPlanOffers(
+      fetchActiveOffers: () => fetchActivePlanOffers(firestore),
+      getPricingOverride: reader.getPricingOverride,
     );
-
-    return fallbackEntries;
   } catch (e, st) {
     AppErrorReporter.report(e, st, hint: 'onboarding_plan_offers');
     rethrow;
   }
 });
+
+Future<List<PlanOffer>> resolveOnboardingPlanOffers({
+  required Future<List<PlanOffer>> Function() fetchActiveOffers,
+  required Future<PricingOverride?> Function(String planCode)
+      getPricingOverride,
+}) async {
+  final offers = await fetchActiveOffers();
+  if (offers.isNotEmpty) {
+    return offers;
+  }
+  return buildOnboardingFallbackPlanOffers(
+    getPricingOverride: getPricingOverride,
+  );
+}
+
+Future<List<PlanOffer>> buildOnboardingFallbackPlanOffers({
+  required Future<PricingOverride?> Function(String planCode)
+      getPricingOverride,
+}) async {
+  final fallbackPlans = Plan.values.where((plan) => plan != Plan.growth);
+  return Future.wait(
+    fallbackPlans.map((plan) async {
+      final override = await getPricingOverride(plan.code);
+      final definition = PlanCatalog.forPlan(plan);
+      final currency = override?.currency;
+      final hasInvalidConfiguredCurrency = currency != null &&
+          currency.trim().isNotEmpty &&
+          !isValidPlanOfferCurrency(currency);
+      return PlanOffer(
+        plan: plan,
+        code: plan.code,
+        displayName: definition.displayName,
+        priceCents: hasInvalidConfiguredCurrency
+            ? null
+            : override?.priceCents ?? (plan == Plan.free ? 0 : null),
+        currency: isValidPlanOfferCurrency(currency)
+            ? currency!.trim().toUpperCase()
+            : 'MZN',
+        billingInterval: override?.billingInterval ?? 'monthly',
+        features: definition.features,
+        whatsappMonthlyLimit: definition.whatsappMonthlyLimit,
+        sortOrder: 999,
+      );
+    }),
+  );
+}
 
 class OnboardingPlanSelectionScreen extends ConsumerStatefulWidget {
   const OnboardingPlanSelectionScreen({super.key});
@@ -74,7 +100,12 @@ class _OnboardingPlanSelectionScreenState
     final colorScheme = Theme.of(context).colorScheme;
 
     return PopScope(
-      canPop: false,
+      canPop: Navigator.of(context).canPop(),
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          context.go(merchantOnboardingStartRoute);
+        }
+      },
       child: Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
@@ -120,7 +151,8 @@ class _OnboardingPlanSelectionScreenState
               onPlanSelected: (plan) => setState(() {
                 _selectedPlan = plan;
               }),
-              onConfirmPlan: (plan) => _confirmSelection(snapshot, plan),
+              onConfirmPlan: (offer) => _confirmSelection(snapshot, offer),
+              onOfferContact: _openPlanContact,
             ),
           ),
         ),
@@ -130,8 +162,14 @@ class _OnboardingPlanSelectionScreenState
 
   Future<void> _confirmSelection(
     SubscriptionSnapshot snapshot,
-    Plan selectedPlan,
+    PlanOffer selectedOffer,
   ) async {
+    if (!canConfirmOnboardingPlanOffer(selectedOffer)) {
+      _openPlanContact(selectedOffer);
+      return;
+    }
+
+    final selectedPlan = selectedOffer.plan;
     final merchantId = ref.read(activeMerchantIdProvider);
 
     if (merchantId == null || merchantId.isEmpty) {
@@ -177,8 +215,8 @@ class _OnboardingPlanSelectionScreenState
       }
 
       final destination = await _showNextStepPicker();
-      if (destination != null && mounted) {
-        context.go(destination);
+      if (mounted) {
+        context.go(destination ?? '/dashboard');
       }
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'onboarding_plan_confirm');
@@ -195,6 +233,16 @@ class _OnboardingPlanSelectionScreenState
         setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  void _openPlanContact(PlanOffer offer) {
+    context.push(
+      featureUpsellLocation(
+        featureKey: '${offer.code}_plan',
+        featureName: 'Plano ${offer.displayName}',
+        reason: 'plan_pricing',
+      ),
+    );
   }
 
   Future<String?> _showNextStepPicker() {
@@ -219,11 +267,22 @@ class _OnboardingPlanSelectionScreenState
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Plano confirmado',
-                    style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Plano confirmado',
+                          style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
+                      ),
+                      IconButton(
+                        tooltip: 'Fechar',
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -316,6 +375,7 @@ class _PlanSelectionBody extends ConsumerWidget {
     required this.isSubmitting,
     required this.onPlanSelected,
     required this.onConfirmPlan,
+    required this.onOfferContact,
   });
 
   final SubscriptionSnapshot snapshot;
@@ -323,28 +383,22 @@ class _PlanSelectionBody extends ConsumerWidget {
   final Plan? selectedPlan;
   final bool isSubmitting;
   final ValueChanged<Plan> onPlanSelected;
-  final ValueChanged<Plan> onConfirmPlan;
+  final ValueChanged<PlanOffer> onConfirmPlan;
+  final ValueChanged<PlanOffer> onOfferContact;
 
   @override
   Widget build(BuildContext context, WidgetRef _) {
     final bottomPadding = MediaQuery.of(context).padding.bottom + 80;
     final offerByPlan = <Plan, PlanOffer>{};
     for (final offer in planOffers) {
-      offerByPlan.putIfAbsent(offer.plan, () => offer);
+      if (isValidPlanOfferCurrency(offer.currency)) {
+        offerByPlan.putIfAbsent(offer.plan, () => offer);
+      }
     }
-
-    const plans = [Plan.free, Plan.starter, Plan.business];
+    final offers = offerByPlan.values.toList();
     final selected = selectedPlan ?? snapshot.plan;
-    final activePlan = plans.contains(selected) ? selected : Plan.starter;
-
-    final pricingByPlan = {
-      for (final entry in offerByPlan.entries)
-        entry.key: _PlanPricingInfo(
-          priceCents: entry.value.priceCents,
-          billingInterval: entry.value.billingInterval,
-          currency: entry.value.currency,
-        ),
-    };
+    final activeOffer =
+        offerByPlan[selected] ?? (offers.isEmpty ? null : offers.first);
 
     return SafeArea(
       top: false,
@@ -353,27 +407,35 @@ class _PlanSelectionBody extends ConsumerWidget {
         children: [
           const _HeroBanner(),
           const SizedBox(height: 24),
-          for (final plan in plans)
+          for (final offer in offers)
             Padding(
               padding: const EdgeInsets.only(bottom: 24),
               child: _PlanCard(
-                plan: plan,
-                whatsappMonthlyLimit: offerByPlan[plan]?.whatsappMonthlyLimit ??
-                    PlanCatalog.forPlan(plan).whatsappMonthlyLimit,
-                pricingInfo: pricingByPlan[plan],
-                isSelected: activePlan == plan,
+                offer: offer,
+                isSelected: activeOffer?.plan == offer.plan,
                 onTap: isSubmitting
                     ? null
                     : () {
-                        onPlanSelected(plan);
+                        onPlanSelected(offer.plan);
                       },
                 onPrimaryAction: isSubmitting
                     ? null
                     : () {
-                        onPlanSelected(plan);
-                        onConfirmPlan(plan);
+                        if (!canConfirmOnboardingPlanOffer(offer)) {
+                          onOfferContact(offer);
+                        } else {
+                          onPlanSelected(offer.plan);
+                        }
                       },
               ),
+            ),
+          if (activeOffer != null)
+            _PlanSelectionFooter(
+              offer: activeOffer,
+              isSubmitting: isSubmitting,
+              onConfirm: canConfirmOnboardingPlanOffer(activeOffer)
+                  ? () => onConfirmPlan(activeOffer)
+                  : () => onOfferContact(activeOffer),
             ),
           const SizedBox(height: 96),
         ],
@@ -430,17 +492,13 @@ class _HeroBanner extends StatelessWidget {
 
 class _PlanCard extends StatelessWidget {
   const _PlanCard({
-    required this.plan,
-    required this.whatsappMonthlyLimit,
-    required this.pricingInfo,
+    required this.offer,
     required this.isSelected,
     required this.onTap,
     required this.onPrimaryAction,
   });
 
-  final Plan plan;
-  final int? whatsappMonthlyLimit;
-  final _PlanPricingInfo? pricingInfo;
+  final PlanOffer offer;
   final bool isSelected;
   final VoidCallback? onTap;
   final VoidCallback? onPrimaryAction;
@@ -448,19 +506,25 @@ class _PlanCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final plan = offer.plan;
     final isStarter = plan == Plan.starter;
-    final title = _planTitle(plan);
-    final subtitle = whatsappMonthlyLimit == null
+    final title = offer.displayName.toUpperCase();
+    final subtitle = offer.whatsappMonthlyLimit == null
         ? 'Mensagens ilimitadas'
-        : '${_formatInt(whatsappMonthlyLimit!)} mensagens/mes';
+        : '${_formatInt(offer.whatsappMonthlyLimit!)} mensagens/mes';
     final benefits = _planBenefits(plan);
-    final buttonLabel = _planPrimaryCta(plan);
-    final priceLabel = _formatPrice(
-      pricingInfo?.priceCents,
-      currency: pricingInfo?.currency,
-    );
-    final hasPrice = pricingInfo?.priceCents != null;
-    final billingSuffix = _billingSuffix(pricingInfo?.billingInterval);
+    final requiresContact = !canConfirmOnboardingPlanOffer(offer);
+    final buttonLabel =
+        requiresContact ? 'Falar Connosco' : _planPrimaryCta(plan);
+    final hasTrustworthyPrice = hasTrustworthyOnboardingOfferPrice(offer);
+    final priceLabel = hasTrustworthyPrice
+        ? _formatPrice(
+            offer.priceCents,
+            currency: offer.currency,
+          )
+        : 'Preço sob consulta';
+    final hasPrice = hasTrustworthyPrice;
+    final billingSuffix = _billingSuffix(offer.billingInterval);
 
     return Stack(
       clipBehavior: Clip.none,
@@ -557,32 +621,42 @@ class _PlanCard extends StatelessWidget {
                   child: _BenefitRow(benefit: benefit),
                 ),
               const SizedBox(height: 8),
-              switch (plan) {
-                Plan.starter => MaisUmButton(
-                    label: buttonLabel,
-                    onPressed: onPrimaryAction,
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    height: 40,
-                    radius: 8,
-                  ),
-                Plan.business => MaisUmButton(
-                    label: buttonLabel,
-                    onPressed: onPrimaryAction,
-                    variant: MaisUmButtonVariant.outlined,
-                    foregroundColor: colorScheme.primary,
-                    height: 40,
-                    radius: 8,
-                  ),
-                _ => MaisUmButton(
-                    label: buttonLabel,
-                    onPressed: onPrimaryAction,
-                    variant: MaisUmButtonVariant.ghost,
-                    foregroundColor: colorScheme.onSurface,
-                    height: 40,
-                    radius: 8,
-                  ),
-              },
+              if (requiresContact)
+                MaisUmButton(
+                  label: buttonLabel,
+                  onPressed: onPrimaryAction,
+                  variant: MaisUmButtonVariant.outlined,
+                  foregroundColor: colorScheme.primary,
+                  height: 40,
+                  radius: 8,
+                )
+              else
+                switch (plan) {
+                  Plan.starter => MaisUmButton(
+                      label: buttonLabel,
+                      onPressed: onPrimaryAction,
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: colorScheme.onPrimary,
+                      height: 40,
+                      radius: 8,
+                    ),
+                  Plan.business => MaisUmButton(
+                      label: buttonLabel,
+                      onPressed: onPrimaryAction,
+                      variant: MaisUmButtonVariant.outlined,
+                      foregroundColor: colorScheme.primary,
+                      height: 40,
+                      radius: 8,
+                    ),
+                  _ => MaisUmButton(
+                      label: buttonLabel,
+                      onPressed: onPrimaryAction,
+                      variant: MaisUmButtonVariant.ghost,
+                      foregroundColor: colorScheme.onSurface,
+                      height: 40,
+                      radius: 8,
+                    ),
+                },
             ],
           ),
         ),
@@ -660,25 +734,53 @@ class _PlanBenefitData {
   final String label;
 }
 
-class _PlanPricingInfo {
-  const _PlanPricingInfo({
-    this.priceCents,
-    this.billingInterval,
-    this.currency,
+class _PlanSelectionFooter extends StatelessWidget {
+  const _PlanSelectionFooter({
+    required this.offer,
+    required this.isSubmitting,
+    required this.onConfirm,
   });
 
-  final int? priceCents;
-  final String? billingInterval;
-  final String? currency;
-}
+  final PlanOffer offer;
+  final bool isSubmitting;
+  final VoidCallback onConfirm;
 
-String _planTitle(Plan plan) {
-  return switch (plan) {
-    Plan.free => 'FREE',
-    Plan.starter => 'STARTER',
-    Plan.business => 'BUSINESS',
-    _ => plan.displayName.toUpperCase(),
-  };
+  @override
+  Widget build(BuildContext context) {
+    final requiresContact = !canConfirmOnboardingPlanOffer(offer);
+    return MaisUmSurface(
+      semanticButton: false,
+      padding: const EdgeInsets.all(14),
+      backgroundColor: Theme.of(context)
+          .colorScheme
+          .secondaryContainer
+          .withValues(alpha: 0.3),
+      borderColor: Theme.of(context).colorScheme.secondary,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            requiresContact
+                ? 'Fale connosco sobre o plano ${offer.displayName}'
+                : 'Plano ${offer.displayName} selecionado',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 8),
+          MaisUmButton(
+            label: requiresContact ? 'Falar Connosco' : 'Confirmar plano',
+            loadingLabel: 'A confirmar...',
+            isLoading: isSubmitting,
+            onPressed: onConfirm,
+            variant: requiresContact
+                ? MaisUmButtonVariant.outlined
+                : MaisUmButtonVariant.primary,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 List<_PlanBenefitData> _planBenefits(Plan plan) {
@@ -715,15 +817,43 @@ String _formatPrice(int? priceCents, {String? currency}) {
   if (priceCents == null || priceCents < 0) {
     return 'Preço sob consulta';
   }
-  final symbol = (currency?.toUpperCase() ?? 'BRL') == 'BRL'
-      ? 'R\$'
-      : (currency?.toUpperCase() ?? 'R\$');
+  final currencyCode = isValidPlanOfferCurrency(currency)
+      ? currency!.trim().toUpperCase()
+      : 'MZN';
   final major = priceCents ~/ 100;
   final minor = (priceCents % 100).abs();
   if (minor == 0) {
-    return '$symbol ${_formatInt(major)}';
+    return '$currencyCode ${_formatInt(major)}';
   }
-  return '$symbol ${_formatInt(major)},${minor.toString().padLeft(2, '0')}';
+  return '$currencyCode ${_formatInt(major)},${minor.toString().padLeft(2, '0')}';
+}
+
+bool canConfirmOnboardingPlanOffer(PlanOffer offer) {
+  if (offer.plan == Plan.business) {
+    return false;
+  }
+  return hasTrustworthyOnboardingOfferPrice(offer) &&
+      _hasSupportedBillingInterval(offer.billingInterval);
+}
+
+bool hasTrustworthyOnboardingOfferPrice(PlanOffer offer) {
+  if (offer.priceCents == null || offer.priceCents! < 0) {
+    return false;
+  }
+  if (!isValidPlanOfferCurrency(offer.currency)) {
+    return false;
+  }
+  return offer.plan == Plan.free || offer.priceCents! > 0;
+}
+
+bool _hasSupportedBillingInterval(String? billingInterval) {
+  final value = billingInterval?.trim().toLowerCase();
+  return value != null &&
+      value.isNotEmpty &&
+      (value.contains('month') ||
+          value.contains('mens') ||
+          value.contains('year') ||
+          value.contains('anual'));
 }
 
 String _billingSuffix(String? billingInterval) {

@@ -6,6 +6,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../design_system/components/maisum_app_bar.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../domain/engage_models.dart';
@@ -38,10 +39,9 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        title: const Text('Criar questionário'),
-        backgroundColor: AppColors.offWhite,
-        elevation: 0,
+      appBar: const MaisUmAppBar(
+        title: 'Criar questionário',
+        fallbackLocation: '/engage',
       ),
       body: accessAsync.when(
         loading: () => const Center(
@@ -57,7 +57,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
               title: 'Questionários indisponíveis no seu plano',
               subtitle:
                   'A criação de questionários é exclusiva do plano Business.',
-              actionLabel: 'Falar no WhatsApp',
+              actionLabel: 'Ver opções',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageSurveys,

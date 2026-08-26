@@ -61,6 +61,11 @@ class PlanOffer {
 
     final features = _readStringList(data, const ['features']).toSet();
 
+    final currency = _readString(data, const ['currency']);
+    if (!isValidPlanOfferCurrency(currency)) {
+      throw const FormatException('Invalid plan currency in plans collection.');
+    }
+
     return PlanOffer(
       plan: plan,
       code: normalizedCode,
@@ -75,7 +80,7 @@ class PlanOffer {
           'price',
         ],
       ),
-      currency: (_readString(data, const ['currency']) ?? 'BRL').toUpperCase(),
+      currency: currency!.trim().toUpperCase(),
       billingInterval:
           _readString(data, const ['billing_interval', 'billingInterval']) ??
               'monthly',
@@ -105,9 +110,7 @@ Future<List<PlanOffer>> fetchActivePlanOffers(
 
     try {
       final offer = PlanOffer.fromFirestore(doc);
-      if (offer.priceCents != null) {
-        offers.add(offer);
-      }
+      offers.add(offer);
     } on FormatException {
       // Ignore invalid documents and keep loading other plans.
     }
@@ -128,6 +131,10 @@ Future<List<PlanOffer>> fetchActivePlanOffers(
   });
 
   return offers;
+}
+
+bool isValidPlanOfferCurrency(String? currency) {
+  return RegExp(r'^[A-Za-z]{3}$').hasMatch(currency?.trim() ?? '');
 }
 
 String? _readString(Map<String, dynamic> data, List<String> keys) {

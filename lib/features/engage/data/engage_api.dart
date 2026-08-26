@@ -42,15 +42,16 @@ class EngageApi {
             recommendedPriority: _asInt(row['priority']) >= 45
                 ? RecoveryTaskPriority.high
                 : _asInt(row['priority']) >= 25
-                ? RecoveryTaskPriority.medium
-                : RecoveryTaskPriority.low,
+                    ? RecoveryTaskPriority.medium
+                    : RecoveryTaskPriority.low,
             lastVisitAt: _asDateTime(row['last_visit_at']),
           ),
         )
         .toList();
   }
 
-  Future<RecoveryTask> createTask({
+  Future<RecoveryTaskCreationResult> createTask({
+    required String taskId,
     required String customerId,
     required String priority,
     DateTime? dueAt,
@@ -61,13 +62,19 @@ class EngageApi {
       '/engage/task',
       bearerToken: token,
       body: {
+        'id': taskId,
         'customer_id': customerId,
         'priority': priority,
         'due_at': dueAt?.millisecondsSinceEpoch,
         'notes': notes,
       },
     );
-    return RecoveryTask.fromJson(_asMap(response.data) ?? {});
+    final data = _asMap(response.data) ?? {};
+    final task = RecoveryTask.fromJson(_asMap(data['task']) ?? data);
+    final outcome = data['outcome'] == 'already_open'
+        ? RecoveryTaskCreationOutcome.alreadyOpen
+        : RecoveryTaskCreationOutcome.created;
+    return RecoveryTaskCreationResult(task: task, outcome: outcome);
   }
 
   Future<RecoveryTask?> completeTask(String taskId) async {
@@ -83,6 +90,7 @@ class EngageApi {
   }
 
   Future<RecoveryActionLog> logAction({
+    required String actionId,
     required String customerId,
     required String actionType,
     String? taskId,
@@ -93,6 +101,7 @@ class EngageApi {
       '/engage/action',
       bearerToken: token,
       body: {
+        'id': actionId,
         'customer_id': customerId,
         'task_id': taskId,
         'action_type': actionType,
@@ -103,6 +112,7 @@ class EngageApi {
   }
 
   Future<VisitReport> submitVisitReport({
+    required String reportId,
     required String customerId,
     required String result,
     required DateTime visitedAt,
@@ -114,6 +124,7 @@ class EngageApi {
       '/engage/visit-report',
       bearerToken: token,
       body: {
+        'id': reportId,
         'customer_id': customerId,
         'task_id': taskId,
         'result': result,

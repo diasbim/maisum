@@ -73,17 +73,26 @@ void main() {
   testWidgets('welcome screen fits on small phones without scrolling',
       (tester) async {
     await pumpScreen(tester, physicalSize: const Size(320, 568));
-    final assetNames = tester.widgetList<Image>(find.byType(Image)).map(
-          (image) => (image.image as AssetImage).assetName,
-        );
 
     expect(find.byKey(const Key('welcome_start_button')), findsOneWidget);
-    expect(assetNames, contains('assets/images/logotypographi.png'));
-    expect(assetNames, isNot(contains('assets/images/welcome.png')));
-    expect(assetNames, isNot(contains('assets/images/welcomebg.png')));
-    expect(assetNames, isNot(contains('assets/images/welcome_background.png')));
-    expect(assetNames, isNot(contains('assets/images/welcome_barber.png')));
+    expect(find.text('Clientes que voltam.\nNegócios que crescem.'),
+        findsOneWidget);
+    expect(find.text('+26%'), findsOneWidget);
+    expect(find.text('Funciona offline'), findsOneWidget);
     expect(find.byType(SingleChildScrollView), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('phone form always offers a way back to the welcome screen',
+      (tester) async {
+    await pumpScreen(tester);
+    await openPhoneForm(tester);
+
+    expect(find.byTooltip('Voltar'), findsOneWidget);
+    await tester.tap(find.byTooltip('Voltar'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('welcome_start_button')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

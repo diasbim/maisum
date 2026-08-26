@@ -78,7 +78,9 @@ class MaisUmButton extends StatelessWidget {
 
     return SizedBox(
       width: fullWidth ? double.infinity : null,
-      height: height,
+      height: height < AppControlSize.iconButton
+          ? AppControlSize.iconButton
+          : height,
       child: switch (variant) {
         MaisUmButtonVariant.outlined => OutlinedButton(
             onPressed: effectiveEnabled ? onPressed : null,

@@ -122,7 +122,7 @@ class FirestoreSyncService implements SyncTransport {
   }
 
   @override
-  Future<void> processSyncItem(SyncItem item) async {
+  Future<SyncProcessResult?> processSyncItem(SyncItem item) async {
     try {
       final collection = _collectionMap[item.entityType] ?? item.entityType;
       final docRef = _firestore
@@ -135,11 +135,14 @@ class FirestoreSyncService implements SyncTransport {
         case 'create':
         case 'update':
           final data = jsonDecode(item.payload) as Map<String, dynamic>;
+          if (item.entityType == 'recovery_task') {
+            return _processRecoveryTask(item, data, docRef);
+          }
           await docRef.set(data, SetOptions(merge: true));
-          break;
+          return null;
         case 'delete':
           await docRef.delete();
-          break;
+          return null;
         default:
           throw ArgumentError('Unknown sync operation: ${item.operation}');
       }
@@ -149,5 +152,66 @@ class FirestoreSyncService implements SyncTransport {
         code: e.code,
       );
     }
+  }
+
+  Future<SyncProcessResult> _processRecoveryTask(
+    SyncItem item,
+    Map<String, dynamic> data,
+    DocumentReference<Map<String, dynamic>> taskRef,
+  ) async {
+    final customerId =
+        (data['customer_id'] as String?)?.trim() ?? '';
+    final status = ((data['status'] as String?) ?? 'open').toLowerCase();
+    if (customerId.isEmpty) {
+      throw const SyncTransportException(
+        'Recovery task is missing customer_id',
+        code: 'failed-precondition',
+      );
+    }
+    final slotRef = _firestore
+        .collection('businesses')
+        .doc(_businessUid)
+        .collection('recovery_task_open_slots')
+        .doc(customerId);
+
+    return _firestore.runTransaction((transaction) async {
+      final slot = await transaction.get(slotRef);
+      final canonicalId = slot.data()?['task_id'] as String?;
+      if (status == 'open') {
+        if (canonicalId != null && canonicalId.isNotEmpty) {
+          final canonicalRef = taskRef.parent.doc(canonicalId);
+          final canonical = await transaction.get(canonicalRef);
+          final canonicalData = canonical.data();
+          if (canonical.exists &&
+              ((canonicalData?['status'] as String?) ?? 'open')
+                      .toLowerCase() ==
+                  'open') {
+            return SyncProcessResult(
+              canonicalEntity: {
+                ...canonicalData!,
+                'id': canonical.id,
+              },
+            );
+          }
+        }
+        transaction.set(taskRef, data, SetOptions(merge: true));
+        transaction.set(slotRef, {
+          'task_id': item.entityId,
+          'customer_id': customerId,
+          'updated_at': data['updated_at'],
+        });
+        return SyncProcessResult(
+          canonicalEntity: {...data, 'id': item.entityId},
+        );
+      }
+
+      transaction.set(taskRef, data, SetOptions(merge: true));
+      if (canonicalId == item.entityId) {
+        transaction.delete(slotRef);
+      }
+      return SyncProcessResult(
+        canonicalEntity: {...data, 'id': item.entityId},
+      );
+    });
   }
 }

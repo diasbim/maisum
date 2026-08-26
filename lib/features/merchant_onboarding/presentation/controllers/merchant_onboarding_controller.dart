@@ -66,10 +66,6 @@ class MerchantOnboardingState {
 
   String? validate(MerchantOnboardingStep step) {
     switch (step) {
-      case MerchantOnboardingStep.verifyPhone:
-        return (draft.phone ?? '').trim().isEmpty
-            ? 'Telemóvel verificado obrigatório.'
-            : null;
       case MerchantOnboardingStep.businessType:
         return (draft.businessType ?? '').trim().isEmpty
             ? 'Selecione o tipo do seu negócio.'
@@ -82,26 +78,24 @@ class MerchantOnboardingState {
         if ((draft.city ?? '').trim().isEmpty) {
           return 'Informe a cidade.';
         }
+        if ((draft.district ?? '').trim().isEmpty) {
+          return 'Informe o bairro ou distrito.';
+        }
         if ((draft.phone ?? '').trim().isEmpty) {
           return 'Telemóvel verificado obrigatório.';
         }
         return null;
       case MerchantOnboardingStep.location:
-        if (draft.location == null) {
-          return 'Selecione a localização do negócio.';
-        }
-        if ((draft.address ?? '').trim().isEmpty) {
-          return 'Indique o endereço do negócio.';
-        }
         return null;
       case MerchantOnboardingStep.workingHours:
-        final openDays =
-            draft.workingHours.values.where((hours) => hours.isOpen);
-        return openDays.isEmpty ? 'Defina pelo menos um dia aberto.' : null;
+        return null;
       case MerchantOnboardingStep.services:
         return null;
       case MerchantOnboardingStep.review:
-        for (final step in MerchantOnboardingStep.values.skip(1).take(5)) {
+        for (final step in const [
+          MerchantOnboardingStep.businessType,
+          MerchantOnboardingStep.businessInfo,
+        ]) {
           final message = validate(step);
           if (message != null) return message;
         }
@@ -130,14 +124,10 @@ class MerchantOnboardingController
     final initialDraft = (localDraft ?? const MerchantDraft()).mergeMissing(
       remoteDraft.mergeMissing(MerchantDraft.empty(phone: session.phone)),
     );
-    final configuredDraft = initialDraft.workingHours.isEmpty
-        ? initialDraft.copyWith(workingHours: config.defaultWorkingHours)
-        : initialDraft;
-
     return MerchantOnboardingState(
-      draft: configuredDraft,
+      draft: initialDraft,
       config: config,
-      currentStep: firstIncompleteStep(configuredDraft),
+      currentStep: firstIncompleteStep(initialDraft),
       wasProfileCompleteAtLoad: _isProfileComplete(remoteDraft),
     );
   }
@@ -210,18 +200,15 @@ class MerchantOnboardingController
     ));
   }
 
-  Future<void> updateLocation({
-    MerchantLocation? location,
+  Future<void> updateLocationDetails({
     required String address,
     String? reference,
   }) async {
     final current = state.valueOrNull;
     if (current == null) return;
     await updateDraft(current.draft.copyWith(
-      location: location,
       address: address,
       reference: reference,
-      clearLocation: location == null,
     ));
   }
 
@@ -317,11 +304,6 @@ class MerchantOnboardingController
       }
 
       final role = await storage.getAppUserRole();
-      await storage.setOnboardingPlanConfirmed(
-        true,
-        merchantId: session.resolvedMerchantId,
-        role: role,
-      );
       await draftStore.clear(
         merchantId: session.resolvedMerchantId,
         role: role,
@@ -358,19 +340,17 @@ class MerchantOnboardingController
       currentStep: MerchantOnboardingStep.businessType,
       wasProfileCompleteAtLoad: false,
     );
-    for (final step in MerchantOnboardingStep.values.skip(1).take(5)) {
+    for (final step in const [
+      MerchantOnboardingStep.businessType,
+      MerchantOnboardingStep.businessInfo,
+    ]) {
       if (probe.validate(step) != null) return step;
     }
     return MerchantOnboardingStep.review;
   }
 
-  MerchantOnboardingStep? _nextStep(MerchantOnboardingStep step) {
-    final index = MerchantOnboardingStep.values.indexOf(step);
-    if (index < 0 || index >= MerchantOnboardingStep.values.length - 1) {
-      return null;
-    }
-    return MerchantOnboardingStep.values[index + 1];
-  }
+  MerchantOnboardingStep? _nextStep(MerchantOnboardingStep step) =>
+      step.nextStep;
 
   bool _isProfileComplete(MerchantDraft draft) {
     final name = (draft.businessName ?? '').trim();

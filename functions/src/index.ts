@@ -5,6 +5,7 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { Pool, type PoolClient } from 'pg';
+import { createOrGetOpenRecoveryTask } from './recovery_task_creation.js';
 
 admin.initializeApp();
 
@@ -544,7 +545,7 @@ adminRouter.get('/operations/summary', async (_req, res) => {
       (SELECT COUNT(*)::int FROM subscription_state WHERE status IN ('PAST_DUE', 'CANCELLED', 'CANCELED')) AS attention_subscription_count,
       (SELECT COUNT(*)::int FROM app_users WHERE status = 'ACTIVE') AS active_staff_count,
       (SELECT COUNT(*)::int FROM usage_events WHERE created_at >= $1) AS usage_events_24h,
-      (SELECT COUNT(*)::int FROM recovery_tasks WHERE status NOT IN ('DONE', 'COMPLETED', 'CANCELLED', 'CANCELED')) AS open_recovery_task_count,
+      (SELECT COUNT(*)::int FROM recovery_tasks WHERE LOWER(status) NOT IN ('done', 'completed', 'cancelled', 'canceled', 'superseded')) AS open_recovery_task_count,
       (SELECT COUNT(*)::int FROM visit_reports WHERE created_at >= $1) AS visit_reports_24h,
       (SELECT COUNT(*)::int FROM survey_responses WHERE created_at >= $1) AS survey_responses_24h,
       (SELECT COUNT(*)::int FROM admin_audit_events WHERE created_at >= $1) AS admin_audit_events_24h,
@@ -1381,6 +1382,40 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
       case 'recovery_task':
         if (operation === 'delete') {
           await deleteById('recovery_tasks', entityId, merchantId);
+          return res.json({ success: true });
+        }
+        if (
+          operation === 'create' &&
+          (pickString(payload, 'status') ?? 'open').toLowerCase() === 'open'
+        ) {
+          const result = await createOrGetOpenRecoveryTask(pool, {
+            id: entityId,
+            merchantId,
+            customerId:
+              pickString(payload, 'customer_id') ??
+              pickString(payload, 'customerId') ??
+              '',
+            priority: pickString(payload, 'priority') ?? 'medium',
+            dueAt:
+              pickNumber(payload, 'due_at') ?? pickNumber(payload, 'dueAt'),
+            notes: pickString(payload, 'notes'),
+            now: pickNumber(payload, 'updated_at') ?? Date.now(),
+            createdAt:
+              pickNumber(payload, 'created_at') ??
+              pickNumber(payload, 'createdAt') ??
+              undefined,
+            actorAppUserId:
+              pickString(payload, 'updated_by_app_user_id') ??
+              pickString(payload, 'updatedByAppUserId') ??
+              null,
+          });
+          return res.json({
+            success: true,
+            data: {
+              outcome: result.outcome,
+              canonical_entity: result.task,
+            },
+          });
         } else {
           await upsertRecoveryTask(merchantId, payload, entityId);
         }
@@ -1655,51 +1690,20 @@ app.post('/engage/task', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing customer_id' });
   }
 
-  const id = pickString(payload, 'id') ?? randomUUID();
   const now = Date.now();
 
-  const sql = `
-    INSERT INTO recovery_tasks (
-      id,
-      merchant_id,
-      customer_id,
-      priority,
-      status,
-      due_at,
-      notes,
-      created_at,
-      updated_at,
-      created_by_app_user_id,
-      updated_by_app_user_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-    ON CONFLICT (id) DO UPDATE SET
-      merchant_id = EXCLUDED.merchant_id,
-      customer_id = EXCLUDED.customer_id,
-      priority = EXCLUDED.priority,
-      status = EXCLUDED.status,
-      due_at = EXCLUDED.due_at,
-      notes = EXCLUDED.notes,
-      created_by_app_user_id = COALESCE(recovery_tasks.created_by_app_user_id, EXCLUDED.created_by_app_user_id),
-      updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
-      updated_at = EXCLUDED.updated_at
-    RETURNING *
-  `;
-
   try {
-    const result = await pool.query(sql, [
-      id,
+    const result = await createOrGetOpenRecoveryTask(pool, {
+      id: pickString(payload, 'id') ?? undefined,
       merchantId,
       customerId,
       priority,
-      'open',
       dueAt,
       notes,
       now,
-      now,
       actorAppUserId,
-      actorAppUserId,
-    ]);
-    return res.json({ success: true, data: result.rows[0] ?? null });
+    });
+    return res.json({ success: true, data: result });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -1755,19 +1759,27 @@ app.post('/engage/action', async (req, res) => {
   const now = Date.now();
 
   const sql = `
-    INSERT INTO recovery_actions (
-      id,
-      merchant_id,
-      customer_id,
-      task_id,
-      action_type,
-      payload,
-      created_at,
-      updated_at,
-      created_by_app_user_id,
-      updated_by_app_user_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-    RETURNING *
+    WITH inserted AS (
+      INSERT INTO recovery_actions (
+        id,
+        merchant_id,
+        customer_id,
+        task_id,
+        action_type,
+        payload,
+        created_at,
+        updated_at,
+        created_by_app_user_id,
+        updated_by_app_user_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      ON CONFLICT (id) DO NOTHING
+      RETURNING *
+    )
+    SELECT * FROM inserted
+    UNION ALL
+    SELECT * FROM recovery_actions
+    WHERE id = $1 AND merchant_id = $2
+    LIMIT 1
   `;
 
   try {
@@ -1783,7 +1795,10 @@ app.post('/engage/action', async (req, res) => {
       actorAppUserId,
       actorAppUserId,
     ]);
-    return res.json({ success: true, data: result.rows[0] ?? null });
+    if (!result.rows[0]) {
+      return res.status(409).json({ success: false, message: 'Action ID already in use' });
+    }
+    return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -1810,20 +1825,28 @@ app.post('/engage/visit-report', async (req, res) => {
   const now = Date.now();
 
   const sql = `
-    INSERT INTO visit_reports (
-      id,
-      merchant_id,
-      task_id,
-      customer_id,
-      result,
-      notes,
-      visited_at,
-      created_at,
-      updated_at,
-      created_by_app_user_id,
-      updated_by_app_user_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-    RETURNING *
+    WITH inserted AS (
+      INSERT INTO visit_reports (
+        id,
+        merchant_id,
+        task_id,
+        customer_id,
+        result,
+        notes,
+        visited_at,
+        created_at,
+        updated_at,
+        created_by_app_user_id,
+        updated_by_app_user_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+      ON CONFLICT (id) DO NOTHING
+      RETURNING *
+    )
+    SELECT * FROM inserted
+    UNION ALL
+    SELECT * FROM visit_reports
+    WHERE id = $1 AND merchant_id = $2
+    LIMIT 1
   `;
 
   try {
@@ -1840,7 +1863,10 @@ app.post('/engage/visit-report', async (req, res) => {
       actorAppUserId,
       actorAppUserId,
     ]);
-    return res.json({ success: true, data: result.rows[0] ?? null });
+    if (!result.rows[0]) {
+      return res.status(409).json({ success: false, message: 'Visit report ID already in use' });
+    }
+    return res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -2050,27 +2076,41 @@ app.post('/engage/survey-response', async (req, res) => {
     return res.status(400).json({ success: false, message: 'Missing answers' });
   }
 
-  const responseId = randomUUID();
+  const responseId =
+    pickString(payload, 'id') ??
+    pickString(payload, 'response_id') ??
+    pickString(payload, 'responseId') ??
+    randomUUID();
   const now = Date.now();
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    await client.query(
+    const responseResult = await client.query(
       `
-      INSERT INTO survey_responses (
-        id,
-        merchant_id,
-        survey_id,
-        customer_id,
-        submitted_at,
-        channel,
-        created_at,
-        updated_at,
-        created_by_app_user_id,
-        updated_by_app_user_id
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      WITH inserted AS (
+        INSERT INTO survey_responses (
+          id,
+          merchant_id,
+          survey_id,
+          customer_id,
+          submitted_at,
+          channel,
+          created_at,
+          updated_at,
+          created_by_app_user_id,
+          updated_by_app_user_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id
+      )
+      SELECT id, true AS inserted FROM inserted
+      UNION ALL
+      SELECT id, false AS inserted
+      FROM survey_responses
+      WHERE id = $1 AND merchant_id = $2
+      LIMIT 1
       `,
       [
         responseId,
@@ -2085,11 +2125,19 @@ app.post('/engage/survey-response', async (req, res) => {
         actorAppUserId,
       ],
     );
+    if (!responseResult.rows[0]) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ success: false, message: 'Response ID already in use' });
+    }
+    const inserted = responseResult.rows[0].inserted === true;
 
-    for (const item of answers) {
+    for (const [index, item] of answers.entries()) {
       const row = item as Record<string, unknown>;
       const questionId = pickString(row, 'question_id') ?? pickString(row, 'questionId');
       if (!questionId) continue;
+      const answerId =
+        pickString(row, 'id') ??
+        deterministicDocumentId('sra', [merchantId, responseId, questionId, String(index)]);
 
       const answerText = pickString(row, 'answer_text') ?? pickString(row, 'answerText');
       const answerNumeric = pickNumber(row, 'answer_numeric') ?? pickNumber(row, 'answerNumeric');
@@ -2110,9 +2158,18 @@ app.post('/engage/survey-response', async (req, res) => {
           created_by_app_user_id,
           updated_by_app_user_id
         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        ON CONFLICT (id) DO UPDATE SET
+          answer_text = EXCLUDED.answer_text,
+          answer_numeric = EXCLUDED.answer_numeric,
+          answer_bool = EXCLUDED.answer_bool,
+          updated_by_app_user_id = EXCLUDED.updated_by_app_user_id,
+          updated_at = EXCLUDED.updated_at
+        WHERE survey_response_answers.merchant_id = EXCLUDED.merchant_id
+          AND survey_response_answers.response_id = EXCLUDED.response_id
+          AND survey_response_answers.question_id = EXCLUDED.question_id
         `,
         [
-          randomUUID(),
+          answerId,
           merchantId,
           responseId,
           questionId,
@@ -2130,17 +2187,19 @@ app.post('/engage/survey-response', async (req, res) => {
     await client.query('COMMIT');
 
     // Best-effort automation: survey-completed action log and risk adjustment.
-    try {
-      await runSurveyCompletedAutomation(
-        merchantId,
-        surveyId,
-        customerId,
-        answers as Array<Record<string, unknown>>,
-        responseId,
-        now,
-      );
-    } catch {
-      // Do not fail response delivery if automation side-effects fail.
+    if (inserted) {
+      try {
+        await runSurveyCompletedAutomation(
+          merchantId,
+          surveyId,
+          customerId,
+          answers as Array<Record<string, unknown>>,
+          responseId,
+          now,
+        );
+      } catch {
+        // Do not fail response delivery if automation side-effects fail.
+      }
     }
 
     return res.json({ success: true, data: { response_id: responseId } });
@@ -7423,14 +7482,8 @@ async function ensureRecoveryTaskForRedCustomer(
       created_at,
       updated_at
     )
-    SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9
-    WHERE NOT EXISTS (
-      SELECT 1
-      FROM recovery_tasks
-      WHERE merchant_id = $2
-        AND customer_id = $3
-        AND status = 'open'
-    )
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    ON CONFLICT (merchant_id, customer_id, open_slot) DO NOTHING
   `;
 
   await pool.query(sql, [
@@ -8038,15 +8091,20 @@ async function upsertSurveyResponse(
   ]);
 
   const answers = Array.isArray(payload.answers) ? payload.answers : [];
-  for (const answer of answers) {
+  for (const [index, answer] of answers.entries()) {
     const row = answer as Record<string, unknown>;
+    const questionId =
+      pickString(row, 'question_id') ?? pickString(row, 'questionId') ?? '';
+    const answerId =
+      pickString(row, 'id') ??
+      deterministicDocumentId('sra', [merchantId, id, questionId, String(index)]);
     await upsertSurveyResponseAnswer(
       merchantId,
       {
         ...row,
         response_id: id,
       },
-      randomUUID(),
+      answerId,
     );
   }
 }

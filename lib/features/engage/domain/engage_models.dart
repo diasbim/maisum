@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class EngageRiskLevel {
   static const String green = 'green';
   static const String yellow = 'yellow';
@@ -67,14 +69,14 @@ class CustomerRiskScore {
   final bool synced;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'customer_id': customerId,
-    'days_since_visit': daysSinceVisit,
-    'risk_level': riskLevel,
-    'priority': priority,
-    'updated_at': updatedAt.millisecondsSinceEpoch,
-    'synced': synced ? 1 : 0,
-  };
+        'id': id,
+        'customer_id': customerId,
+        'days_since_visit': daysSinceVisit,
+        'risk_level': riskLevel,
+        'priority': priority,
+        'updated_at': updatedAt.millisecondsSinceEpoch,
+        'synced': synced ? 1 : 0,
+      };
 
   factory CustomerRiskScore.fromJson(Map<String, dynamic> json) {
     return CustomerRiskScore(
@@ -113,16 +115,16 @@ class RecoveryTask {
   final bool synced;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'customer_id': customerId,
-    'priority': priority,
-    'status': status,
-    'due_at': dueAt?.millisecondsSinceEpoch,
-    'notes': notes,
-    'created_at': createdAt.millisecondsSinceEpoch,
-    'updated_at': updatedAt.millisecondsSinceEpoch,
-    'synced': synced ? 1 : 0,
-  };
+        'id': id,
+        'customer_id': customerId,
+        'priority': priority,
+        'status': status,
+        'due_at': dueAt?.millisecondsSinceEpoch,
+        'notes': notes,
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'updated_at': updatedAt.millisecondsSinceEpoch,
+        'synced': synced ? 1 : 0,
+      };
 
   factory RecoveryTask.fromJson(Map<String, dynamic> json) {
     return RecoveryTask(
@@ -137,6 +139,39 @@ class RecoveryTask {
       synced: _readBool(json['synced']),
     );
   }
+}
+
+enum RecoveryTaskCreationOutcome { created, alreadyOpen }
+
+class RecoveryTaskCreationResult {
+  const RecoveryTaskCreationResult({
+    required this.task,
+    required this.outcome,
+  });
+
+  final RecoveryTask task;
+  final RecoveryTaskCreationOutcome outcome;
+
+  bool get wasAlreadyOpen => outcome == RecoveryTaskCreationOutcome.alreadyOpen;
+}
+
+class RecoveryTaskQueueItem {
+  const RecoveryTaskQueueItem({
+    required this.task,
+    required this.customerName,
+    required this.customerPhone,
+  });
+
+  final RecoveryTask task;
+  final String customerName;
+  final String customerPhone;
+}
+
+class RecoveryTaskAlreadyOpenException implements Exception {
+  const RecoveryTaskAlreadyOpenException();
+
+  @override
+  String toString() => 'Já existe uma tarefa aberta para este cliente.';
 }
 
 class RecoveryQueueItem {
@@ -185,15 +220,15 @@ class RecoveryActionLog {
   final bool synced;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'customer_id': customerId,
-    'task_id': taskId,
-    'action_type': actionType,
-    'payload': payload,
-    'created_at': createdAt.millisecondsSinceEpoch,
-    'updated_at': updatedAt.millisecondsSinceEpoch,
-    'synced': synced ? 1 : 0,
-  };
+        'id': id,
+        'customer_id': customerId,
+        'task_id': taskId,
+        'action_type': actionType,
+        'payload': payload,
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'updated_at': updatedAt.millisecondsSinceEpoch,
+        'synced': synced ? 1 : 0,
+      };
 
   factory RecoveryActionLog.fromJson(Map<String, dynamic> json) {
     return RecoveryActionLog(
@@ -233,16 +268,16 @@ class VisitReport {
   final bool synced;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'customer_id': customerId,
-    'task_id': taskId,
-    'result': result,
-    'notes': notes,
-    'visited_at': visitedAt.millisecondsSinceEpoch,
-    'created_at': createdAt.millisecondsSinceEpoch,
-    'updated_at': updatedAt.millisecondsSinceEpoch,
-    'synced': synced ? 1 : 0,
-  };
+        'id': id,
+        'customer_id': customerId,
+        'task_id': taskId,
+        'result': result,
+        'notes': notes,
+        'visited_at': visitedAt.millisecondsSinceEpoch,
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'updated_at': updatedAt.millisecondsSinceEpoch,
+        'synced': synced ? 1 : 0,
+      };
 
   factory VisitReport.fromJson(Map<String, dynamic> json) {
     return VisitReport(
@@ -251,8 +286,7 @@ class VisitReport {
       taskId: json['task_id'] as String?,
       result: (json['result'] as String?) ?? VisitResultType.interested,
       notes: json['notes'] as String?,
-      visitedAt:
-          _readDateTime(json['visited_at']) ??
+      visitedAt: _readDateTime(json['visited_at']) ??
           _readDateTime(json['created_at']) ??
           DateTime.now(),
       createdAt: _readDateTime(json['created_at']) ?? DateTime.now(),
@@ -313,17 +347,17 @@ class EngageSurveyQuestion {
   final bool synced;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'survey_id': surveyId,
-    'question_text': questionText,
-    'question_type': questionType,
-    'sort_order': sortOrder,
-    'is_required': isRequired ? 1 : 0,
-    'options_payload': options,
-    'created_at': createdAt.millisecondsSinceEpoch,
-    'updated_at': updatedAt.millisecondsSinceEpoch,
-    'synced': synced ? 1 : 0,
-  };
+        'id': id,
+        'survey_id': surveyId,
+        'question_text': questionText,
+        'question_type': questionType,
+        'sort_order': sortOrder,
+        'is_required': isRequired ? 1 : 0,
+        'options_payload': options,
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'updated_at': updatedAt.millisecondsSinceEpoch,
+        'synced': synced ? 1 : 0,
+      };
 
   factory EngageSurveyQuestion.fromJson(Map<String, dynamic> json) {
     return EngageSurveyQuestion(
@@ -364,27 +398,27 @@ class EngageSurvey {
   final bool synced;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'title': title,
-    'description': description,
-    'is_active': isActive ? 1 : 0,
-    'created_at': createdAt.millisecondsSinceEpoch,
-    'updated_at': updatedAt.millisecondsSinceEpoch,
-    'synced': synced ? 1 : 0,
-    'questions': questions.map((question) => question.toJson()).toList(),
-  };
+        'id': id,
+        'title': title,
+        'description': description,
+        'is_active': isActive ? 1 : 0,
+        'created_at': createdAt.millisecondsSinceEpoch,
+        'updated_at': updatedAt.millisecondsSinceEpoch,
+        'synced': synced ? 1 : 0,
+        'questions': questions.map((question) => question.toJson()).toList(),
+      };
 
   factory EngageSurvey.fromJson(Map<String, dynamic> json) {
     final rawQuestions = json['questions'];
     final questions = rawQuestions is List
         ? rawQuestions
-              .whereType<Map>()
-              .map(
-                (row) => EngageSurveyQuestion.fromJson(
-                  row.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList()
+            .whereType<Map>()
+            .map(
+              (row) => EngageSurveyQuestion.fromJson(
+                row.map((key, value) => MapEntry(key.toString(), value)),
+              ),
+            )
+            .toList()
         : const <EngageSurveyQuestion>[];
 
     return EngageSurvey(
@@ -403,43 +437,49 @@ class EngageSurvey {
 class SurveyAnswerInput {
   const SurveyAnswerInput({
     required this.questionId,
+    this.id,
     this.answerText,
     this.answerNumeric,
     this.answerBool,
   });
 
+  final String? id;
   final String questionId;
   final String? answerText;
   final double? answerNumeric;
   final bool? answerBool;
 
   Map<String, dynamic> toJson() => {
-    'question_id': questionId,
-    'answer_text': answerText,
-    'answer_numeric': answerNumeric,
-    'answer_bool': answerBool,
-  };
+        if (id != null) 'id': id,
+        'question_id': questionId,
+        'answer_text': answerText,
+        'answer_numeric': answerNumeric,
+        'answer_bool': answerBool,
+      };
 }
 
 class SurveySubmissionInput {
   const SurveySubmissionInput({
     required this.surveyId,
     required this.answers,
+    this.responseId,
     this.customerId,
     this.channel,
   });
 
+  final String? responseId;
   final String surveyId;
   final String? customerId;
   final String? channel;
   final List<SurveyAnswerInput> answers;
 
   Map<String, dynamic> toJson() => {
-    'survey_id': surveyId,
-    'customer_id': customerId,
-    'channel': channel,
-    'answers': answers.map((answer) => answer.toJson()).toList(),
-  };
+        if (responseId != null) 'id': responseId,
+        'survey_id': surveyId,
+        'customer_id': customerId,
+        'channel': channel,
+        'answers': answers.map((answer) => answer.toJson()).toList(),
+      };
 }
 
 class EngageSurveyAnalytics {
@@ -528,6 +568,13 @@ Map<String, dynamic>? _readMap(Object? value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) {
     return value.map((key, value) => MapEntry(key.toString(), value));
+  }
+  if (value is String && value.isNotEmpty) {
+    try {
+      return _readMap(jsonDecode(value));
+    } on FormatException {
+      return null;
+    }
   }
   return null;
 }

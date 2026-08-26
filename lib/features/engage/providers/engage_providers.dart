@@ -11,10 +11,15 @@ import '../domain/engage_models.dart';
 import '../services/engage_risk_service.dart';
 
 class EngageOverview {
-  const EngageOverview({required this.dashboard, required this.queue});
+  const EngageOverview({
+    required this.dashboard,
+    required this.queue,
+    required this.pendingTasks,
+  });
 
   final EngageDashboardData dashboard;
   final List<RecoveryQueueItem> queue;
+  final List<RecoveryTaskQueueItem> pendingTasks;
 }
 
 final engageDaoProvider = Provider<EngageDao>(
@@ -103,7 +108,12 @@ class EngageOverviewController extends AsyncNotifier<EngageOverview> {
       refreshRiskScores: refreshRisk,
     );
     final queue = await repository.getRecoveryQueue(limit: 12);
-    return EngageOverview(dashboard: dashboard, queue: queue);
+    final pendingTasks = await repository.getOpenRecoveryTasks(limit: 20);
+    return EngageOverview(
+      dashboard: dashboard,
+      queue: queue,
+      pendingTasks: pendingTasks,
+    );
   }
 }
 

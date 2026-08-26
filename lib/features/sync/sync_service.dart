@@ -293,9 +293,14 @@ class SyncService {
         _tag,
         'Syncing ${item.entityType}/${item.entityId} [${item.operation}]',
       );
-      await transport.processSyncItem(item);
+      final result = await transport.processSyncItem(item);
+      final canonicalEntityId =
+          await _reconcileCanonicalEntity(item, result?.canonicalEntity);
       await _syncDao.markSynced(item.id);
-      await _markEntitySynced(item.entityType, item.entityId);
+      await _markEntitySynced(
+        item.entityType,
+        canonicalEntityId ?? item.entityId,
+      );
       Log.i(_tag, '✓ ${item.entityType}/${item.entityId}');
       return null;
     } catch (e, st) {
@@ -359,6 +364,101 @@ class SyncService {
       }
       return errorReason;
     }
+  }
+
+  Future<String?> _reconcileCanonicalEntity(
+    SyncItem item,
+    Map<String, dynamic>? canonical,
+  ) async {
+    if (item.entityType != 'recovery_task' || canonical == null) return null;
+    final canonicalId = canonical['id'] as String?;
+    if (canonicalId == null || canonicalId.isEmpty) return null;
+
+    final db = await _database.database;
+    await db.transaction((txn) async {
+      final row = <String, Object?>{
+        'id': canonicalId,
+        'merchant_id': canonical['merchant_id'] ?? _syncDao.merchantId,
+        'customer_id': canonical['customer_id'],
+        'priority': canonical['priority'] ?? 'medium',
+        'status': canonical['status'] ?? 'open',
+        'due_at': canonical['due_at'],
+        'notes': canonical['notes'],
+        'created_at':
+            canonical['created_at'] ?? DateTime.now().millisecondsSinceEpoch,
+        'updated_at':
+            canonical['updated_at'] ?? DateTime.now().millisecondsSinceEpoch,
+        'created_by_app_user_id': canonical['created_by_app_user_id'],
+        'updated_by_app_user_id': canonical['updated_by_app_user_id'],
+        'synced': 1,
+      };
+      final updated = await txn.update(
+        'recovery_tasks',
+        row,
+        where: _entityWhereClause('id = ?'),
+        whereArgs: _entityWhereArgs([canonicalId]),
+      );
+      if (updated == 0) {
+        await txn.insert('recovery_tasks', row);
+      }
+
+      if (canonicalId == item.entityId) return;
+      await txn.update(
+        'recovery_actions',
+        {'task_id': canonicalId},
+        where: _entityWhereClause('task_id = ?'),
+        whereArgs: _entityWhereArgs([item.entityId]),
+      );
+      await txn.update(
+        'visit_reports',
+        {'task_id': canonicalId},
+        where: _entityWhereClause('task_id = ?'),
+        whereArgs: _entityWhereArgs([item.entityId]),
+      );
+
+      final queued = await txn.query(
+        'sync_queue',
+        columns: const ['id', 'entity_type', 'entity_id', 'payload'],
+        where: _syncDao.merchantId == null
+            ? 'status != ?'
+            : 'merchant_id = ? AND status != ?',
+        whereArgs: _syncDao.merchantId == null
+            ? ['synced']
+            : [_syncDao.merchantId, 'synced'],
+      );
+      for (final queuedItem in queued) {
+        final payload =
+            jsonDecode(queuedItem['payload'] as String) as Map<String, dynamic>;
+        var changed = false;
+        if (payload['task_id'] == item.entityId) {
+          payload['task_id'] = canonicalId;
+          changed = true;
+        }
+        if (queuedItem['entity_type'] == 'recovery_task' &&
+            queuedItem['entity_id'] == item.entityId) {
+          payload['id'] = canonicalId;
+          await txn.update(
+            'sync_queue',
+            {'entity_id': canonicalId, 'payload': jsonEncode(payload)},
+            where: 'id = ?',
+            whereArgs: [queuedItem['id']],
+          );
+        } else if (changed) {
+          await txn.update(
+            'sync_queue',
+            {'payload': jsonEncode(payload)},
+            where: 'id = ?',
+            whereArgs: [queuedItem['id']],
+          );
+        }
+      }
+      await txn.delete(
+        'recovery_tasks',
+        where: _entityWhereClause('id = ?'),
+        whereArgs: _entityWhereArgs([item.entityId]),
+      );
+    });
+    return canonicalId;
   }
 
   Future<void> _pullRemoteChanges() async {

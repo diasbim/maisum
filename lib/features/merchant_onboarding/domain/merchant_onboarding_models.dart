@@ -1,7 +1,6 @@
 import '../../business_profile/domain/business_profile.dart';
 
 enum MerchantOnboardingStep {
-  verifyPhone,
   businessType,
   businessInfo,
   location,
@@ -15,7 +14,6 @@ extension MerchantOnboardingStepX on MerchantOnboardingStep {
   int get total => MerchantOnboardingStep.values.length;
 
   String get route => switch (this) {
-        MerchantOnboardingStep.verifyPhone => '/login',
         MerchantOnboardingStep.businessType => '/merchant-onboarding/type',
         MerchantOnboardingStep.businessInfo => '/merchant-onboarding/info',
         MerchantOnboardingStep.location => '/merchant-onboarding/location',
@@ -23,6 +21,36 @@ extension MerchantOnboardingStepX on MerchantOnboardingStep {
         MerchantOnboardingStep.services => '/merchant-onboarding/services',
         MerchantOnboardingStep.review => '/merchant-onboarding/review',
       };
+
+  String get previousRoute => switch (this) {
+        MerchantOnboardingStep.businessType => '/onboarding-entry',
+        MerchantOnboardingStep.businessInfo =>
+          MerchantOnboardingStep.businessType.route,
+        MerchantOnboardingStep.location =>
+          MerchantOnboardingStep.businessInfo.route,
+        MerchantOnboardingStep.workingHours =>
+          MerchantOnboardingStep.location.route,
+        MerchantOnboardingStep.services =>
+          MerchantOnboardingStep.workingHours.route,
+        MerchantOnboardingStep.review => MerchantOnboardingStep.services.route,
+      };
+
+  MerchantOnboardingStep? get nextStep {
+    final nextIndex = index + 1;
+    return nextIndex < MerchantOnboardingStep.values.length
+        ? MerchantOnboardingStep.values[nextIndex]
+        : null;
+  }
+}
+
+String merchantOnboardingStepLocation(
+  MerchantOnboardingStep step, {
+  String? returnTo,
+}) {
+  return Uri(
+    path: step.route,
+    queryParameters: returnTo == null ? null : {'returnTo': returnTo},
+  ).toString();
 }
 
 class MerchantLocation {

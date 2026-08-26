@@ -9,10 +9,12 @@ class InactiveCustomerCard extends StatelessWidget {
     super.key,
     required this.customer,
     required this.onSendReminder,
+    this.isSending = false,
   });
 
   final InactiveCustomerSummary customer;
   final VoidCallback onSendReminder;
+  final bool isSending;
 
   @override
   Widget build(BuildContext context) {
@@ -77,9 +79,19 @@ class InactiveCustomerCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: onSendReminder,
-              icon: const Icon(Icons.notifications_active_rounded, size: 18),
-              label: const Text('Enviar lembrete'),
+              onPressed: isSending ? null : onSendReminder,
+              icon: isSending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send_rounded, size: 18),
+              label: Text(
+                isSending
+                    ? 'A preparar lembrete…'
+                    : 'Abrir lembrete no WhatsApp',
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.secondary,
                 foregroundColor: AppColors.primary,

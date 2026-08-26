@@ -4,14 +4,15 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_layout.dart';
-import '../../../../core/theme/app_shadows.dart';
 import '../../../../design_system/components/maisum_text_field.dart';
 import '../../domain/merchant_onboarding_models.dart';
 import '../controllers/merchant_onboarding_controller.dart';
 import '../widgets/onboarding_widgets.dart';
 
 class BusinessLocationPage extends ConsumerStatefulWidget {
-  const BusinessLocationPage({super.key});
+  const BusinessLocationPage({super.key, this.returnRoute});
+
+  final String? returnRoute;
 
   @override
   ConsumerState<BusinessLocationPage> createState() =>
@@ -21,154 +22,109 @@ class BusinessLocationPage extends ConsumerStatefulWidget {
 class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
   late final TextEditingController _addressController;
   late final TextEditingController _referenceController;
-  late final TextEditingController _latitudeController;
-  late final TextEditingController _longitudeController;
 
   @override
   void initState() {
     super.initState();
     _addressController = TextEditingController();
     _referenceController = TextEditingController();
-    _latitudeController = TextEditingController();
-    _longitudeController = TextEditingController();
   }
 
   @override
   void dispose() {
     _addressController.dispose();
     _referenceController.dispose();
-    _latitudeController.dispose();
-    _longitudeController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(merchantOnboardingControllerProvider);
+    final backRoute =
+        widget.returnRoute ?? MerchantOnboardingStep.location.previousRoute;
     return asyncState.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Não foi possível carregar a localização.')),
+      loading: () => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.location,
+        title: 'Onde está o seu negócio?',
+        onBack: () => context.go(backRoute),
+      ),
+      error: (_, __) => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.location,
+        title: 'Onde está o seu negócio?',
+        errorMessage: 'Não foi possível carregar a localização.',
+        onBack: () => context.go(backRoute),
+        onRetry: () => ref.invalidate(merchantOnboardingControllerProvider),
+      ),
       data: (state) {
         _syncController(_addressController, state.draft.address ?? '');
         _syncController(_referenceController, state.draft.reference ?? '');
-        final location = state.draft.location;
-        if (location != null) {
-          _syncController(_latitudeController, location.latitude.toString());
-          _syncController(_longitudeController, location.longitude.toString());
-        }
         return OnboardingScaffold(
           step: MerchantOnboardingStep.location,
-          title: 'Onde está o seu negócio?',
+          title: 'Detalhes da localização',
           subtitle:
-              'Esta localização será usada para que os clientes o encontrem mais facilmente.',
+              'Opcional. Pode adicionar um endereço agora ou completar esta informação mais tarde.',
+          onBack: () => context.go(backRoute),
           errorMessage: state.errorMessage,
-          primaryLabel: 'Continuar',
-          onPrimaryPressed: () async {
-            await _save();
-            final moved = await ref
-                .read(merchantOnboardingControllerProvider.notifier)
-                .continueFromStep(MerchantOnboardingStep.location);
-            if (moved && context.mounted) {
-              context.go(MerchantOnboardingStep.workingHours.route);
-            }
-          },
+          primaryLabel: 'Guardar e continuar',
+          onPrimaryPressed: () => _continue(saveDetails: true),
+          secondaryLabel: 'Adicionar depois',
+          onSecondaryPressed: () => _continue(saveDetails: false),
           children: [
             Container(
-              height: AppSpacing.xxxxxxl * 3,
+              padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
                 color: AppColors.secondaryLight,
-                borderRadius: BorderRadius.circular(AppRadius.xl),
-                border: Border.all(color: AppColors.g100),
-                boxShadow: AppShadows.sm,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
               ),
-              child: Center(
-                child: Semantics(
-                  label:
-                      'Mapa indisponível. Introduza as coordenadas manualmente.',
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: AppSpacing.xxxxxxl,
-                        height: AppSpacing.xxxxxxl,
-                        decoration: const BoxDecoration(
-                          color: AppColors.primaryDarker,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.location_pin,
-                          size: AppSpacing.xxxl,
-                          color: AppColors.secondary,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        'Localização manual',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: AppColors.primaryDarker,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Use endereço e coordenadas.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: AppColors.onSurfaceVariant,
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                    ],
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.location_on_outlined,
+                    color: AppColors.primary,
+                    size: 28,
                   ),
-                ),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Área principal já guardada',
+                          style:
+                              Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: AppColors.primaryDarker,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                        Text(
+                          [
+                            state.draft.city?.trim(),
+                            state.draft.district?.trim(),
+                          ]
+                              .whereType<String>()
+                              .where((value) => value.isNotEmpty)
+                              .join(' · '),
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
             MaisUmTextField(
               controller: _addressController,
               textCapitalization: TextCapitalization.words,
-              label: 'Endereço selecionado *',
+              label: 'Endereço (opcional)',
               prefixIcon: const Icon(Icons.map_rounded),
               textInputAction: TextInputAction.next,
               autofillHints: const [AutofillHints.streetAddressLine1],
               useFloatingLabel: true,
-              onChanged: (_) => _save(),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: [
-                Expanded(
-                  child: MaisUmTextField(
-                    controller: _latitudeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                      signed: true,
-                    ),
-                    label: 'Latitude *',
-                    prefixIcon: const Icon(Icons.explore_rounded),
-                    textInputAction: TextInputAction.next,
-                    useFloatingLabel: true,
-                    onChanged: (_) => _save(),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: MaisUmTextField(
-                    controller: _longitudeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                      signed: true,
-                    ),
-                    label: 'Longitude *',
-                    prefixIcon: const Icon(Icons.explore_rounded),
-                    textInputAction: TextInputAction.next,
-                    useFloatingLabel: true,
-                    onChanged: (_) => _save(),
-                  ),
-                ),
-              ],
             ),
             const SizedBox(height: AppSpacing.lg),
             MaisUmTextField(
@@ -178,11 +134,14 @@ class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
               prefixIcon: const Icon(Icons.flag_rounded),
               textInputAction: TextInputAction.done,
               useFloatingLabel: true,
-              onChanged: (_) => _save(),
             ),
             const SizedBox(height: AppSpacing.lg),
-            const ErrorCard(
-              message: 'Mapa interativo indisponível nesta versão.',
+            Text(
+              'Não precisa de conhecer latitude ou longitude. Poderá definir a posição exata mais tarde nas configurações.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurfaceVariant,
+                    height: 1.4,
+                  ),
             ),
           ],
         );
@@ -190,21 +149,21 @@ class _BusinessLocationPageState extends ConsumerState<BusinessLocationPage> {
     );
   }
 
-  Future<void> _save() {
-    return ref
-        .read(merchantOnboardingControllerProvider.notifier)
-        .updateLocation(
-          location: _locationFromAddress(),
-          address: _addressController.text,
-          reference: _referenceController.text,
-        );
-  }
-
-  MerchantLocation? _locationFromAddress() {
-    final latitude = double.tryParse(_latitudeController.text.trim());
-    final longitude = double.tryParse(_longitudeController.text.trim());
-    if (latitude == null || longitude == null) return null;
-    return MerchantLocation(latitude: latitude, longitude: longitude);
+  Future<void> _continue({required bool saveDetails}) async {
+    final controller = ref.read(merchantOnboardingControllerProvider.notifier);
+    if (saveDetails) {
+      await controller.updateLocationDetails(
+        address: _addressController.text,
+        reference: _referenceController.text,
+      );
+    }
+    final moved =
+        await controller.continueFromStep(MerchantOnboardingStep.location);
+    if (moved && mounted) {
+      context.go(
+        widget.returnRoute ?? MerchantOnboardingStep.workingHours.route,
+      );
+    }
   }
 
   void _syncController(TextEditingController controller, String value) {

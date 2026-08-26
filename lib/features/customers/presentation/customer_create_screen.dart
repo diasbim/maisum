@@ -13,6 +13,7 @@ import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/moz_phone_input_formatter.dart';
 import '../../../core/utils/moz_phone_validator.dart';
 import '../../../design_system/components/loading_button.dart';
+import '../../../design_system/components/maisum_app_bar.dart';
 import '../../../design_system/components/maisum_surface.dart';
 import '../../../design_system/components/maisum_modal.dart';
 import '../../../design_system/components/maisum_text_field.dart';
@@ -243,9 +244,9 @@ class _CustomerCreateScreenState extends ConsumerState<CustomerCreateScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Adicionar Cliente'),
-        backgroundColor: AppColors.offWhite,
+      appBar: MaisUmAppBar(
+        title: 'Adicionar cliente',
+        fallbackLocation: widget.returnRoute ?? '/customers',
       ),
       backgroundColor: AppColors.offWhite,
       body: SafeArea(

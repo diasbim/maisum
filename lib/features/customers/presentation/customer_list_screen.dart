@@ -68,6 +68,11 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
+      appBar: customers.hasValue
+          ? null
+          : const MaisUmAppBar(
+              title: 'Clientes',
+            ),
       body: customers.when(
         data: (list) {
           final filtered = _applyFilter(list);

@@ -31,6 +31,12 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.primaryDarker,
+      appBar: rewards.hasValue
+          ? null
+          : const MaisUmAppBar(
+              title: 'Recompensas',
+              backgroundColor: AppColors.primaryDarker,
+            ),
       body: rewards.when(
         data: (list) => RefreshIndicator(
           color: AppColors.secondary,

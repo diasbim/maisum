@@ -27,9 +27,123 @@ void main() {
       expect(profile.capabilities.appointments, isFalse);
     });
 
+    test('local business expansion profiles have coherent defaults', () {
+      final expectedProfiles = {
+        'car_wash': (
+          label: 'Lavagem Automóvel',
+          iconKey: 'car_wash',
+          services: true,
+          products: true,
+          appointments: true,
+          intervals: [7, 14, 30, 60],
+          presets: [
+            'basic_wash',
+            'interior_cleaning',
+            'polishing',
+            'air_freshener',
+          ],
+        ),
+        'laundry': (
+          label: 'Lavandaria',
+          iconKey: 'laundry',
+          services: true,
+          products: false,
+          appointments: true,
+          intervals: [7, 14, 30],
+          presets: ['wash_and_fold', 'dry_cleaning', 'ironing'],
+        ),
+        'bakery': (
+          label: 'Padaria',
+          iconKey: 'bakery',
+          services: false,
+          products: true,
+          appointments: false,
+          intervals: [7, 14, 30],
+          presets: ['bread', 'cake', 'pastry'],
+        ),
+        'pharmacy': (
+          label: 'Farmácia',
+          iconKey: 'pharmacy',
+          services: true,
+          products: true,
+          appointments: false,
+          intervals: [7, 14, 30],
+          presets: ['medicine', 'health_product', 'basic_care'],
+        ),
+        'pet_care': (
+          label: 'Pet care',
+          iconKey: 'pet_care',
+          services: true,
+          products: true,
+          appointments: true,
+          intervals: [14, 30, 60, 90],
+          presets: ['pet_bath', 'grooming', 'pet_food'],
+        ),
+        'tailoring': (
+          label: 'Alfaiataria',
+          iconKey: 'tailoring',
+          services: true,
+          products: true,
+          appointments: true,
+          intervals: [7, 14, 30, 90],
+          presets: ['adjustment', 'custom_clothing', 'clothing_repair'],
+        ),
+        'phone_repair': (
+          label: 'Reparação de Telemóveis',
+          iconKey: 'phone_repair',
+          services: true,
+          products: true,
+          appointments: true,
+          intervals: [7, 30, 90, 180],
+          presets: [
+            'screen_replacement',
+            'battery_replacement',
+            'phone_accessory',
+          ],
+        ),
+      };
+
+      for (final MapEntry(key: id, value: expected)
+          in expectedProfiles.entries) {
+        final profile = BusinessProfiles.resolve(id);
+
+        expect(profile.id, id);
+        expect(profile.label, expected.label);
+        expect(profile.iconKey, expected.iconKey);
+        expect(profile.capabilities.services, expected.services);
+        expect(profile.capabilities.products, expected.products);
+        expect(profile.capabilities.appointments, expected.appointments);
+        expect(profile.retention.activeDays,
+            lessThan(profile.retention.attentionDays));
+        expect(profile.retention.attentionDays,
+            lessThan(profile.retention.riskDays));
+        expect(profile.appointmentIntervalsDays, expected.intervals);
+        expect(
+          profile.itemPresets.map((item) => item.id),
+          expected.presets,
+        );
+      }
+    });
+
     test('legacy labels resolve to their compatible profile', () {
       expect(BusinessProfiles.resolve('Barbearia').id, 'barbershop');
       expect(BusinessProfiles.resolve('Salao de beleza').id, 'salon');
+    });
+
+    test('new profile labels and aliases resolve to built-in profiles', () {
+      expect(BusinessProfiles.resolve('Lavagem Automovel').id, 'car_wash');
+      expect(BusinessProfiles.resolve('lava car').id, 'car_wash');
+      expect(BusinessProfiles.resolve('Lavanderia').id, 'laundry');
+      expect(BusinessProfiles.resolve('dry cleaning').id, 'laundry');
+      expect(BusinessProfiles.resolve('Panificadora').id, 'bakery');
+      expect(BusinessProfiles.resolve('Farmacia').id, 'pharmacy');
+      expect(BusinessProfiles.resolve('Drogaria').id, 'pharmacy');
+      expect(BusinessProfiles.resolve('Cuidados de animais').id, 'pet_care');
+      expect(BusinessProfiles.resolve('Pet shop').id, 'pet_care');
+      expect(BusinessProfiles.resolve('Costura').id, 'tailoring');
+      expect(BusinessProfiles.resolve('Reparacao de telemoveis').id,
+          'phone_repair');
+      expect(BusinessProfiles.resolve('phone repair').id, 'phone_repair');
     });
 
     test('legacy businesses keep the original barbershop behavior', () {

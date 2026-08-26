@@ -1,5 +1,11 @@
 import '../domain/sync_item.dart';
 
+class SyncProcessResult {
+  const SyncProcessResult({this.canonicalEntity});
+
+  final Map<String, dynamic>? canonicalEntity;
+}
+
 abstract class SyncTransport {
   String get transportName;
 
@@ -13,7 +19,7 @@ abstract class SyncTransport {
     int limit,
   });
 
-  Future<void> processSyncItem(SyncItem item);
+  Future<SyncProcessResult?> processSyncItem(SyncItem item);
 }
 
 class SyncTransportException implements Exception {

@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/empty_state.dart';
+import '../../../design_system/components/maisum_app_bar.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
 import '../providers/engage_providers.dart';
@@ -19,10 +20,9 @@ class SurveyAnalyticsScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
-      appBar: AppBar(
-        title: const Text('Análise de questionários'),
-        backgroundColor: AppColors.offWhite,
-        elevation: 0,
+      appBar: const MaisUmAppBar(
+        title: 'Resultados dos questionários',
+        fallbackLocation: '/engage',
       ),
       body: accessAsync.when(
         loading: () => const Center(
@@ -38,7 +38,7 @@ class SurveyAnalyticsScreen extends ConsumerWidget {
               title: 'Análises indisponíveis no seu plano',
               subtitle:
                   'A análise completa dos questionários é exclusiva do plano Business.',
-              actionLabel: 'Falar no WhatsApp',
+              actionLabel: 'Ver opções',
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageSurveys,

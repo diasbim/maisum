@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -30,7 +29,6 @@ import 'post_auth_navigation.dart';
 const _defaultCountryDialCode = '+258';
 const _brandNavy = Color(0xFF102A5E);
 const _brandAccent = Color(0xFFF4C542);
-const _welcomeLogoAsset = 'assets/images/logotypographi.png';
 
 class PhoneAuthScreen extends ConsumerStatefulWidget {
   const PhoneAuthScreen({super.key});
@@ -52,8 +50,6 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
   bool _showPhoneForm = false;
   ValidationState _phoneValidationState = ValidationState.neutral;
 
-  late final TapGestureRecognizer _termsRecognizer;
-  late final TapGestureRecognizer _privacyRecognizer;
   late final AnimationController _entryController;
   late final Animation<double> _fadeAnim;
   late final Animation<Offset> _slideAnim;
@@ -61,10 +57,6 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
   @override
   void initState() {
     super.initState();
-    _termsRecognizer = TapGestureRecognizer()
-      ..onTap = () => context.push('/terms');
-    _privacyRecognizer = TapGestureRecognizer()
-      ..onTap = () => context.push('/privacy');
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 480),
@@ -131,8 +123,6 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
     _phoneController.dispose();
     _phoneFocusNode.dispose();
     _entryController.dispose();
-    _termsRecognizer.dispose();
-    _privacyRecognizer.dispose();
     super.dispose();
   }
 
@@ -282,303 +272,473 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
-      backgroundColor: AppColors.offWhite,
-      appBar: canPop
-          ? AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              scrolledUnderElevation: 0,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                color: _brandNavy,
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            )
-          : null,
-      body: FadeTransition(
-        opacity: _fadeAnim,
-        child: SlideTransition(
-          position: _slideAnim,
-          child: KeyboardAwarePage(
-            builder: (context, keyboardOpen, constraints) {
-              final compact = constraints.maxHeight < 640;
-              final narrow = constraints.maxWidth < 360;
-              final logoSize = keyboardOpen ? 64.0 : 80.0;
-              final titleTopSpacing = keyboardOpen ? 6.0 : 12.0;
-              final sectionSpacing = keyboardOpen ? 12.0 : 16.0;
-              final horizontalPadding = narrow ? AppSpacing.sm : AppSpacing.xl;
-              final surfaceHorizontalPadding =
-                  narrow ? AppSpacing.md : AppSpacing.xl;
+      backgroundColor: AppColors.primaryDarker,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        leading: IconButton(
+          tooltip: 'Voltar',
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () {
+            if (canPop) {
+              Navigator.of(context).pop();
+              return;
+            }
+            setState(() => _showPhoneForm = false);
+          },
+        ),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: AppSpacing.xl),
+            child: _SecureAccessBadge(),
+          ),
+        ],
+      ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.primaryDarker,
+              AppColors.primary,
+              Color(0xFF243D68),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Stack(
+          children: [
+            const Positioned.fill(child: _AuthBackground()),
+            FadeTransition(
+              opacity: _fadeAnim,
+              child: SlideTransition(
+                position: _slideAnim,
+                child: KeyboardAwarePage(
+                  builder: (context, keyboardOpen, constraints) {
+                    final compact = constraints.maxHeight < 680;
+                    final narrow = constraints.maxWidth < 360;
+                    final pagePadding = narrow ? AppSpacing.md : AppSpacing.xl;
+                    final cardPadding = narrow ? AppSpacing.lg : AppSpacing.xxl;
 
-              return SafeArea(
-                top: false,
-                child: Center(
-                  child: SingleChildScrollView(
-                    keyboardDismissBehavior:
-                        ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: EdgeInsets.symmetric(
-                      horizontal: horizontalPadding,
-                      vertical: AppSpacing.lg,
-                    ),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: AppLayout.formMaxWidth,
-                      ),
-                      child: Form(
-                        key: _formKey,
-                        child: MaisUmSurface(
+                    return SafeArea(
+                      child: Center(
+                        child: SingleChildScrollView(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
                           padding: EdgeInsets.fromLTRB(
-                            surfaceHorizontalPadding,
-                            keyboardOpen ? AppSpacing.lg : AppSpacing.xxl,
-                            surfaceHorizontalPadding,
-                            keyboardOpen ? AppSpacing.lg : AppSpacing.xxl,
+                            pagePadding,
+                            keyboardOpen ? 8 : (compact ? 16 : 28),
+                            pagePadding,
+                            keyboardOpen ? 12 : 24,
                           ),
-                          radius: AppRadius.xl,
-                          borderColor: AppColors.g100,
-                          shadows: AppShadows.md,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(height: titleTopSpacing),
-                              Center(
-                                child: MaisUmSurface(
-                                  width: logoSize,
-                                  height: logoSize,
-                                  radius: AppRadius.lg,
-                                  padding: const EdgeInsets.all(AppSpacing.md),
-                                  backgroundColor: AppColors.primaryDarker,
-                                  borderColor: AppColors.secondary,
-                                  borderWidth: 1.5,
-                                  shadows: AppShadows.sm,
-                                  child: Center(
-                                    child: BrandMark(
-                                      size: keyboardOpen ? 34 : 42,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: AppLayout.formMaxWidth,
+                            ),
+                            child: Form(
+                              key: _formKey,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (!keyboardOpen)
+                                    _PhoneAuthHero(compact: compact),
+                                  if (!keyboardOpen)
+                                    SizedBox(
+                                      height: compact
+                                          ? AppSpacing.lg
+                                          : AppSpacing.xxl,
                                     ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.md),
-                              Text(
-                                'Bem-vindo',
-                                textAlign: TextAlign.center,
-                                style: (compact
-                                        ? theme.textTheme.titleLarge
-                                        : theme.textTheme.headlineSmall)
-                                    ?.copyWith(
-                                  color: AppColors.primaryDarker,
-                                  fontWeight: FontWeight.w800,
-                                  height: 1.05,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              Text(
-                                'Introduza o seu número\npara continuar.',
-                                textAlign: TextAlign.center,
-                                style: (compact
-                                        ? theme.textTheme.bodySmall
-                                        : theme.textTheme.bodyMedium)
-                                    ?.copyWith(
-                                  color: AppColors.onSurfaceVariant,
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              SizedBox(height: sectionSpacing),
-                              Text(
-                                'Número de telemóvel',
-                                style: theme.textTheme.labelLarge?.copyWith(
-                                  color: AppColors.onSurface,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.sm),
-                              Container(
-                                key: _phoneFieldKey,
-                                child: MaisUmTextField(
-                                  fieldKey: const Key('phone_input'),
-                                  autovalidateMode: AutovalidateMode.disabled,
-                                  validator: _phoneValidator,
-                                  controller: _phoneController,
-                                  focusNode: _phoneFocusNode,
-                                  keyboardType: TextInputType.number,
-                                  textInputAction: TextInputAction.done,
-                                  onFieldSubmitted: (_) {
-                                    if (!_isSendingCode && !_isGoogleLoading) {
-                                      _sendCode();
-                                    }
-                                  },
-                                  inputFormatters: [
-                                    FilteringTextInputFormatter.digitsOnly,
-                                    LengthLimitingTextInputFormatter(9),
-                                    MozPhoneFormatter(),
-                                  ],
-                                  hintText: '84 326 2347',
-                                  prefix: const _CountryCodePrefix(),
-                                  validationState: _phoneValidationState,
-                                  showValidIcon: true,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.md),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: MaisUmSurface(
-                                  variant: MaisUmSurfaceVariant.warning,
-                                  radius: AppRadius.pill,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.md,
-                                    vertical: AppSpacing.sm,
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.lock_outline_rounded,
-                                        size: 14,
-                                        color: AppColors.secondaryDark,
-                                      ),
-                                      const SizedBox(width: AppSpacing.xs),
-                                      Text(
-                                        'Acesso por SMS',
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(
-                                          color: AppColors.primaryDarker,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.lg),
-                              LoadingButton(
-                                key: const Key('send_code_button'),
-                                onPressed: _sendCode,
-                                enabled: !_isSendingCode &&
-                                    !_isGoogleLoading &&
-                                    _canSubmit,
-                                isLoading: _isSendingCode,
-                                label: 'CONTINUAR',
-                                loadingLabel: 'A enviar código...',
-                                radius: AppRadius.lg,
-                                backgroundColor: AppColors.primaryDarker,
-                              ),
-                              if (!keyboardOpen) ...[
-                                const SizedBox(height: AppSpacing.lg),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Container(
-                                        height: 1,
-                                        color: AppColors.onSurfaceVariant
-                                            .withValues(alpha: 0.20),
-                                      ),
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: AppSpacing.md,
-                                      ),
-                                      child: Text(
-                                        'ou',
-                                        style: theme.textTheme.labelSmall
-                                            ?.copyWith(
-                                          color: AppColors.onSurfaceVariant,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Container(
-                                        height: 1,
-                                        color: AppColors.onSurfaceVariant
-                                            .withValues(alpha: 0.20),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: AppSpacing.lg),
-                                KeyedSubtree(
-                                  key: const Key('google_auth_button'),
-                                  child: MaisUmButton(
-                                    onPressed:
-                                        (_isSendingCode || _isGoogleLoading)
-                                            ? null
-                                            : _continueWithGoogle,
-                                    isLoading: _isGoogleLoading,
-                                    label: 'Continuar com Google',
-                                    loadingLabel: 'A autenticar...',
-                                    variant: MaisUmButtonVariant.outlined,
-                                    leadingIcon: Icons.g_mobiledata_rounded,
-                                    height: compact ? 50 : 54,
-                                    radius: AppRadius.lg,
+                                  MaisUmSurface(
+                                    padding: EdgeInsets.all(cardPadding),
+                                    radius: AppRadius.xxl,
                                     backgroundColor: AppColors.white,
-                                    foregroundColor: AppColors.onSurface,
-                                  ),
-                                ),
-                                const SizedBox(height: AppSpacing.lg),
-                                RichText(
-                                  key: const Key('terms_section'),
-                                  textAlign: TextAlign.center,
-                                  text: TextSpan(
-                                    style: (compact
-                                            ? theme.textTheme.labelSmall
-                                            : theme.textTheme.bodySmall)
-                                        ?.copyWith(
-                                      color: AppColors.onSurfaceVariant,
-                                      height: compact ? 1.4 : 1.55,
-                                      fontWeight: FontWeight.w500,
+                                    borderColor:
+                                        Colors.white.withValues(alpha: 0.72),
+                                    shadows: AppShadows.lg,
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        const AuthStepProgress(currentStep: 0),
+                                        SizedBox(
+                                          height: compact
+                                              ? AppSpacing.lg
+                                              : AppSpacing.xxl,
+                                        ),
+                                        Text(
+                                          'O seu número',
+                                          style: theme.textTheme.titleLarge
+                                              ?.copyWith(
+                                            color: AppColors.primaryDarker,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                        const SizedBox(height: AppSpacing.xs),
+                                        Text(
+                                          'Enviaremos um código único por SMS. Sem palavras-passe.',
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                            color: AppColors.onSurfaceVariant,
+                                            height: 1.45,
+                                          ),
+                                        ),
+                                        const SizedBox(height: AppSpacing.lg),
+                                        Semantics(
+                                          label:
+                                              'Número de telemóvel de Moçambique',
+                                          textField: true,
+                                          child: Container(
+                                            key: _phoneFieldKey,
+                                            child: MaisUmTextField(
+                                              fieldKey:
+                                                  const Key('phone_input'),
+                                              autovalidateMode:
+                                                  AutovalidateMode.disabled,
+                                              validator: _phoneValidator,
+                                              controller: _phoneController,
+                                              focusNode: _phoneFocusNode,
+                                              keyboardType:
+                                                  TextInputType.number,
+                                              textInputAction:
+                                                  TextInputAction.done,
+                                              onFieldSubmitted: (_) {
+                                                if (!_isSendingCode &&
+                                                    !_isGoogleLoading) {
+                                                  _sendCode();
+                                                }
+                                              },
+                                              inputFormatters: [
+                                                FilteringTextInputFormatter
+                                                    .digitsOnly,
+                                                LengthLimitingTextInputFormatter(
+                                                    9),
+                                                MozPhoneFormatter(),
+                                              ],
+                                              label: 'Número de telemóvel',
+                                              hintText: '84 326 2347',
+                                              prefix:
+                                                  const _CountryCodePrefix(),
+                                              validationState:
+                                                  _phoneValidationState,
+                                              showValidIcon: true,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: AppSpacing.md),
+                                        const _SmsTrustMessage(),
+                                        const SizedBox(height: AppSpacing.lg),
+                                        LoadingButton(
+                                          key: const Key('send_code_button'),
+                                          onPressed: _sendCode,
+                                          enabled: !_isSendingCode &&
+                                              !_isGoogleLoading &&
+                                              _canSubmit,
+                                          isLoading: _isSendingCode,
+                                          label: 'CONTINUAR',
+                                          loadingLabel: 'A enviar código...',
+                                          radius: AppRadius.lg,
+                                          backgroundColor:
+                                              AppColors.primaryDarker,
+                                        ),
+                                        if (!keyboardOpen) ...[
+                                          const SizedBox(height: AppSpacing.lg),
+                                          const _AuthDivider(),
+                                          const SizedBox(height: AppSpacing.lg),
+                                          KeyedSubtree(
+                                            key:
+                                                const Key('google_auth_button'),
+                                            child: MaisUmButton(
+                                              onPressed: (_isSendingCode ||
+                                                      _isGoogleLoading)
+                                                  ? null
+                                                  : _continueWithGoogle,
+                                              isLoading: _isGoogleLoading,
+                                              label: 'Continuar com Google',
+                                              loadingLabel: 'A autenticar...',
+                                              variant:
+                                                  MaisUmButtonVariant.outlined,
+                                              leadingIcon:
+                                                  Icons.g_mobiledata_rounded,
+                                              radius: AppRadius.lg,
+                                              foregroundColor:
+                                                  AppColors.onSurface,
+                                            ),
+                                          ),
+                                          const SizedBox(height: AppSpacing.md),
+                                          _AuthLegalLinks(
+                                            key: const Key('terms_section'),
+                                            compact: compact,
+                                            onTerms: () =>
+                                                context.push('/terms'),
+                                            onPrivacy: () =>
+                                                context.push('/privacy'),
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                    children: [
-                                      const TextSpan(
-                                        text:
-                                            'Ao continuar, concorda com os nossos ',
-                                      ),
-                                      TextSpan(
-                                        text: 'Termos de Serviço',
-                                        recognizer: _termsRecognizer,
-                                        style:
-                                            theme.textTheme.bodySmall?.copyWith(
-                                          color: AppColors.primaryDarker,
-                                          fontWeight: FontWeight.w600,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor:
-                                              AppColors.primaryDarker,
-                                        ),
-                                      ),
-                                      const TextSpan(text: ' e '),
-                                      TextSpan(
-                                        text: 'Política de Privacidade',
-                                        recognizer: _privacyRecognizer,
-                                        style:
-                                            theme.textTheme.bodySmall?.copyWith(
-                                          color: AppColors.primaryDarker,
-                                          fontWeight: FontWeight.w600,
-                                          decoration: TextDecoration.underline,
-                                          decorationColor:
-                                              AppColors.primaryDarker,
-                                        ),
-                                      ),
-                                      const TextSpan(text: '.'),
-                                    ],
                                   ),
-                                ),
-                              ],
-                              SizedBox(
-                                height: keyboardOpen
-                                    ? AppSpacing.md
-                                    : (compact ? AppSpacing.md : AppSpacing.lg),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
-              );
-            },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AuthBackground extends StatelessWidget {
+  const _AuthBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          Positioned(
+            top: 60,
+            right: -90,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.secondary.withValues(alpha: 0.10),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: -100,
+            left: -100,
+            child: Container(
+              width: 300,
+              height: 300,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.05),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SecureAccessBadge extends StatelessWidget {
+  const _SecureAccessBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Acesso seguro',
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.10),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 15),
+            SizedBox(width: AppSpacing.xs),
+            Text(
+              'Seguro',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PhoneAuthHero extends StatelessWidget {
+  const _PhoneAuthHero({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: compact ? 56 : 64,
+          height: compact ? 56 : 64,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+          ),
+          child: BrandMark(size: compact ? 30 : 36),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        Text(
+          'Bem-vindo',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -0.4,
+              ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          'Entre na sua conta ou comece agora.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.white.withValues(alpha: 0.70),
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SmsTrustMessage extends StatelessWidget {
+  const _SmsTrustMessage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.secondaryLight,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: const BoxDecoration(
+              color: AppColors.white,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.sms_outlined,
+              color: AppColors.primary,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              'Código gratuito por SMS. O número é usado apenas para confirmar a sua identidade.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.primaryDarker,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuthDivider extends StatelessWidget {
+  const _AuthDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: AppColors.g100)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+          child: Text(
+            'ou continue com',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: AppColors.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
         ),
+        const Expanded(child: Divider(color: AppColors.g100)),
+      ],
+    );
+  }
+}
+
+class _AuthLegalLinks extends StatelessWidget {
+  const _AuthLegalLinks({
+    super.key,
+    required this.compact,
+    required this.onTerms,
+    required this.onPrivacy,
+    this.foregroundColor = AppColors.onSurfaceVariant,
+    this.linkColor = AppColors.primary,
+  });
+
+  final bool compact;
+  final VoidCallback onTerms;
+  final VoidCallback onPrivacy;
+  final Color foregroundColor;
+  final Color linkColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final textStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: foregroundColor,
+          fontSize: compact ? 10 : 11,
+          height: 1.35,
+        );
+    final linkStyle = TextButton.styleFrom(
+      foregroundColor: linkColor,
+      minimumSize: const Size(48, 48),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+      tapTargetSize: MaterialTapTargetSize.padded,
+      textStyle: textStyle?.copyWith(
+        color: linkColor,
+        fontWeight: FontWeight.w800,
+        decoration: TextDecoration.underline,
+      ),
+    );
+
+    return Semantics(
+      container: true,
+      label: 'Informação legal',
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('Ao continuar, aceita os', style: textStyle),
+          TextButton(
+            onPressed: onTerms,
+            style: linkStyle,
+            child: const Text('Termos'),
+          ),
+          Text('e a', style: textStyle),
+          TextButton(
+            onPressed: onPrivacy,
+            style: linkStyle,
+            child: const Text('Privacidade'),
+          ),
+        ],
       ),
     );
   }
@@ -599,45 +759,30 @@ class _WelcomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
     final shortestSide = media.size.shortestSide;
-    final compact = media.size.height < 680;
-    final tight = media.size.height < 600;
+    final compact = media.size.height < 700;
+    final tight = media.size.height < 610;
     final maxWidth = shortestSide >= 600 ? 520.0 : double.infinity;
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
-      backgroundColor: const Color(0xFF001235),
+      backgroundColor: AppColors.primaryDarker,
       body: Stack(
         fit: StackFit.expand,
         children: [
           const DecoratedBox(
             decoration: BoxDecoration(
-              gradient: RadialGradient(
-                center: Alignment(0.04, -0.08),
-                radius: 0.88,
+              gradient: LinearGradient(
                 colors: [
-                  Color(0xFF063D9F),
-                  Color(0xFF01235F),
-                  Color(0xFF000719),
+                  Color(0xFF0D2652),
+                  AppColors.primary,
+                  AppColors.primaryDarker,
                 ],
-                stops: [0, 0.45, 1],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
             ),
           ),
           const _WelcomeBackgroundGlow(),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  const Color(0xFF000718).withValues(alpha: 0.10),
-                  const Color(0xFF001D55).withValues(alpha: 0.02),
-                  const Color(0xFF001136).withValues(alpha: 0.84),
-                ],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                stops: const [0, 0.44, 1],
-              ),
-            ),
-          ),
           SafeArea(
             child: Center(
               child: ConstrainedBox(
@@ -645,7 +790,7 @@ class _WelcomeScreen extends StatelessWidget {
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final tightHeight = constraints.maxHeight < 620;
-                    final horizontalPadding = tightHeight ? 18.0 : 24.0;
+                    final horizontalPadding = tightHeight ? 16.0 : 24.0;
                     final contentWidth =
                         constraints.maxWidth - (horizontalPadding * 2);
 
@@ -658,14 +803,8 @@ class _WelcomeScreen extends StatelessWidget {
                       ),
                       child: Column(
                         children: [
-                          _WelcomeAssetImage(
-                            assetName: _welcomeLogoAsset,
-                            width: tight ? 146 : (compact ? 168 : 196),
-                            fit: BoxFit.contain,
-                            semanticLabel: 'MaisUm',
-                            fallback: const _WelcomeLogoFallback(),
-                          ),
-                          SizedBox(height: tight ? 4 : 10),
+                          const _WelcomeBrand(),
+                          SizedBox(height: tight ? 8 : 16),
                           Expanded(
                             child: Center(
                               child: FittedBox(
@@ -673,20 +812,52 @@ class _WelcomeScreen extends StatelessWidget {
                                 alignment: Alignment.center,
                                 child: SizedBox(
                                   width: contentWidth,
-                                  child: _WelcomeHero(compact: compact),
+                                  child: Column(
+                                    children: [
+                                      const _WelcomeEyebrow(),
+                                      SizedBox(height: tight ? 10 : 16),
+                                      Text(
+                                        'Clientes que voltam.\nNegócios que crescem.',
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .displaySmall
+                                            ?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w900,
+                                              height: 1.05,
+                                              letterSpacing: -0.7,
+                                            ),
+                                      ),
+                                      SizedBox(height: tight ? 8 : 12),
+                                      Text(
+                                        'Fidelização, vendas e clientes num só lugar — simples desde o primeiro dia.',
+                                        textAlign: TextAlign.center,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyLarge
+                                            ?.copyWith(
+                                              color: Colors.white
+                                                  .withValues(alpha: 0.72),
+                                              height: 1.45,
+                                            ),
+                                      ),
+                                      SizedBox(height: tight ? 12 : 22),
+                                      _WelcomeHero(compact: compact),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
+                          SizedBox(height: tightHeight ? 8 : 14),
                           _WelcomeBenefits(compact: compact),
-                          SizedBox(height: tightHeight ? 14 : 20),
+                          SizedBox(height: tightHeight ? 12 : 18),
                           _WelcomePrimaryButton(
                             compact: tightHeight,
                             onPressed: onStart,
                           ),
                           SizedBox(height: tightHeight ? 8 : 12),
-                          const _WelcomeDots(),
-                          SizedBox(height: tightHeight ? 6 : 10),
                           _WelcomeTerms(
                             compact: tightHeight,
                             onTerms: onTerms,
@@ -706,6 +877,205 @@ class _WelcomeScreen extends StatelessWidget {
   }
 }
 
+class _WelcomeBrand extends StatelessWidget {
+  const _WelcomeBrand();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      header: true,
+      label: 'MaisUm',
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+            ),
+            child: const BrandMark(size: 26),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          const Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: 'Mais'),
+                TextSpan(
+                  text: 'Um',
+                  style: TextStyle(color: AppColors.secondary),
+                ),
+              ],
+            ),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.7,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WelcomeEyebrow extends StatelessWidget {
+  const _WelcomeEyebrow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(
+          color: AppColors.secondary.withValues(alpha: 0.28),
+        ),
+      ),
+      child: const Row(
+        children: [
+          Icon(
+            Icons.auto_awesome_rounded,
+            color: AppColors.secondary,
+            size: 16,
+          ),
+          SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: Text(
+              'Feito para pequenos negócios',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WelcomeAvatar extends StatelessWidget {
+  const _WelcomeAvatar();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: AppColors.secondaryLight,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: const Icon(
+        Icons.storefront_rounded,
+        color: AppColors.primary,
+        size: 22,
+      ),
+    );
+  }
+}
+
+class _LiveIndicator extends StatelessWidget {
+  const _LiveIndicator();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.green.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.circle, color: AppColors.green, size: 7),
+          SizedBox(width: AppSpacing.xs),
+          Text(
+            'Hoje',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WelcomeMetric extends StatelessWidget {
+  const _WelcomeMetric({
+    required this.icon,
+    required this.value,
+    required this.label,
+    this.highlighted = false,
+  });
+
+  final IconData icon;
+  final String value;
+  final String label;
+  final bool highlighted;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = highlighted ? AppColors.primaryDarker : Colors.white;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: highlighted
+            ? AppColors.secondary
+            : Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color.withValues(alpha: 0.84), size: 18),
+          const SizedBox(height: AppSpacing.xs),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                  ),
+            ),
+          ),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: color.withValues(alpha: 0.72),
+                  fontSize: 10,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _WelcomeBackgroundGlow extends StatelessWidget {
   const _WelcomeBackgroundGlow();
 
@@ -715,14 +1085,26 @@ class _WelcomeBackgroundGlow extends StatelessWidget {
       child: Stack(
         children: [
           Positioned(
-            top: 96,
-            left: -54,
-            right: -54,
+            top: 80,
+            right: -120,
             child: Container(
-              height: 420,
+              width: 320,
+              height: 320,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withValues(alpha: 0.045),
+                color: AppColors.secondary.withValues(alpha: 0.10),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 80,
+            left: -140,
+            child: Container(
+              width: 280,
+              height: 280,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.04),
               ),
             ),
           ),
@@ -764,108 +1146,79 @@ class _WelcomeHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final heroHeight = compact ? 292.0 : 384.0;
-    return SizedBox(
-      height: heroHeight,
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        alignment: Alignment.center,
-        children: [
-          Positioned(
-            top: compact ? 8 : 4,
-            left: compact ? -20 : -34,
-            right: compact ? -20 : -34,
-            bottom: compact ? -10 : -20,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(compact ? 26 : 34),
-              child: _WelcomeBusinessFallback(height: heroHeight),
-            ),
+    return Container(
+      padding: EdgeInsets.all(compact ? 14 : 18),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AppRadius.xxl),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.16),
+            blurRadius: 32,
+            offset: const Offset(0, 18),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: heroHeight * 0.42,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    const Color(0xFF001136).withValues(alpha: 0),
-                    const Color(0xFF001136).withValues(alpha: 0.88),
-                    const Color(0xFF001136),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const _WelcomeAvatar(),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Bom dia, Ana',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
+                    Text(
+                      'O seu negócio está a crescer',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.white.withValues(alpha: 0.62),
+                          ),
+                    ),
                   ],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
                 ),
               ),
-            ),
+              const _LiveIndicator(),
+            ],
           ),
-          Positioned(
-            left: compact ? 18 : 34,
-            right: compact ? 18 : 34,
-            bottom: compact ? 12 : 18,
-            child: const _WelcomeGrowthPill(),
+          SizedBox(height: compact ? 12 : 18),
+          const Row(
+            children: [
+              Expanded(
+                child: _WelcomeMetric(
+                  icon: Icons.groups_rounded,
+                  value: '128',
+                  label: 'clientes',
+                ),
+              ),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _WelcomeMetric(
+                  icon: Icons.trending_up_rounded,
+                  value: '+26%',
+                  label: 'este mês',
+                  highlighted: true,
+                ),
+              ),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _WelcomeMetric(
+                  icon: Icons.stars_rounded,
+                  value: '4,9',
+                  label: 'avaliação',
+                ),
+              ),
+            ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _WelcomeGrowthPill extends StatelessWidget {
-  const _WelcomeGrowthPill();
-
-  static const _shadowColor = Color(0x42000000);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.97),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [
-          BoxShadow(
-            color: _shadowColor,
-            blurRadius: 30,
-            offset: Offset(0, 16),
-          ),
-        ],
-      ),
-      child: const FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.trending_up_rounded, color: Color(0xFF2FAA4A), size: 34),
-            SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '+26% este mes',
-                  style: TextStyle(
-                    color: Color(0xFF2FAA4A),
-                    fontWeight: FontWeight.w900,
-                    fontSize: 13,
-                  ),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  'Mais clientes fieis',
-                  style: TextStyle(
-                    color: _brandNavy,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(width: 12),
-            Icon(Icons.groups_rounded, color: _brandAccent, size: 34),
-          ],
-        ),
       ),
     );
   }
@@ -879,19 +1232,26 @@ class _WelcomeBenefits extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
-          child: _BenefitItem(text: 'Registo em menos\nde 2 minutos.'),
+          child: _BenefitItem(
+            icon: Icons.bolt_rounded,
+            text: 'Rápido',
+          ),
         ),
-        _BenefitDivider(),
-        Expanded(
-          child: _BenefitItem(text: 'Dados sempre\nprotegidos.'),
-        ),
-        _BenefitDivider(),
+        SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _BenefitItem(
-              text: 'Ferramentas para atrair\ne fidelizar clientes.'),
+            icon: Icons.shield_outlined,
+            text: 'Seguro',
+          ),
+        ),
+        SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: _BenefitItem(
+            icon: Icons.cloud_off_rounded,
+            text: 'Funciona offline',
+          ),
         ),
       ],
     );
@@ -899,69 +1259,44 @@ class _WelcomeBenefits extends StatelessWidget {
 }
 
 class _BenefitItem extends StatelessWidget {
-  const _BenefitItem({required this.text});
+  const _BenefitItem({required this.icon, required this.text});
 
+  final IconData icon;
   final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.68),
-        fontWeight: FontWeight.w600,
-        fontSize: 12,
-        height: 1.28,
-        letterSpacing: 0,
-      ),
-    );
-  }
-}
-
-class _BenefitDivider extends StatelessWidget {
-  const _BenefitDivider();
-
-  @override
-  Widget build(BuildContext context) {
     return Container(
-      width: 1,
-      height: 34,
-      margin: const EdgeInsets.symmetric(horizontal: 10),
-      color: Colors.white.withValues(alpha: 0.16),
-    );
-  }
-}
-
-class _WelcomeDots extends StatelessWidget {
-  const _WelcomeDots();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          width: 28,
-          height: 4,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.all(Radius.circular(999)),
-          ),
-        ),
-        const SizedBox(width: 8),
-        for (var i = 0; i < 2; i++) ...[
-          Container(
-            width: 4,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.34),
-              shape: BoxShape.circle,
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 17, color: AppColors.secondary),
+          const SizedBox(height: AppSpacing.xs),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              text,
+              maxLines: 1,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.82),
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
             ),
           ),
-          if (i == 0) const SizedBox(width: 8),
         ],
-      ],
+      ),
     );
   }
 }
@@ -980,11 +1315,11 @@ class _WelcomePrimaryButton extends StatelessWidget {
     return KeyedSubtree(
       key: const Key('welcome_start_button'),
       child: MaisUmButton(
-        label: 'Começar agora',
+        label: 'Entrar ou criar conta',
         onPressed: onPressed,
         trailingIcon: Icons.arrow_forward_rounded,
-        height: compact ? 62 : 72,
-        radius: 999,
+        height: compact ? 56 : 60,
+        radius: AppRadius.lg,
         backgroundColor: _brandAccent,
         foregroundColor: _brandNavy,
       ),
@@ -1005,156 +1340,12 @@ class _WelcomeTerms extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 2),
-          child:
-              Icon(Icons.lock_outline_rounded, color: _brandAccent, size: 22),
-        ),
-        SizedBox(width: compact ? 8 : 10),
-        Flexible(
-          child: Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                'Ao continuar, concorda com os nossos ',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.58),
-                  fontWeight: FontWeight.w600,
-                  height: 1.35,
-                  fontSize: compact ? 12 : null,
-                ),
-              ),
-              GestureDetector(
-                onTap: onTerms,
-                child: Text(
-                  'Termos de Serviço',
-                  style: TextStyle(
-                    color: _brandAccent,
-                    decoration: TextDecoration.underline,
-                    decorationColor: _brandAccent,
-                    fontWeight: FontWeight.w700,
-                    fontSize: compact ? 12 : null,
-                  ),
-                ),
-              ),
-              Text(
-                ' e ',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.58),
-                  fontWeight: FontWeight.w600,
-                  fontSize: compact ? 12 : null,
-                ),
-              ),
-              GestureDetector(
-                onTap: onPrivacy,
-                child: Text(
-                  'Política de Privacidade.',
-                  style: TextStyle(
-                    color: _brandAccent,
-                    decoration: TextDecoration.underline,
-                    decorationColor: _brandAccent,
-                    fontWeight: FontWeight.w700,
-                    fontSize: compact ? 12 : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _WelcomeAssetImage extends StatelessWidget {
-  const _WelcomeAssetImage({
-    required this.assetName,
-    required this.fallback,
-    this.width,
-    this.fit,
-    this.semanticLabel,
-  });
-
-  final String assetName;
-  final Widget fallback;
-  final double? width;
-  final BoxFit? fit;
-  final String? semanticLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    return Image.asset(
-      assetName,
-      width: width,
-      fit: fit,
-      semanticLabel: semanticLabel,
-      errorBuilder: (_, __, ___) => fallback,
-    );
-  }
-}
-
-class _WelcomeLogoFallback extends StatelessWidget {
-  const _WelcomeLogoFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const BrandMark(size: 42),
-        const SizedBox(width: 10),
-        RichText(
-          text: const TextSpan(
-            children: [
-              TextSpan(text: 'Mais'),
-              TextSpan(
-                text: 'Um',
-                style: TextStyle(color: _brandAccent),
-              ),
-            ],
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 34,
-              fontWeight: FontWeight.w900,
-              height: 1,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _WelcomeBusinessFallback extends StatelessWidget {
-  const _WelcomeBusinessFallback({required this.height});
-
-  final double height;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: height,
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        children: [
-          Icon(
-            Icons.storefront_rounded,
-            size: height * 0.52,
-            color: Colors.white.withValues(alpha: 0.16),
-          ),
-          Icon(
-            Icons.phone_iphone_rounded,
-            size: height * 0.36,
-            color: _brandAccent.withValues(alpha: 0.82),
-          ),
-        ],
-      ),
+    return _AuthLegalLinks(
+      compact: compact,
+      onTerms: onTerms,
+      onPrivacy: onPrivacy,
+      foregroundColor: Colors.white.withValues(alpha: 0.62),
+      linkColor: AppColors.secondary,
     );
   }
 }

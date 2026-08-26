@@ -92,11 +92,13 @@ class MerchantOnboardingRepository {
           if ((draft.reference ?? '').trim().isNotEmpty)
             'reference': draft.reference!.trim(),
           if (draft.location != null) 'location': draft.location!.toJson(),
-          'working_hours': draft.workingHours.map(
-            (key, value) => MapEntry(key.toString(), value.toJson()),
-          ),
-          'services':
-              draft.services.map((service) => service.toJson()).toList(),
+          if (draft.workingHours.isNotEmpty)
+            'working_hours': draft.workingHours.map(
+              (key, value) => MapEntry(key.toString(), value.toJson()),
+            ),
+          if (draft.services.isNotEmpty)
+            'services':
+                draft.services.map((service) => service.toJson()).toList(),
           if (!wasProfileCompleteAtLoad) 'created_at': now,
           'updated_at': now,
         },

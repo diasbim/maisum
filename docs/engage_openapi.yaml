@@ -51,11 +51,11 @@ paths:
               $ref: '#/components/schemas/CreateTaskRequest'
       responses:
         '200':
-          description: Task created
+          description: Task created, or the existing open task returned
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskMutationResponse'
+                $ref: '#/components/schemas/TaskCreationResponse'
   /engage/task/complete:
     post:
       summary: Complete recovery task
@@ -278,12 +278,27 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/RecoveryTask'
+    TaskCreationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [task, outcome]
+              properties:
+                task:
+                  $ref: '#/components/schemas/RecoveryTask'
+                outcome:
+                  type: string
+                  enum: [created, already_open]
     CreateActionRequest:
       type: object
       required: [customer_id, action_type]
       properties:
         id:
           type: string
+          description: Client-generated stable ID used to make retries idempotent.
         customer_id:
           type: string
         task_id:
@@ -329,6 +344,7 @@ components:
       properties:
         id:
           type: string
+          description: Client-generated stable ID used to make retries idempotent.
         customer_id:
           type: string
         task_id:
@@ -460,6 +476,9 @@ components:
       type: object
       required: [question_id]
       properties:
+        id:
+          type: string
+          description: Client-generated stable answer ID used to make retries idempotent.
         question_id:
           type: string
         answer_text:
@@ -475,6 +494,9 @@ components:
       type: object
       required: [survey_id, answers]
       properties:
+        id:
+          type: string
+          description: Client-generated stable response ID used to make retries idempotent.
         survey_id:
           type: string
         customer_id:

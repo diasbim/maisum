@@ -365,6 +365,296 @@ class BusinessProfiles {
       ],
     ),
     BusinessProfile(
+      id: 'car_wash',
+      label: 'Lavagem Automóvel',
+      iconKey: 'car_wash',
+      capabilities: BusinessCapabilities(
+        services: true,
+        products: true,
+        appointments: true,
+      ),
+      terminology: BusinessTerminology(
+        appointment: 'lavagem',
+        appointments: 'lavagens',
+        nextVisit: 'próxima lavagem',
+      ),
+      retention: BusinessRetentionDefaults(
+        activeDays: 14,
+        attentionDays: 30,
+        riskDays: 60,
+      ),
+      appointmentIntervalsDays: [7, 14, 30, 60],
+      itemPresets: [
+        BusinessItemPreset(
+          id: 'basic_wash',
+          name: 'Lavagem simples',
+          kind: BusinessItemKind.service,
+          iconKey: 'car_wash',
+        ),
+        BusinessItemPreset(
+          id: 'interior_cleaning',
+          name: 'Limpeza interior',
+          kind: BusinessItemKind.service,
+          iconKey: 'car_wash',
+        ),
+        BusinessItemPreset(
+          id: 'polishing',
+          name: 'Polimento',
+          kind: BusinessItemKind.service,
+          iconKey: 'car_wash',
+        ),
+        BusinessItemPreset(
+          id: 'air_freshener',
+          name: 'Ambientador',
+          kind: BusinessItemKind.product,
+          iconKey: 'car_wash',
+        ),
+      ],
+    ),
+    BusinessProfile(
+      id: 'laundry',
+      label: 'Lavandaria',
+      iconKey: 'laundry',
+      capabilities: BusinessCapabilities(
+        services: true,
+        products: false,
+        appointments: true,
+      ),
+      terminology: BusinessTerminology(
+        appointment: 'recolha',
+        appointments: 'recolhas',
+        nextVisit: 'próxima recolha',
+      ),
+      retention: BusinessRetentionDefaults(
+        activeDays: 14,
+        attentionDays: 30,
+        riskDays: 60,
+      ),
+      appointmentIntervalsDays: [7, 14, 30],
+      itemPresets: [
+        BusinessItemPreset(
+          id: 'wash_and_fold',
+          name: 'Lavar e dobrar',
+          kind: BusinessItemKind.service,
+          iconKey: 'laundry',
+        ),
+        BusinessItemPreset(
+          id: 'dry_cleaning',
+          name: 'Limpeza a seco',
+          kind: BusinessItemKind.service,
+          iconKey: 'laundry',
+        ),
+        BusinessItemPreset(
+          id: 'ironing',
+          name: 'Engomadoria',
+          kind: BusinessItemKind.service,
+          iconKey: 'laundry',
+        ),
+      ],
+    ),
+    BusinessProfile(
+      id: 'bakery',
+      label: 'Padaria',
+      iconKey: 'bakery',
+      capabilities: BusinessCapabilities(
+        services: false,
+        products: true,
+        appointments: false,
+      ),
+      terminology: BusinessTerminology(
+        transaction: 'compra',
+        nextVisit: 'próxima compra',
+      ),
+      retention: BusinessRetentionDefaults(
+        activeDays: 7,
+        attentionDays: 14,
+        riskDays: 30,
+      ),
+      itemPresets: [
+        BusinessItemPreset(
+          id: 'bread',
+          name: 'Pão',
+          kind: BusinessItemKind.product,
+          iconKey: 'bakery',
+        ),
+        BusinessItemPreset(
+          id: 'cake',
+          name: 'Bolo',
+          kind: BusinessItemKind.product,
+          iconKey: 'bakery',
+        ),
+        BusinessItemPreset(
+          id: 'pastry',
+          name: 'Pastel',
+          kind: BusinessItemKind.product,
+          iconKey: 'bakery',
+        ),
+      ],
+    ),
+    BusinessProfile(
+      id: 'pharmacy',
+      label: 'Farmácia',
+      iconKey: 'pharmacy',
+      capabilities: BusinessCapabilities(
+        services: true,
+        products: true,
+        appointments: false,
+      ),
+      terminology: BusinessTerminology(
+        transaction: 'compra',
+        nextVisit: 'próxima compra',
+      ),
+      retention: BusinessRetentionDefaults(
+        activeDays: 21,
+        attentionDays: 45,
+        riskDays: 90,
+      ),
+      itemPresets: [
+        BusinessItemPreset(
+          id: 'medicine',
+          name: 'Medicamento',
+          kind: BusinessItemKind.product,
+          iconKey: 'pharmacy',
+        ),
+        BusinessItemPreset(
+          id: 'health_product',
+          name: 'Produto de saúde',
+          kind: BusinessItemKind.product,
+          iconKey: 'pharmacy',
+        ),
+        BusinessItemPreset(
+          id: 'basic_care',
+          name: 'Atendimento básico',
+          kind: BusinessItemKind.service,
+          iconKey: 'pharmacy',
+        ),
+      ],
+    ),
+    BusinessProfile(
+      id: 'pet_care',
+      label: 'Pet care',
+      iconKey: 'pet_care',
+      capabilities: BusinessCapabilities(
+        services: true,
+        products: true,
+        appointments: true,
+      ),
+      terminology: BusinessTerminology(
+        business: 'serviço pet',
+        appointment: 'agendamento',
+        appointments: 'agendamentos',
+        nextVisit: 'próximo cuidado',
+      ),
+      retention: BusinessRetentionDefaults(
+        activeDays: 30,
+        attentionDays: 60,
+        riskDays: 120,
+      ),
+      appointmentIntervalsDays: [14, 30, 60, 90],
+      itemPresets: [
+        BusinessItemPreset(
+          id: 'pet_bath',
+          name: 'Banho',
+          kind: BusinessItemKind.service,
+          iconKey: 'pet_care',
+        ),
+        BusinessItemPreset(
+          id: 'grooming',
+          name: 'Tosa',
+          kind: BusinessItemKind.service,
+          iconKey: 'pet_care',
+        ),
+        BusinessItemPreset(
+          id: 'pet_food',
+          name: 'Ração',
+          kind: BusinessItemKind.product,
+          iconKey: 'pet_care',
+        ),
+      ],
+    ),
+    BusinessProfile(
+      id: 'tailoring',
+      label: 'Alfaiataria',
+      iconKey: 'tailoring',
+      capabilities: BusinessCapabilities(
+        services: true,
+        products: true,
+        appointments: true,
+      ),
+      terminology: BusinessTerminology(
+        appointment: 'prova',
+        appointments: 'provas',
+        nextVisit: 'próxima prova',
+      ),
+      retention: BusinessRetentionDefaults(
+        activeDays: 30,
+        attentionDays: 90,
+        riskDays: 180,
+      ),
+      appointmentIntervalsDays: [7, 14, 30, 90],
+      itemPresets: [
+        BusinessItemPreset(
+          id: 'adjustment',
+          name: 'Ajuste',
+          kind: BusinessItemKind.service,
+          iconKey: 'tailoring',
+        ),
+        BusinessItemPreset(
+          id: 'custom_clothing',
+          name: 'Peça sob medida',
+          kind: BusinessItemKind.product,
+          iconKey: 'tailoring',
+        ),
+        BusinessItemPreset(
+          id: 'clothing_repair',
+          name: 'Reparação de roupa',
+          kind: BusinessItemKind.service,
+          iconKey: 'tailoring',
+        ),
+      ],
+    ),
+    BusinessProfile(
+      id: 'phone_repair',
+      label: 'Reparação de Telemóveis',
+      iconKey: 'phone_repair',
+      capabilities: BusinessCapabilities(
+        services: true,
+        products: true,
+        appointments: true,
+      ),
+      terminology: BusinessTerminology(
+        appointment: 'reparação',
+        appointments: 'reparações',
+        nextVisit: 'próxima assistência',
+      ),
+      retention: BusinessRetentionDefaults(
+        activeDays: 60,
+        attentionDays: 120,
+        riskDays: 240,
+      ),
+      appointmentIntervalsDays: [7, 30, 90, 180],
+      itemPresets: [
+        BusinessItemPreset(
+          id: 'screen_replacement',
+          name: 'Troca de ecrã',
+          kind: BusinessItemKind.service,
+          iconKey: 'phone_repair',
+        ),
+        BusinessItemPreset(
+          id: 'battery_replacement',
+          name: 'Troca de bateria',
+          kind: BusinessItemKind.service,
+          iconKey: 'phone_repair',
+        ),
+        BusinessItemPreset(
+          id: 'phone_accessory',
+          name: 'Acessório',
+          kind: BusinessItemKind.product,
+          iconKey: 'phone_repair',
+        ),
+      ],
+    ),
+    BusinessProfile(
       id: 'clinic',
       label: 'Clínica e saúde',
       iconKey: 'clinic',
@@ -458,6 +748,55 @@ class BusinessProfiles {
     generic,
   ];
 
+  static const _profileAliases = <String, String>{
+    'barber': 'barbershop',
+    'barber_shop': 'barbershop',
+    'barbear': 'barbershop',
+    'barbearia': 'barbershop',
+    'salao': 'salon',
+    'salao_de_beleza': 'salon',
+    'beauty_salon': 'salon',
+    'loja': 'retail',
+    'comercio': 'retail',
+    'retalho': 'retail',
+    'shop': 'retail',
+    'carwash': 'car_wash',
+    'auto_wash': 'car_wash',
+    'lavacar': 'car_wash',
+    'lava_car': 'car_wash',
+    'lava_jato': 'car_wash',
+    'lavagem_auto': 'car_wash',
+    'lavagem_de_carros': 'car_wash',
+    'lavagem_automovel': 'car_wash',
+    'lavagem_automoveis': 'car_wash',
+    'lavandaria': 'laundry',
+    'lavanderia': 'laundry',
+    'limpeza_a_seco': 'laundry',
+    'dry_cleaning': 'laundry',
+    'padaria': 'bakery',
+    'panificadora': 'bakery',
+    'bakery_shop': 'bakery',
+    'farmacia': 'pharmacy',
+    'drogaria': 'pharmacy',
+    'drugstore': 'pharmacy',
+    'cuidados_de_animais': 'pet_care',
+    'cuidados_para_animais': 'pet_care',
+    'pet_shop': 'pet_care',
+    'pets': 'pet_care',
+    'alfaiate': 'tailoring',
+    'alfaiataria': 'tailoring',
+    'costura': 'tailoring',
+    'costureira': 'tailoring',
+    'tailor': 'tailoring',
+    'reparacao_de_telemoveis': 'phone_repair',
+    'telemoveis': 'phone_repair',
+    'reparacao_de_celulares': 'phone_repair',
+    'conserto_de_celular': 'phone_repair',
+    'cell_phone_repair': 'phone_repair',
+    'mobile_repair': 'phone_repair',
+    'smartphone_repair': 'phone_repair',
+  };
+
   static BusinessProfile resolve(String? businessType) {
     final normalized = _normalize(businessType);
     if (normalized.isEmpty) return generic;
@@ -469,14 +808,57 @@ class BusinessProfiles {
       }
     }
 
-    if (normalized.contains('barbear')) return all.first;
-    if (normalized.contains('salao') || normalized.contains('beleza')) {
-      return all.firstWhere((profile) => profile.id == 'salon');
+    final aliasId = _profileAliases[normalized];
+    if (aliasId != null) return _byId(aliasId);
+
+    if (_containsAny(normalized, ['barbear', 'barber'])) {
+      return _byId('barbershop');
     }
-    if (normalized.contains('loja') || normalized.contains('comerc')) {
-      return all.firstWhere((profile) => profile.id == 'retail');
+    if (_containsAny(normalized, ['salao', 'beleza', 'beauty_salon'])) {
+      return _byId('salon');
     }
+    if (_containsAny(normalized, ['loja', 'comerc', 'retalho'])) {
+      return _byId('retail');
+    }
+    if (_containsAny(normalized, ['lavacar']) ||
+        (normalized.contains('lava') &&
+            _containsAny(normalized, ['car', 'auto', 'jato'])) ||
+        (normalized.contains('lavagem') &&
+            _containsAny(normalized, ['carro', 'automovel', 'auto']))) {
+      return _byId('car_wash');
+    }
+    if (_containsAny(
+      normalized,
+      ['lavand', 'laundry', 'limpeza_a_seco', 'dry_clean'],
+    )) {
+      return _byId('laundry');
+    }
+    if (_containsAny(normalized, ['padar', 'bakery', 'panificador'])) {
+      return _byId('bakery');
+    }
+    if (_containsAny(normalized, ['farmac', 'pharmacy', 'drogaria'])) {
+      return _byId('pharmacy');
+    }
+    if (_containsAny(normalized, ['pet', 'animais'])) {
+      return _byId('pet_care');
+    }
+    if (_containsAny(normalized, ['alfaiat', 'costur', 'tailor'])) {
+      return _byId('tailoring');
+    }
+    if (_containsAny(normalized, ['telemov', 'celular', 'smartphone']) ||
+        (normalized.contains('phone') && normalized.contains('repair'))) {
+      return _byId('phone_repair');
+    }
+
     return generic;
+  }
+
+  static BusinessProfile _byId(String id) {
+    return all.firstWhere((profile) => profile.id == id);
+  }
+
+  static bool _containsAny(String value, List<String> needles) {
+    return needles.any(value.contains);
   }
 
   static BusinessProfile resolveBusinessData(Map<String, dynamic> data) {
@@ -489,9 +871,15 @@ class BusinessProfiles {
   }
 
   static String _normalize(String? value) {
-    return (value ?? '')
-        .trim()
-        .toLowerCase()
+    final normalized = (value ?? '').trim().toLowerCase();
+    return normalized
+        .replaceAll(RegExp('[áàâãä]'), 'a')
+        .replaceAll(RegExp('[éèêë]'), 'e')
+        .replaceAll(RegExp('[íìîï]'), 'i')
+        .replaceAll(RegExp('[óòôõö]'), 'o')
+        .replaceAll(RegExp('[úùûü]'), 'u')
+        .replaceAll('ç', 'c')
+        .replaceAll('ñ', 'n')
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
   }

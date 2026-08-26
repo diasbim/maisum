@@ -11,7 +11,9 @@ import '../controllers/merchant_onboarding_controller.dart';
 import '../widgets/onboarding_widgets.dart';
 
 class ServicesPage extends ConsumerStatefulWidget {
-  const ServicesPage({super.key});
+  const ServicesPage({super.key, this.returnRoute});
+
+  final String? returnRoute;
 
   @override
   ConsumerState<ServicesPage> createState() => _ServicesPageState();
@@ -29,11 +31,21 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
   @override
   Widget build(BuildContext context) {
     final asyncState = ref.watch(merchantOnboardingControllerProvider);
+    final backRoute =
+        widget.returnRoute ?? MerchantOnboardingStep.services.previousRoute;
     return asyncState.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => const Scaffold(
-          body: ErrorCard(message: 'Não foi possível carregar os serviços.')),
+      loading: () => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.services,
+        title: 'Produtos e serviços',
+        onBack: () => context.go(backRoute),
+      ),
+      error: (_, __) => OnboardingStatusScaffold(
+        step: MerchantOnboardingStep.services,
+        title: 'Produtos e serviços',
+        errorMessage: 'Não foi possível carregar os serviços.',
+        onBack: () => context.go(backRoute),
+        onRetry: () => ref.invalidate(merchantOnboardingControllerProvider),
+      ),
       data: (state) {
         final profile = BusinessProfiles.resolve(state.draft.businessType);
         final suggestions =
@@ -53,16 +65,12 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
                   ? 'Produtos vendidos'
                   : 'Serviços oferecidos',
           subtitle: 'Adicione agora ou configure o catálogo mais tarde.',
+          onBack: () => context.go(backRoute),
           errorMessage: state.errorMessage,
-          primaryLabel: 'Continuar',
-          onPrimaryPressed: () async {
-            final moved = await ref
-                .read(merchantOnboardingControllerProvider.notifier)
-                .continueFromStep(MerchantOnboardingStep.services);
-            if (moved && context.mounted) {
-              context.go(MerchantOnboardingStep.review.route);
-            }
-          },
+          primaryLabel: 'Guardar e continuar',
+          onPrimaryPressed: _continue,
+          secondaryLabel: 'Configurar depois',
+          onSecondaryPressed: _continue,
           children: [
             MaisUmTextField(
               controller: _searchController,
@@ -131,6 +139,15 @@ class _ServicesPageState extends ConsumerState<ServicesPage> {
         );
       },
     );
+  }
+
+  Future<void> _continue() async {
+    final moved = await ref
+        .read(merchantOnboardingControllerProvider.notifier)
+        .continueFromStep(MerchantOnboardingStep.services);
+    if (moved && mounted) {
+      context.go(widget.returnRoute ?? MerchantOnboardingStep.review.route);
+    }
   }
 
   void _toggle(MerchantOnboardingState state, MerchantService service) {

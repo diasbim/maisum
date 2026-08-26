@@ -198,35 +198,113 @@ class EngageDao {
   }
 
   Future<RecoveryTask> createRecoveryTask({
+    String? taskId,
     required String customerId,
     required String priority,
     DateTime? dueAt,
     String? notes,
   }) async {
     final db = await _db.database;
-    final now = DateTime.now();
-    final task = RecoveryTask(
-      id: _uuid.v4(),
-      customerId: customerId,
-      priority: RecoveryTaskPriority.values.contains(priority)
-          ? priority
-          : RecoveryTaskPriority.medium,
-      status: RecoveryTaskStatus.open,
-      dueAt: dueAt,
-      notes: notes,
-      createdAt: now,
-      updatedAt: now,
-      synced: false,
-    );
+    return db.transaction((txn) async {
+      final existing = await txn.query(
+        'recovery_tasks',
+        columns: const ['id'],
+        where: _withMerchantScope('customer_id = ? AND status = ?'),
+        whereArgs: _withMerchantArgs([
+          customerId,
+          RecoveryTaskStatus.open,
+        ]),
+        limit: 1,
+      );
+      if (existing.isNotEmpty) {
+        throw const RecoveryTaskAlreadyOpenException();
+      }
 
-    await db.insert('recovery_tasks', {
-      ...task.toJson(),
-      'merchant_id': merchantId,
-      'created_by_app_user_id': appUserId,
-      'updated_by_app_user_id': appUserId,
+      final now = DateTime.now();
+      final task = RecoveryTask(
+        id: taskId ?? _uuid.v4(),
+        customerId: customerId,
+        priority: RecoveryTaskPriority.values.contains(priority)
+            ? priority
+            : RecoveryTaskPriority.medium,
+        status: RecoveryTaskStatus.open,
+        dueAt: dueAt,
+        notes: notes,
+        createdAt: now,
+        updatedAt: now,
+        synced: false,
+      );
+
+      await txn.insert('recovery_tasks', {
+        ...task.toJson(),
+        'merchant_id': merchantId,
+        'created_by_app_user_id': appUserId,
+        'updated_by_app_user_id': appUserId,
+      });
+      return task;
     });
+  }
 
-    return task;
+  Future<bool> hasOpenRecoveryTask(String customerId) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'recovery_tasks',
+      columns: const ['id'],
+      where: _withMerchantScope('customer_id = ? AND status = ?'),
+      whereArgs: _withMerchantArgs([customerId, RecoveryTaskStatus.open]),
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
+  Future<List<RecoveryTaskQueueItem>> getOpenRecoveryTasks({
+    int limit = 50,
+  }) async {
+    final db = await _db.database;
+    final rows = await db.rawQuery(
+      merchantId == null
+          ? '''
+            SELECT rt.*, c.name AS customer_name, c.phone AS customer_phone
+            FROM recovery_tasks rt
+            INNER JOIN customers c ON c.id = rt.customer_id
+            WHERE rt.status = ?
+            ORDER BY CASE rt.priority
+                       WHEN 'high' THEN 0
+                       WHEN 'medium' THEN 1
+                       ELSE 2
+                     END,
+                     COALESCE(rt.due_at, rt.created_at),
+                     rt.created_at
+            LIMIT ?
+          '''
+          : '''
+            SELECT rt.*, c.name AS customer_name, c.phone AS customer_phone
+            FROM recovery_tasks rt
+            INNER JOIN customers c
+              ON c.id = rt.customer_id AND c.merchant_id = rt.merchant_id
+            WHERE rt.merchant_id = ? AND rt.status = ?
+            ORDER BY CASE rt.priority
+                       WHEN 'high' THEN 0
+                       WHEN 'medium' THEN 1
+                       ELSE 2
+                     END,
+                     COALESCE(rt.due_at, rt.created_at),
+                     rt.created_at
+            LIMIT ?
+          ''',
+      merchantId == null
+          ? [RecoveryTaskStatus.open, limit]
+          : [merchantId, RecoveryTaskStatus.open, limit],
+    );
+    return rows
+        .map(
+          (row) => RecoveryTaskQueueItem(
+            task: RecoveryTask.fromJson(row),
+            customerName: (row['customer_name'] as String?) ?? 'Cliente',
+            customerPhone: (row['customer_phone'] as String?) ?? '',
+          ),
+        )
+        .toList();
   }
 
   Future<RecoveryTask> upsertRecoveryTask(RecoveryTask task) async {
@@ -268,6 +346,7 @@ class EngageDao {
   }
 
   Future<RecoveryActionLog> insertRecoveryAction({
+    String? forcedId,
     required String customerId,
     required String actionType,
     String? taskId,
@@ -277,7 +356,7 @@ class EngageDao {
     final db = await _db.database;
     final now = DateTime.now();
     final action = RecoveryActionLog(
-      id: _uuid.v4(),
+      id: forcedId ?? _uuid.v4(),
       customerId: customerId,
       actionType: actionType,
       taskId: taskId,
@@ -287,12 +366,17 @@ class EngageDao {
       synced: synced,
     );
 
-    await db.insert('recovery_actions', {
-      ...action.toJson(),
-      'merchant_id': merchantId,
-      'created_by_app_user_id': appUserId,
-      'updated_by_app_user_id': appUserId,
-    });
+    await db.insert(
+      'recovery_actions',
+      {
+        ...action.toJson(),
+        'payload': payload == null ? null : jsonEncode(payload),
+        'merchant_id': merchantId,
+        'created_by_app_user_id': appUserId,
+        'updated_by_app_user_id': appUserId,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
     return action;
   }
 
@@ -304,6 +388,7 @@ class EngageDao {
         'recovery_actions',
         {
           ...action.toJson(),
+          'payload': action.payload == null ? null : jsonEncode(action.payload),
           'merchant_id': merchantId,
           'created_by_app_user_id': appUserId,
           'updated_by_app_user_id': appUserId,
@@ -313,6 +398,7 @@ class EngageDao {
   }
 
   Future<VisitReport> insertVisitReport({
+    String? forcedId,
     required String customerId,
     required String result,
     required DateTime visitedAt,
@@ -323,7 +409,7 @@ class EngageDao {
     final db = await _db.database;
     final now = DateTime.now();
     final report = VisitReport(
-      id: _uuid.v4(),
+      id: forcedId ?? _uuid.v4(),
       customerId: customerId,
       result: result,
       visitedAt: visitedAt,
@@ -334,12 +420,16 @@ class EngageDao {
       synced: synced,
     );
 
-    await db.insert('visit_reports', {
-      ...report.toJson(),
-      'merchant_id': merchantId,
-      'created_by_app_user_id': appUserId,
-      'updated_by_app_user_id': appUserId,
-    });
+    await db.insert(
+      'visit_reports',
+      {
+        ...report.toJson(),
+        'merchant_id': merchantId,
+        'created_by_app_user_id': appUserId,
+        'updated_by_app_user_id': appUserId,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
     return report;
   }
 
@@ -525,21 +615,25 @@ class EngageDao {
           conflictAlgorithm: ConflictAlgorithm.replace);
 
       for (final answer in submission.answers) {
-        await txn.insert('survey_response_answers', {
-          'id': _uuid.v4(),
-          'merchant_id': merchantId,
-          'response_id': responseId,
-          'question_id': answer.questionId,
-          'answer_text': answer.answerText,
-          'answer_numeric': answer.answerNumeric,
-          'answer_bool':
-              answer.answerBool == null ? null : (answer.answerBool! ? 1 : 0),
-          'created_at': now.millisecondsSinceEpoch,
-          'updated_at': now.millisecondsSinceEpoch,
-          'created_by_app_user_id': appUserId,
-          'updated_by_app_user_id': appUserId,
-          'synced': synced ? 1 : 0,
-        });
+        await txn.insert(
+          'survey_response_answers',
+          {
+            'id': answer.id ?? _uuid.v4(),
+            'merchant_id': merchantId,
+            'response_id': responseId,
+            'question_id': answer.questionId,
+            'answer_text': answer.answerText,
+            'answer_numeric': answer.answerNumeric,
+            'answer_bool':
+                answer.answerBool == null ? null : (answer.answerBool! ? 1 : 0),
+            'created_at': now.millisecondsSinceEpoch,
+            'updated_at': now.millisecondsSinceEpoch,
+            'created_by_app_user_id': appUserId,
+            'updated_by_app_user_id': appUserId,
+            'synced': synced ? 1 : 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
       }
     });
 

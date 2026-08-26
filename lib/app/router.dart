@@ -74,6 +74,7 @@ const _planOnboardingBypassRoutes = {
   '/merchant-onboarding/services',
   '/merchant-onboarding/review',
   '/onboarding-plan',
+  featureUpsellRoutePath,
   '/terms',
   '/privacy',
 };
@@ -125,6 +126,11 @@ bool _isAdminPortalRoute(String location) {
 
 bool _isAdminSelfServiceRoute(String location) {
   return location == '/admin/self-service';
+}
+
+bool canAccessWithoutOnboardingPlanConfirmation(String location) {
+  return _planOnboardingBypassRoutes.contains(location) ||
+      location.startsWith('/otp');
 }
 
 String? resolveAdminPortalRedirect({
@@ -218,8 +224,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             role: appUserRole,
           );
           final canAccessWithoutPlanConfirmation =
-              _planOnboardingBypassRoutes.contains(state.matchedLocation) ||
-                  state.matchedLocation.startsWith('/otp');
+              canAccessWithoutOnboardingPlanConfirmation(
+            state.matchedLocation,
+          );
 
           if (!hasConfirmedPlan && !canAccessWithoutPlanConfirmation) {
             return '/onboarding-plan';
@@ -302,23 +309,33 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/merchant-onboarding/type',
-        builder: (_, __) => const BusinessTypePage(),
+        builder: (_, state) => BusinessTypePage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/info',
-        builder: (_, __) => const BusinessInfoPage(),
+        builder: (_, state) => BusinessInfoPage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/location',
-        builder: (_, __) => const BusinessLocationPage(),
+        builder: (_, state) => BusinessLocationPage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/hours',
-        builder: (_, __) => const WorkingHoursPage(),
+        builder: (_, state) => WorkingHoursPage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/services',
-        builder: (_, __) => const ServicesPage(),
+        builder: (_, state) => ServicesPage(
+          returnRoute: state.uri.queryParameters['returnTo'],
+        ),
       ),
       GoRoute(
         path: '/merchant-onboarding/review',

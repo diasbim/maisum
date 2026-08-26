@@ -2,11 +2,26 @@ import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 
+import '../../../core/errors/app_exception.dart';
 import '../../sync/data/sync_dao.dart';
 import '../../sync/domain/sync_item.dart';
 import '../domain/engage_models.dart';
 import 'engage_api.dart';
 import 'engage_dao.dart';
+
+enum EngageSaveStatus { saved, queued }
+
+class EngageSaveResult<T> {
+  const EngageSaveResult.saved(this.value) : status = EngageSaveStatus.saved;
+
+  const EngageSaveResult.queued(this.value) : status = EngageSaveStatus.queued;
+
+  final T value;
+  final EngageSaveStatus status;
+
+  bool get isSaved => status == EngageSaveStatus.saved;
+  bool get isQueued => status == EngageSaveStatus.queued;
+}
 
 class EngageRepository {
   EngageRepository(
@@ -71,6 +86,11 @@ class EngageRepository {
     return _dao.getRecoveryQueue(limit: limit);
   }
 
+  Future<List<RecoveryTaskQueueItem>> getOpenRecoveryTasks({
+    int limit = 50,
+  }) =>
+      _dao.getOpenRecoveryTasks(limit: limit);
+
   Future<List<CustomerRiskScore>> recalculateRiskScores() async {
     final scores = await _dao.recalculateRiskScores();
     for (final score in scores) {
@@ -98,16 +118,34 @@ class EngageRepository {
     DateTime? dueAt,
     String? notes,
   }) async {
+    return (await createRecoveryTaskWithResult(
+      customerId: customerId,
+      priority: priority,
+      dueAt: dueAt,
+      notes: notes,
+    ))
+        .task;
+  }
+
+  Future<RecoveryTaskCreationResult> createRecoveryTaskWithResult({
+    required String customerId,
+    required String priority,
+    DateTime? dueAt,
+    String? notes,
+  }) async {
+    final taskId = _uuid.v4();
     final api = _api;
     if (_useRemote && api != null) {
       try {
-        final remoteTask = await api.createTask(
+        final remoteResult = await api.createTask(
+          taskId: taskId,
           customerId: customerId,
           priority: priority,
           dueAt: dueAt,
           notes: notes,
         );
-        return _dao.upsertRecoveryTask(
+        final remoteTask = remoteResult.task;
+        final task = await _dao.upsertRecoveryTask(
           RecoveryTask(
             id: remoteTask.id,
             customerId: remoteTask.customerId,
@@ -120,12 +158,20 @@ class EngageRepository {
             synced: true,
           ),
         );
-      } catch (_) {
-        // Falls back to local queue mode.
+        return RecoveryTaskCreationResult(
+          task: task,
+          outcome: remoteResult.outcome,
+        );
+      } catch (error) {
+        if (!_shouldQueueAfterRemoteFailure(error)) rethrow;
       }
     }
 
+    if (await _dao.hasOpenRecoveryTask(customerId)) {
+      throw const RecoveryTaskAlreadyOpenException();
+    }
     final task = await _dao.createRecoveryTask(
+      taskId: taskId,
       customerId: customerId,
       priority: priority,
       dueAt: dueAt,
@@ -147,7 +193,10 @@ class EngageRepository {
       ),
     );
 
-    return task;
+    return RecoveryTaskCreationResult(
+      task: task,
+      outcome: RecoveryTaskCreationOutcome.created,
+    );
   }
 
   Future<RecoveryTask?> completeRecoveryTask(String taskId) async {
@@ -196,21 +245,44 @@ class EngageRepository {
   }
 
   Future<RecoveryActionLog> logRecoveryAction({
+    String? actionId,
     required String customerId,
     required String actionType,
     String? taskId,
     Map<String, dynamic>? payload,
   }) async {
+    return (await logRecoveryActionWithResult(
+      actionId: actionId,
+      customerId: customerId,
+      actionType: actionType,
+      taskId: taskId,
+      payload: payload,
+    ))
+        .value;
+  }
+
+  Future<EngageSaveResult<RecoveryActionLog>> logRecoveryActionWithResult({
+    String? actionId,
+    required String customerId,
+    required String actionType,
+    String? taskId,
+    Map<String, dynamic>? payload,
+  }) async {
+    final stableActionId = _stableId(actionId);
     final api = _api;
     if (_useRemote && api != null) {
       try {
         final remoteAction = await api.logAction(
+          actionId: stableActionId,
           customerId: customerId,
           actionType: actionType,
           taskId: taskId,
           payload: payload,
         );
-        return _dao.upsertRecoveryAction(
+        if (remoteAction.id.isEmpty) {
+          throw StateError('A resposta da ação de recuperação é inválida.');
+        }
+        return EngageSaveResult.saved(await _dao.upsertRecoveryAction(
           RecoveryActionLog(
             id: remoteAction.id,
             customerId: remoteAction.customerId,
@@ -221,13 +293,14 @@ class EngageRepository {
             updatedAt: remoteAction.updatedAt,
             synced: true,
           ),
-        );
-      } catch (_) {
-        // Falls back to local queue mode.
+        ));
+      } catch (error) {
+        if (!_shouldQueueAfterRemoteFailure(error)) rethrow;
       }
     }
 
     final action = await _dao.insertRecoveryAction(
+      forcedId: stableActionId,
       customerId: customerId,
       actionType: actionType,
       taskId: taskId,
@@ -250,27 +323,52 @@ class EngageRepository {
       ),
     );
 
-    return action;
+    return EngageSaveResult.queued(action);
   }
 
   Future<VisitReport> submitVisitReport({
+    String? reportId,
     required String customerId,
     required String result,
     required DateTime visitedAt,
     String? taskId,
     String? notes,
   }) async {
+    return (await submitVisitReportWithResult(
+      reportId: reportId,
+      customerId: customerId,
+      result: result,
+      visitedAt: visitedAt,
+      taskId: taskId,
+      notes: notes,
+    ))
+        .value;
+  }
+
+  Future<EngageSaveResult<VisitReport>> submitVisitReportWithResult({
+    String? reportId,
+    required String customerId,
+    required String result,
+    required DateTime visitedAt,
+    String? taskId,
+    String? notes,
+  }) async {
+    final stableReportId = _stableId(reportId);
     final api = _api;
     if (_useRemote && api != null) {
       try {
         final remoteReport = await api.submitVisitReport(
+          reportId: stableReportId,
           customerId: customerId,
           result: result,
           visitedAt: visitedAt,
           taskId: taskId,
           notes: notes,
         );
-        return _dao.upsertVisitReport(
+        if (remoteReport.id.isEmpty) {
+          throw StateError('A resposta do relatório de visita é inválida.');
+        }
+        return EngageSaveResult.saved(await _dao.upsertVisitReport(
           VisitReport(
             id: remoteReport.id,
             customerId: remoteReport.customerId,
@@ -282,13 +380,14 @@ class EngageRepository {
             notes: remoteReport.notes,
             synced: true,
           ),
-        );
-      } catch (_) {
-        // Falls back to local queue mode.
+        ));
+      } catch (error) {
+        if (!_shouldQueueAfterRemoteFailure(error)) rethrow;
       }
     }
 
     final report = await _dao.insertVisitReport(
+      forcedId: stableReportId,
       customerId: customerId,
       result: result,
       visitedAt: visitedAt,
@@ -312,7 +411,7 @@ class EngageRepository {
       ),
     );
 
-    return report;
+    return EngageSaveResult.queued(report);
   }
 
   Future<List<EngageSurvey>> getSurveys() async {
@@ -415,26 +514,35 @@ class EngageRepository {
   }
 
   Future<String> submitSurveyResponse(SurveySubmissionInput submission) async {
+    return (await submitSurveyResponseWithResult(submission)).value;
+  }
+
+  Future<EngageSaveResult<String>> submitSurveyResponseWithResult(
+    SurveySubmissionInput submission,
+  ) async {
+    final stableSubmission = _withStableSurveyIds(submission);
     final api = _api;
     if (_useRemote && api != null) {
       try {
-        final responseId = await api.submitSurveyResponse(submission);
-        if (responseId.isNotEmpty) {
-          await _dao.submitSurveyResponse(
-            submission,
-            synced: true,
-            forcedResponseId: responseId,
-          );
+        final responseId = await api.submitSurveyResponse(stableSubmission);
+        if (responseId.isEmpty) {
+          throw StateError('A resposta do questionário é inválida.');
         }
-        return responseId;
-      } catch (_) {
-        // Falls back to local queue mode.
+        await _dao.submitSurveyResponse(
+          stableSubmission,
+          synced: true,
+          forcedResponseId: responseId,
+        );
+        return EngageSaveResult.saved(responseId);
+      } catch (error) {
+        if (!_shouldQueueAfterRemoteFailure(error)) rethrow;
       }
     }
 
     final responseId = await _dao.submitSurveyResponse(
-      submission,
+      stableSubmission,
       synced: false,
+      forcedResponseId: stableSubmission.responseId,
     );
     await _syncDao.enqueue(
       SyncItem(
@@ -443,7 +551,7 @@ class EngageRepository {
         entityType: 'survey_response',
         entityId: responseId,
         payload: jsonEncode({
-          ...submission.toJson(),
+          ...stableSubmission.toJson(),
           'id': responseId,
           'merchant_id': _dao.merchantId,
           ..._actorFields(),
@@ -451,7 +559,40 @@ class EngageRepository {
         createdAt: DateTime.now(),
       ),
     );
-    return responseId;
+    return EngageSaveResult.queued(responseId);
+  }
+
+  bool _shouldQueueAfterRemoteFailure(Object error) {
+    return error is NetworkException ||
+        error is UnknownException ||
+        error is ServerException && error.statusCode >= 500;
+  }
+
+  String _stableId(String? id) {
+    final normalized = id?.trim();
+    return normalized == null || normalized.isEmpty ? _uuid.v4() : normalized;
+  }
+
+  SurveySubmissionInput _withStableSurveyIds(
+    SurveySubmissionInput submission,
+  ) {
+    return SurveySubmissionInput(
+      responseId: _stableId(submission.responseId),
+      surveyId: submission.surveyId,
+      customerId: submission.customerId,
+      channel: submission.channel,
+      answers: submission.answers
+          .map(
+            (answer) => SurveyAnswerInput(
+              id: _stableId(answer.id),
+              questionId: answer.questionId,
+              answerText: answer.answerText,
+              answerNumeric: answer.answerNumeric,
+              answerBool: answer.answerBool,
+            ),
+          )
+          .toList(),
+    );
   }
 
   Future<EngageSurveyAnalytics> getSurveyAnalytics() async {
