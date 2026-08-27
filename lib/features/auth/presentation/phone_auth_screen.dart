@@ -23,6 +23,7 @@ import '../../../design_system/components/maisum_surface.dart';
 import '../../../design_system/components/maisum_text_field.dart';
 import '../../../design_system/components/validation_state.dart';
 import 'auth_controller.dart';
+import '../domain/auth_session.dart';
 import 'otp_verification_screen.dart';
 import 'post_auth_navigation.dart';
 
@@ -31,7 +32,12 @@ const _brandNavy = Color(0xFF102A5E);
 const _brandAccent = Color(0xFFF4C542);
 
 class PhoneAuthScreen extends ConsumerStatefulWidget {
-  const PhoneAuthScreen({super.key});
+  const PhoneAuthScreen({
+    super.key,
+    this.actor = AuthActor.merchant,
+  });
+
+  final AuthActor actor;
 
   @override
   ConsumerState<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
@@ -159,6 +165,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
     setState(() => _isSendingCode = true);
     await ref.read(authControllerProvider.notifier).requestOtp(
           phone: cleanNumber,
+          actor: widget.actor,
           onCodeSent: (verificationId) {
             if (!mounted) return;
             setState(() => _isSendingCode = false);
@@ -168,7 +175,10 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
             );
             context.push('/otp',
                 extra: OtpScreenArgs(
-                    phone: cleanNumber, verificationId: verificationId));
+                  phone: cleanNumber,
+                  verificationId: verificationId,
+                  actor: widget.actor,
+                ));
           },
           onError: (error) {
             if (!mounted) return;
@@ -186,8 +196,15 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
               await ref
                   .read(authControllerProvider.notifier)
                   .signInWithCredential(
-                      phone: cleanNumber, credential: credential);
+                    phone: cleanNumber,
+                    credential: credential,
+                    actor: widget.actor,
+                  );
               if (!mounted) return;
+              if (widget.actor == AuthActor.customer) {
+                context.go('/customer/home');
+                return;
+              }
               final hasPin =
                   await ref.read(secureStorageServiceProvider).hasPin();
               if (!mounted) return;
@@ -201,6 +218,13 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
             } catch (e, st) {
               AppErrorReporter.report(e, st, hint: 'auth_auto_verify');
               if (!mounted) return;
+              if (widget.actor == AuthActor.customer &&
+                  e
+                      .toString()
+                      .contains('aplicação de cliente não está disponível')) {
+                context.go('/customer-disabled');
+                return;
+              }
               final rawMessage = e.toString().trim();
               final message = rawMessage.startsWith('Exception: ')
                   ? rawMessage.substring('Exception: '.length)
@@ -218,6 +242,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
   }
 
   Future<void> _continueWithGoogle() async {
+    if (widget.actor == AuthActor.customer) return;
     if (_isSendingCode || _isGoogleLoading) return;
 
     if (!await ConnectivityCheck.isConnected()) {

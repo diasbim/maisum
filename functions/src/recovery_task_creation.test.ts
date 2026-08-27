@@ -86,3 +86,39 @@ test('schema derives and uniquely indexes the open slot', () => {
     /CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_tasks_one_open_customer\s+ON recovery_tasks\(merchant_id, customer_id, open_slot\)/,
   );
 });
+
+test('queued task collision reconciles to the canonical remote task', async () => {
+  const canonical: RecoveryTaskRow = {
+    id: 'task-canonical',
+    merchant_id: 'merchant-1',
+    customer_id: 'customer-1',
+    status: 'open',
+    created_at: 1000,
+    updated_at: 2000,
+    creation_created: false,
+  };
+  let values: unknown[] = [];
+  const db = {
+    async query(_sql: string, queryValues: unknown[]) {
+      values = queryValues;
+      return { rows: [canonical] };
+    },
+  };
+
+  const result = await createOrGetOpenRecoveryTask(db, {
+    id: 'task-provisional',
+    merchantId: 'merchant-1',
+    customerId: 'customer-1',
+    priority: 'low',
+    dueAt: null,
+    notes: 'queued offline',
+    actorAppUserId: null,
+    createdAt: 1500,
+    now: 1600,
+  });
+
+  assert.equal(result.outcome, 'already_open');
+  assert.equal(result.task.id, 'task-canonical');
+  assert.equal(values[0], 'task-provisional');
+  assert.equal(values[6], 1500);
+});

@@ -19,6 +19,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     required void Function(String verificationId) onCodeSent,
     required void Function(String error) onError,
     void Function(PhoneAuthCredential credential)? onAutoVerify,
+    AuthActor actor = AuthActor.merchant,
   }) async {
     try {
       await ref.read(authRepositoryProvider).requestOtp(
@@ -26,6 +27,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
             onCodeSent: onCodeSent,
             onError: onError,
             onAutoVerify: onAutoVerify,
+            actor: actor,
           );
     } catch (error, stackTrace) {
       AppErrorReporter.report(error, stackTrace, hint: 'auth_request_otp');
@@ -37,6 +39,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     required String phone,
     required String verificationId,
     required String code,
+    AuthActor actor = AuthActor.merchant,
   }) async {
     state = const AsyncLoading();
     try {
@@ -44,6 +47,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
             phone: phone,
             verificationId: verificationId,
             code: code,
+            actor: actor,
           );
       state = AsyncData(session);
       return session;
@@ -57,6 +61,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
   Future<AuthSession> signInWithCredential({
     required String phone,
     required PhoneAuthCredential credential,
+    AuthActor actor = AuthActor.merchant,
   }) async {
     state = const AsyncLoading();
     try {
@@ -64,6 +69,7 @@ class AuthController extends AsyncNotifier<AuthSession?> {
           await ref.read(authRepositoryProvider).signInWithCredential(
                 phone: phone,
                 credential: credential,
+                actor: actor,
               );
       state = AsyncData(session);
       return session;
@@ -151,7 +157,15 @@ class AuthController extends AsyncNotifier<AuthSession?> {
 
   Future<void> logout() async {
     try {
+      final session = state.valueOrNull;
+      if (session?.isCustomer == true) {
+        await ref.read(customerPlatformServiceProvider).removeToken(session);
+      }
       await ref.read(authRepositoryProvider).logout();
+      if (session?.isCustomer == true) {
+        final accountId = session!.firebaseUid ?? session.userId;
+        await ref.read(customerCacheDaoProvider).clearAccount(accountId);
+      }
       await ref.read(secureStorageServiceProvider).clearPin();
       await ref.read(secureStorageServiceProvider).clearPinAttempts();
       state = const AsyncData(null);
@@ -167,7 +181,7 @@ final authControllerProvider =
 
 final activeMerchantIdProvider = Provider<String?>((ref) {
   final session = ref.watch(authControllerProvider).valueOrNull;
-  if (session == null) {
+  if (session == null || session.isCustomer) {
     return null;
   }
   return session.resolvedMerchantId;

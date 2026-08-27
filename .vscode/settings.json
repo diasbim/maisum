@@ -19,6 +19,22 @@
     "/^firebase deploy --project loyaltyos-fc4dd --only \"functions,firestore:rules,firestore:indexes\" --non-interactive$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^firebase deploy --only \"firestore:rules,firestore:indexes,functions\" --project loyaltyos-fc4dd$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^firebase login$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^flutter doctor -v$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^Set-Location 'C:\\\\Dev\\\\flutter\\\\maisum\\\\functions'; npm test$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   },
   "java.configuration.updateBuildConfiguration": "interactive"

@@ -190,4 +190,20 @@ void main() {
     expect(sale['updated_at'], 10);
     expect(sale['confirmation_status'], 'PENDING');
   });
+
+  test('v26 adds customer app cache partition', () async {
+    final db = await _openDb(version: 25);
+    await AppMigrations.migrate(db, fromVersion: 25, toVersion: 26);
+
+    expect(
+      await _columns(db, 'customer_app_cache'),
+      containsAll(<String>[
+        'account_id',
+        'cache_key',
+        'payload',
+        'updated_at',
+        'last_successful_refresh_at',
+      ]),
+    );
+  });
 }

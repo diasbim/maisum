@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,17 +42,47 @@ class _FakeSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<void> processSyncItem(SyncItem item) async {
+  Future<SyncProcessResult?> processSyncItem(SyncItem item) async {
     processed.add(item);
+    return null;
   }
 }
 
 class _TransientFailSyncTransport extends _FakeSyncTransport {
   @override
-  Future<void> processSyncItem(SyncItem item) async {
+  Future<SyncProcessResult?> processSyncItem(SyncItem item) async {
     throw const SyncTransportException(
       'Unable to resolve host firestore.googleapis.com',
       code: 'unavailable',
+    );
+  }
+}
+
+class _PermissionDeniedSyncTransport extends _FakeSyncTransport {
+  @override
+  Future<SyncProcessResult?> processSyncItem(SyncItem item) async {
+    throw const SyncTransportException(
+      'Forbidden',
+      code: 'permission-denied',
+    );
+  }
+}
+
+class _CanonicalRecoveryTransport extends _FakeSyncTransport {
+  @override
+  Future<SyncProcessResult?> processSyncItem(SyncItem item) async {
+    processed.add(item);
+    if (item.entityType != 'recovery_task') return null;
+    return const SyncProcessResult(
+      canonicalEntity: {
+        'id': 'task-canonical',
+        'merchant_id': 'merchant-1',
+        'customer_id': 'cust-recovery',
+        'priority': 'high',
+        'status': 'open',
+        'created_at': 1000,
+        'updated_at': 2000,
+      },
     );
   }
 }
@@ -102,6 +133,353 @@ void main() {
     expect(await syncDao.getPending(), hasLength(1));
     expect(service.status.phase, SyncPhase.offline);
     expect(service.status.pendingCount, 1);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('successful processQueue can process items added by a later cycle',
+      () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final transport = _FakeSyncTransport();
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await syncDao.enqueue(
+      SyncItem(
+        id: 'sync-first',
+        operation: 'create',
+        entityType: 'customer',
+        entityId: 'cust-first',
+        payload: '{"id":"cust-first"}',
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    await service.processQueue();
+
+    expect(service.status.phase, SyncPhase.synced);
+
+    await syncDao.enqueue(
+      SyncItem(
+        id: 'sync-second',
+        operation: 'create',
+        entityType: 'customer',
+        entityId: 'cust-second',
+        payload: '{"id":"cust-second"}',
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    await service.processQueue();
+
+    expect(
+      transport.processed.map((item) => item.id),
+      ['sync-first', 'sync-second'],
+    );
+    expect(await syncDao.getPending(), isEmpty);
+    expect(service.status.phase, SyncPhase.synced);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('imports legacy customer without updated_at', () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final transport = _FakeSyncTransport(
+      collections: {
+        'customer': [
+          {
+            'id': 'legacy-customer',
+            'merchant_id': 'merchant-1',
+            'name': 'Legacy Customer',
+            'phone': '842222222',
+            'total_points': 4,
+            'created_at': '2026-07-09T18:34:25.564Z',
+          },
+        ],
+      },
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await service.processQueue();
+
+    final customer = await customerDao.getById('legacy-customer');
+    final expectedTimestamp =
+        DateTime.parse('2026-07-09T18:34:25.564Z').millisecondsSinceEpoch;
+    expect(customer, isNotNull);
+    expect(customer?.createdAt.millisecondsSinceEpoch, expectedTimestamp);
+    expect(customer?.updatedAt?.millisecondsSinceEpoch, expectedTimestamp);
+    expect(customer?.synced, isTrue);
+    expect(service.status.phase, SyncPhase.synced);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('imports legacy camelCase reward', () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final transport = _FakeSyncTransport(
+      collections: {
+        'reward': [
+          {
+            'id': 'legacy-reward',
+            'merchantId': 'merchant-1',
+            'title': 'Legacy Reward',
+            'pointsRequired': 10,
+            'description': 'Imported legacy reward',
+          },
+        ],
+      },
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await service.processQueue();
+
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      'rewards',
+      where: 'merchant_id = ? AND id = ?',
+      whereArgs: ['merchant-1', 'legacy-reward'],
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single['name'], 'Legacy Reward');
+    expect(rows.single['points_required'], 10);
+    expect(rows.single['active'], 1);
+    expect(rows.single['created_at'], isA<int>());
+    expect(rows.single['updated_at'], rows.single['created_at']);
+    expect(rows.single['synced'], 1);
+    expect(service.status.phase, SyncPhase.synced);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('imports legacy camelCase redemption', () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final transport = _FakeSyncTransport(
+      collections: {
+        'customer': [
+          {
+            'id': 'legacy-redemption-customer',
+            'merchantId': 'merchant-1',
+            'name': 'Legacy Customer',
+            'phone': '843333333',
+            'createdAt': '2026-06-27T18:20:00.000Z',
+          },
+        ],
+        'reward': [
+          {
+            'id': 'legacy-redemption-reward',
+            'merchantId': 'merchant-1',
+            'title': 'Legacy Reward',
+            'pointsRequired': 10,
+          },
+        ],
+        'redemption': [
+          {
+            'id': 'legacy-redemption',
+            'merchantId': 'merchant-1',
+            'customerId': 'legacy-redemption-customer',
+            'rewardId': 'legacy-redemption-reward',
+            'pointsRedeemed': 10,
+            'createdAt': '2026-06-27T18:22:04.421Z',
+            'status': 'synced',
+          },
+        ],
+      },
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await service.processQueue();
+
+    final db = await AppDatabase.instance.database;
+    final rows = await db.query(
+      'redemptions',
+      where: 'merchant_id = ? AND id = ?',
+      whereArgs: ['merchant-1', 'legacy-redemption'],
+    );
+    expect(rows, hasLength(1));
+    expect(rows.single['customer_id'], 'legacy-redemption-customer');
+    expect(rows.single['reward_id'], 'legacy-redemption-reward');
+    expect(rows.single['points_spent'], 10);
+    expect(
+      rows.single['redeemed_at'],
+      DateTime.parse('2026-06-27T18:22:04.421Z').millisecondsSinceEpoch,
+    );
+    expect(rows.single['synced'], 1);
+    expect(service.status.phase, SyncPhase.synced);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('skips orphaned remote redemption without failing sync', () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final transport = _FakeSyncTransport(
+      collections: {
+        'redemption': [
+          {
+            'id': 'orphaned-redemption',
+            'merchantId': 'merchant-1',
+            'customerId': 'missing-customer',
+            'rewardId': 'missing-reward',
+            'pointsRedeemed': 10,
+            'createdAt': '2026-06-27T18:22:04.421Z',
+          },
+        ],
+      },
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await service.processQueue();
+
+    final db = await AppDatabase.instance.database;
+    expect(
+      await db.query(
+        'redemptions',
+        where: 'merchant_id = ? AND id = ?',
+        whereArgs: ['merchant-1', 'orphaned-redemption'],
+      ),
+      isEmpty,
+    );
+    expect(service.status.phase, SyncPhase.synced);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('queued recovery task converges to remote canonical task', () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final transport = _CanonicalRecoveryTransport();
+    final db = await AppDatabase.instance.database;
+    await db.insert('customers', {
+      'id': 'cust-recovery',
+      'merchant_id': 'merchant-1',
+      'name': 'Cliente',
+      'phone': '841111111',
+      'total_points': 0,
+      'created_at': 1000,
+      'updated_at': 1000,
+      'synced': 1,
+    });
+    await db.insert('recovery_tasks', {
+      'id': 'task-provisional',
+      'merchant_id': 'merchant-1',
+      'customer_id': 'cust-recovery',
+      'priority': 'low',
+      'status': 'open',
+      'created_at': 1500,
+      'updated_at': 1500,
+      'synced': 0,
+    });
+    await syncDao.enqueue(
+      SyncItem(
+        id: 'sync-recovery',
+        operation: 'create',
+        entityType: 'recovery_task',
+        entityId: 'task-provisional',
+        payload:
+            '{"id":"task-provisional","merchant_id":"merchant-1","customer_id":"cust-recovery","priority":"low","status":"open","created_at":1500,"updated_at":1500}',
+        createdAt: DateTime.fromMillisecondsSinceEpoch(1500),
+      ),
+    );
+    await syncDao.enqueue(
+      SyncItem(
+        id: 'sync-action',
+        operation: 'create',
+        entityType: 'recovery_action',
+        entityId: 'action-1',
+        payload:
+            '{"id":"action-1","merchant_id":"merchant-1","customer_id":"cust-recovery","task_id":"task-provisional","action_type":"CALL","created_at":1600,"updated_at":1600}',
+        createdAt: DateTime.fromMillisecondsSinceEpoch(1600),
+      ),
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await service.processQueue();
+
+    final tasks = await db.query(
+      'recovery_tasks',
+      where: 'merchant_id = ? AND customer_id = ?',
+      whereArgs: ['merchant-1', 'cust-recovery'],
+    );
+    expect(tasks, hasLength(1));
+    expect(tasks.single['id'], 'task-canonical');
+    expect(tasks.single['synced'], 1);
+    final syncedAction = transport.processed.singleWhere(
+      (item) => item.entityType == 'recovery_action',
+    );
+    expect(
+      (jsonDecode(syncedAction.payload) as Map<String, dynamic>)['task_id'],
+      'task-canonical',
+    );
+    expect(await syncDao.getAllItems(), isEmpty);
 
     service.dispose();
     connectivity.dispose();
@@ -303,6 +681,50 @@ void main() {
     expect(stats.pendingReady, 0);
     expect(service.status.phase, isNot(SyncPhase.syncFailed));
     expect(service.status.lastError, isNull);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('permission errors use the localized sync message', () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      _PermissionDeniedSyncTransport(),
+      connectivity,
+    );
+
+    await syncDao.enqueue(
+      SyncItem(
+        id: 'sync-permission-1',
+        operation: 'create',
+        entityType: 'usage_event',
+        entityId: 'usage-event-1',
+        payload: '{"id":"usage-event-1"}',
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    await service.processQueue();
+
+    final item = (await syncDao.getAllItems()).single;
+    expect(item.status, 'failed');
+    final db = await AppDatabase.instance.database;
+    final storedItem = (await db.query(
+      'sync_queue',
+      where: 'id = ?',
+      whereArgs: ['sync-permission-1'],
+    ))
+        .single;
+    expect(storedItem['last_error'], 'Sem permissão para sincronizar.');
+    expect(service.status.lastError, 'Sem permissão para sincronizar.');
 
     service.dispose();
     connectivity.dispose();

@@ -44,9 +44,28 @@ export const CREATE_OPEN_RECOVERY_TASK_SQL = `
     updated_at,
     created_by_app_user_id,
     updated_by_app_user_id
-  ) VALUES ($1,$2,$3,$4,'open',$5,$6,$7,$7,$8,$8)
+  ) VALUES ($1,$2,$3,$4,'open',$5,$6,$7,$8,$9,$9)
   ON CONFLICT (merchant_id, customer_id, open_slot) DO UPDATE SET
-    status = recovery_tasks.status
+    priority = CASE
+      WHEN recovery_tasks.id = EXCLUDED.id THEN EXCLUDED.priority
+      ELSE recovery_tasks.priority
+    END,
+    due_at = CASE
+      WHEN recovery_tasks.id = EXCLUDED.id THEN EXCLUDED.due_at
+      ELSE recovery_tasks.due_at
+    END,
+    notes = CASE
+      WHEN recovery_tasks.id = EXCLUDED.id THEN EXCLUDED.notes
+      ELSE recovery_tasks.notes
+    END,
+    updated_by_app_user_id = CASE
+      WHEN recovery_tasks.id = EXCLUDED.id THEN EXCLUDED.updated_by_app_user_id
+      ELSE recovery_tasks.updated_by_app_user_id
+    END,
+    updated_at = CASE
+      WHEN recovery_tasks.id = EXCLUDED.id THEN EXCLUDED.updated_at
+      ELSE recovery_tasks.updated_at
+    END
   RETURNING recovery_tasks.*, recovery_tasks.id = $1 AS creation_created
 `;
 
@@ -63,6 +82,7 @@ export async function createOrGetOpenRecoveryTask(
     input.dueAt,
     input.notes,
     input.createdAt ?? input.now,
+    input.now,
     input.actorAppUserId,
   ]);
   const row = result.rows[0];

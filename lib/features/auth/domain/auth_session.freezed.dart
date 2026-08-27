@@ -31,6 +31,7 @@ mixin _$AuthSession {
   String? get refreshToken => throw _privateConstructorUsedError;
   String? get deviceId => throw _privateConstructorUsedError;
   String? get firebaseUid => throw _privateConstructorUsedError;
+  AuthActor get actor => throw _privateConstructorUsedError;
 
   /// Serializes this AuthSession to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -59,7 +60,8 @@ abstract class $AuthSessionCopyWith<$Res> {
       String subscriptionStatus,
       String? refreshToken,
       String? deviceId,
-      String? firebaseUid});
+      String? firebaseUid,
+      AuthActor actor});
 }
 
 /// @nodoc
@@ -88,6 +90,7 @@ class _$AuthSessionCopyWithImpl<$Res, $Val extends AuthSession>
     Object? refreshToken = freezed,
     Object? deviceId = freezed,
     Object? firebaseUid = freezed,
+    Object? actor = null,
   }) {
     return _then(_value.copyWith(
       userId: null == userId
@@ -134,6 +137,10 @@ class _$AuthSessionCopyWithImpl<$Res, $Val extends AuthSession>
           ? _value.firebaseUid
           : firebaseUid // ignore: cast_nullable_to_non_nullable
               as String?,
+      actor: null == actor
+          ? _value.actor
+          : actor // ignore: cast_nullable_to_non_nullable
+              as AuthActor,
     ) as $Val);
   }
 }
@@ -157,7 +164,8 @@ abstract class _$$AuthSessionImplCopyWith<$Res>
       String subscriptionStatus,
       String? refreshToken,
       String? deviceId,
-      String? firebaseUid});
+      String? firebaseUid,
+      AuthActor actor});
 }
 
 /// @nodoc
@@ -184,6 +192,7 @@ class __$$AuthSessionImplCopyWithImpl<$Res>
     Object? refreshToken = freezed,
     Object? deviceId = freezed,
     Object? firebaseUid = freezed,
+    Object? actor = null,
   }) {
     return _then(_$AuthSessionImpl(
       userId: null == userId
@@ -230,6 +239,10 @@ class __$$AuthSessionImplCopyWithImpl<$Res>
           ? _value.firebaseUid
           : firebaseUid // ignore: cast_nullable_to_non_nullable
               as String?,
+      actor: null == actor
+          ? _value.actor
+          : actor // ignore: cast_nullable_to_non_nullable
+              as AuthActor,
     ));
   }
 }
@@ -248,7 +261,8 @@ class _$AuthSessionImpl extends _AuthSession {
       this.subscriptionStatus = 'TRIAL',
       this.refreshToken,
       this.deviceId,
-      this.firebaseUid})
+      this.firebaseUid,
+      this.actor = AuthActor.merchant})
       : super._();
 
   factory _$AuthSessionImpl.fromJson(Map<String, dynamic> json) =>
@@ -279,10 +293,13 @@ class _$AuthSessionImpl extends _AuthSession {
   final String? deviceId;
   @override
   final String? firebaseUid;
+  @override
+  @JsonKey()
+  final AuthActor actor;
 
   @override
   String toString() {
-    return 'AuthSession(userId: $userId, phone: $phone, expiresAt: $expiresAt, token: $token, appUserId: $appUserId, merchantId: $merchantId, merchantName: $merchantName, subscriptionStatus: $subscriptionStatus, refreshToken: $refreshToken, deviceId: $deviceId, firebaseUid: $firebaseUid)';
+    return 'AuthSession(userId: $userId, phone: $phone, expiresAt: $expiresAt, token: $token, appUserId: $appUserId, merchantId: $merchantId, merchantName: $merchantName, subscriptionStatus: $subscriptionStatus, refreshToken: $refreshToken, deviceId: $deviceId, firebaseUid: $firebaseUid, actor: $actor)';
   }
 
   @override
@@ -308,7 +325,8 @@ class _$AuthSessionImpl extends _AuthSession {
             (identical(other.deviceId, deviceId) ||
                 other.deviceId == deviceId) &&
             (identical(other.firebaseUid, firebaseUid) ||
-                other.firebaseUid == firebaseUid));
+                other.firebaseUid == firebaseUid) &&
+            (identical(other.actor, actor) || other.actor == actor));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -325,7 +343,8 @@ class _$AuthSessionImpl extends _AuthSession {
       subscriptionStatus,
       refreshToken,
       deviceId,
-      firebaseUid);
+      firebaseUid,
+      actor);
 
   /// Create a copy of AuthSession
   /// with the given fields replaced by the non-null parameter values.
@@ -355,7 +374,8 @@ abstract class _AuthSession extends AuthSession {
       final String subscriptionStatus,
       final String? refreshToken,
       final String? deviceId,
-      final String? firebaseUid}) = _$AuthSessionImpl;
+      final String? firebaseUid,
+      final AuthActor actor}) = _$AuthSessionImpl;
   const _AuthSession._() : super._();
 
   factory _AuthSession.fromJson(Map<String, dynamic> json) =
@@ -383,6 +403,8 @@ abstract class _AuthSession extends AuthSession {
   String? get deviceId;
   @override
   String? get firebaseUid;
+  @override
+  AuthActor get actor;
 
   /// Create a copy of AuthSession
   /// with the given fields replaced by the non-null parameter values.

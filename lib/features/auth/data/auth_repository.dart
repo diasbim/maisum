@@ -11,6 +11,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/app_runtime_config.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/errors/app_error_reporter.dart';
+import '../../../core/errors/app_exception.dart';
 import '../../../core/services/firebase_auth_service.dart';
 import '../../../core/storage/secure_storage.dart';
 import '../../../core/utils/app_logger.dart';
@@ -20,6 +21,7 @@ import '../domain/auth_session.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/domain/plan_catalog.dart';
 import '../../subscription/domain/usage_metrics.dart';
+import '../../customer_app/data/customer_app_api.dart';
 
 class AuthRepository {
   AuthRepository(
@@ -29,8 +31,10 @@ class AuthRepository {
     this.config = const AppRuntimeConfig(),
     BackendAuthApi? backendAuthApi,
     FirebaseFirestore? firestore,
+    CustomerAppApi? customerAppApi,
   })  : _backendAuthApi = backendAuthApi,
-        _firestore = firestore;
+        _firestore = firestore,
+        _customerAppApi = customerAppApi;
 
   static const _uuid = Uuid();
   static const _tag = 'AuthRepository';
@@ -44,12 +48,14 @@ class AuthRepository {
   final AppRuntimeConfig config;
   final BackendAuthApi? _backendAuthApi;
   final FirebaseFirestore? _firestore;
+  final CustomerAppApi? _customerAppApi;
 
   Future<void> requestOtp({
     required String phone,
     required void Function(String verificationId) onCodeSent,
     required void Function(String error) onError,
     void Function(PhoneAuthCredential credential)? onAutoVerify,
+    AuthActor actor = AuthActor.merchant,
   }) =>
       _firebaseAuth.verifyPhoneNumber(
         phoneNumber: phone,
@@ -62,20 +68,40 @@ class AuthRepository {
     required String phone,
     required String verificationId,
     required String code,
+    AuthActor actor = AuthActor.merchant,
   }) async {
     final userCredential = await _firebaseAuth.verifyOtp(
       verificationId: verificationId,
       smsCode: code,
     );
-    return _sessionFromUser(userCredential.user!, phone);
+    if (actor != AuthActor.customer) {
+      return _sessionFromUser(userCredential.user!, phone);
+    }
+    try {
+      return await _customerSessionFromUser(userCredential.user!, phone);
+    } catch (_) {
+      await _firebaseAuth.signOut();
+      await _storage.clearAll();
+      rethrow;
+    }
   }
 
   Future<AuthSession> signInWithCredential({
     required String phone,
     required PhoneAuthCredential credential,
+    AuthActor actor = AuthActor.merchant,
   }) async {
     final userCredential = await _firebaseAuth.signInWithCredential(credential);
-    return _sessionFromUser(userCredential.user!, phone);
+    if (actor != AuthActor.customer) {
+      return _sessionFromUser(userCredential.user!, phone);
+    }
+    try {
+      return await _customerSessionFromUser(userCredential.user!, phone);
+    } catch (_) {
+      await _firebaseAuth.signOut();
+      await _storage.clearAll();
+      rethrow;
+    }
   }
 
   Future<AuthSession> signInWithGoogle() async {
@@ -90,6 +116,42 @@ class AuthRepository {
 
   Future<AuthSession?> getStoredSession() async {
     final storedSession = await _readStoredSession();
+    final currentFirebaseUser = _firebaseAuth.currentUser;
+    final storedFirebaseUid = storedSession?.firebaseUid;
+    if (storedSession != null &&
+        currentFirebaseUser != null &&
+        storedFirebaseUid != null &&
+        storedFirebaseUid.isNotEmpty &&
+        currentFirebaseUser.uid != storedFirebaseUid) {
+      await _storage.clearAll();
+      return null;
+    }
+    if (storedSession?.isCustomer == true) {
+      final firebaseUser = currentFirebaseUser;
+      if (firebaseUser != null) {
+        try {
+          return await _customerSessionFromUser(
+            firebaseUser,
+            firebaseUser.phoneNumber?.trim() ?? storedSession!.phone,
+          );
+        } catch (error, stackTrace) {
+          AppErrorReporter.report(
+            error,
+            stackTrace,
+            hint: 'auth_customer_session_restore',
+          );
+          if (error is! NetworkException &&
+              !(error is FirebaseAuthException &&
+                  error.code == 'network-request-failed')) {
+            rethrow;
+          }
+        }
+      }
+      if (firebaseUser?.uid == storedSession!.firebaseUid) {
+        return storedSession;
+      }
+      return null;
+    }
     if (storedSession != null) {
       final backendSession = await _tryRestoreBackendSession(storedSession);
       if (backendSession != null) {
@@ -201,6 +263,31 @@ class AuthRepository {
   Future<void> logout() async {
     await _firebaseAuth.signOut();
     await _storage.clearAll();
+  }
+
+  Future<AuthSession> _customerSessionFromUser(User user, String phone) async {
+    final api = _customerAppApi;
+    if (api == null) {
+      throw StateError('Sessão de cliente indisponível neste ambiente.');
+    }
+    final token = await user.getIdToken();
+    if (token == null || token.isEmpty) {
+      throw StateError('Token Firebase indisponível.');
+    }
+    final customerSession = await api.session(token);
+    if (!customerSession.flags.appEnabled) {
+      throw StateError('A aplicação de cliente não está disponível.');
+    }
+    final session = AuthSession(
+      userId: user.uid,
+      phone: customerSession.phone.isEmpty ? phone : customerSession.phone,
+      expiresAt: DateTime.now().add(const Duration(hours: 1)),
+      token: token,
+      firebaseUid: user.uid,
+      actor: AuthActor.customer,
+    );
+    await _persistSession(session);
+    return session;
   }
 
   Future<AuthSession> updateMerchantName(String merchantName) async {
@@ -365,6 +452,7 @@ class AuthRepository {
     final storedDeviceId = await _storage.getDeviceId();
     final storedExpiry = await _storage.getTokenExpiry();
     final storedFirebaseUid = await _storage.getFirebaseUid();
+    final actor = await _storage.getAuthActor();
 
     if (storedToken == null ||
         storedToken.isEmpty ||
@@ -376,8 +464,10 @@ class AuthRepository {
 
     return AuthSession(
       userId: storedUserId,
-      appUserId: storedAppUserId ?? storedUserId,
-      merchantId: storedMerchantId ?? storedFirebaseUid ?? storedUserId,
+      appUserId: actor == 'customer' ? null : storedAppUserId ?? storedUserId,
+      merchantId: actor == 'customer'
+          ? null
+          : storedMerchantId ?? storedFirebaseUid ?? storedUserId,
       merchantName: storedMerchantName ?? _defaultMerchantName,
       subscriptionStatus:
           storedSubscriptionStatus ?? _defaultSubscriptionStatus,
@@ -387,6 +477,7 @@ class AuthRepository {
       phone: storedPhone,
       token: storedToken,
       expiresAt: storedExpiry,
+      actor: actor == 'customer' ? AuthActor.customer : AuthActor.merchant,
     );
   }
 
@@ -430,6 +521,19 @@ class AuthRepository {
   }
 
   Future<void> _persistSession(AuthSession session) async {
+    if (session.isCustomer) {
+      await _storage.clearMerchantSessionData();
+      await Future.wait([
+        _storage.saveToken(session.token),
+        _storage.saveUserId(session.userId),
+        _storage.saveUserPhone(session.phone),
+        _storage.saveTokenExpiry(session.expiresAt),
+        _storage.saveAuthActor('customer'),
+        if (session.firebaseUid != null)
+          _storage.saveFirebaseUid(session.firebaseUid!),
+      ]);
+      return;
+    }
     await Future.wait([
       _storage.saveToken(session.token),
       _storage.saveUserId(session.userId),
@@ -444,6 +548,7 @@ class AuthRepository {
       _storage.saveTokenExpiry(session.expiresAt),
       if (session.firebaseUid != null)
         _storage.saveFirebaseUid(session.firebaseUid!),
+      _storage.saveAuthActor('merchant'),
     ]);
     await _ensureLocalIdentity(session);
     await _syncStoredAppUserRole(session);

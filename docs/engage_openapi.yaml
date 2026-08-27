@@ -233,7 +233,7 @@ components:
                 $ref: '#/components/schemas/RecoveryQueueItem'
     CreateTaskRequest:
       type: object
-      required: [customer_id]
+      required: [id, customer_id]
       properties:
         id:
           type: string

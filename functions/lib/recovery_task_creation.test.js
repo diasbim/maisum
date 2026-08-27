@@ -69,3 +69,36 @@ const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
     strict_1.default.match(schema, /open_slot SMALLINT GENERATED ALWAYS AS \(\s*CASE WHEN LOWER\(status\) = 'open' THEN 1 ELSE NULL END\s*\) STORED/);
     strict_1.default.match(schema, /CREATE UNIQUE INDEX IF NOT EXISTS idx_recovery_tasks_one_open_customer\s+ON recovery_tasks\(merchant_id, customer_id, open_slot\)/);
 });
+(0, node_test_1.default)('queued task collision reconciles to the canonical remote task', async () => {
+    const canonical = {
+        id: 'task-canonical',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        status: 'open',
+        created_at: 1000,
+        updated_at: 2000,
+        creation_created: false,
+    };
+    let values = [];
+    const db = {
+        async query(_sql, queryValues) {
+            values = queryValues;
+            return { rows: [canonical] };
+        },
+    };
+    const result = await (0, recovery_task_creation_js_1.createOrGetOpenRecoveryTask)(db, {
+        id: 'task-provisional',
+        merchantId: 'merchant-1',
+        customerId: 'customer-1',
+        priority: 'low',
+        dueAt: null,
+        notes: 'queued offline',
+        actorAppUserId: null,
+        createdAt: 1500,
+        now: 1600,
+    });
+    strict_1.default.equal(result.outcome, 'already_open');
+    strict_1.default.equal(result.task.id, 'task-canonical');
+    strict_1.default.equal(values[0], 'task-provisional');
+    strict_1.default.equal(values[6], 1500);
+});

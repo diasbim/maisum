@@ -57,9 +57,9 @@ class _AppLockWrapperState extends ConsumerState<AppLockWrapper>
   Future<void> _checkInitialLock() async {
     if (_initialized) return;
     _initialized = true;
-    final isAuth = ref.read(authControllerProvider).valueOrNull != null;
-    if (!isAuth) {
-      Log.d(_lockTag, 'Not authenticated — skipping initial lock');
+    final session = ref.read(authControllerProvider).valueOrNull;
+    if (session == null || session.isCustomer) {
+      Log.d(_lockTag, 'PIN lock is not required for this session');
       _resetInactivityTimer();
       return;
     }
@@ -101,8 +101,8 @@ class _AppLockWrapperState extends ConsumerState<AppLockWrapper>
     _bgTimer?.cancel();
     _bgTimer = null;
     _inactivityTimer?.cancel();
-    final isAuth = ref.read(authControllerProvider).valueOrNull != null;
-    if (!isAuth) return;
+    final session = ref.read(authControllerProvider).valueOrNull;
+    if (session == null || session.isCustomer) return;
     final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
     if (hasPin && mounted) {
       Log.i(_lockTag, 'Locking app');
@@ -126,9 +126,8 @@ class _AppLockWrapperState extends ConsumerState<AppLockWrapper>
   @override
   Widget build(BuildContext context) {
     final isLocked = ref.watch(appLockedProvider);
-    final isAuthenticated =
-        ref.watch(authControllerProvider).valueOrNull != null;
-    final showLock = isLocked && isAuthenticated;
+    final session = ref.watch(authControllerProvider).valueOrNull;
+    final showLock = isLocked && session != null && !session.isCustomer;
 
     return Stack(
       children: [

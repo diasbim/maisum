@@ -36,8 +36,9 @@ class _FakeSyncTransport implements SyncTransport {
   }
 
   @override
-  Future<void> processSyncItem(SyncItem item) async {
+  Future<SyncProcessResult?> processSyncItem(SyncItem item) async {
     processed.add(item);
+    return null;
   }
 }
 

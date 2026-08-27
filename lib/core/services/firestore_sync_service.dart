@@ -7,11 +7,18 @@ import '../constants/app_constants.dart';
 import '../../features/sync/data/sync_transport.dart';
 import '../../features/sync/domain/sync_item.dart';
 
+typedef UsageEventSyncHandler = Future<void> Function(SyncItem item);
+
 class FirestoreSyncService implements SyncTransport {
-  FirestoreSyncService(this._firestore, this._businessUid);
+  FirestoreSyncService(
+    this._firestore,
+    this._businessUid, {
+    UsageEventSyncHandler? usageEventSyncHandler,
+  }) : _usageEventSyncHandler = usageEventSyncHandler;
 
   final FirebaseFirestore _firestore;
   final String _businessUid;
+  final UsageEventSyncHandler? _usageEventSyncHandler;
 
   static const _collectionMap = {
     'customer': 'customers',
@@ -123,6 +130,12 @@ class FirestoreSyncService implements SyncTransport {
 
   @override
   Future<SyncProcessResult?> processSyncItem(SyncItem item) async {
+    final usageEventSyncHandler = _usageEventSyncHandler;
+    if (item.entityType == 'usage_event' && usageEventSyncHandler != null) {
+      await usageEventSyncHandler(item);
+      return null;
+    }
+
     try {
       final collection = _collectionMap[item.entityType] ?? item.entityType;
       final docRef = _firestore
@@ -159,8 +172,7 @@ class FirestoreSyncService implements SyncTransport {
     Map<String, dynamic> data,
     DocumentReference<Map<String, dynamic>> taskRef,
   ) async {
-    final customerId =
-        (data['customer_id'] as String?)?.trim() ?? '';
+    final customerId = (data['customer_id'] as String?)?.trim() ?? '';
     final status = ((data['status'] as String?) ?? 'open').toLowerCase();
     if (customerId.isEmpty) {
       throw const SyncTransportException(
@@ -183,8 +195,7 @@ class FirestoreSyncService implements SyncTransport {
           final canonical = await transaction.get(canonicalRef);
           final canonicalData = canonical.data();
           if (canonical.exists &&
-              ((canonicalData?['status'] as String?) ?? 'open')
-                      .toLowerCase() ==
+              ((canonicalData?['status'] as String?) ?? 'open').toLowerCase() ==
                   'open') {
             return SyncProcessResult(
               canonicalEntity: {

@@ -44,6 +44,23 @@ class JsonApiClient {
     );
   }
 
+  Future<ApiResponse<dynamic>> patch(
+    String path, {
+    Map<String, String>? headers,
+    Map<String, Object?>? queryParameters,
+    Object? body,
+    String? bearerToken,
+  }) {
+    return _send(
+      'PATCH',
+      path,
+      headers: headers,
+      queryParameters: queryParameters,
+      body: body,
+      bearerToken: bearerToken,
+    );
+  }
+
   Future<ApiResponse<dynamic>> _send(
     String method,
     String path, {

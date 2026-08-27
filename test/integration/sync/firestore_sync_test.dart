@@ -1,4 +1,4 @@
-﻿import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
+import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/services/firestore_sync_service.dart';
 import 'package:maisum/features/sync/data/sync_transport.dart';
@@ -51,10 +51,10 @@ void main() {
             .collection('customers')
             .doc('cust-2')
             .set({
-              'name': 'Old Name',
-              'phone': '840000002',
-              'total_points': 50,
-            });
+          'name': 'Old Name',
+          'phone': '840000002',
+          'total_points': 50,
+        });
 
         final item = SyncItem(
           id: 'sync-2',
@@ -160,6 +160,34 @@ void main() {
       expect(doc.data()!['name'], 'Corte grátis');
     });
 
+    test('usage_event uses its API handler instead of Firestore', () async {
+      SyncItem? handledItem;
+      service = FirestoreSyncService(
+        fakeFirestore,
+        businessUid,
+        usageEventSyncHandler: (item) async => handledItem = item,
+      );
+      final item = SyncItem(
+        id: 'sync-usage-1',
+        operation: 'create',
+        entityType: 'usage_event',
+        entityId: 'usage-1',
+        payload: '{"id":"usage-1","metric_key":"sales_count","quantity":1}',
+        createdAt: DateTime.now(),
+      );
+
+      await service.processSyncItem(item);
+
+      expect(handledItem, same(item));
+      final doc = await fakeFirestore
+          .collection('businesses')
+          .doc(businessUid)
+          .collection('usage_events')
+          .doc('usage-1')
+          .get();
+      expect(doc.exists, isFalse);
+    });
+
     test('sync entity types map to Firestore collection names', () async {
       const mappings = {
         'merchant_item': 'merchant_items',
@@ -177,12 +205,15 @@ void main() {
 
       for (final entry in mappings.entries) {
         final entityId = '${entry.key}-1';
+        final payload = entry.key == 'recovery_task'
+            ? '{"id":"$entityId","customer_id":"customer-1","status":"open","updated_at":1234}'
+            : '{"id":"$entityId","updated_at":1234}';
         final item = SyncItem(
           id: 'sync-${entry.key}',
           operation: 'create',
           entityType: entry.key,
           entityId: entityId,
-          payload: '{"id":"$entityId","updated_at":1234}',
+          payload: payload,
           createdAt: DateTime.now(),
         );
         await service.processSyncItem(item);
@@ -204,6 +235,58 @@ void main() {
             .get();
         expect(fallbackDoc.exists, false, reason: entry.key);
       }
+    });
+
+    test('recovery task sync returns canonical open task across devices',
+        () async {
+      final first = SyncItem(
+        id: 'sync-task-1',
+        operation: 'create',
+        entityType: 'recovery_task',
+        entityId: 'task-canonical',
+        payload:
+            '{"id":"task-canonical","merchant_id":"merchant-1","customer_id":"customer-1","priority":"high","status":"open","created_at":1000,"updated_at":1000}',
+        createdAt: DateTime.now(),
+      );
+      final second = SyncItem(
+        id: 'sync-task-2',
+        operation: 'create',
+        entityType: 'recovery_task',
+        entityId: 'task-provisional',
+        payload:
+            '{"id":"task-provisional","merchant_id":"merchant-1","customer_id":"customer-1","priority":"low","status":"open","created_at":2000,"updated_at":2000}',
+        createdAt: DateTime.now(),
+      );
+
+      final created = await service.processSyncItem(first);
+      final collision = await service.processSyncItem(second);
+
+      expect(created?.canonicalEntity?['id'], 'task-canonical');
+      expect(collision?.canonicalEntity?['id'], 'task-canonical');
+      expect(
+        (await fakeFirestore
+                .collection('businesses')
+                .doc(businessUid)
+                .collection('recovery_tasks')
+                .doc('task-provisional')
+                .get())
+            .exists,
+        isFalse,
+      );
+
+      await service.processSyncItem(
+        SyncItem(
+          id: 'sync-complete',
+          operation: 'update',
+          entityType: 'recovery_task',
+          entityId: 'task-canonical',
+          payload:
+              '{"id":"task-canonical","merchant_id":"merchant-1","customer_id":"customer-1","priority":"high","status":"completed","created_at":1000,"updated_at":3000}',
+          createdAt: DateTime.now(),
+        ),
+      );
+      final afterCompletion = await service.processSyncItem(second);
+      expect(afterCompletion?.canonicalEntity?['id'], 'task-provisional');
     });
 
     test(
@@ -277,4 +360,3 @@ void main() {
     });
   });
 }
-

@@ -19,6 +19,8 @@ _$AuthSessionImpl _$$AuthSessionImplFromJson(Map<String, dynamic> json) =>
       refreshToken: json['refreshToken'] as String?,
       deviceId: json['deviceId'] as String?,
       firebaseUid: json['firebaseUid'] as String?,
+      actor: $enumDecodeNullable(_$AuthActorEnumMap, json['actor']) ??
+          AuthActor.merchant,
     );
 
 Map<String, dynamic> _$$AuthSessionImplToJson(_$AuthSessionImpl instance) =>
@@ -34,4 +36,10 @@ Map<String, dynamic> _$$AuthSessionImplToJson(_$AuthSessionImpl instance) =>
       'refreshToken': instance.refreshToken,
       'deviceId': instance.deviceId,
       'firebaseUid': instance.firebaseUid,
+      'actor': _$AuthActorEnumMap[instance.actor]!,
     };
+
+const _$AuthActorEnumMap = {
+  AuthActor.merchant: 'merchant',
+  AuthActor.customer: 'customer',
+};

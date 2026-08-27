@@ -1,10 +1,11 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'providers.dart';
 import '../features/auth/presentation/auth_controller.dart';
+import '../features/auth/domain/auth_session.dart';
 import '../features/auth/presentation/otp_verification_screen.dart';
 import '../features/auth/presentation/phone_auth_screen.dart';
 import '../features/auth/presentation/pin_entry_screen.dart';
@@ -47,10 +48,15 @@ import '../features/subscription/presentation/subscription_admin_screen.dart';
 import '../features/subscription/presentation/onboarding_plan_selection_screen.dart';
 import '../features/subscription/presentation/feature_upsell_screen.dart';
 import '../features/sync/presentation/pending_sync_screen.dart';
+import '../features/customer_app/presentation/customer_route_guards.dart';
+import '../features/customer_app/presentation/customer_screens.dart';
 
 const _publicRoutes = {
   '/splash',
   '/login',
+  '/customer-login',
+  '/customer-login/phone',
+  '/customer-disabled',
   '/otp',
   '/pin-setup',
   '/pin-entry',
@@ -161,9 +167,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isAdminPortalRoute = _isAdminPortalRoute(state.matchedLocation);
       final isPublic = _publicRoutes.contains(state.matchedLocation) ||
           state.matchedLocation.startsWith('/otp');
-      final isAuthenticated =
-          ref.read(authControllerProvider).valueOrNull != null;
+      final session = ref.read(authControllerProvider).valueOrNull;
+      final isAuthenticated = session != null;
 
+      final customerRedirect = resolveCustomerActorRedirect(
+        location: state.matchedLocation,
+        session: session,
+      );
+      if (customerRedirect != null) return customerRedirect;
       if (!isAuthenticated && !isPublic) return '/login';
       if (isAuthenticated && state.matchedLocation == '/login') {
         final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
@@ -171,7 +182,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         return resolvePostAuthRoute(ref.read);
       }
 
-      if (isAuthenticated && isAdminPortalRoute) {
+      if (isAuthenticated && !session.isCustomer && isAdminPortalRoute) {
         final isSelfServiceRoute =
             _isAdminSelfServiceRoute(state.matchedLocation);
         final isOwner = await ref.read(isOwnerUserProvider.future);
@@ -186,7 +197,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         );
       }
 
-      if (isAuthenticated) {
+      if (isAuthenticated && !session.isCustomer) {
         final storage = ref.read(secureStorageServiceProvider);
         final canAccessWithoutPinSetup =
             _pinSetupBypassRoutes.contains(state.matchedLocation) ||
@@ -240,6 +251,22 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
       GoRoute(path: '/login', builder: (_, __) => const PhoneAuthScreen()),
       GoRoute(
+        path: '/customer-login',
+        builder: (_, __) => const CustomerLoginScreen(),
+        routes: [
+          GoRoute(
+            path: 'phone',
+            builder: (_, __) => const PhoneAuthScreen(
+              actor: AuthActor.customer,
+            ),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/customer-disabled',
+        builder: (_, __) => const CustomerFeatureDisabledScreen(),
+      ),
+      GoRoute(
         path: '/admin',
         builder: (_, __) => const AdminPortalShell(
           section: AdminPortalSection.overview,
@@ -285,8 +312,56 @@ final routerProvider = Provider<GoRouter>((ref) {
           return OTPVerificationScreen(
             phoneNumber: args.phone,
             verificationId: args.verificationId,
+            actor: args.actor,
           );
         },
+      ),
+      GoRoute(path: '/customer', redirect: (_, __) => '/customer/home'),
+      ShellRoute(
+        builder: (_, __, child) => CustomerShell(child: child),
+        routes: [
+          GoRoute(
+            path: '/customer/home',
+            builder: (_, __) => const CustomerHomeScreen(),
+          ),
+          GoRoute(
+            path: '/customer/rewards',
+            builder: (_, __) => const CustomerRewardsScreen(),
+          ),
+          GoRoute(
+            path: '/customer/activity',
+            builder: (_, __) => const CustomerActivityScreen(),
+          ),
+          GoRoute(
+            path: '/customer/businesses',
+            builder: (_, __) => const CustomerBusinessesScreen(),
+          ),
+          GoRoute(
+            path: '/customer/profile',
+            builder: (_, __) => const CustomerProfileScreen(),
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/customer/business/:businessId',
+        builder: (_, state) => CustomerBusinessDetailScreen(
+          businessId: state.pathParameters['businessId'] ?? '',
+        ),
+      ),
+      GoRoute(
+          path: '/customer/qr', builder: (_, __) => const CustomerQrScreen()),
+      GoRoute(
+        path: '/merchant/customer-qr',
+        builder: (_, __) => const MerchantCustomerQrResolveScreen(),
+      ),
+      GoRoute(
+        path: '/customer/redeem/:rewardId',
+        builder: (_, state) => CustomerRedeemScreen(
+            rewardId: state.pathParameters['rewardId'] ?? ''),
+      ),
+      GoRoute(
+        path: '/customer/preferences',
+        builder: (_, __) => const CustomerPreferencesScreen(),
       ),
       GoRoute(
         path: '/pin-setup',

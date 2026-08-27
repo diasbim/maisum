@@ -28,9 +28,22 @@ class ApiResponse<T> {
 }
 
 ApiResponse<dynamic> parseJsonApiResponse(int statusCode, String responseText) {
-  final decoded = responseText.isEmpty
-      ? <String, dynamic>{'success': statusCode < 400}
-      : jsonDecode(responseText);
+  dynamic decoded;
+  if (responseText.isEmpty) {
+    decoded = <String, dynamic>{'success': statusCode < 400};
+  } else {
+    try {
+      decoded = jsonDecode(responseText);
+    } on FormatException {
+      if (statusCode >= 400) {
+        throw ServerException(
+          statusCode: statusCode,
+          message: 'Erro no servidor.',
+        );
+      }
+      rethrow;
+    }
+  }
 
   if (statusCode >= 400) {
     final message =

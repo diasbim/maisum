@@ -307,6 +307,10 @@ void main() {
       useRemote: true,
     );
 
+    final task = await repository.createRecoveryTaskWithResult(
+      customerId: 'cust-idempotent',
+      priority: RecoveryTaskPriority.high,
+    );
     final action = await repository.logRecoveryActionWithResult(
       customerId: 'cust-idempotent',
       actionType: RecoveryActionType.call,
@@ -334,6 +338,8 @@ void main() {
         ) as Map<String, dynamic>;
 
     expect(action.isQueued, isTrue);
+    expect(task.task.id, api.taskId);
+    expect(payloadFor('recovery_task')['id'], api.taskId);
     expect(action.value.id, api.actionId);
     expect(payloadFor('recovery_action')['id'], api.actionId);
     expect(report.isQueued, isTrue);
@@ -416,9 +422,22 @@ class _FailAfterCommitEngageApi extends EngageApi {
         );
 
   String? actionId;
+  String? taskId;
   String? reportId;
   String? responseId;
   String? answerId;
+
+  @override
+  Future<RecoveryTaskCreationResult> createTask({
+    required String taskId,
+    required String customerId,
+    required String priority,
+    DateTime? dueAt,
+    String? notes,
+  }) async {
+    this.taskId = taskId;
+    throw const NetworkException('Response lost');
+  }
 
   @override
   Future<RecoveryActionLog> logAction({

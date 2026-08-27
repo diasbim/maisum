@@ -42,8 +42,14 @@ const crypto_1 = require("crypto");
 const express_1 = __importDefault(require("express"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const pg_1 = require("pg");
+const customer_account_binding_js_1 = require("./customer_account_binding.js");
+const customer_feature_flags_js_1 = require("./customer_feature_flags.js");
+const customer_push_tokens_js_1 = require("./customer_push_tokens.js");
+const customer_qr_js_1 = require("./customer_qr.js");
+const customer_request_auth_js_1 = require("./customer_request_auth.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
 admin.initializeApp();
 const pool = new pg_1.Pool({
@@ -194,6 +200,10 @@ const OWNER_ONLY_SYNC_ENTITIES = new Set([
     'app_user',
 ]);
 const CUSTOMER_IDENTITY_COLLECTION = 'customer_identities';
+const CUSTOMER_ACCOUNT_COLLECTION = 'customer_accounts';
+const CUSTOMER_IDENTITY_ACCOUNT_LINK_COLLECTION = 'customer_identity_account_links';
+const CUSTOMER_ANALYTICS_EVENT_COLLECTION = 'customer_analytics_events';
+const CUSTOMER_PUSH_TOKEN_COLLECTION = 'customer_push_tokens';
 const BUSINESS_CUSTOMER_LINK_COLLECTION = 'business_customer_identity_links';
 const CANONICAL_IDENTITY_BUSINESS_LINK_COLLECTION = 'canonical_identity_business_links';
 const LOYALTY_LEDGER_COLLECTION = 'loyalty_ledger';
@@ -210,6 +220,9 @@ const LOYALTY_PROJECTION_VERSION = 2;
 const DEFAULT_LOYALTY_POINTS_PER_MZN = 100;
 const DEFAULT_LOYALTY_CONFIG_VERSION = 1;
 const CUSTOMER_CORE_SECRET_ENV = 'CUSTOMER_IDENTITY_HMAC_SECRET';
+const customerIdentityHmacSecret = (0, params_1.defineSecret)(CUSTOMER_CORE_SECRET_ENV);
+const CUSTOMER_QR_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_CUSTOMER_ACTIVITY_ENTRIES = 100;
 const MOZAMBIQUE_PHONE_PREFIXES = new Set(['82', '83', '84', '85', '86', '87']);
 const CUSTOMER_SERVER_OWNED_FIELDS = [
     'canonical_customer_id',
@@ -294,17 +307,24 @@ app.use(async (req, res, next) => {
     const token = authHeader.replace('Bearer ', '').trim();
     try {
         const decoded = await admin.auth().verifyIdToken(token);
-        const merchantId = resolveMerchantId(decoded);
         const adminAccess = isAdminPath(req) && hasAdminClaims(decoded);
-        if (!merchantId && !adminAccess && !supportsBodyMerchantScope(req)) {
+        const requestScope = (0, customer_request_auth_js_1.resolveAuthenticatedRequestScope)({
+            path: req.path,
+            resolvedMerchantId: resolveMerchantId(decoded),
+            hasAdminAccess: adminAccess,
+            supportsBodyMerchantScope: supportsBodyMerchantScope(req),
+        });
+        if (!requestScope.hasRequiredScope) {
             return res
                 .status(403)
                 .json({ success: false, message: 'Missing merchant scope' });
         }
         const authedReq = req;
-        authedReq.merchantId = merchantId ?? '';
+        authedReq.merchantId = requestScope.merchantId;
         authedReq.appUserId = resolveAppUserId(decoded);
-        authedReq.appUserRole = resolveAppUserRole(decoded);
+        authedReq.appUserRole = requestScope.actor === 'CUSTOMER'
+            ? 'CUSTOMER'
+            : resolveAppUserRole(decoded);
         authedReq.auth = decoded;
         return next();
     }
@@ -929,6 +949,150 @@ adminRouter.post('/retention/classifications/scan', async (req, res) => {
     }
 });
 app.use('/admin', adminRouter);
+app.get('/customer/session', async (req, res) => {
+    try {
+        const result = await handleCustomerSessionRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/home', async (req, res) => {
+    try {
+        const result = await handleCustomerHomeRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/businesses', async (req, res) => {
+    try {
+        const result = await handleCustomerBusinessesRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/businesses/:businessId', async (req, res) => {
+    try {
+        const result = await handleCustomerBusinessDetailRequest(req, req.params.businessId);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/rewards', async (req, res) => {
+    try {
+        const result = await handleCustomerRewardsRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/activity', async (req, res) => {
+    try {
+        const result = await handleCustomerActivityRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/profile', async (req, res) => {
+    try {
+        const result = await handleCustomerProfileRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.patch('/customer/preferences', async (req, res) => {
+    try {
+        const result = await handleCustomerPreferencesRequest(req, requireBodyObject(req.body));
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/notifications', async (req, res) => {
+    try {
+        const result = await handleCustomerNotificationsRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/deep-links', async (req, res) => {
+    try {
+        const result = await handleCustomerDeepLinksRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.post('/customer/push-tokens', async (req, res) => {
+    try {
+        const result = await handleCustomerPushTokenRegistration(req, requireBodyObject(req.body));
+        return res.status(201).json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.post('/customer/push-tokens/remove', async (req, res) => {
+    try {
+        const result = await handleCustomerPushTokenRemoval(req, requireBodyObject(req.body));
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.post('/customer/events', async (req, res) => {
+    try {
+        const result = await handleCustomerAnalyticsEventRequest(req, requireBodyObject(req.body));
+        return res.status(202).json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/customer/qr', async (req, res) => {
+    try {
+        const result = await handleCustomerQrRequest(req);
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.post('/customer/redemptions', async (req, res) => {
+    try {
+        const result = await handleCustomerRedemptionRequest(req, requireBodyObject(req.body));
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.post('/merchant/customer-qr/resolve', async (req, res) => {
+    try {
+        const result = await handleMerchantCustomerQrResolveRequest(req, requireBodyObject(req.body));
+        return res.json({ success: true, data: result });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
 app.post('/customer-core/identities/lookup', async (req, res) => {
     try {
         const payload = requireBodyObject(req.body);
@@ -1190,6 +1354,33 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
             case 'recovery_task':
                 if (operation === 'delete') {
                     await deleteById('recovery_tasks', entityId, merchantId);
+                    return res.json({ success: true });
+                }
+                if ((pickString(payload, 'status') ?? 'open').toLowerCase() === 'open') {
+                    const result = await (0, recovery_task_creation_js_1.createOrGetOpenRecoveryTask)(pool, {
+                        id: entityId,
+                        merchantId,
+                        customerId: pickString(payload, 'customer_id') ??
+                            pickString(payload, 'customerId') ??
+                            '',
+                        priority: pickString(payload, 'priority') ?? 'medium',
+                        dueAt: pickNumber(payload, 'due_at') ?? pickNumber(payload, 'dueAt'),
+                        notes: pickString(payload, 'notes'),
+                        now: pickNumber(payload, 'updated_at') ?? Date.now(),
+                        createdAt: pickNumber(payload, 'created_at') ??
+                            pickNumber(payload, 'createdAt') ??
+                            undefined,
+                        actorAppUserId: pickString(payload, 'updated_by_app_user_id') ??
+                            pickString(payload, 'updatedByAppUserId') ??
+                            null,
+                    });
+                    return res.json({
+                        success: true,
+                        data: {
+                            outcome: result.outcome,
+                            canonical_entity: result.task,
+                        },
+                    });
                 }
                 else {
                     await upsertRecoveryTask(merchantId, payload, entityId);
@@ -1291,6 +1482,12 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
         }
     }
     catch (error) {
+        console.error('Sync write failed', {
+            entityType,
+            entityId,
+            operation,
+            error,
+        });
         return res.status(500).json({ success: false, message: 'Server error' });
     }
 });
@@ -1944,8 +2141,15 @@ app.get('/engage/analytics', async (req, res) => {
         return res.status(500).json({ success: false, message: 'Server error' });
     }
 });
-exports.api = (0, https_1.onRequest)({ cors: true }, app);
-exports.customerCoreCanonicalLinkOnCustomerWrite = (0, firestore_1.onDocumentWritten)('businesses/{merchantId}/customers/{customerId}', async (event) => {
+exports.api = (0, https_1.onRequest)({
+    cors: true,
+    invoker: 'public',
+    secrets: [customerIdentityHmacSecret],
+}, app);
+exports.customerCoreCanonicalLinkOnCustomerWrite = (0, firestore_1.onDocumentWritten)({
+    document: 'businesses/{merchantId}/customers/{customerId}',
+    secrets: [customerIdentityHmacSecret],
+}, async (event) => {
     const merchantId = isNonEmptyString(event.params.merchantId)
         ? event.params.merchantId.trim()
         : '';
@@ -2008,7 +2212,10 @@ exports.customerCoreCanonicalLinkOnCustomerWrite = (0, firestore_1.onDocumentWri
         throw error;
     }
 });
-exports.loyaltyLedgerSaleOnSaleWrite = (0, firestore_1.onDocumentWritten)('businesses/{merchantId}/sales/{saleId}', async (event) => {
+exports.loyaltyLedgerSaleOnSaleWrite = (0, firestore_1.onDocumentWritten)({
+    document: 'businesses/{merchantId}/sales/{saleId}',
+    secrets: [customerIdentityHmacSecret],
+}, async (event) => {
     const merchantId = isNonEmptyString(event.params.merchantId)
         ? event.params.merchantId.trim()
         : '';
@@ -2345,7 +2552,7 @@ function requirePayloadString(payload, key) {
     return value;
 }
 function requireCustomerCoreSecret() {
-    const secret = process.env[CUSTOMER_CORE_SECRET_ENV];
+    const secret = customerIdentityHmacSecret.value();
     if (typeof secret !== 'string' || secret.trim().length < 16) {
         throw new CustomerCoreError(500, 'customer_core_secret_missing', `Set ${CUSTOMER_CORE_SECRET_ENV} before using customer core routes.`);
     }
@@ -2460,6 +2667,23 @@ function setIfMissingNumber(patch, source, key, value) {
 }
 function canonicalCustomerIdentityRef(canonicalCustomerId) {
     return admin.firestore().collection(CUSTOMER_IDENTITY_COLLECTION).doc(canonicalCustomerId);
+}
+function customerAccountRef(firebaseUid) {
+    return admin.firestore().collection(CUSTOMER_ACCOUNT_COLLECTION).doc(firebaseUid);
+}
+function customerPushTokenRef(firebaseUid, token) {
+    const tokenId = (0, crypto_1.createHash)('sha256')
+        .update(firebaseUid)
+        .update('\u001f')
+        .update(token)
+        .digest('hex');
+    return admin.firestore().collection(CUSTOMER_PUSH_TOKEN_COLLECTION).doc(tokenId);
+}
+function customerIdentityAccountLinkRef(canonicalCustomerId) {
+    return admin
+        .firestore()
+        .collection(CUSTOMER_IDENTITY_ACCOUNT_LINK_COLLECTION)
+        .doc(canonicalCustomerId);
 }
 function businessCustomerRef(merchantId, customerId) {
     return admin
@@ -2650,6 +2874,674 @@ async function findOrCreateCanonicalCustomerIdentity(merchantId, phoneE164) {
         };
     });
     return result;
+}
+async function handleCustomerSessionRequest(req) {
+    const firebaseUid = req.auth?.uid?.trim() ?? '';
+    if (!firebaseUid) {
+        throw new CustomerCoreError(401, 'customer_auth_required', 'Authenticated customer identity is required.');
+    }
+    const tokenPhone = req.auth?.phone_number;
+    if (!isNonEmptyString(tokenPhone)) {
+        throw new CustomerCoreError(403, 'verified_phone_required', 'Customer access requires a verified phone number.');
+    }
+    const phoneE164 = normalizeMozambiquePhoneToE164(tokenPhone);
+    const canonicalCustomerId = buildCanonicalCustomerId(phoneE164);
+    const now = Date.now();
+    let binding;
+    try {
+        binding = await admin.firestore().runTransaction(async (transaction) => {
+            const accountRef = customerAccountRef(firebaseUid);
+            const identityAccountLinkRef = customerIdentityAccountLinkRef(canonicalCustomerId);
+            const identityRef = canonicalCustomerIdentityRef(canonicalCustomerId);
+            const [accountSnapshot, identityAccountLinkSnapshot, identitySnapshot] = await Promise.all([
+                transaction.get(accountRef),
+                transaction.get(identityAccountLinkRef),
+                transaction.get(identityRef),
+            ]);
+            const accountData = snapshotDataRecord(accountSnapshot);
+            const identityAccountLinkData = snapshotDataRecord(identityAccountLinkSnapshot);
+            const conflict = (0, customer_account_binding_js_1.findCustomerAccountBindingConflict)({
+                firebaseUid,
+                canonicalCustomerId,
+                existingAccountCanonicalCustomerId: maybePayloadString(accountData, 'canonical_customer_id', 'canonicalCustomerId'),
+                existingIdentityFirebaseUid: maybePayloadString(identityAccountLinkData, 'firebase_uid', 'firebaseUid'),
+            });
+            if (conflict === 'account_identity_mismatch') {
+                throw new CustomerCoreError(409, conflict, 'The authenticated account is already linked to another customer identity.');
+            }
+            if (conflict === 'identity_account_mismatch') {
+                throw new CustomerCoreError(409, conflict, 'This customer identity is already linked to another authenticated account.');
+            }
+            if (!identitySnapshot.exists) {
+                transaction.set(identityRef, {
+                    id: canonicalCustomerId,
+                    lookup_key: canonicalCustomerId,
+                    phone_e164: phoneE164,
+                    phone_last4: last4(phoneE164),
+                    country_code: 'MZ',
+                    identity_version: 1,
+                    account_state: 'CLAIMED',
+                    account_linked_at: now,
+                    created_by_actor: 'CUSTOMER',
+                    created_at: now,
+                    updated_at: now,
+                });
+            }
+            else {
+                transaction.set(identityRef, {
+                    account_state: 'CLAIMED',
+                    account_linked_at: pickNumber(snapshotDataRecord(identitySnapshot), 'account_linked_at') ?? now,
+                    updated_at: now,
+                }, { merge: true });
+            }
+            transaction.set(accountRef, {
+                firebase_uid: firebaseUid,
+                canonical_customer_id: canonicalCustomerId,
+                phone_e164: phoneE164,
+                phone_last4: last4(phoneE164),
+                status: 'ACTIVE',
+                schema_version: 1,
+                created_at: pickNumber(accountData, 'created_at') ?? now,
+                updated_at: now,
+            }, { merge: true });
+            transaction.set(identityAccountLinkRef, {
+                canonical_customer_id: canonicalCustomerId,
+                firebase_uid: firebaseUid,
+                status: 'ACTIVE',
+                schema_version: 1,
+                created_at: pickNumber(identityAccountLinkData, 'created_at') ?? now,
+                updated_at: now,
+            }, { merge: true });
+            return {
+                accountCreated: !accountSnapshot.exists,
+                identityCreated: !identitySnapshot.exists,
+            };
+        });
+    }
+    catch (error) {
+        if (error instanceof CustomerCoreError &&
+            (error.code === 'account_identity_mismatch' ||
+                error.code === 'identity_account_mismatch')) {
+            console.warn('customer_account_binding_conflict', {
+                firebase_uid: firebaseUid,
+                phone_last4: last4(phoneE164),
+                code: error.code,
+            });
+        }
+        throw error;
+    }
+    const businessLinksSnapshot = await admin
+        .firestore()
+        .collection(CANONICAL_IDENTITY_BUSINESS_LINK_COLLECTION)
+        .where('canonical_customer_id', '==', canonicalCustomerId)
+        .get();
+    const businessLinks = businessLinksSnapshot.docs
+        .map((snapshot) => {
+        const data = snapshotDataRecord(snapshot);
+        return {
+            merchant_id: maybePayloadString(data, 'merchant_id'),
+            business_customer_id: maybePayloadString(data, 'business_customer_id', 'customer_id'),
+            relationship_created_at: pickNumber(data, 'created_at'),
+            relationship_updated_at: pickNumber(data, 'updated_at'),
+        };
+    })
+        .filter((link) => link.merchant_id != null && link.business_customer_id != null)
+        .sort((left, right) => left.merchant_id.localeCompare(right.merchant_id));
+    const featureFlags = serializeCustomerFeatureFlags(firebaseUid);
+    return {
+        actor: 'CUSTOMER',
+        customer_app_enabled: featureFlags.customer_app_enabled,
+        feature_flags: featureFlags,
+        phone_e164: phoneE164,
+        phone_last4: last4(phoneE164),
+        account_created: binding.accountCreated,
+        identity_created: binding.identityCreated,
+        business_relationships: businessLinks,
+    };
+}
+function serializeCustomerFeatureFlags(firebaseUid) {
+    const flags = (0, customer_feature_flags_js_1.resolveCustomerFeatureFlags)(process.env);
+    const appEnabled = flags.customerAppEnabled &&
+        (firebaseUid == null || (0, customer_feature_flags_js_1.isCustomerUidAllowed)(process.env, firebaseUid));
+    return {
+        customer_app_enabled: appEnabled,
+        customer_redemption_enabled: appEnabled && flags.customerRedemptionEnabled,
+        customer_qr_enabled: appEnabled && flags.customerQrEnabled,
+        customer_push_enabled: appEnabled && flags.customerPushEnabled,
+        customer_deep_links_enabled: appEnabled && flags.customerDeepLinksEnabled,
+    };
+}
+function requireCustomerFeature(feature) {
+    const flags = (0, customer_feature_flags_js_1.resolveCustomerFeatureFlags)(process.env);
+    if (!flags.customerAppEnabled || !flags[feature]) {
+        throw new CustomerCoreError(403, 'customer_feature_disabled', 'This customer feature is not enabled.');
+    }
+}
+function isSafeFirestoreDocumentId(value) {
+    return value.length <= 256 && !value.includes('/');
+}
+function customerPreferencesFromAccount(accountData) {
+    const raw = accountData.customer_preferences;
+    const preferences = raw != null && typeof raw === 'object' && !Array.isArray(raw)
+        ? raw
+        : {};
+    return {
+        notifications_enabled: pickBoolean(preferences, 'notifications_enabled') ?? true,
+        marketing_enabled: pickBoolean(preferences, 'marketing_enabled') ?? false,
+        deep_links_enabled: pickBoolean(preferences, 'deep_links_enabled') ?? true,
+    };
+}
+async function requireBoundCustomerAccount(req) {
+    const firebaseUid = req.auth?.uid?.trim() ?? '';
+    if (!firebaseUid) {
+        throw new CustomerCoreError(401, 'customer_auth_required', 'Authenticated customer identity is required.');
+    }
+    if (!(0, customer_feature_flags_js_1.isCustomerUidAllowed)(process.env, firebaseUid)) {
+        throw new CustomerCoreError(403, 'customer_feature_disabled', 'This customer account is not enabled for the current rollout.');
+    }
+    const accountSnapshot = await customerAccountRef(firebaseUid).get();
+    if (!accountSnapshot.exists) {
+        throw new CustomerCoreError(403, 'customer_account_required', 'Open the customer session before accessing customer data.');
+    }
+    const accountData = snapshotDataRecord(accountSnapshot);
+    const canonicalCustomerId = maybePayloadString(accountData, 'canonical_customer_id', 'canonicalCustomerId');
+    if (!canonicalCustomerId || maybePayloadString(accountData, 'status') !== 'ACTIVE') {
+        throw new CustomerCoreError(403, 'customer_account_inactive', 'Customer account is not active.');
+    }
+    const identityLinkSnapshot = await customerIdentityAccountLinkRef(canonicalCustomerId).get();
+    const identityLinkData = snapshotDataRecord(identityLinkSnapshot);
+    if (!identityLinkSnapshot.exists ||
+        maybePayloadString(identityLinkData, 'firebase_uid', 'firebaseUid') !== firebaseUid ||
+        maybePayloadString(identityLinkData, 'status') !== 'ACTIVE') {
+        throw new CustomerCoreError(403, 'customer_account_link_inconsistent', 'Customer account binding is inconsistent.');
+    }
+    return { firebaseUid, canonicalCustomerId, accountData };
+}
+async function listCustomerRelationshipLocators(canonicalCustomerId) {
+    const snapshot = await admin
+        .firestore()
+        .collection(CANONICAL_IDENTITY_BUSINESS_LINK_COLLECTION)
+        .where('canonical_customer_id', '==', canonicalCustomerId)
+        .get();
+    const locators = new Map();
+    for (const document of snapshot.docs) {
+        const data = snapshotDataRecord(document);
+        const merchantId = maybePayloadString(data, 'merchant_id');
+        const customerId = maybePayloadString(data, 'business_customer_id', 'customer_id');
+        if (merchantId && customerId) {
+            locators.set(`${merchantId}\u001f${customerId}`, { merchantId, customerId });
+        }
+    }
+    return [...locators.values()].sort((left, right) => left.merchantId.localeCompare(right.merchantId));
+}
+async function requireCustomerBusinessRelationship(account, merchantId) {
+    const locator = (await listCustomerRelationshipLocators(account.canonicalCustomerId))
+        .find((item) => item.merchantId === merchantId);
+    if (!locator) {
+        throw new CustomerCoreError(404, 'customer_business_not_found', 'Business is not linked to the authenticated customer.');
+    }
+    const [customerSnapshot, forwardLinkSnapshot, reverseLinkSnapshot, businessSnapshot] = await Promise.all([
+        businessCustomerRef(locator.merchantId, locator.customerId).get(),
+        businessCustomerLinkRef(locator.merchantId, locator.customerId).get(),
+        canonicalIdentityBusinessLinkRef(locator.merchantId, account.canonicalCustomerId).get(),
+        businessDocumentRef(locator.merchantId).get(),
+    ]);
+    const customerData = snapshotDataRecord(customerSnapshot);
+    const forwardLinkData = snapshotDataRecord(forwardLinkSnapshot);
+    const reverseLinkData = snapshotDataRecord(reverseLinkSnapshot);
+    if (!customerSnapshot.exists ||
+        !businessSnapshot.exists ||
+        maybePayloadString(customerData, 'canonical_customer_id', 'canonicalCustomerId') !==
+            account.canonicalCustomerId ||
+        !forwardLinkSnapshot.exists ||
+        maybePayloadString(forwardLinkData, 'canonical_customer_id') !==
+            account.canonicalCustomerId ||
+        !reverseLinkSnapshot.exists ||
+        maybePayloadString(reverseLinkData, 'business_customer_id', 'customer_id') !==
+            locator.customerId) {
+        throw new CustomerCoreError(409, 'customer_business_link_inconsistent', 'Customer business relationship is inconsistent.');
+    }
+    return {
+        merchantId: locator.merchantId,
+        customerId: locator.customerId,
+        customerData,
+        businessData: snapshotDataRecord(businessSnapshot),
+    };
+}
+function serializeCustomerBusiness(relationship) {
+    const customer = relationship.customerData;
+    const business = relationship.businessData;
+    return {
+        business_id: relationship.merchantId,
+        name: maybePayloadString(business, 'name', 'business_name') ?? 'Business',
+        logo_url: maybePayloadString(business, 'logo_url', 'logoUrl'),
+        address: maybePayloadString(business, 'address'),
+        phone: maybePayloadString(business, 'phone'),
+        confirmed_points: Math.max(0, pickNumber(customer, 'confirmed_points') ?? 0),
+        last_visit_at: pickNumber(customer, 'last_visit_at'),
+    };
+}
+function serializeCustomerReward(rewardId, rewardData, confirmedPoints) {
+    const pointsRequired = pickNumber(rewardData, 'points_required') ?? pickNumber(rewardData, 'pointsRequired');
+    if ((pickBoolean(rewardData, 'active') ?? true) !== true ||
+        pointsRequired == null ||
+        pointsRequired <= 0) {
+        return null;
+    }
+    return {
+        reward_id: rewardId,
+        name: maybePayloadString(rewardData, 'name') ?? 'Reward',
+        description: maybePayloadString(rewardData, 'description'),
+        points_required: pointsRequired,
+        confirmed_points: confirmedPoints,
+        points_remaining: Math.max(0, pointsRequired - confirmedPoints),
+        eligible: confirmedPoints >= pointsRequired,
+        expires_at: pickNumber(rewardData, 'expires_at') ?? pickNumber(rewardData, 'expiresAt'),
+    };
+}
+async function readCustomerBusiness(account, merchantId) {
+    const relationship = await requireCustomerBusinessRelationship(account, merchantId);
+    const confirmedPoints = Math.max(0, pickNumber(relationship.customerData, 'confirmed_points') ?? 0);
+    const rewardsSnapshot = await businessRewardsCollectionRef(merchantId).limit(100).get();
+    const rewards = rewardsSnapshot.docs
+        .map((document) => serializeCustomerReward(document.id, snapshotDataRecord(document), confirmedPoints))
+        .filter((reward) => reward != null)
+        .sort((left, right) => left.points_required - right.points_required);
+    const nextReward = rewards.find((reward) => reward.points_required > confirmedPoints) ??
+        rewards.find((reward) => reward.eligible === true) ??
+        null;
+    return {
+        ...serializeCustomerBusiness(relationship),
+        rewards,
+        next_reward: nextReward,
+    };
+}
+async function readCustomerActivity(account, maximumEntries) {
+    const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
+    const entries = await Promise.all(locators.map(async (locator) => {
+        const relationship = await requireCustomerBusinessRelationship(account, locator.merchantId);
+        const ledgerSnapshot = await boundedCustomerLedgerQuery(relationship.merchantId, relationship.customerId).get();
+        assertLedgerQueryIsBounded(ledgerSnapshot, relationship.merchantId, relationship.customerId);
+        return ledgerSnapshot.docs.map((document) => {
+            const data = loyaltyLedgerEntryFromData(snapshotDataRecord(document));
+            return {
+                business_id: relationship.merchantId,
+                entry_id: document.id,
+                type: data.entry_type,
+                points_delta: data.points_delta,
+                occurred_at: data.occurred_at,
+                reward_id: data.reward_id ?? null,
+            };
+        });
+    }));
+    return entries.flat()
+        .sort((left, right) => right.occurred_at - left.occurred_at)
+        .slice(0, maximumEntries);
+}
+async function handleCustomerHomeRequest(req) {
+    requireCustomerFeature('customerAppEnabled');
+    const account = await requireBoundCustomerAccount(req);
+    const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
+    const businesses = await Promise.all(locators.map((locator) => readCustomerBusiness(account, locator.merchantId)));
+    return {
+        businesses,
+        recent_activity: await readCustomerActivity(account, 10),
+        updated_at: Date.now(),
+    };
+}
+async function handleCustomerBusinessesRequest(req) {
+    requireCustomerFeature('customerAppEnabled');
+    const account = await requireBoundCustomerAccount(req);
+    const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
+    return {
+        businesses: await Promise.all(locators.map((locator) => readCustomerBusiness(account, locator.merchantId))),
+    };
+}
+async function handleCustomerBusinessDetailRequest(req, merchantId) {
+    requireCustomerFeature('customerAppEnabled');
+    if (!isNonEmptyString(merchantId) || !isSafeFirestoreDocumentId(merchantId.trim())) {
+        throw new CustomerCoreError(400, 'business_id_required', 'Business id is required.');
+    }
+    return readCustomerBusiness(await requireBoundCustomerAccount(req), merchantId.trim());
+}
+async function handleCustomerRewardsRequest(req) {
+    requireCustomerFeature('customerAppEnabled');
+    const account = await requireBoundCustomerAccount(req);
+    const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
+    const businesses = await Promise.all(locators.map((locator) => readCustomerBusiness(account, locator.merchantId)));
+    return {
+        rewards: businesses.flatMap((business) => business.rewards.map((reward) => ({
+            business_id: business.business_id,
+            ...reward,
+        }))),
+    };
+}
+async function handleCustomerActivityRequest(req) {
+    requireCustomerFeature('customerAppEnabled');
+    return {
+        activity: await readCustomerActivity(await requireBoundCustomerAccount(req), MAX_CUSTOMER_ACTIVITY_ENTRIES),
+    };
+}
+async function handleCustomerProfileRequest(req) {
+    requireCustomerFeature('customerAppEnabled');
+    const account = await requireBoundCustomerAccount(req);
+    const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
+    const firstRelationship = locators.length > 0
+        ? await requireCustomerBusinessRelationship(account, locators[0].merchantId)
+        : null;
+    return {
+        display_name: firstRelationship == null
+            ? null
+            : maybePayloadString(firstRelationship.customerData, 'name'),
+        phone_e164: req.auth?.phone_number ?? null,
+        preferences: customerPreferencesFromAccount(account.accountData),
+        linked_business_count: locators.length,
+    };
+}
+async function handleCustomerPreferencesRequest(req, payload) {
+    requireCustomerFeature('customerAppEnabled');
+    const allowedKeys = new Set([
+        'notifications_enabled',
+        'marketing_enabled',
+        'deep_links_enabled',
+    ]);
+    if (Object.keys(payload).length === 0 ||
+        Object.keys(payload).some((key) => !allowedKeys.has(key))) {
+        throw new CustomerCoreError(400, 'customer_preferences_invalid', 'Only customer notification preference fields may be updated.');
+    }
+    const account = await requireBoundCustomerAccount(req);
+    const current = customerPreferencesFromAccount(account.accountData);
+    const preferences = {
+        ...current,
+        ...Object.fromEntries(Object.keys(payload).map((key) => {
+            const value = pickBoolean(payload, key);
+            if (value == null) {
+                throw new CustomerCoreError(400, 'customer_preferences_invalid', `${key} must be a boolean.`);
+            }
+            return [key, value];
+        })),
+    };
+    await customerAccountRef(account.firebaseUid).set({
+        customer_preferences: preferences,
+        customer_preferences_updated_at: Date.now(),
+        updated_at: Date.now(),
+    }, { merge: true });
+    return { preferences };
+}
+async function handleCustomerPushTokenRegistration(req, payload) {
+    requireCustomerFeature('customerPushEnabled');
+    const registration = parseCustomerPushToken(payload);
+    const account = await requireBoundCustomerAccount(req);
+    const tokenRef = customerPushTokenRef(account.firebaseUid, registration.token);
+    const now = Date.now();
+    await admin.firestore().runTransaction(async (transaction) => {
+        const existing = await transaction.get(tokenRef);
+        const existingData = snapshotDataRecord(existing);
+        transaction.set(tokenRef, {
+            account_firebase_uid: account.firebaseUid,
+            platform: registration.platform,
+            fcm_token: registration.token,
+            created_at: pickNumber(existingData, 'created_at') ?? now,
+            updated_at: now,
+        });
+    });
+    return { registered: true, platform: registration.platform };
+}
+async function handleCustomerPushTokenRemoval(req, payload) {
+    requireCustomerFeature('customerPushEnabled');
+    const registration = parseCustomerPushToken(payload);
+    const account = await requireBoundCustomerAccount(req);
+    await customerPushTokenRef(account.firebaseUid, registration.token).delete();
+    return { removed: true, platform: registration.platform };
+}
+function parseCustomerPushToken(payload) {
+    try {
+        return (0, customer_push_tokens_js_1.normalizeCustomerPushToken)(payload);
+    }
+    catch {
+        throw new CustomerCoreError(400, 'customer_push_token_invalid', 'platform and token must be a valid FCM registration.');
+    }
+}
+async function handleCustomerNotificationsRequest(req) {
+    requireCustomerFeature('customerAppEnabled');
+    const account = await requireBoundCustomerAccount(req);
+    const flags = (0, customer_feature_flags_js_1.resolveCustomerFeatureFlags)(process.env);
+    return {
+        preferences: customerPreferencesFromAccount(account.accountData),
+        push: {
+            enabled: flags.customerPushEnabled,
+            delivery: 'not_configured',
+        },
+        deep_links: {
+            enabled: flags.customerDeepLinksEnabled,
+            contract_path: '/customer/deep-links',
+        },
+    };
+}
+async function handleCustomerDeepLinksRequest(req) {
+    requireCustomerFeature('customerDeepLinksEnabled');
+    await requireBoundCustomerAccount(req);
+    return {
+        routes: [
+            '/customer/home',
+            '/customer/rewards',
+            '/customer/activity',
+            '/customer/businesses',
+            '/customer/profile',
+        ],
+        parameterized_routes: [
+            '/customer/business/:businessId',
+            '/customer/redeem/:rewardId',
+        ],
+    };
+}
+async function handleCustomerAnalyticsEventRequest(req, payload) {
+    requireCustomerFeature('customerAppEnabled');
+    if (Object.keys(payload).some((key) => key !== 'event_type')) {
+        throw new CustomerCoreError(400, 'customer_event_invalid', 'Only event_type is accepted for customer analytics.');
+    }
+    const eventType = requirePayloadString(payload, 'event_type');
+    const allowedEventTypes = new Set([
+        'CUSTOMER_HOME_OPENED',
+        'CUSTOMER_REWARD_VIEWED',
+        'CUSTOMER_QR_VIEWED',
+        'CUSTOMER_DEEP_LINK_OPENED',
+    ]);
+    if (!allowedEventTypes.has(eventType)) {
+        throw new CustomerCoreError(400, 'customer_event_invalid', 'Unsupported customer analytics event.');
+    }
+    const account = await requireBoundCustomerAccount(req);
+    const eventId = `cae_${(0, crypto_1.randomUUID)()}`;
+    await admin.firestore().collection(CUSTOMER_ANALYTICS_EVENT_COLLECTION).doc(eventId).set({
+        id: eventId,
+        firebase_uid: account.firebaseUid,
+        event_type: eventType,
+        occurred_at: Date.now(),
+    });
+    return { accepted: true };
+}
+async function ensureCustomerQrSubject(account) {
+    return admin.firestore().runTransaction(async (transaction) => {
+        const accountRef = customerAccountRef(account.firebaseUid);
+        const snapshot = await transaction.get(accountRef);
+        const data = snapshotDataRecord(snapshot);
+        if (!snapshot.exists ||
+            maybePayloadString(data, 'canonical_customer_id', 'canonicalCustomerId') !==
+                account.canonicalCustomerId ||
+            maybePayloadString(data, 'status') !== 'ACTIVE') {
+            throw new CustomerCoreError(403, 'customer_account_inactive', 'Customer account is not active.');
+        }
+        const existingSubject = maybePayloadString(data, 'qr_subject');
+        if (existingSubject && /^[A-Za-z0-9_-]{16,128}$/.test(existingSubject)) {
+            return existingSubject;
+        }
+        const subject = (0, crypto_1.randomBytes)(24).toString('base64url');
+        transaction.set(accountRef, {
+            qr_subject: subject,
+            qr_subject_created_at: Date.now(),
+            updated_at: Date.now(),
+        }, { merge: true });
+        return subject;
+    });
+}
+async function handleCustomerQrRequest(req) {
+    requireCustomerFeature('customerQrEnabled');
+    const account = await requireBoundCustomerAccount(req);
+    const now = Date.now();
+    const expiresAt = now + CUSTOMER_QR_TOKEN_TTL_MS;
+    return {
+        token: (0, customer_qr_js_1.createCustomerQrToken)({
+            subject: await ensureCustomerQrSubject(account),
+            issuedAt: now,
+            expiresAt,
+            secret: requireCustomerCoreSecret(),
+        }),
+        expires_at: expiresAt,
+        format: 'cq1',
+    };
+}
+async function handleCustomerRedemptionRequest(req, payload) {
+    requireCustomerFeature('customerRedemptionEnabled');
+    const allowedKeys = new Set(['reward_id', 'idempotency_key']);
+    if (Object.keys(payload).some((key) => !allowedKeys.has(key)) ||
+        Object.keys(payload).length !== 2) {
+        throw new CustomerCoreError(400, 'customer_redemption_invalid', 'reward_id and idempotency_key are required.');
+    }
+    const rewardId = requirePayloadString(payload, 'reward_id');
+    const idempotencyKey = requirePayloadString(payload, 'idempotency_key');
+    if (!isSafeFirestoreDocumentId(rewardId)) {
+        throw new CustomerCoreError(400, 'customer_redemption_invalid', 'Invalid reward_id.');
+    }
+    if (!/^[A-Za-z0-9_-]{8,200}$/.test(idempotencyKey)) {
+        throw new CustomerCoreError(400, 'loyalty_idempotency_key_invalid', 'idempotency_key must be an opaque client operation identifier.');
+    }
+    const account = await requireBoundCustomerAccount(req);
+    const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
+    const replayCandidates = await Promise.all(locators.map(async (locator) => {
+        const relationship = await requireCustomerBusinessRelationship(account, locator.merchantId);
+        const redemptionId = buildDeterministicRedemptionId(relationship.merchantId, idempotencyKey);
+        const redemptionSnapshot = await businessRedemptionsCollectionRef(relationship.merchantId).doc(redemptionId).get();
+        if (!redemptionSnapshot.exists)
+            return null;
+        const redemption = snapshotDataRecord(redemptionSnapshot);
+        if (maybePayloadString(redemption, 'customer_id', 'customerId') !==
+            relationship.customerId ||
+            maybePayloadString(redemption, 'reward_id', 'rewardId') !== rewardId ||
+            maybePayloadString(redemption, 'idempotency_key', 'idempotencyKey') !==
+                idempotencyKey) {
+            throw new CustomerCoreError(409, 'loyalty_redemption_idempotency_conflict', 'The supplied idempotency_key was already used for a different redemption request.', {
+                merchant_id: relationship.merchantId,
+                redemption_id: redemptionId,
+            });
+        }
+        const ledgerEntryId = buildDeterministicLoyaltyLedgerEntryId('REDEMPTION', redemptionId);
+        const [ledgerSnapshot, ledgerQuerySnapshot] = await Promise.all([
+            loyaltyLedgerDocumentRef(relationship.merchantId, ledgerEntryId).get(),
+            boundedCustomerLedgerQuery(relationship.merchantId, relationship.customerId).get(),
+        ]);
+        if (!ledgerSnapshot.exists) {
+            throw new CustomerCoreError(409, 'loyalty_redemption_replay_inconsistent', 'The existing redemption is missing its confirmed ledger entry.');
+        }
+        assertLedgerQueryIsBounded(ledgerQuerySnapshot, relationship.merchantId, relationship.customerId);
+        const projection = computeCustomerProjectionFromLedgerEntries(ledgerQuerySnapshot.docs.map((document) => loyaltyLedgerEntryFromData(snapshotDataRecord(document))));
+        return {
+            business_id: relationship.merchantId,
+            redemption_id: redemptionId,
+            reward_id: rewardId,
+            points_spent: pickNumber(redemption, 'confirmed_points_spent') ??
+                pickNumber(redemption, 'points_spent'),
+            confirmed_points: projection.confirmedPoints,
+            redemption_code: maybePayloadString(redemption, 'redemption_code'),
+            redeemed_at: pickNumber(redemption, 'redeemed_at'),
+            idempotent_replay: true,
+        };
+    }));
+    const existingReplays = replayCandidates.filter((candidate) => candidate != null);
+    if (existingReplays.length > 1) {
+        throw new CustomerCoreError(409, 'customer_redemption_replay_ambiguous', 'The redemption replay is ambiguous across linked businesses.');
+    }
+    if (existingReplays.length === 1) {
+        return existingReplays[0];
+    }
+    const matches = await Promise.all(locators.map(async (locator) => {
+        const relationship = await requireCustomerBusinessRelationship(account, locator.merchantId);
+        const reward = await businessRewardsCollectionRef(relationship.merchantId)
+            .doc(rewardId)
+            .get();
+        return reward.exists ? relationship : null;
+    }));
+    const authorizedBusinesses = matches.filter((relationship) => relationship != null);
+    if (authorizedBusinesses.length !== 1) {
+        throw new CustomerCoreError(authorizedBusinesses.length === 0 ? 404 : 409, authorizedBusinesses.length === 0
+            ? 'customer_reward_not_found'
+            : 'customer_reward_ambiguous', authorizedBusinesses.length === 0
+            ? 'Reward is not available to the authenticated customer.'
+            : 'Reward id is ambiguous across linked businesses.');
+    }
+    const relationship = authorizedBusinesses[0];
+    const result = await handleAssistedLoyaltyRedemptionRequest(req, { reward_id: rewardId, idempotency_key: idempotencyKey }, {
+        merchantId: relationship.merchantId,
+        customerId: relationship.customerId,
+        redemptionCode: `r1_${(0, crypto_1.randomBytes)(18).toString('base64url')}`,
+    });
+    const redemption = result.redemption;
+    return {
+        business_id: relationship.merchantId,
+        redemption_id: result.redemption_id,
+        reward_id: rewardId,
+        points_spent: pickNumber(redemption, 'confirmed_points_spent') ??
+            pickNumber(redemption, 'points_spent'),
+        confirmed_points: result.confirmed_points,
+        redemption_code: maybePayloadString(redemption, 'redemption_code'),
+        redeemed_at: pickNumber(redemption, 'redeemed_at'),
+        idempotent_replay: result.idempotent_replay === true,
+    };
+}
+async function handleMerchantCustomerQrResolveRequest(req, payload) {
+    requireCustomerFeature('customerQrEnabled');
+    if (!req.merchantId || !(await requestCanAccessMerchant(req, req.merchantId))) {
+        throw new CustomerCoreError(403, 'merchant_access_denied', 'Merchant access is required.');
+    }
+    if (Object.keys(payload).length !== 1 || typeof payload.token !== 'string') {
+        throw new CustomerCoreError(400, 'customer_qr_invalid', 'A customer QR token is required.');
+    }
+    const verified = (0, customer_qr_js_1.verifyCustomerQrToken)({
+        token: payload.token,
+        secret: requireCustomerCoreSecret(),
+        now: Date.now(),
+    });
+    if (!verified) {
+        throw new CustomerCoreError(400, 'customer_qr_invalid', 'Customer QR token is invalid or expired.');
+    }
+    const accounts = await admin.firestore()
+        .collection(CUSTOMER_ACCOUNT_COLLECTION)
+        .where('qr_subject', '==', verified.subject)
+        .limit(2)
+        .get();
+    if (accounts.size !== 1) {
+        throw new CustomerCoreError(404, 'customer_qr_not_found', 'Customer QR account was not found.');
+    }
+    const accountData = snapshotDataRecord(accounts.docs[0]);
+    const canonicalCustomerId = maybePayloadString(accountData, 'canonical_customer_id');
+    if (maybePayloadString(accountData, 'status') !== 'ACTIVE' ||
+        !canonicalCustomerId) {
+        throw new CustomerCoreError(404, 'customer_qr_not_found', 'Customer QR account was not found.');
+    }
+    const account = {
+        firebaseUid: maybePayloadString(accountData, 'firebase_uid') ?? '',
+        canonicalCustomerId,
+        accountData,
+    };
+    const relationship = await requireCustomerBusinessRelationship(account, req.merchantId);
+    return {
+        business_id: relationship.merchantId,
+        customer: {
+            customer_id: relationship.customerId,
+            name: maybePayloadString(relationship.customerData, 'name'),
+            phone: maybePayloadString(relationship.customerData, 'phone'),
+        },
+        qr_expires_at: verified.expiresAt,
+    };
 }
 async function findMatchingBusinessCustomers(merchantId, rawPhone, phoneE164) {
     const candidates = buildPhoneSearchCandidates(rawPhone, phoneE164);
@@ -4100,9 +4992,11 @@ async function handleLoyaltyLedgerReconcileRequest(req, body) {
         results,
     };
 }
-async function handleAssistedLoyaltyRedemptionRequest(req, payload) {
-    const merchantId = await resolveCustomerCoreMerchantId(req, payload);
-    const customerId = requirePayloadString(payload, 'customer_id');
+async function handleAssistedLoyaltyRedemptionRequest(req, payload, trustedCustomerRequest) {
+    const merchantId = trustedCustomerRequest?.merchantId ??
+        await resolveCustomerCoreMerchantId(req, payload);
+    const customerId = trustedCustomerRequest?.customerId ??
+        requirePayloadString(payload, 'customer_id');
     const rewardId = requirePayloadString(payload, 'reward_id');
     const idempotencyKey = maybePayloadString(payload, 'idempotency_key', 'idempotencyKey');
     if (!idempotencyKey) {
@@ -4242,6 +5136,9 @@ async function handleAssistedLoyaltyRedemptionRequest(req, payload) {
                 points_required: pointsRequired,
             });
         }
+        const existingRedemptionCode = redemptionSnapshot.exists
+            ? maybePayloadString(snapshotDataRecord(redemptionSnapshot), 'redemption_code')
+            : null;
         const redemptionData = {
             id: redemptionId,
             merchant_id: merchantId,
@@ -4257,6 +5154,11 @@ async function handleAssistedLoyaltyRedemptionRequest(req, payload) {
             loyalty_processed_at: now,
             created_at: pickNumber(payload, 'redeemed_at') ?? now,
             updated_at: now,
+            ...(trustedCustomerRequest?.redemptionCode
+                ? {
+                    redemption_code: existingRedemptionCode ?? trustedCustomerRequest.redemptionCode,
+                }
+                : {}),
         };
         const expectedEntry = buildExpectedRedemptionLedgerEntry({
             merchantId,

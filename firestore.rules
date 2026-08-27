@@ -406,6 +406,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    match /customer_accounts/{firebaseUid} {
+      allow read, write: if false;
+    }
+
+    match /customer_identity_account_links/{canonicalCustomerId} {
+      allow read, write: if false;
+    }
+
+    match /customer_analytics_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    // FCM registration tokens are accepted only by authenticated Functions.
+    match /customer_push_tokens/{tokenId} {
+      allow read, write: if false;
+    }
+
     // Global plan catalog used by onboarding/settings plan selectors.
     match /plans/{planId} {
       allow read: if isSignedIn();

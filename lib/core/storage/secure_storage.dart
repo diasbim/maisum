@@ -75,6 +75,32 @@ class SecureStorageService {
   Future<String?> getMerchantId() =>
       _storage.read(key: AppConstants.merchantIdKey, aOptions: _androidOptions);
 
+  Future<void> clearMerchantSessionData() async {
+    await Future.wait([
+      _storage.delete(
+          key: AppConstants.merchantIdKey, aOptions: _androidOptions),
+      _storage.delete(
+          key: AppConstants.merchantNameKey, aOptions: _androidOptions),
+      _storage.delete(
+        key: AppConstants.subscriptionStatusKey,
+        aOptions: _androidOptions,
+      ),
+      _storage.delete(
+          key: AppConstants.appUserIdKey, aOptions: _androidOptions),
+      _storage.delete(
+          key: AppConstants.appUserRoleKey, aOptions: _androidOptions),
+    ]);
+  }
+
+  Future<void> saveAuthActor(String actor) => _storage.write(
+        key: AppConstants.authActorKey,
+        value: actor,
+        aOptions: _androidOptions,
+      );
+
+  Future<String?> getAuthActor() =>
+      _storage.read(key: AppConstants.authActorKey, aOptions: _androidOptions);
+
   Future<void> saveMerchantName(String merchantName) => _storage.write(
         key: AppConstants.merchantNameKey,
         value: merchantName,

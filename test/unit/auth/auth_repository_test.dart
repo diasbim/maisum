@@ -72,6 +72,38 @@ void main() {
   });
 
   group('AuthRepository.getStoredSession', () {
+    test('rejects a stored merchant session owned by another Firebase UID',
+        () async {
+      await storage.seedSession(
+        userId: 'merchant-user',
+        appUserId: 'merchant-user',
+        merchantId: 'merchant-1',
+        merchantName: 'Minha Loja',
+        subscriptionStatus: 'TRIAL',
+        phone: '+258840000000',
+        token: 'stored-token',
+        firebaseUid: 'merchant-firebase-uid',
+        expiresAt: DateTime.now().add(const Duration(days: 1)),
+      );
+      final mockAuth = MockFirebaseAuth(
+        signedIn: true,
+        mockUser: MockUser(
+          uid: 'different-customer-uid',
+          phoneNumber: '+258850000000',
+        ),
+      );
+      final repository = AuthRepository(
+        FirebaseAuthService(mockAuth),
+        storage,
+        AppDatabase.instance,
+        config: const AppRuntimeConfig(enableBackendAuth: false),
+      );
+
+      expect(await repository.getStoredSession(), isNull);
+      expect(await storage.getMerchantId(), isNull);
+      expect(await storage.getToken(), isNull);
+    });
+
     test(
       'keeps entry flow alive when Firestore denies access',
       () async {
@@ -512,6 +544,13 @@ class _InMemorySecureStorageService extends SecureStorageService {
 
   @override
   Future<String?> getAppUserRole() async => _store['app_user_role'];
+
+  @override
+  Future<void> saveAuthActor(String actor) async =>
+      _store['auth_actor'] = actor;
+
+  @override
+  Future<String?> getAuthActor() async => _store['auth_actor'];
 
   @override
   Future<void> saveUserPhone(String phone) async =>

@@ -12,6 +12,7 @@ import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../design_system/design_system.dart';
 import 'auth_controller.dart';
+import '../domain/auth_session.dart';
 import 'post_auth_navigation.dart';
 import 'phone_auth_screen.dart';
 
@@ -19,10 +20,12 @@ class OtpScreenArgs {
   const OtpScreenArgs({
     required this.phone,
     required this.verificationId,
+    this.actor = AuthActor.merchant,
   });
 
   final String phone;
   final String verificationId;
+  final AuthActor actor;
 }
 
 class OTPVerificationScreen extends ConsumerStatefulWidget {
@@ -33,7 +36,10 @@ class OTPVerificationScreen extends ConsumerStatefulWidget {
     super.key,
     required this.phoneNumber,
     required this.verificationId,
+    this.actor = AuthActor.merchant,
   });
+
+  final AuthActor actor;
 
   @override
   ConsumerState<OTPVerificationScreen> createState() =>
@@ -83,6 +89,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
     _startResendTimer();
     ref.read(authControllerProvider.notifier).requestOtp(
           phone: widget.phoneNumber,
+          actor: widget.actor,
           onCodeSent: (newVerificationId) {
             _verificationId = newVerificationId;
             AppFeedback.showSuccessToast(
@@ -121,8 +128,13 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
             phone: widget.phoneNumber,
             verificationId: _verificationId,
             code: otp,
+            actor: widget.actor,
           );
       if (!mounted) return;
+      if (widget.actor == AuthActor.customer) {
+        context.go('/customer/home');
+        return;
+      }
       final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
       if (!mounted) return;
       if (hasPin) {
@@ -133,6 +145,11 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       if (mounted) context.go(route);
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'auth_otp_verify_button');
+      if (widget.actor == AuthActor.customer &&
+          e.toString().contains('aplicação de cliente não está disponível')) {
+        if (mounted) context.go('/customer-disabled');
+        return;
+      }
       _submitInFlight = false;
       setState(() => _isVerifying = false);
       _pinController.clear();

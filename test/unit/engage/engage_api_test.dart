@@ -25,6 +25,9 @@ void main() {
     final responseFuture = server.first.then((request) async {
       expect(request.method, 'POST');
       expect(request.uri.path, '/engage/task');
+      final body = jsonDecode(await utf8.decoder.bind(request).join())
+          as Map<String, dynamic>;
+      expect(body['id'], 'task-requested');
       request.response
         ..headers.contentType = ContentType.json
         ..write(jsonEncode({
@@ -45,6 +48,7 @@ void main() {
     });
 
     final result = await api.createTask(
+      taskId: 'task-requested',
       customerId: 'customer-1',
       priority: RecoveryTaskPriority.high,
     );
@@ -76,6 +80,7 @@ void main() {
     });
 
     final result = await api.createTask(
+      taskId: 'task-new',
       customerId: 'customer-1',
       priority: RecoveryTaskPriority.medium,
     );

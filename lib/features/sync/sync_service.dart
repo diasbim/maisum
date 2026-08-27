@@ -176,6 +176,7 @@ class SyncService {
 
   StreamSubscription<bool>? _connectivitySub;
   Timer? _backgroundSyncTimer;
+  final Map<String, String> _recoveryTaskAliases = {};
   DateTime? _lastSyncAt;
   SyncQueueStats _cachedStats = const SyncQueueStats(
     pendingTotal: 0,
@@ -236,7 +237,8 @@ class SyncService {
     try {
       final items = await _syncDao.getPending();
       Log.i(_tag, '${items.length} item(s) pending');
-      for (final item in items) {
+      for (final queuedItem in items) {
+        final item = _applyRecoveryTaskAliases(queuedItem);
         final error = await _processItem(item);
         if (error != null) {
           itemError = error;
@@ -270,8 +272,30 @@ class SyncService {
       }
     } finally {
       final resolvedError = lastError ?? itemError;
-      await _refreshStatus(lastErrorOverride: resolvedError);
+      await _refreshStatus(
+        lastErrorOverride: resolvedError,
+        isSyncingOverride: false,
+      );
     }
+  }
+
+  SyncItem _applyRecoveryTaskAliases(SyncItem item) {
+    final payload = jsonDecode(item.payload) as Map<String, dynamic>;
+    var changed = false;
+    final taskId = payload['task_id'] as String?;
+    if (taskId != null && _recoveryTaskAliases.containsKey(taskId)) {
+      payload['task_id'] = _recoveryTaskAliases[taskId];
+      changed = true;
+    }
+    var entityId = item.entityId;
+    if (item.entityType == 'recovery_task' &&
+        _recoveryTaskAliases.containsKey(entityId)) {
+      entityId = _recoveryTaskAliases[entityId]!;
+      payload['id'] = entityId;
+      changed = true;
+    }
+    if (!changed) return item;
+    return item.copyWith(entityId: entityId, payload: jsonEncode(payload));
   }
 
   Future<void> retryFailed({String? itemId}) async {
@@ -458,6 +482,9 @@ class SyncService {
         whereArgs: _entityWhereArgs([item.entityId]),
       );
     });
+    if (canonicalId != item.entityId) {
+      _recoveryTaskAliases[item.entityId] = canonicalId;
+    }
     return canonicalId;
   }
 
@@ -608,11 +635,10 @@ class SyncService {
     Map<String, dynamic> remote,
   ) {
     final rawValue = remote[entity.cursorField] ??
-        (entity.entityType == 'reward' ? remote['created_at'] : null);
-    if (rawValue is num) {
-      return rawValue.toInt();
-    }
-    return null;
+        (entity.cursorField == 'updated_at' || entity.entityType == 'reward'
+            ? remote['created_at']
+            : null);
+    return _timestampToMilliseconds(rawValue);
   }
 
   _SyncCursor _advanceCursor(
@@ -885,7 +911,7 @@ class SyncService {
       whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
+    final incoming = _normalizedRewardIncoming(remote)..['synced'] = 1;
 
     if (row.isEmpty) {
       await txn.insert('rewards', incoming);
@@ -923,7 +949,28 @@ class SyncService {
       whereArgs: _entityWhereArgs([id]),
       limit: 1,
     );
-    final incoming = _normalizedIncoming(remote)..['synced'] = 1;
+    final incoming = _normalizedRedemptionIncoming(remote)..['synced'] = 1;
+    final customerId = incoming['customer_id'] as String?;
+    final rewardId = incoming['reward_id'] as String?;
+    if (customerId == null || rewardId == null) return;
+
+    final customerRows = await txn.query(
+      'customers',
+      columns: const ['id'],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([customerId]),
+      limit: 1,
+    );
+    if (customerRows.isEmpty) return;
+
+    final rewardRows = await txn.query(
+      'rewards',
+      columns: const ['id'],
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([rewardId]),
+      limit: 1,
+    );
+    if (rewardRows.isEmpty) return;
 
     if (row.isEmpty) {
       await txn.insert('redemptions', incoming);
@@ -1929,6 +1976,13 @@ class SyncService {
     if (normalized['merchant_id'] == null && _syncDao.merchantId != null) {
       normalized['merchant_id'] = _syncDao.merchantId;
     }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final createdAt = _timestampToMilliseconds(normalized['created_at']) ??
+        _timestampToMilliseconds(normalized['updated_at']) ??
+        now;
+    normalized['created_at'] = createdAt;
+    normalized['updated_at'] =
+        _timestampToMilliseconds(normalized['updated_at']) ?? createdAt;
 
     return <String, dynamic>{
       for (final key in _customerLocalColumns)
@@ -1983,6 +2037,52 @@ class SyncService {
     return _filterKeys(normalized, _saleLocalColumns);
   }
 
+  Map<String, dynamic> _normalizedRewardIncoming(
+    Map<String, dynamic> remote,
+  ) {
+    final normalized = Map<String, dynamic>.from(remote);
+    _copyIfAbsent(normalized, 'merchant_id', 'merchantId');
+    _copyIfAbsent(normalized, 'name', 'title');
+    _copyIfAbsent(normalized, 'points_required', 'pointsRequired');
+    _copyIfAbsent(normalized, 'active', 'isActive');
+    _copyIfAbsent(normalized, 'created_at', 'createdAt');
+    _copyIfAbsent(normalized, 'updated_at', 'updatedAt');
+    if (normalized['merchant_id'] == null && _syncDao.merchantId != null) {
+      normalized['merchant_id'] = _syncDao.merchantId;
+    }
+    _normalizeBoolean(normalized, 'active');
+    normalized['active'] ??= 1;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final createdAt = _timestampToMilliseconds(normalized['created_at']) ??
+        _timestampToMilliseconds(normalized['updated_at']) ??
+        now;
+    normalized['created_at'] = createdAt;
+    normalized['updated_at'] =
+        _timestampToMilliseconds(normalized['updated_at']) ?? createdAt;
+    return _filterKeys(normalized, _rewardLocalColumns);
+  }
+
+  Map<String, dynamic> _normalizedRedemptionIncoming(
+    Map<String, dynamic> remote,
+  ) {
+    final normalized = Map<String, dynamic>.from(remote);
+    _copyIfAbsent(normalized, 'merchant_id', 'merchantId');
+    _copyIfAbsent(normalized, 'customer_id', 'customerId');
+    _copyIfAbsent(normalized, 'reward_id', 'rewardId');
+    _copyIfAbsent(normalized, 'points_spent', 'pointsSpent');
+    _copyIfAbsent(normalized, 'points_spent', 'pointsRedeemed');
+    _copyIfAbsent(normalized, 'redeemed_at', 'redeemedAt');
+    _copyIfAbsent(normalized, 'redeemed_at', 'created_at');
+    _copyIfAbsent(normalized, 'redeemed_at', 'createdAt');
+    if (normalized['merchant_id'] == null && _syncDao.merchantId != null) {
+      normalized['merchant_id'] = _syncDao.merchantId;
+    }
+    normalized['redeemed_at'] =
+        _timestampToMilliseconds(normalized['redeemed_at']) ??
+            DateTime.now().millisecondsSinceEpoch;
+    return _filterKeys(normalized, _redemptionLocalColumns);
+  }
+
   void _copyIfAbsent(
     Map<String, dynamic> target,
     String targetKey,
@@ -1991,6 +2091,20 @@ class SyncService {
     if (target[targetKey] == null && target[sourceKey] != null) {
       target[targetKey] = target[sourceKey];
     }
+  }
+
+  int? _timestampToMilliseconds(Object? value) {
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is DateTime) {
+      return value.millisecondsSinceEpoch;
+    }
+    if (value is String) {
+      return int.tryParse(value) ??
+          DateTime.tryParse(value)?.millisecondsSinceEpoch;
+    }
+    return null;
   }
 
   void _normalizeBoolean(Map<String, dynamic> target, String key) {
@@ -2024,6 +2138,28 @@ class SyncService {
     'schema_version',
     'created_at',
     'updated_at',
+    'synced',
+  };
+
+  static const Set<String> _rewardLocalColumns = <String>{
+    'id',
+    'merchant_id',
+    'name',
+    'points_required',
+    'description',
+    'active',
+    'created_at',
+    'updated_at',
+    'synced',
+  };
+
+  static const Set<String> _redemptionLocalColumns = <String>{
+    'id',
+    'merchant_id',
+    'customer_id',
+    'reward_id',
+    'points_spent',
+    'redeemed_at',
     'synced',
   };
 
@@ -2120,7 +2256,10 @@ class SyncService {
     return [_syncDao.merchantId, ...args];
   }
 
-  Future<void> _refreshStatus({String? lastErrorOverride}) async {
+  Future<void> _refreshStatus({
+    String? lastErrorOverride,
+    bool? isSyncingOverride,
+  }) async {
     final stats = await _syncDao.getStats();
     _cachedStats = stats;
 
@@ -2128,7 +2267,7 @@ class SyncService {
         (stats.failed > 0 ? AppStrings.syncFalhaPendentes : null);
     final phase = _derivePhase(
       isOnline: _connectivity.isOnline,
-      isSyncing: _status.isSyncing,
+      isSyncing: isSyncingOverride ?? _status.isSyncing,
       stats: stats,
       lastError: effectiveError,
     );
@@ -2189,6 +2328,8 @@ class SyncService {
           return AppStrings.syncIndiceFaltando;
         case 'unauthenticated':
           return AppStrings.erroAuth;
+        case 'permission-denied':
+          return AppStrings.syncPermissaoNegada;
         case 'resource-exhausted':
         case 'deadline-exceeded':
         case 'unavailable':

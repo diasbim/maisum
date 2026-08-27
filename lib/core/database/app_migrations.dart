@@ -127,6 +127,11 @@ class AppMigrations {
       name: 'loyalty ledger and confirmations',
       up: _createV25Schema,
     ),
+    const MigrationStep(
+      version: 26,
+      name: 'customer app read cache',
+      up: _createV26Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -1495,6 +1500,23 @@ Future<void> _createV25Schema(DatabaseExecutor db) async {
     'ON redemption_requests(merchant_id, customer_id, reward_id, status)',
   );
   await db.delete('sync_state', where: 'entity_type = ?', whereArgs: ['sale']);
+}
+
+Future<void> _createV26Schema(DatabaseExecutor db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS customer_app_cache (
+      account_id TEXT NOT NULL,
+      cache_key TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      last_successful_refresh_at INTEGER NOT NULL,
+      PRIMARY KEY (account_id, cache_key)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_customer_app_cache_account '
+    'ON customer_app_cache(account_id, updated_at)',
+  );
 }
 
 Future<void> _addColumnIfMissing(

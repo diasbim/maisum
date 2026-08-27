@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:app_links/app_links.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../core/constants/app_runtime_config.dart';
 import '../core/database/app_database.dart';
 import '../core/errors/app_error_reporter.dart';
+import '../core/errors/app_exception.dart';
 import '../core/network/json_api_client.dart';
 import '../core/services/connectivity_service.dart';
 import '../core/services/firebase_auth_service.dart';
@@ -22,6 +26,10 @@ import '../features/auth/data/backend_auth_api.dart';
 import '../features/appointments/data/appointment_dao.dart';
 import '../features/appointments/data/appointment_repository.dart';
 import '../features/auth/data/auth_repository.dart';
+import '../features/customer_app/data/customer_app_api.dart';
+import '../features/customer_app/data/customer_app_repository.dart';
+import '../features/customer_app/data/customer_cache_dao.dart';
+import '../features/customer_app/data/customer_platform_service.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/business_profile/domain/business_profile.dart';
 import '../features/catalog/data/merchant_catalog_dao.dart';
@@ -122,7 +130,54 @@ final activeBusinessProfileProvider =
 final firestoreSyncServiceProvider = Provider<FirestoreSyncService?>((ref) {
   final uid = ref.watch(businessUidProvider);
   if (uid == null) return null;
-  return FirestoreSyncService(ref.read(firestoreInstanceProvider), uid);
+  final apiClient = ref.read(cloudFunctionsApiClientProvider);
+  final firebaseAuth = ref.read(firebaseAuthInstanceProvider);
+  return FirestoreSyncService(
+    ref.read(firestoreInstanceProvider),
+    uid,
+    usageEventSyncHandler: (item) async {
+      if (item.operation != 'create') {
+        throw const SyncTransportException(
+          'usage_event only supports create operations',
+          code: 'failed-precondition',
+        );
+      }
+      final token = await firebaseAuth.currentUser?.getIdToken();
+      if (token == null || token.isEmpty) {
+        throw const SyncTransportException(
+          'Firebase session is not available',
+          code: 'unauthenticated',
+        );
+      }
+      final payload = jsonDecode(item.payload) as Map<String, dynamic>;
+      try {
+        final response = await apiClient.post(
+          '/sync/usage_event/${Uri.encodeComponent(item.entityId)}',
+          bearerToken: token,
+          body: {
+            'operation': item.operation,
+            'payload': payload,
+          },
+        );
+        if (!response.success) {
+          throw SyncTransportException(
+            response.message ?? 'Usage event sync failed',
+            code: 'failed-precondition',
+          );
+        }
+      } on NetworkException catch (error) {
+        throw SyncTransportException(error.message, code: 'unavailable');
+      } on ServerException catch (error) {
+        final code = switch (error.statusCode) {
+          401 => 'unauthenticated',
+          403 => 'permission-denied',
+          >= 500 => 'unavailable',
+          _ => 'failed-precondition',
+        };
+        throw SyncTransportException(error.message, code: code);
+      }
+    },
+  );
 });
 
 final appRuntimeConfigProvider = Provider<AppRuntimeConfig>(
@@ -146,6 +201,23 @@ final backendAuthApiProvider = Provider<BackendAuthApi>(
   (ref) => BackendAuthApi(ref.read(jsonApiClientProvider)),
 );
 
+final customerAppApiProvider = Provider<CustomerAppApi>(
+  (ref) => CustomerAppApi(ref.read(cloudFunctionsApiClientProvider)),
+);
+
+final customerPlatformServiceProvider =
+    Provider<CustomerPlatformService>((ref) {
+  final service = CustomerPlatformService(
+    FirebaseMessaging.instance,
+    AppLinks(),
+    ref.read(customerAppApiProvider),
+    ref.read(firebaseAuthInstanceProvider),
+    ref.read(connectivityServiceProvider),
+  );
+  ref.onDispose(service.dispose);
+  return service;
+});
+
 final syncTransportProvider = Provider<SyncTransport?>((ref) {
   return ref.watch(firestoreSyncServiceProvider);
 });
@@ -153,6 +225,19 @@ final syncTransportProvider = Provider<SyncTransport?>((ref) {
 // ── Core ─────────────────────────────────────────────────────────────────────
 
 final appDatabaseProvider = Provider<AppDatabase>((_) => AppDatabase.instance);
+
+final customerCacheDaoProvider = Provider<CustomerCacheDao>(
+  (ref) => CustomerCacheDao(ref.read(appDatabaseProvider)),
+);
+
+final customerAppRepositoryProvider = Provider<CustomerAppRepository>(
+  (ref) => CustomerAppRepository(
+    ref.read(customerAppApiProvider),
+    ref.read(customerCacheDaoProvider),
+    ref.read(firebaseAuthInstanceProvider),
+    ref.read(connectivityServiceProvider),
+  ),
+);
 
 final secureStorageServiceProvider = Provider<SecureStorageService>(
   (_) => const SecureStorageService(FlutterSecureStorage()),
@@ -529,6 +614,7 @@ final authRepositoryProvider = Provider<AuthRepository>(
     backendAuthApi: ref.read(appRuntimeConfigProvider).enableBackendAuth
         ? ref.read(backendAuthApiProvider)
         : null,
+    customerAppApi: ref.read(customerAppApiProvider),
   ),
 );
 
