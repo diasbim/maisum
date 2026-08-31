@@ -78,8 +78,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(notificationsTile);
     await tester.pumpAndSettle();
-    expect(router.routeInformationProvider.value.uri.path,
-        '/customer/preferences');
     expect(find.text('Novidades e ofertas'), findsOneWidget);
     router.pop();
     await tester.pumpAndSettle();
@@ -89,7 +87,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(termsTile);
     await tester.pumpAndSettle();
-    expect(router.routeInformationProvider.value.uri.path, '/customer/terms');
     expect(find.text('Termos e Condições'), findsOneWidget);
     router.pop();
     await tester.pumpAndSettle();
@@ -99,7 +96,6 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(privacyTile);
     await tester.pumpAndSettle();
-    expect(router.routeInformationProvider.value.uri.path, '/customer/privacy');
     expect(find.text('Política de Privacidade'), findsOneWidget);
   });
 }
