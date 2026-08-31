@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/services/connectivity_service.dart';
+import '../../../core/storage/secure_storage.dart';
 import '../../auth/domain/auth_session.dart';
 import '../domain/customer_models.dart';
 import '../presentation/customer_route_parser.dart';
@@ -20,6 +21,7 @@ class CustomerPlatformService {
     this._api,
     this._auth,
     this._connectivity,
+    this._secureStorage,
   );
 
   final FirebaseMessaging _messaging;
@@ -27,6 +29,7 @@ class CustomerPlatformService {
   final CustomerAppApi _api;
   final FirebaseAuth _auth;
   final ConnectivityService _connectivity;
+  final SecureStorageService _secureStorage;
 
   StreamSubscription<String>? _tokenRefreshSubscription;
   StreamSubscription<RemoteMessage>? _foregroundSubscription;
@@ -35,6 +38,7 @@ class CustomerPlatformService {
   GoRouter? _router;
   AuthSession? _customerSession;
   CustomerFeatureFlags? _flags;
+  CustomerPreferences? _preferences;
   RemoteMessage? _pendingNotification;
   Uri? _pendingLink;
   String? _registeredToken;
@@ -88,6 +92,7 @@ class CustomerPlatformService {
   Future<void> synchronize(AuthSession? session) async {
     _customerSession = session?.isCustomer == true ? session : null;
     _flags = null;
+    _preferences = null;
     if (_customerSession == null) return;
 
     final user = _auth.currentUser;
@@ -99,9 +104,18 @@ class CustomerPlatformService {
       _flags = customerSession.flags;
       if (!customerSession.flags.appEnabled) return;
       if (customerSession.flags.pushEnabled) {
-        await _enablePush();
+        await _removePendingToken(token);
       }
-      if (customerSession.flags.deepLinksEnabled) {
+      final profile = CustomerProfile.fromJson(await _api.profile(token));
+      _preferences = profile.preferences;
+      if (customerSession.flags.pushEnabled &&
+          profile.preferences.notificationsEnabled) {
+        await _enablePush();
+      } else {
+        await removeToken(_customerSession);
+      }
+      if (customerSession.flags.deepLinksEnabled &&
+          profile.preferences.deepLinksEnabled) {
         final pendingLink = _pendingLink;
         _pendingLink = null;
         if (pendingLink != null) {
@@ -122,25 +136,78 @@ class CustomerPlatformService {
   Future<void> removeToken([AuthSession? session]) async {
     final customer = session ?? _customerSession;
     if (customer == null || !customer.isCustomer || !_supportsMessaging) return;
+    final customerUid = customer.firebaseUid;
     final user = _auth.currentUser;
-    if (user == null || user.uid != customer.firebaseUid) return;
+    if (customerUid == null || user == null || user.uid != customerUid) return;
 
     try {
-      if (!await _connectivity.check()) return;
       final platform = _platform;
       if (platform == null) return;
       final token = _registeredToken ?? await _messaging.getToken();
       if (token == null || token.isEmpty) return;
-      final authToken = await user.getIdToken();
-      if (authToken == null || authToken.isEmpty) return;
-      await _api.removePushToken(
-        authToken,
-        platform: platform,
-        token: token,
-      );
+      var removedRemotely = false;
+      if (await _connectivity.check()) {
+        final authToken = await user.getIdToken();
+        if (authToken != null && authToken.isNotEmpty) {
+          try {
+            await _api.removePushToken(
+              authToken,
+              platform: platform,
+              token: token,
+            );
+            removedRemotely = true;
+          } catch (error, stackTrace) {
+            AppErrorReporter.report(
+              error,
+              stackTrace,
+              hint: 'customer_push_remove_remote',
+            );
+          }
+        }
+      }
+      if (removedRemotely) {
+        final pending = await _secureStorage.getPendingCustomerPushRemoval();
+        if (pending?.accountId == customerUid && pending?.token == token) {
+          await _secureStorage.clearPendingCustomerPushRemoval();
+        }
+      } else {
+        await _secureStorage.savePendingCustomerPushRemoval(
+          accountId: customerUid,
+          platform: platform,
+          token: token,
+        );
+      }
+      await _tokenRefreshSubscription?.cancel();
+      _tokenRefreshSubscription = null;
+      await _messaging.deleteToken();
       _registeredToken = null;
     } catch (error, stackTrace) {
       AppErrorReporter.report(error, stackTrace, hint: 'customer_push_remove');
+    }
+  }
+
+  Future<void> _removePendingToken(String authToken) async {
+    if (!await _connectivity.check()) return;
+    final pending = await _secureStorage.getPendingCustomerPushRemoval();
+    final customer = _customerSession;
+    if (pending == null ||
+        customer == null ||
+        pending.accountId != customer.firebaseUid) {
+      return;
+    }
+    try {
+      await _api.removePushToken(
+        authToken,
+        platform: pending.platform,
+        token: pending.token,
+      );
+      await _secureStorage.clearPendingCustomerPushRemoval();
+    } catch (error, stackTrace) {
+      AppErrorReporter.report(
+        error,
+        stackTrace,
+        hint: 'customer_push_remove_pending',
+      );
     }
   }
 
@@ -174,6 +241,7 @@ class CustomerPlatformService {
     final platform = _platform;
     if (customer == null ||
         _flags?.pushEnabled != true ||
+        _preferences?.notificationsEnabled == false ||
         user == null ||
         user.uid != customer.firebaseUid ||
         platform == null ||
@@ -196,7 +264,11 @@ class CustomerPlatformService {
   }
 
   void _handleForegroundMessage(RemoteMessage message) {
-    if (_customerSession == null || _flags?.pushEnabled != true) return;
+    if (_customerSession == null ||
+        _flags?.pushEnabled != true ||
+        _preferences?.notificationsEnabled == false) {
+      return;
+    }
     AppErrorReporter.breadcrumb(
       'CustomerPush',
       'Foreground customer notification received.',
@@ -204,7 +276,9 @@ class CustomerPlatformService {
   }
 
   void _handleNotificationTap(RemoteMessage message) {
-    if (_customerSession == null || _flags?.deepLinksEnabled != true) {
+    if (_customerSession == null ||
+        _flags?.deepLinksEnabled != true ||
+        _preferences?.deepLinksEnabled == false) {
       _pendingNotification = message;
       return;
     }
@@ -213,7 +287,9 @@ class CustomerPlatformService {
   }
 
   void _handleDeepLink(Uri uri) {
-    if (_customerSession == null || _flags?.deepLinksEnabled != true) {
+    if (_customerSession == null ||
+        _flags?.deepLinksEnabled != true ||
+        _preferences?.deepLinksEnabled == false) {
       _pendingLink = uri;
       return;
     }

@@ -25,8 +25,10 @@ import '../../appointments/providers/appointments_providers.dart';
 import '../../business_profile/domain/business_profile.dart';
 import '../../engage/domain/engage_models.dart';
 import '../../engage/providers/engage_providers.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../../sales/domain/sale.dart';
 import '../../sales/presentation/new_sale_screen.dart';
+import '../../sales/presentation/sale_cancellation_dialog.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/domain/usage_metrics.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
@@ -78,6 +80,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         ref.watch(activeBusinessProfileProvider).valueOrNull ??
             BusinessProfiles.generic;
     final appointmentsEnabled = businessProfile.capabilities.appointments;
+    final isOwner = ref.watch(isOwnerUserProvider).valueOrNull == true;
 
     final isCompact = MediaQuery.of(context).size.width < 360;
 
@@ -91,7 +94,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               fallbackLocation: '/customers',
             )
           : null,
-      bottomNavigationBar: customer == null
+      bottomNavigationBar: customer == null || customer.isArchived
           ? null
           : SafeArea(
               minimum: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -120,6 +123,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
               : MozPhoneUtils.maskForDisplay(customer.phone);
           final pendingPoints = sales
               .where((sale) =>
+                  !sale.isCancelled &&
                   sale.confirmationStatus == SaleConfirmationStatus.pending)
               .fold<int>(0, (sum, sale) => sum + sale.points);
           final displayedPoints = customer.confirmedPoints == null
@@ -131,10 +135,11 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
             displayedPoints,
             businessProfile.loyalty.pointsPerMzn,
           );
-          final totalSpent = sales.fold<double>(
-            0,
-            (sum, sale) => sum + sale.amount,
-          );
+          final totalSpent =
+              sales.where((sale) => !sale.isCancelled).fold<double>(
+                    0,
+                    (sum, sale) => sum + sale.amount,
+                  );
           final lastActivity = _lastActivity(customer, sales);
           final bottomPadding = MediaQuery.of(context).padding.bottom + 120;
 
@@ -165,9 +170,34 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           'Ver ${businessProfile.terminology.appointments}',
                       onPressed: () => context.push('/appointments'),
                     ),
-                  IconButton(
-                    icon: const Icon(Icons.edit_rounded, color: Colors.white),
-                    onPressed: () => _showEditSheet(context, ref, customer),
+                  PopupMenuButton<_CustomerAction>(
+                    icon: const Icon(Icons.more_vert_rounded,
+                        color: Colors.white),
+                    tooltip: 'Ações do cliente',
+                    onSelected: (action) =>
+                        _handleCustomerAction(action, customer, isOwner),
+                    itemBuilder: (_) => [
+                      if (!customer.isArchived)
+                        const PopupMenuItem(
+                          value: _CustomerAction.edit,
+                          child: Text('Editar cliente'),
+                        ),
+                      PopupMenuItem(
+                        value: customer.isArchived
+                            ? _CustomerAction.restore
+                            : _CustomerAction.archive,
+                        child: Text(
+                          customer.isArchived
+                              ? 'Restaurar cliente'
+                              : 'Arquivar cliente',
+                        ),
+                      ),
+                      if (customer.isArchived && isOwner)
+                        const PopupMenuItem(
+                          value: _CustomerAction.delete,
+                          child: Text('Eliminar definitivamente'),
+                        ),
+                    ],
                   ),
                 ],
                 flexibleSpace: FlexibleSpaceBar(
@@ -457,6 +487,7 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                               child: _SaleTimelineItem(
                                 sale: sales[i],
                                 isLast: i == sales.length - 1,
+                                onCancel: () => _cancelSale(sales[i]),
                               ),
                             ),
                             childCount: sales.length,
@@ -515,6 +546,162 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
       ),
       builder: (_) =>
           _EditCustomerSheet(customer: customer, customerId: widget.id),
+    );
+  }
+
+  Future<void> _handleCustomerAction(
+    _CustomerAction action,
+    Customer customer,
+    bool isOwner,
+  ) async {
+    switch (action) {
+      case _CustomerAction.edit:
+        _showEditSheet(context, ref, customer);
+        return;
+      case _CustomerAction.archive:
+        final confirmed = await _confirmAction(
+          title: 'Arquivar cliente?',
+          message:
+              'O cliente deixará de aparecer nas listas e não poderá receber '
+              'novas vendas. Pode restaurá-lo mais tarde.',
+          confirmLabel: 'Arquivar',
+        );
+        if (!confirmed || !mounted) return;
+        try {
+          await ref
+              .read(customersControllerProvider.notifier)
+              .archiveCustomer(customer.id);
+          if (mounted) {
+            AppFeedback.showMessage(
+              context,
+              message: 'Cliente arquivado com sucesso.',
+            );
+          }
+        } catch (error) {
+          if (mounted) {
+            AppFeedback.showMessage(
+              context,
+              message: error.toString(),
+              isError: true,
+            );
+          }
+        }
+        return;
+      case _CustomerAction.restore:
+        try {
+          await ref
+              .read(customersControllerProvider.notifier)
+              .restoreCustomer(customer.id);
+          if (mounted) {
+            AppFeedback.showMessage(
+              context,
+              message: 'Cliente restaurado com sucesso.',
+            );
+          }
+        } catch (error) {
+          if (mounted) {
+            AppFeedback.showMessage(
+              context,
+              message: error.toString(),
+              isError: true,
+            );
+          }
+        }
+        return;
+      case _CustomerAction.delete:
+        if (!isOwner) {
+          AppFeedback.showMessage(
+            context,
+            message: 'Apenas o proprietário pode eliminar clientes.',
+            isError: true,
+          );
+          return;
+        }
+        final blockers = await ref
+            .read(customerRepositoryProvider)
+            .getDeleteDependencies(customer.id);
+        if (!mounted) return;
+        if (blockers.isNotEmpty) {
+          AppFeedback.showMessage(
+            context,
+            message: 'Este cliente possui histórico associado e não pode ser '
+                'eliminado definitivamente.',
+            isError: true,
+          );
+          return;
+        }
+        final confirmed = await _confirmAction(
+          title: 'Eliminar definitivamente?',
+          message: 'Esta ação exige internet, não pode ser desfeita e remove o '
+              'cliente de todos os dispositivos.',
+          confirmLabel: 'Eliminar',
+        );
+        if (!confirmed || !mounted) return;
+        try {
+          await ref
+              .read(customersControllerProvider.notifier)
+              .deleteCustomerPermanently(customer.id);
+          if (!mounted) return;
+          AppFeedback.showMessage(
+            context,
+            message: 'Cliente eliminado definitivamente.',
+          );
+          context.go('/customers');
+        } catch (error) {
+          if (mounted) {
+            AppFeedback.showMessage(
+              context,
+              message: error.toString(),
+              isError: true,
+            );
+          }
+        }
+        return;
+    }
+  }
+
+  Future<bool> _confirmAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+  }) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: Text(title),
+            content: Text(message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: Text(confirmLabel),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
+  Future<void> _cancelSale(Sale sale) async {
+    final cancelled = await showSaleCancellationDialog(context, ref, sale);
+    if (!cancelled || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Venda anulada com sucesso.'),
+        action: SnackBarAction(
+          label: 'Registar correta',
+          onPressed: () => context.push(
+            '/new-sale',
+            extra: NewSaleArgs(
+              preselectedCustomerId: sale.customerId,
+              replacesSaleId: sale.id,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -763,8 +950,10 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   }
 
   DateTime _lastActivity(Customer customer, List<Sale>? sales) {
-    if (sales != null && sales.isNotEmpty) {
-      return sales
+    final activeSales =
+        sales?.where((sale) => !sale.isCancelled).toList() ?? const <Sale>[];
+    if (activeSales.isNotEmpty) {
+      return activeSales
           .map((sale) => sale.createdAt)
           .reduce((a, b) => a.isAfter(b) ? a : b);
     }
@@ -1343,10 +1532,15 @@ class _RewardProgressPanel extends StatelessWidget {
 }
 
 class _SaleTimelineItem extends StatelessWidget {
-  const _SaleTimelineItem({required this.sale, required this.isLast});
+  const _SaleTimelineItem({
+    required this.sale,
+    required this.isLast,
+    required this.onCancel,
+  });
 
   final Sale sale;
   final bool isLast;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -1380,28 +1574,31 @@ class _SaleTimelineItem extends StatelessWidget {
           ],
         ),
         const SizedBox(width: 12),
-        Expanded(child: _SaleCard(sale: sale)),
+        Expanded(child: _SaleCard(sale: sale, onCancel: onCancel)),
       ],
     );
   }
 }
 
 class _SaleCard extends StatelessWidget {
-  const _SaleCard({required this.sale});
+  const _SaleCard({required this.sale, required this.onCancel});
   final Sale sale;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
     final displayedPoints = sale.confirmedPoints ?? sale.points;
-    final (statusLabel, statusColor) = switch (sale.confirmationStatus) {
-      SaleConfirmationStatus.pending => ('A confirmar', AppColors.amber),
-      SaleConfirmationStatus.confirmed => ('Confirmado', AppColors.green),
-      SaleConfirmationStatus.rejected => ('Rejeitado', AppColors.error),
-      SaleConfirmationStatus.baselineRequired => (
-          'Sincronização necessária',
-          AppColors.amber,
-        ),
-    };
+    final (statusLabel, statusColor) = sale.isCancelled
+        ? ('Anulada', AppColors.error)
+        : switch (sale.confirmationStatus) {
+            SaleConfirmationStatus.pending => ('A confirmar', AppColors.amber),
+            SaleConfirmationStatus.confirmed => ('Confirmado', AppColors.green),
+            SaleConfirmationStatus.rejected => ('Rejeitado', AppColors.error),
+            SaleConfirmationStatus.baselineRequired => (
+                'Sincronização necessária',
+                AppColors.amber,
+              ),
+          };
     return MaisUmSurface(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       radius: 16,
@@ -1445,6 +1642,18 @@ class _SaleCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                 ),
+                if (sale.isCancelled &&
+                    sale.cancellationReason?.isNotEmpty == true) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Motivo: ${sale.cancellationReason}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.error,
+                        ),
+                  ),
+                ],
                 if (sale.items.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
@@ -1463,29 +1672,49 @@ class _SaleCard extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppColors.secondaryLight,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '+$displayedPoints ${AppStrings.pontosAbrev}',
-              style: TextStyle(
-                color:
-                    sale.confirmationStatus == SaleConfirmationStatus.rejected
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: sale.isCancelled
+                      ? AppColors.error.withValues(alpha: 0.08)
+                      : AppColors.secondaryLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  sale.isCancelled
+                      ? '0 ${AppStrings.pontosAbrev}'
+                      : '+$displayedPoints ${AppStrings.pontosAbrev}',
+                  style: TextStyle(
+                    color: sale.isCancelled ||
+                            sale.confirmationStatus ==
+                                SaleConfirmationStatus.rejected
                         ? AppColors.error
                         : AppColors.secondaryDark,
-                fontWeight: FontWeight.w700,
-                fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                  ),
+                ),
               ),
-            ),
+              if (!sale.isCancelled)
+                IconButton(
+                  tooltip: 'Anular venda',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onCancel,
+                  icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                ),
+            ],
           ),
         ],
       ),
     );
   }
 }
+
+enum _CustomerAction { edit, archive, restore, delete }
 
 class _EditCustomerSheet extends ConsumerStatefulWidget {
   const _EditCustomerSheet({required this.customer, required this.customerId});

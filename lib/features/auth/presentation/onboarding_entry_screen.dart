@@ -145,7 +145,9 @@ class _OnboardingEntryScreenState extends State<OnboardingEntryScreen> {
             padding: const EdgeInsets.all(AppSpacing.md),
             child: Text(
               'Pode concluir em etapas. O app retoma de onde parou.',
-              style: theme.textTheme.bodySmall,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: AppColors.onSurfaceVariant,
+              ),
             ),
           ),
         ],
@@ -180,7 +182,8 @@ class _IntentCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final selectionColor = isSelected ? AppColors.secondary : AppColors.g300;
+    final selectionColor =
+        isSelected ? AppColors.secondary : AppColors.onSurfaceVariant;
 
     return MergeSemantics(
       child: Semantics(
@@ -215,7 +218,8 @@ class _IntentCard extends StatelessWidget {
                     Text(
                       title,
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color: isSelected ? AppColors.white : null,
+                        color:
+                            isSelected ? AppColors.white : AppColors.onSurface,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -225,7 +229,7 @@ class _IntentCard extends StatelessWidget {
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: isSelected
                             ? AppColors.white.withValues(alpha: 0.78)
-                            : null,
+                            : AppColors.onSurfaceVariant,
                       ),
                     ),
                   ],

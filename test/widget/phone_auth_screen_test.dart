@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:maisum/core/theme/app_colors.dart';
 import 'package:maisum/core/theme/app_theme.dart';
+import 'package:maisum/features/auth/domain/auth_session.dart';
 import 'package:maisum/features/auth/presentation/phone_auth_screen.dart';
 
 void main() {
@@ -11,6 +12,7 @@ void main() {
     double keyboardInset = 0,
     Size? physicalSize,
     ThemeData? theme,
+    AuthActor actor = AuthActor.merchant,
   }) async {
     if (physicalSize != null) {
       tester.view.physicalSize = physicalSize;
@@ -28,7 +30,7 @@ void main() {
       ProviderScope(
         child: MaterialApp(
           theme: theme,
-          home: const PhoneAuthScreen(),
+          home: PhoneAuthScreen(actor: actor),
         ),
       ),
     );
@@ -68,6 +70,20 @@ void main() {
     expect(find.byKey(const Key('google_auth_button')), findsOneWidget);
     expect(find.text('Continuar com Google'), findsOneWidget);
     expect(find.byKey(const Key('terms_section')), findsOneWidget);
+  });
+
+  testWidgets('customer mode offers only the supported phone OTP action',
+      (tester) async {
+    await pumpScreen(tester, actor: AuthActor.customer);
+
+    expect(find.byKey(const Key('send_code_button')), findsOneWidget);
+    expect(find.byKey(const Key('welcome_start_button')), findsNothing);
+    expect(find.byKey(const Key('google_auth_button')), findsNothing);
+    expect(find.text('ou continue com'), findsNothing);
+    expect(find.byKey(const Key('terms_section')), findsOneWidget);
+    expect(find.text('Entre com o telemóvel'), findsOneWidget);
+    expect(find.text('PIN'), findsNothing);
+    expect(find.text('Pronto'), findsNothing);
   });
 
   testWidgets('welcome screen fits on small phones without scrolling',

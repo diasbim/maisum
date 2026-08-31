@@ -17,7 +17,9 @@ class CustomerDao {
     final db = await _db.database;
     final rows = await db.query(
       'customers',
-      where: _withMerchantScope('phone LIKE ? OR name LIKE ?'),
+      where: _withMerchantScope(
+        '(phone LIKE ? OR name LIKE ?) AND archived_at IS NULL',
+      ),
       whereArgs: _withMerchantArgs(['%$query%', '%$query%']),
       orderBy: 'name ASC',
       limit: 20,
@@ -40,7 +42,8 @@ class CustomerDao {
     final rows = await db.query(
       'customers',
       where: _withMerchantScope(
-        isPhoneSearch ? 'phone LIKE ?' : 'name LIKE ? COLLATE NOCASE',
+        '${isPhoneSearch ? 'phone LIKE ?' : 'name LIKE ? COLLATE NOCASE'} '
+        'AND archived_at IS NULL',
       ),
       whereArgs: _withMerchantArgs([
         '${isPhoneSearch ? normalizedPhoneQuery : trimmed}%',
@@ -108,9 +111,20 @@ class CustomerDao {
     final db = await _db.database;
     final rows = await db.query(
       'customers',
-      where: merchantId == null ? null : 'merchant_id = ?',
+      where: _withMerchantScope('archived_at IS NULL'),
       whereArgs: merchantId == null ? null : [merchantId],
       orderBy: 'name ASC',
+    );
+    return rows.map(customerFromMap).toList();
+  }
+
+  Future<List<Customer>> getArchived() async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'customers',
+      where: _withMerchantScope('archived_at IS NOT NULL'),
+      whereArgs: merchantId == null ? null : [merchantId],
+      orderBy: 'archived_at DESC, name COLLATE NOCASE ASC',
     );
     return rows.map(customerFromMap).toList();
   }
@@ -119,7 +133,7 @@ class CustomerDao {
     final db = await _db.database;
     final rows = await db.query(
       'customers',
-      where: merchantId == null ? null : 'merchant_id = ?',
+      where: _withMerchantScope('archived_at IS NULL'),
       whereArgs: merchantId == null ? null : [merchantId],
       orderBy: 'updated_at DESC, created_at DESC',
       limit: limit,
@@ -202,6 +216,97 @@ class CustomerDao {
     }
   }
 
+  Future<Customer> setArchived(
+    String id, {
+    required bool archived,
+    required String? appUserId,
+  }) async {
+    final db = await _db.database;
+    final now = DateTime.now();
+    final updated = await db.update(
+      'customers',
+      {
+        'archived_at': archived ? now.millisecondsSinceEpoch : null,
+        'archived_by_app_user_id': archived ? appUserId : null,
+        'updated_at': now.millisecondsSinceEpoch,
+        'synced': 0,
+      },
+      where: _withMerchantScope('id = ?'),
+      whereArgs: _withMerchantArgs([id]),
+    );
+    if (updated != 1) {
+      throw StateError('Customer not found in the active merchant');
+    }
+    final customer = await getById(id);
+    if (customer == null) {
+      throw StateError('Customer not found after archive update');
+    }
+    return customer;
+  }
+
+  Future<Map<String, int>> getDeleteDependencies(String id) async {
+    final db = await _db.database;
+    const tables = <String>[
+      'sales',
+      'redemptions',
+      'appointments',
+      'retention_metrics',
+      'customer_risk_scores',
+      'recovery_tasks',
+      'recovery_actions',
+      'visit_reports',
+      'survey_responses',
+      'loyalty_ledger',
+      'redemption_requests',
+    ];
+    final counts = <String, int>{};
+    for (final table in tables) {
+      final rows = await db.rawQuery(
+        'SELECT COUNT(*) AS count FROM $table WHERE customer_id = ?',
+        [id],
+      );
+      final count = (rows.first['count'] as num?)?.toInt() ?? 0;
+      if (count > 0) counts[table] = count;
+    }
+    return counts;
+  }
+
+  Future<void> deletePermanently(String id) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      const tables = <String>[
+        'sales',
+        'redemptions',
+        'appointments',
+        'retention_metrics',
+        'customer_risk_scores',
+        'recovery_tasks',
+        'recovery_actions',
+        'visit_reports',
+        'survey_responses',
+        'loyalty_ledger',
+        'redemption_requests',
+      ];
+      for (final table in tables) {
+        final rows = await txn.rawQuery(
+          'SELECT 1 FROM $table WHERE customer_id = ? LIMIT 1',
+          [id],
+        );
+        if (rows.isNotEmpty) {
+          throw StateError('Customer has dependent records in $table');
+        }
+      }
+      final deleted = await txn.delete(
+        'customers',
+        where: _withMerchantScope('id = ?'),
+        whereArgs: _withMerchantArgs([id]),
+      );
+      if (deleted != 1) {
+        throw StateError('Customer not found in the active merchant');
+      }
+    });
+  }
+
   Future<void> markSynced(String id) async {
     final db = await _db.database;
     await db.update(
@@ -216,8 +321,9 @@ class CustomerDao {
     final db = await _db.database;
     final result = await db.rawQuery(
       merchantId == null
-          ? 'SELECT COUNT(*) as count FROM customers'
-          : 'SELECT COUNT(*) as count FROM customers WHERE merchant_id = ?',
+          ? 'SELECT COUNT(*) as count FROM customers WHERE archived_at IS NULL'
+          : 'SELECT COUNT(*) as count FROM customers '
+              'WHERE merchant_id = ? AND archived_at IS NULL',
       merchantId == null ? const [] : [merchantId],
     );
     return result.first['count'] as int? ?? 0;

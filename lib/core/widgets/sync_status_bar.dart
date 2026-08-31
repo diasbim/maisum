@@ -114,6 +114,9 @@ class SyncStatusBar extends StatelessWidget {
                       onRetry != null)
                     TextButton(
                       onPressed: onRetry,
+                      style: TextButton.styleFrom(
+                        foregroundColor: foreground,
+                      ),
                       child: const Text(AppStrings.syncRetryNow),
                     )
                   else

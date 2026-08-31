@@ -34,7 +34,10 @@ class EngageDao {
                    c.total_points AS total_points,
                    c.created_at AS customer_created_at
             FROM customers c
-            LEFT JOIN sales s ON s.customer_id = c.id
+            LEFT JOIN sales s
+              ON s.customer_id = c.id
+             AND s.cancellation_status = 'ACTIVE'
+            WHERE c.archived_at IS NULL
             GROUP BY c.id, c.total_points, c.created_at
           '''
           : '''
@@ -45,8 +48,10 @@ class EngageDao {
                    c.created_at AS customer_created_at
             FROM customers c
             LEFT JOIN sales s
-              ON s.customer_id = c.id AND s.merchant_id = c.merchant_id
-            WHERE c.merchant_id = ?
+              ON s.customer_id = c.id
+             AND s.merchant_id = c.merchant_id
+             AND s.cancellation_status = 'ACTIVE'
+            WHERE c.merchant_id = ? AND c.archived_at IS NULL
             GROUP BY c.id, c.total_points, c.created_at
           ''',
       merchantId == null ? const [] : [merchantId],
@@ -107,6 +112,8 @@ class EngageDao {
               SUM(CASE WHEN crs.risk_level IN ('orange', 'red') THEN COALESCE(rm.total_spent, 0) ELSE 0 END) AS revenue_at_risk,
               SUM(CASE WHEN COALESCE(rm.recovered, 0) = 1 THEN 1 ELSE 0 END) AS recovered_customers
             FROM customer_risk_scores crs
+            INNER JOIN customers c
+              ON c.id = crs.customer_id AND c.archived_at IS NULL
             LEFT JOIN retention_metrics rm ON rm.customer_id = crs.customer_id
           '''
           : '''
@@ -117,6 +124,10 @@ class EngageDao {
               SUM(CASE WHEN crs.risk_level IN ('orange', 'red') THEN COALESCE(rm.total_spent, 0) ELSE 0 END) AS revenue_at_risk,
               SUM(CASE WHEN COALESCE(rm.recovered, 0) = 1 THEN 1 ELSE 0 END) AS recovered_customers
             FROM customer_risk_scores crs
+            INNER JOIN customers c
+              ON c.id = crs.customer_id
+             AND c.merchant_id = crs.merchant_id
+             AND c.archived_at IS NULL
             LEFT JOIN retention_metrics rm
               ON rm.customer_id = crs.customer_id AND rm.merchant_id = crs.merchant_id
             WHERE crs.merchant_id = ?
@@ -151,7 +162,8 @@ class EngageDao {
             FROM customer_risk_scores crs
             INNER JOIN customers c ON c.id = crs.customer_id
             LEFT JOIN retention_metrics rm ON rm.customer_id = crs.customer_id
-            WHERE crs.risk_level IN ('yellow', 'orange', 'red')
+            WHERE c.archived_at IS NULL
+              AND crs.risk_level IN ('yellow', 'orange', 'red')
             ORDER BY COALESCE(rm.total_spent, 0) DESC,
                      crs.priority DESC,
                      COALESCE(c.total_points, 0) DESC
@@ -172,6 +184,7 @@ class EngageDao {
             LEFT JOIN retention_metrics rm
               ON rm.customer_id = crs.customer_id AND rm.merchant_id = crs.merchant_id
             WHERE crs.merchant_id = ?
+              AND c.archived_at IS NULL
               AND crs.risk_level IN ('yellow', 'orange', 'red')
             ORDER BY COALESCE(rm.total_spent, 0) DESC,
                      crs.priority DESC,
@@ -267,7 +280,7 @@ class EngageDao {
             SELECT rt.*, c.name AS customer_name, c.phone AS customer_phone
             FROM recovery_tasks rt
             INNER JOIN customers c ON c.id = rt.customer_id
-            WHERE rt.status = ?
+            WHERE rt.status = ? AND c.archived_at IS NULL
             ORDER BY CASE rt.priority
                        WHEN 'high' THEN 0
                        WHEN 'medium' THEN 1
@@ -282,7 +295,9 @@ class EngageDao {
             FROM recovery_tasks rt
             INNER JOIN customers c
               ON c.id = rt.customer_id AND c.merchant_id = rt.merchant_id
-            WHERE rt.merchant_id = ? AND rt.status = ?
+            WHERE rt.merchant_id = ?
+              AND rt.status = ?
+              AND c.archived_at IS NULL
             ORDER BY CASE rt.priority
                        WHEN 'high' THEN 0
                        WHEN 'medium' THEN 1

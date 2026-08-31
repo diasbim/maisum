@@ -26,7 +26,8 @@ class RetentionDao {
                    c.average_visit_interval_days AS average_visit_interval,
                    c.total_spent
             FROM customers c
-            WHERE c.lifecycle_stage IN (
+            WHERE c.archived_at IS NULL
+              AND c.lifecycle_stage IN (
               'RETURNING', 'REGULAR', 'LOYAL', 'VIP', 'ADVOCATE'
             )
             ORDER BY c.total_visits DESC, c.total_spent DESC
@@ -38,6 +39,7 @@ class RetentionDao {
                    c.total_spent
             FROM customers c
             WHERE c.merchant_id = ?
+              AND c.archived_at IS NULL
               AND c.lifecycle_stage IN (
                 'RETURNING', 'REGULAR', 'LOYAL', 'VIP', 'ADVOCATE'
               )
@@ -72,7 +74,8 @@ class RetentionDao {
             SELECT c.id AS customer_id, c.name, c.last_visit_at,
                    c.retention_status, c.total_visits, c.total_spent
             FROM customers c
-            WHERE c.retention_status IN ('AT_RISK', 'INACTIVE', 'LOST')
+            WHERE c.archived_at IS NULL
+              AND c.retention_status IN ('AT_RISK', 'INACTIVE', 'LOST')
             ORDER BY c.last_visit_at ASC, c.total_spent DESC
             LIMIT ?
           '''
@@ -81,6 +84,7 @@ class RetentionDao {
                    c.retention_status, c.total_visits, c.total_spent
             FROM customers c
             WHERE c.merchant_id = ?
+              AND c.archived_at IS NULL
               AND c.retention_status IN ('AT_RISK', 'INACTIVE', 'LOST')
             ORDER BY c.last_visit_at ASC, c.total_spent DESC
             LIMIT ?
@@ -135,7 +139,10 @@ class RetentionDao {
                    COUNT(s.id) AS total_visits,
                    COALESCE(SUM(s.amount), 0) AS total_spent
             FROM customers c
-            LEFT JOIN sales s ON s.customer_id = c.id
+            LEFT JOIN sales s
+              ON s.customer_id = c.id
+             AND s.cancellation_status = 'ACTIVE'
+            WHERE c.archived_at IS NULL
             GROUP BY c.id
           '''
           : '''
@@ -146,8 +153,10 @@ class RetentionDao {
                    COALESCE(SUM(s.amount), 0) AS total_spent
             FROM customers c
             LEFT JOIN sales s
-              ON s.customer_id = c.id AND s.merchant_id = c.merchant_id
-            WHERE c.merchant_id = ?
+              ON s.customer_id = c.id
+             AND s.merchant_id = c.merchant_id
+             AND s.cancellation_status = 'ACTIVE'
+            WHERE c.merchant_id = ? AND c.archived_at IS NULL
             GROUP BY c.id
           ''',
       merchantId == null ? const [] : [merchantId],

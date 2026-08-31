@@ -48,9 +48,11 @@ const pg_1 = require("pg");
 const customer_account_binding_js_1 = require("./customer_account_binding.js");
 const customer_feature_flags_js_1 = require("./customer_feature_flags.js");
 const customer_push_tokens_js_1 = require("./customer_push_tokens.js");
+const customer_reward_eligibility_js_1 = require("./customer_reward_eligibility.js");
 const customer_qr_js_1 = require("./customer_qr.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
+const sync_backend_js_1 = require("./sync_backend.js");
 admin.initializeApp();
 const pool = new pg_1.Pool({
     connectionString: process.env.PG_CONNECTION_STRING,
@@ -73,7 +75,7 @@ const ENTITY_CONFIG = {
     },
     sale: {
         table: 'sales',
-        orderField: 'created_at',
+        orderField: 'updated_at',
         idField: 'id',
         selectSql: '*',
     },
@@ -191,6 +193,12 @@ const ENTITY_CONFIG = {
         idField: 'id',
         selectSql: '*',
     },
+    sync_tombstone: {
+        table: 'sync_tombstones',
+        orderField: 'deleted_at',
+        idField: 'id',
+        selectSql: 'id, merchant_id, entity_type, entity_id, deleted_at',
+    },
 };
 const OWNER_ONLY_SYNC_ENTITIES = new Set([
     'subscription_state',
@@ -206,6 +214,7 @@ const CUSTOMER_ANALYTICS_EVENT_COLLECTION = 'customer_analytics_events';
 const CUSTOMER_PUSH_TOKEN_COLLECTION = 'customer_push_tokens';
 const BUSINESS_CUSTOMER_LINK_COLLECTION = 'business_customer_identity_links';
 const CANONICAL_IDENTITY_BUSINESS_LINK_COLLECTION = 'canonical_identity_business_links';
+const SYNC_TOMBSTONE_COLLECTION = 'sync_tombstones';
 const LOYALTY_LEDGER_COLLECTION = 'loyalty_ledger';
 const DOMAIN_EVENT_COLLECTION = 'domain_events';
 const RETENTION_POLICY_COLLECTION = 'retention_policies';
@@ -262,6 +271,11 @@ const CUSTOMER_SERVER_OWNED_FIELDS = [
     'pre_return_active_relationship',
 ];
 const SALE_SERVER_OWNED_FIELDS = [
+    'cancellation_status',
+    'cancelled_at',
+    'cancelled_by_app_user_id',
+    'cancellation_reason',
+    'replacement_sale_id',
     'confirmation_status',
     'confirmed_points',
     'confirmed_at',
@@ -1207,7 +1221,11 @@ app.get('/sync/:entityType', async (req, res) => {
     const { entityType } = req.params;
     const config = ENTITY_CONFIG[entityType];
     if (!config) {
-        return res.status(404).json({ success: false, message: 'Unknown entity' });
+        return res.status(404).json({
+            success: false,
+            code: 'sync_unknown_entity',
+            message: 'Unknown entity',
+        });
     }
     const merchantId = req.merchantId;
     const sql = `
@@ -1221,14 +1239,18 @@ app.get('/sync/:entityType', async (req, res) => {
         return res.json({ success: true, data: result.rows });
     }
     catch (error) {
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondCustomerCoreError(res, error);
     }
 });
 app.get('/sync/:entityType/changes', async (req, res) => {
     const { entityType } = req.params;
     const config = ENTITY_CONFIG[entityType];
     if (!config) {
-        return res.status(404).json({ success: false, message: 'Unknown entity' });
+        return res.status(404).json({
+            success: false,
+            code: 'sync_unknown_entity',
+            message: 'Unknown entity',
+        });
     }
     const merchantId = req.merchantId;
     const lastValue = parseNumber(req.query.last_value);
@@ -1251,41 +1273,45 @@ app.get('/sync/:entityType/changes', async (req, res) => {
         return res.json({ success: true, data: result.rows });
     }
     catch (error) {
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondCustomerCoreError(res, error);
     }
 });
 app.post('/sync/:entityType/:entityId', async (req, res) => {
-    const { entityType, entityId } = req.params;
-    const payload = req.body?.payload ?? null;
-    const operation = req.body?.operation;
-    if (!payload || typeof payload !== 'object') {
-        return res.status(400).json({ success: false, message: 'Invalid payload' });
-    }
-    if (typeof operation !== 'string') {
-        return res.status(400).json({ success: false, message: 'Invalid operation' });
-    }
-    const merchantId = req.merchantId;
-    const payloadMerchantId = pickString(payload, 'merchant_id') ?? pickString(payload, 'merchantId');
-    if (payloadMerchantId && payloadMerchantId !== merchantId) {
-        return res.status(403).json({ success: false, message: 'Tenant mismatch' });
-    }
-    const payloadId = pickString(payload, 'id');
-    if (payloadId && payloadId !== entityId) {
-        return res.status(400).json({ success: false, message: 'ID mismatch' });
-    }
-    if (OWNER_ONLY_SYNC_ENTITIES.has(entityType) &&
-        !isOwnerOrAdminRequest(req)) {
-        return res.status(403).json({ success: false, message: 'Owner access required' });
-    }
     try {
+        const { entityType, entityId } = req.params;
+        const config = ENTITY_CONFIG[entityType];
+        if (!config) {
+            throw new CustomerCoreError(404, 'sync_unknown_entity', 'Unknown entity');
+        }
+        const body = requireBodyObject(req.body);
+        const payload = requireBodyObject(body.payload);
+        const operation = typeof body.operation === 'string' ? body.operation.trim() : '';
+        if (!operation) {
+            throw new CustomerCoreError(400, 'sync_invalid_operation', 'Invalid operation');
+        }
+        const authedReq = req;
+        const merchantId = authedReq.merchantId;
+        const payloadMerchantId = pickString(payload, 'merchant_id') ?? pickString(payload, 'merchantId');
+        if (payloadMerchantId && payloadMerchantId !== merchantId) {
+            throw new CustomerCoreError(403, 'sync_tenant_mismatch', 'Tenant mismatch');
+        }
+        const payloadId = pickString(payload, 'id');
+        if (payloadId && payloadId !== entityId) {
+            throw new CustomerCoreError(400, 'sync_id_mismatch', 'ID mismatch');
+        }
+        if (OWNER_ONLY_SYNC_ENTITIES.has(entityType) && !isOwnerOrAdminRequest(authedReq)) {
+            throw new CustomerCoreError(403, 'sync_owner_required', 'Owner access required');
+        }
         switch (entityType) {
             case 'customer':
                 if (operation === 'delete') {
-                    await deleteById('customers', entityId, merchantId);
+                    if (!isOwnerRequest(authedReq)) {
+                        throw new CustomerCoreError(403, 'customer_delete_owner_required', 'Only an owner can permanently delete customers.');
+                    }
+                    const result = await permanentlyDeleteCustomer(authedReq, entityId);
+                    return res.json({ success: true, data: result });
                 }
-                else {
-                    await upsertCustomer(merchantId, payload, entityId);
-                }
+                await upsertCustomer(merchantId, payload, entityId, authedReq);
                 return res.json({ success: true });
             case 'merchant_item':
                 if (operation === 'delete') {
@@ -1297,10 +1323,20 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
                 return res.json({ success: true });
             case 'sale':
                 if (operation === 'delete') {
-                    await deleteById('sales', entityId, merchantId);
+                    throw new CustomerCoreError(409, 'sale_delete_forbidden', 'Sales are immutable; use operation="cancel" instead of delete.');
+                }
+                else if (operation === 'cancel') {
+                    const result = await cancelSaleViaSync(authedReq, payload, entityId);
+                    return res.json({ success: true, data: result });
+                }
+                else if (operation === 'update') {
+                    throw new CustomerCoreError(409, 'sale_update_forbidden', 'Sales are immutable after creation; use operation="cancel" for authoritative changes.');
+                }
+                else if (operation === 'create') {
+                    await upsertSale(merchantId, payload, entityId, authedReq);
                 }
                 else {
-                    await upsertSale(merchantId, payload, entityId);
+                    throw new CustomerCoreError(400, 'sale_operation_unsupported', 'sale only supports operation="create" or operation="cancel".');
                 }
                 return res.json({ success: true });
             case 'sale_item':
@@ -1463,9 +1499,7 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
                 return res.json({ success: true });
             case 'usage_event':
                 if (operation !== 'create') {
-                    return res
-                        .status(400)
-                        .json({ success: false, message: 'usage_event is create-only' });
+                    throw new CustomerCoreError(400, 'sync_usage_event_create_only', 'usage_event is create-only');
                 }
                 await insertUsageEvent(merchantId, payload, entityId);
                 return res.json({ success: true });
@@ -1477,18 +1511,22 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
                     await upsertAppUser(merchantId, payload, entityId);
                 }
                 return res.json({ success: true });
+            case 'sync_tombstone':
+                throw new CustomerCoreError(400, 'sync_tombstone_read_only', 'sync_tombstone is server-managed and read-only');
             default:
-                return res.status(404).json({ success: false, message: 'Unknown entity' });
+                throw new CustomerCoreError(404, 'sync_unknown_entity', 'Unknown entity');
         }
     }
     catch (error) {
-        console.error('Sync write failed', {
-            entityType,
-            entityId,
-            operation,
-            error,
-        });
-        return res.status(500).json({ success: false, message: 'Server error' });
+        if (!(error instanceof CustomerCoreError)) {
+            console.error('Sync write failed', {
+                entityType: req.params.entityType,
+                entityId: req.params.entityId,
+                operation: req.body?.operation,
+                error,
+            });
+        }
+        return respondCustomerCoreError(res, error);
     }
 });
 app.post('/notifications/queue', async (req, res) => {
@@ -2551,6 +2589,13 @@ function requirePayloadString(payload, key) {
     }
     return value;
 }
+function requireAuthenticatedAppUserId(req) {
+    const appUserId = req.appUserId?.trim();
+    if (!appUserId) {
+        throw new CustomerCoreError(403, 'sync_actor_required', 'An authenticated app user is required for this sync operation.');
+    }
+    return appUserId;
+}
 function requireCustomerCoreSecret() {
     const secret = customerIdentityHmacSecret.value();
     if (typeof secret !== 'string' || secret.trim().length < 16) {
@@ -3128,6 +3173,8 @@ function serializeCustomerReward(rewardId, rewardData, confirmedPoints) {
         pointsRequired <= 0) {
         return null;
     }
+    const expiresAt = pickNumber(rewardData, 'expires_at') ?? pickNumber(rewardData, 'expiresAt');
+    const expired = (0, customer_reward_eligibility_js_1.isCustomerRewardExpired)(rewardData);
     return {
         reward_id: rewardId,
         name: maybePayloadString(rewardData, 'name') ?? 'Reward',
@@ -3135,8 +3182,9 @@ function serializeCustomerReward(rewardId, rewardData, confirmedPoints) {
         points_required: pointsRequired,
         confirmed_points: confirmedPoints,
         points_remaining: Math.max(0, pointsRequired - confirmedPoints),
-        eligible: confirmedPoints >= pointsRequired,
-        expires_at: pickNumber(rewardData, 'expires_at') ?? pickNumber(rewardData, 'expiresAt'),
+        eligible: !expired && confirmedPoints >= pointsRequired,
+        expired,
+        expires_at: expiresAt,
     };
 }
 async function readCustomerBusiness(account, merchantId) {
@@ -3147,8 +3195,9 @@ async function readCustomerBusiness(account, merchantId) {
         .map((document) => serializeCustomerReward(document.id, snapshotDataRecord(document), confirmedPoints))
         .filter((reward) => reward != null)
         .sort((left, right) => left.points_required - right.points_required);
-    const nextReward = rewards.find((reward) => reward.points_required > confirmedPoints) ??
-        rewards.find((reward) => reward.eligible === true) ??
+    const activeRewards = rewards.filter((reward) => reward.expired !== true);
+    const nextReward = activeRewards.find((reward) => reward.points_required > confirmedPoints) ??
+        activeRewards.find((reward) => reward.eligible === true) ??
         null;
     return {
         ...serializeCustomerBusiness(relationship),
@@ -3162,15 +3211,36 @@ async function readCustomerActivity(account, maximumEntries) {
         const relationship = await requireCustomerBusinessRelationship(account, locator.merchantId);
         const ledgerSnapshot = await boundedCustomerLedgerQuery(relationship.merchantId, relationship.customerId).get();
         assertLedgerQueryIsBounded(ledgerSnapshot, relationship.merchantId, relationship.customerId);
-        return ledgerSnapshot.docs.map((document) => {
-            const data = loyaltyLedgerEntryFromData(snapshotDataRecord(document));
+        const ledgerEntries = ledgerSnapshot.docs.map((document) => ({
+            documentId: document.id,
+            data: loyaltyLedgerEntryFromData(snapshotDataRecord(document)),
+        }));
+        const rewardIds = [...new Set(ledgerEntries
+                .map((entry) => entry.data.reward_id)
+                .filter((rewardId) => rewardId != null))];
+        const rewardNames = new Map();
+        await Promise.all(rewardIds.map(async (rewardId) => {
+            const rewardSnapshot = await businessRewardsCollectionRef(relationship.merchantId).doc(rewardId).get();
+            if (!rewardSnapshot.exists)
+                return;
+            const name = maybePayloadString(snapshotDataRecord(rewardSnapshot), 'name');
+            if (name)
+                rewardNames.set(rewardId, name);
+        }));
+        const businessName = maybePayloadString(relationship.businessData, 'name', 'business_name') ??
+            null;
+        return ledgerEntries.map(({ documentId, data }) => {
             return {
                 business_id: relationship.merchantId,
-                entry_id: document.id,
+                business_name: businessName,
+                entry_id: documentId,
                 type: data.entry_type,
                 points_delta: data.points_delta,
                 occurred_at: data.occurred_at,
                 reward_id: data.reward_id ?? null,
+                reward_name: data.reward_id == null
+                    ? null
+                    : rewardNames.get(data.reward_id) ?? null,
             };
         });
     }));
@@ -3230,9 +3300,10 @@ async function handleCustomerProfileRequest(req) {
         ? await requireCustomerBusinessRelationship(account, locators[0].merchantId)
         : null;
     return {
-        display_name: firstRelationship == null
-            ? null
-            : maybePayloadString(firstRelationship.customerData, 'name'),
+        display_name: maybePayloadString(account.accountData, 'display_name', 'displayName') ??
+            (firstRelationship == null
+                ? null
+                : maybePayloadString(firstRelationship.customerData, 'name')),
         phone_e164: req.auth?.phone_number ?? null,
         preferences: customerPreferencesFromAccount(account.accountData),
         linked_business_count: locators.length,
@@ -3272,6 +3343,10 @@ async function handleCustomerPushTokenRegistration(req, payload) {
     requireCustomerFeature('customerPushEnabled');
     const registration = parseCustomerPushToken(payload);
     const account = await requireBoundCustomerAccount(req);
+    const preferences = customerPreferencesFromAccount(account.accountData);
+    if (!preferences.notifications_enabled) {
+        throw new CustomerCoreError(403, 'customer_notifications_disabled', 'Notifications are disabled for this customer.');
+    }
     const tokenRef = customerPushTokenRef(account.firebaseUid, registration.token);
     const now = Date.now();
     await admin.firestore().runTransaction(async (transaction) => {
@@ -3306,11 +3381,26 @@ async function handleCustomerNotificationsRequest(req) {
     requireCustomerFeature('customerAppEnabled');
     const account = await requireBoundCustomerAccount(req);
     const flags = (0, customer_feature_flags_js_1.resolveCustomerFeatureFlags)(process.env);
+    const preferences = customerPreferencesFromAccount(account.accountData);
+    const registeredTokens = await admin
+        .firestore()
+        .collection(CUSTOMER_PUSH_TOKEN_COLLECTION)
+        .where('account_firebase_uid', '==', account.firebaseUid)
+        .limit(1)
+        .get();
+    const registered = !registeredTokens.empty;
     return {
-        preferences: customerPreferencesFromAccount(account.accountData),
+        preferences,
         push: {
             enabled: flags.customerPushEnabled,
-            delivery: 'not_configured',
+            registered,
+            delivery: !flags.customerPushEnabled
+                ? 'disabled'
+                : !preferences.notifications_enabled
+                    ? 'opted_out'
+                    : registered
+                        ? 'registered'
+                        : 'not_registered',
         },
         deep_links: {
             enabled: flags.customerDeepLinksEnabled,
@@ -3328,6 +3418,10 @@ async function handleCustomerDeepLinksRequest(req) {
             '/customer/activity',
             '/customer/businesses',
             '/customer/profile',
+            '/customer/qr',
+            '/customer/preferences',
+            '/customer/terms',
+            '/customer/privacy',
         ],
         parameterized_routes: [
             '/customer/business/:businessId',
@@ -4000,6 +4094,12 @@ function businessRewardsCollectionRef(merchantId) {
 function businessRedemptionsCollectionRef(merchantId) {
     return businessDocumentRef(merchantId).collection('redemptions');
 }
+function businessSyncTombstonesCollectionRef(merchantId) {
+    return businessDocumentRef(merchantId).collection(SYNC_TOMBSTONE_COLLECTION);
+}
+function businessSyncTombstoneRef(merchantId, tombstoneId) {
+    return businessSyncTombstonesCollectionRef(merchantId).doc(tombstoneId);
+}
 function loyaltyLedgerCollectionRef(merchantId) {
     return businessDocumentRef(merchantId).collection(LOYALTY_LEDGER_COLLECTION);
 }
@@ -4101,12 +4201,24 @@ function calculateConfirmedSalePoints(amount, pointsPerMzn) {
     return Math.floor(amount / pointsPerMzn);
 }
 function loyaltyLedgerEntryFromData(data) {
+    const entryTypeRaw = maybePayloadString(data, 'entry_type')?.trim().toUpperCase();
+    const entryType = entryTypeRaw === 'SALE_REVERSAL'
+        ? 'SALE_REVERSAL'
+        : entryTypeRaw === 'REDEMPTION'
+            ? 'REDEMPTION'
+            : 'SALE';
+    const sourceTypeRaw = maybePayloadString(data, 'source_type')?.trim().toLowerCase();
+    const sourceType = sourceTypeRaw === 'sale_cancellation'
+        ? 'sale_cancellation'
+        : sourceTypeRaw === 'redemption'
+            ? 'redemption'
+            : 'sale';
     return {
         id: maybePayloadString(data, 'id') ?? '',
         merchant_id: maybePayloadString(data, 'merchant_id') ?? '',
         customer_id: maybePayloadString(data, 'customer_id') ?? '',
-        entry_type: (maybePayloadString(data, 'entry_type') ?? 'SALE'),
-        source_type: (maybePayloadString(data, 'source_type') ?? 'sale'),
+        entry_type: entryType,
+        source_type: sourceType,
         source_id: maybePayloadString(data, 'source_id') ?? '',
         occurred_at: pickNumber(data, 'occurred_at') ?? 0,
         points_delta: pickNumber(data, 'points_delta') ?? 0,
@@ -4116,6 +4228,8 @@ function loyaltyLedgerEntryFromData(data) {
         amount_mzn: pickNumber(data, 'amount_mzn') ?? 0,
         reward_id: maybePayloadString(data, 'reward_id'),
         idempotency_key: maybePayloadString(data, 'idempotency_key'),
+        reversal_of_entry_id: maybePayloadString(data, 'reversal_of_entry_id', 'reversalOfEntryId'),
+        reversal_reason: maybePayloadString(data, 'reversal_reason', 'reversalReason'),
         created_at: pickNumber(data, 'created_at') ?? 0,
         updated_at: pickNumber(data, 'updated_at') ?? pickNumber(data, 'created_at') ?? 0,
     };
@@ -4134,66 +4248,16 @@ function loyaltyLedgerEntryHasDrift(existingData, expected) {
         'amount_mzn',
         'reward_id',
         'idempotency_key',
+        'reversal_of_entry_id',
+        'reversal_reason',
     ];
     return comparableKeys.some((key) => !valuesEqual(existingData[key], expected[key]));
 }
 function computeCustomerProjectionFromLedgerEntries(entries) {
-    const balancedEntries = computeLedgerEntriesWithBalances(entries);
-    const confirmedPoints = entries.reduce((sum, entry) => sum + entry.points_delta, 0);
-    const saleEntries = balancedEntries
-        .filter((entry) => entry.entry_type === 'SALE')
-        .sort((left, right) => left.occurred_at - right.occurred_at);
-    const totalVisits = saleEntries.length;
-    const totalSpent = saleEntries.reduce((sum, entry) => sum + (entry.amount_mzn ?? 0), 0);
-    const firstVisitAt = totalVisits > 0 ? saleEntries[0].occurred_at : null;
-    const lastVisitAt = totalVisits > 0
-        ? saleEntries[totalVisits - 1].occurred_at
-        : null;
-    const averageSpend = totalVisits > 0 ? totalSpent / totalVisits : 0;
-    const intervals = [];
-    for (let index = 1; index < saleEntries.length; index += 1) {
-        intervals.push(saleEntries[index].occurred_at - saleEntries[index - 1].occurred_at);
-    }
-    const averageVisitIntervalDays = intervals.length > 0
-        ? Math.round(intervals.reduce((sum, value) => sum + value, 0) /
-            intervals.length /
-            (24 * 60 * 60 * 1000))
-        : 0;
-    const lastLedgerEntryAt = balancedEntries.reduce((latest, entry) => {
-        if (latest == null || entry.occurred_at > latest) {
-            return entry.occurred_at;
-        }
-        return latest;
-    }, null);
-    return {
-        confirmedPoints,
-        firstVisitAt,
-        lastVisitAt,
-        totalVisits,
-        totalSpent,
-        averageSpend,
-        averageVisitIntervalDays,
-        lastLedgerEntryAt,
-    };
+    return (0, sync_backend_js_1.computeCustomerProjectionFromLoyaltyLedgerEntries)(entries);
 }
 function computeLedgerEntriesWithBalances(entries) {
-    const ordered = [...entries].sort((left, right) => {
-        const byOccurredAt = left.occurred_at - right.occurred_at;
-        if (byOccurredAt !== 0)
-            return byOccurredAt;
-        const byCreatedAt = left.created_at - right.created_at;
-        if (byCreatedAt !== 0)
-            return byCreatedAt;
-        return left.id.localeCompare(right.id);
-    });
-    let runningBalance = 0;
-    return ordered.map((entry) => {
-        runningBalance += entry.points_delta;
-        return {
-            ...entry,
-            balance_after: runningBalance,
-        };
-    });
+    return (0, sync_backend_js_1.computeLoyaltyLedgerEntriesWithBalances)(entries);
 }
 function buildCustomerProjectionPatch(currentCustomerData, projection, now) {
     const patch = {
@@ -5085,9 +5149,17 @@ async function handleAssistedLoyaltyRedemptionRequest(req, payload, trustedCusto
         }
         const rewardData = snapshotDataRecord(rewardSnapshot);
         const rewardActive = pickBoolean(rewardData, 'active') ?? true;
+        const rewardExpiresAt = pickNumber(rewardData, 'expires_at') ?? pickNumber(rewardData, 'expiresAt');
         const pointsRequired = pickNumber(rewardData, 'points_required') ?? pickNumber(rewardData, 'pointsRequired');
         if (!rewardActive) {
             throw new CustomerCoreError(409, 'loyalty_reward_inactive', 'Reward is not active.', { merchant_id: merchantId, reward_id: rewardId });
+        }
+        if ((0, customer_reward_eligibility_js_1.isCustomerRewardExpired)(rewardData, now)) {
+            throw new CustomerCoreError(409, 'loyalty_reward_expired', 'Reward has expired.', {
+                merchant_id: merchantId,
+                reward_id: rewardId,
+                expires_at: rewardExpiresAt,
+            });
         }
         if (pointsRequired == null || pointsRequired <= 0) {
             throw new CustomerCoreError(409, 'loyalty_reward_points_invalid', 'Reward points_required must be greater than zero.', { merchant_id: merchantId, reward_id: rewardId });
@@ -5976,13 +6048,41 @@ function pickNumber(payload, key) {
     }
     return null;
 }
-async function upsertCustomer(merchantId, payload, entityId) {
+async function upsertCustomer(merchantId, payload, entityId, req) {
     const id = pickString(payload, 'id') ?? entityId;
+    const customerTombstoneResult = await pool.query(`
+      SELECT deleted_at
+      FROM sync_tombstones
+      WHERE merchant_id = $1
+        AND entity_type = 'customer'
+        AND entity_id = $2
+      LIMIT 1
+    `, [merchantId, id]);
+    if ((customerTombstoneResult.rowCount ?? 0) > 0) {
+        throw new CustomerCoreError(409, 'customer_deleted_tombstone_conflict', 'Customer was permanently deleted and cannot be recreated or updated.', {
+            merchant_id: merchantId,
+            customer_id: id,
+            deleted_at: Number(customerTombstoneResult.rows[0].deleted_at ?? Date.now()),
+        });
+    }
     const name = pickString(payload, 'name');
     const phone = pickString(payload, 'phone');
     const totalPoints = pickNumber(payload, 'total_points') ?? pickNumber(payload, 'totalPoints') ?? 0;
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
     const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? createdAt;
+    let archiveMutation = {
+        touched: false,
+        archivedAt: null,
+        archivedByAppUserId: null,
+    };
+    if (req) {
+        try {
+            archiveMutation = (0, sync_backend_js_1.resolveCustomerArchiveMutation)(payload, requireAuthenticatedAppUserId(req));
+        }
+        catch (error) {
+            throw new CustomerCoreError(400, 'customer_archive_invalid', error instanceof Error ? error.message : 'Invalid archive payload.');
+        }
+    }
     if (!name || !phone) {
         throw new Error('Missing customer fields');
     }
@@ -5994,63 +6094,128 @@ async function upsertCustomer(merchantId, payload, entityId) {
       phone,
       total_points,
       created_at,
-      updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7)
+      updated_at,
+      archived_at,
+      archived_by_app_user_id
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
     ON CONFLICT (id) DO UPDATE SET
       merchant_id = EXCLUDED.merchant_id,
       name = EXCLUDED.name,
       phone = EXCLUDED.phone,
       total_points = EXCLUDED.total_points,
       created_at = LEAST(customers.created_at, EXCLUDED.created_at),
-      updated_at = EXCLUDED.updated_at
+      updated_at = EXCLUDED.updated_at,
+      archived_at = CASE
+        WHEN $10 THEN EXCLUDED.archived_at
+        ELSE customers.archived_at
+      END,
+      archived_by_app_user_id = CASE
+        WHEN $10 THEN EXCLUDED.archived_by_app_user_id
+        ELSE customers.archived_by_app_user_id
+      END
   `;
-    await pool.query(sql, [id, merchantId, name, phone, totalPoints, createdAt, updatedAt]);
+    await pool.query(sql, [
+        id,
+        merchantId,
+        name,
+        phone,
+        totalPoints,
+        createdAt,
+        updatedAt,
+        archiveMutation.archivedAt,
+        archiveMutation.archivedByAppUserId,
+        archiveMutation.touched,
+    ]);
+    if (req && archiveMutation.touched) {
+        await businessCustomerRef(merchantId, id).set((0, sync_backend_js_1.buildCustomerArchiveFirestorePatch)(archiveMutation, updatedAt), { merge: true });
+    }
 }
-async function upsertSale(merchantId, payload, entityId) {
+async function upsertSale(merchantId, payload, entityId, req) {
+    try {
+        (0, sync_backend_js_1.assertValidAuthoritativeSaleCreatePayload)(payload);
+    }
+    catch (error) {
+        throw new CustomerCoreError(400, 'sale_create_cancellation_fields_forbidden', error instanceof Error
+            ? error.message
+            : 'Sale create cannot include server-managed cancellation fields.');
+    }
     const id = pickString(payload, 'id') ?? entityId;
     const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
     const amount = pickNumber(payload, 'amount');
     const points = pickNumber(payload, 'points');
     const createdAt = pickNumber(payload, 'created_at') ?? pickNumber(payload, 'createdAt') ?? Date.now();
+    const updatedAt = pickNumber(payload, 'updated_at') ?? pickNumber(payload, 'updatedAt') ?? createdAt;
     const deviceId = pickString(payload, 'device_id') ?? pickString(payload, 'deviceId');
-    const createdByAppUserId = pickString(payload, 'created_by_app_user_id') ?? pickString(payload, 'createdByAppUserId');
-    const updatedByAppUserId = pickString(payload, 'updated_by_app_user_id') ?? pickString(payload, 'updatedByAppUserId');
+    const { createdByAppUserId, updatedByAppUserId } = (0, sync_backend_js_1.resolveAuthoritativeSaleAuthorship)(payload, req?.appUserId);
     if (!customerId || amount == null || points == null) {
-        throw new Error('Missing sale fields');
+        throw new CustomerCoreError(400, 'sale_create_missing_fields', 'Sale create requires customer_id, amount, and points.');
     }
-    const sql = `
-    INSERT INTO sales (
-      id,
-      merchant_id,
-      customer_id,
-      amount,
-      points,
-      created_at,
-      device_id,
-      created_by_app_user_id,
-      updated_by_app_user_id
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-    ON CONFLICT (id) DO UPDATE SET
-      merchant_id = EXCLUDED.merchant_id,
-      customer_id = EXCLUDED.customer_id,
-      amount = EXCLUDED.amount,
-      points = EXCLUDED.points,
-      created_at = EXCLUDED.created_at,
-      device_id = EXCLUDED.device_id,
-      created_by_app_user_id = COALESCE(EXCLUDED.created_by_app_user_id, sales.created_by_app_user_id),
-      updated_by_app_user_id = COALESCE(EXCLUDED.updated_by_app_user_id, sales.updated_by_app_user_id)
-  `;
-    await pool.query(sql, [
+    const insertResult = await pool.query(`
+      INSERT INTO sales (
+        id,
+        merchant_id,
+        customer_id,
+        amount,
+        points,
+        created_at,
+        updated_at,
+        device_id,
+        created_by_app_user_id,
+        updated_by_app_user_id,
+        cancellation_status,
+        cancelled_at,
+        cancelled_by_app_user_id,
+        cancellation_reason,
+        replacement_sale_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ACTIVE',NULL,NULL,NULL,NULL)
+      ON CONFLICT (id) DO NOTHING
+      RETURNING id
+    `, [
         id,
         merchantId,
         customerId,
         amount,
         points,
         createdAt,
+        updatedAt,
         deviceId,
         createdByAppUserId,
         updatedByAppUserId,
     ]);
+    if ((insertResult.rowCount ?? 0) > 0) {
+        return;
+    }
+    const existingSaleResult = await pool.query(`
+      SELECT
+        merchant_id,
+        customer_id,
+        amount,
+        points,
+        created_at
+      FROM sales
+      WHERE id = $1
+      LIMIT 1
+    `, [id]);
+    const existingSale = existingSaleResult.rows[0];
+    if (!existingSale) {
+        throw new CustomerCoreError(409, 'sale_create_conflict', 'Sale create could not be applied.');
+    }
+    if (existingSale.merchant_id !== merchantId) {
+        throw new CustomerCoreError(409, 'sale_create_conflict', 'Sale id already exists for another merchant.', { sale_id: id, merchant_id: merchantId });
+    }
+    if (!(0, sync_backend_js_1.isCompatibleRepeatedSaleCreate)({
+        customerId: existingSale.customer_id,
+        amount: existingSale.amount,
+        points: existingSale.points,
+        createdAt: existingSale.created_at,
+    }, {
+        customerId,
+        amount,
+        points,
+        createdAt,
+    })) {
+        throw new CustomerCoreError(409, 'sale_create_conflict', 'Sale already exists with immutable fields that differ from this create request.', { sale_id: id, merchant_id: merchantId });
+    }
 }
 async function upsertMerchantItem(merchantId, payload, entityId) {
     const id = pickString(payload, 'id') ?? entityId;
@@ -7374,6 +7539,462 @@ async function insertUsageEvent(merchantId, payload, entityId) {
     finally {
         client.release();
     }
+}
+async function cancelSaleViaSync(req, payload, saleId) {
+    const merchantId = req.merchantId;
+    const actorAppUserId = requireAuthenticatedAppUserId(req);
+    const now = Date.now();
+    let cancellationRequest;
+    try {
+        cancellationRequest = (0, sync_backend_js_1.resolveSaleCancellationRequest)(payload, actorAppUserId, now, saleId);
+    }
+    catch (error) {
+        throw new CustomerCoreError(400, 'sale_cancellation_invalid', error instanceof Error ? error.message : 'Invalid sale cancellation payload.');
+    }
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const existingSaleResult = await client.query(`
+        SELECT
+          id,
+          merchant_id,
+          customer_id,
+          amount,
+          points,
+          created_at,
+          updated_at,
+          device_id,
+          created_by_app_user_id,
+          updated_by_app_user_id,
+          cancellation_status,
+          cancelled_at,
+          cancelled_by_app_user_id,
+          cancellation_reason,
+          replacement_sale_id
+        FROM sales
+        WHERE id = $1
+          AND merchant_id = $2
+        FOR UPDATE
+      `, [saleId, merchantId]);
+        if (existingSaleResult.rowCount === 0) {
+            throw new CustomerCoreError(404, 'sale_not_found', 'Sale not found.', {
+                merchant_id: merchantId,
+                sale_id: saleId,
+            });
+        }
+        const existingSale = existingSaleResult.rows[0];
+        const alreadyCancelled = (0, sync_backend_js_1.normalizeSaleCancellationStatus)(existingSale.cancellation_status) === 'CANCELLED';
+        const shouldPersistReplacementLink = (0, sync_backend_js_1.shouldPersistReplacementSaleLinkOnReplay)({
+            cancellationStatus: existingSale.cancellation_status,
+            cancellationReason: existingSale.cancellation_reason,
+            replacementSaleId: existingSale.replacement_sale_id,
+        }, cancellationRequest);
+        if (alreadyCancelled &&
+            !(0, sync_backend_js_1.isCompatibleRepeatedSaleCancellation)({
+                cancellationStatus: existingSale.cancellation_status,
+                cancellationReason: existingSale.cancellation_reason,
+                replacementSaleId: existingSale.replacement_sale_id,
+            }, cancellationRequest)) {
+            throw new CustomerCoreError(409, 'sale_cancellation_conflict', 'Sale is already cancelled with different cancellation metadata.', {
+                merchant_id: merchantId,
+                sale_id: saleId,
+            });
+        }
+        const loyaltyResult = await applySaleCancellationToLoyaltyState({
+            merchantId,
+            saleId,
+            cancellationReason: cancellationRequest.cancellationReason,
+            replacementSaleId: cancellationRequest.replacementSaleId,
+            cancelledAt: cancellationRequest.cancelledAt,
+            cancelledByAppUserId: cancellationRequest.cancelledByAppUserId,
+        });
+        if (!alreadyCancelled) {
+            await client.query(`
+          UPDATE sales
+          SET cancellation_status = 'CANCELLED',
+              cancelled_at = $3,
+              cancelled_by_app_user_id = $4,
+              cancellation_reason = $5,
+              replacement_sale_id = $6,
+              updated_at = $3,
+              updated_by_app_user_id = $4
+          WHERE id = $1
+            AND merchant_id = $2
+        `, [
+                saleId,
+                merchantId,
+                cancellationRequest.cancelledAt,
+                cancellationRequest.cancelledByAppUserId,
+                cancellationRequest.cancellationReason,
+                cancellationRequest.replacementSaleId,
+            ]);
+        }
+        else if (shouldPersistReplacementLink) {
+            await client.query(`
+          UPDATE sales
+          SET replacement_sale_id = $3,
+              updated_at = $4,
+              updated_by_app_user_id = $5
+          WHERE id = $1
+            AND merchant_id = $2
+            AND replacement_sale_id IS NULL
+        `, [
+                saleId,
+                merchantId,
+                cancellationRequest.replacementSaleId,
+                cancellationRequest.cancelledAt,
+                cancellationRequest.cancelledByAppUserId,
+            ]);
+        }
+        await client.query('COMMIT');
+        return {
+            merchant_id: merchantId,
+            sale_id: saleId,
+            cancellation_status: 'CANCELLED',
+            cancelled_at: pickNumber(existingSale, 'cancelled_at') ?? cancellationRequest.cancelledAt,
+            cancelled_by_app_user_id: maybePayloadString(existingSale, 'cancelled_by_app_user_id') ??
+                cancellationRequest.cancelledByAppUserId,
+            cancellation_reason: maybePayloadString(existingSale, 'cancellation_reason') ??
+                cancellationRequest.cancellationReason,
+            replacement_sale_id: maybePayloadString(existingSale, 'replacement_sale_id') ??
+                cancellationRequest.replacementSaleId,
+            already_cancelled: alreadyCancelled,
+            replacement_sale_link_persisted: shouldPersistReplacementLink,
+            loyalty: loyaltyResult,
+        };
+    }
+    catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+    }
+    finally {
+        client.release();
+    }
+}
+async function applySaleCancellationToLoyaltyState(params) {
+    const saleRef = businessSalesCollectionRef(params.merchantId).doc(params.saleId);
+    const saleSnapshot = await saleRef.get();
+    if (!saleSnapshot.exists) {
+        return { status: 'NO_FIRESTORE_SALE' };
+    }
+    const saleLedgerEntryId = buildDeterministicLoyaltyLedgerEntryId('SALE', params.saleId);
+    const reversalLedgerEntryId = buildDeterministicLoyaltyLedgerEntryId('SALE_REVERSAL', params.saleId);
+    const result = await admin.firestore().runTransaction(async (transaction) => {
+        const currentSaleSnapshot = await transaction.get(saleRef);
+        if (!currentSaleSnapshot.exists) {
+            return { status: 'NO_FIRESTORE_SALE' };
+        }
+        const currentSaleData = snapshotDataRecord(currentSaleSnapshot);
+        const currentCancellationStatus = (0, sync_backend_js_1.normalizeSaleCancellationStatus)(maybePayloadString(currentSaleData, 'cancellation_status', 'cancellationStatus'));
+        if (currentCancellationStatus === 'CANCELLED' &&
+            !(0, sync_backend_js_1.isCompatibleRepeatedSaleCancellation)({
+                cancellationStatus: currentCancellationStatus,
+                cancellationReason: maybePayloadString(currentSaleData, 'cancellation_reason', 'cancellationReason'),
+                replacementSaleId: maybePayloadString(currentSaleData, 'replacement_sale_id', 'replacementSaleId'),
+            }, {
+                cancellationReason: params.cancellationReason,
+                replacementSaleId: params.replacementSaleId,
+                cancelledAt: params.cancelledAt,
+                cancelledByAppUserId: params.cancelledByAppUserId,
+            })) {
+            throw new CustomerCoreError(409, 'sale_cancellation_conflict', 'Sale is already cancelled with different cancellation metadata.', {
+                merchant_id: params.merchantId,
+                sale_id: params.saleId,
+            });
+        }
+        const saleLedgerRef = loyaltyLedgerDocumentRef(params.merchantId, saleLedgerEntryId);
+        const reversalLedgerRef = loyaltyLedgerDocumentRef(params.merchantId, reversalLedgerEntryId);
+        const [saleLedgerSnapshot, reversalLedgerSnapshot] = await Promise.all([
+            transaction.get(saleLedgerRef),
+            transaction.get(reversalLedgerRef),
+        ]);
+        const saleLedgerData = saleLedgerSnapshot.exists
+            ? snapshotDataRecord(saleLedgerSnapshot)
+            : {};
+        const reversalLedgerData = reversalLedgerSnapshot.exists
+            ? snapshotDataRecord(reversalLedgerSnapshot)
+            : {};
+        const customerId = maybePayloadString(saleLedgerData, 'customer_id') ??
+            maybePayloadString(reversalLedgerData, 'customer_id') ??
+            maybePayloadString(currentSaleData, 'customer_id', 'customerId');
+        let projectionStatus = 'NO_LEDGER_CHANGE';
+        if (saleLedgerSnapshot.exists) {
+            const originalSaleEntry = loyaltyLedgerEntryFromData(saleLedgerData);
+            const reversalEntry = (0, sync_backend_js_1.buildSaleReversalLoyaltyLedgerEntry)({
+                id: reversalLedgerEntryId,
+                merchantId: params.merchantId,
+                customerId: originalSaleEntry.customer_id,
+                canonicalCustomerId: originalSaleEntry.canonical_customer_id ?? null,
+                saleId: params.saleId,
+                originalSaleEntry,
+                cancellationReason: params.cancellationReason,
+                cancelledAt: params.cancelledAt,
+                createdAt: reversalLedgerSnapshot.exists
+                    ? pickNumber(reversalLedgerData, 'created_at') ?? params.cancelledAt
+                    : params.cancelledAt,
+                updatedAt: params.cancelledAt,
+            });
+            if (reversalLedgerSnapshot.exists &&
+                loyaltyLedgerEntryHasDrift(reversalLedgerData, reversalEntry)) {
+                throw new CustomerCoreError(409, 'sale_cancellation_reversal_conflict', 'Sale cancellation reversal ledger entry conflicts with existing immutable data.', {
+                    merchant_id: params.merchantId,
+                    sale_id: params.saleId,
+                    ledger_entry_id: reversalLedgerEntryId,
+                });
+            }
+            if (customerId) {
+                const customerRef = businessCustomerRef(params.merchantId, customerId);
+                const customerSnapshot = await transaction.get(customerRef);
+                if (customerSnapshot.exists) {
+                    await updateCustomerProjectionFromLedger(transaction, params.merchantId, customerId, snapshotDataRecord(customerSnapshot), reversalEntry);
+                    projectionStatus = 'REVERSED';
+                }
+                else if (!reversalLedgerSnapshot.exists) {
+                    transaction.set(reversalLedgerRef, reversalEntry);
+                    projectionStatus = 'REVERSAL_RECORDED';
+                }
+                else {
+                    projectionStatus = 'REVERSAL_RECORDED';
+                }
+            }
+            else if (!reversalLedgerSnapshot.exists) {
+                transaction.set(reversalLedgerRef, reversalEntry);
+                projectionStatus = 'REVERSAL_RECORDED';
+            }
+        }
+        const currentUpdatedAt = pickNumber(currentSaleData, 'updated_at');
+        const currentCancelledAt = pickNumber(currentSaleData, 'cancelled_at') ??
+            pickNumber(currentSaleData, 'cancelledAt');
+        const currentCancelledBy = maybePayloadString(currentSaleData, 'cancelled_by_app_user_id', 'cancelledByAppUserId');
+        const currentReason = maybePayloadString(currentSaleData, 'cancellation_reason', 'cancellationReason');
+        const currentReplacement = maybePayloadString(currentSaleData, 'replacement_sale_id', 'replacementSaleId');
+        const shouldPersistReplacementLink = (0, sync_backend_js_1.shouldPersistReplacementSaleLinkOnReplay)({
+            cancellationStatus: currentCancellationStatus,
+            cancellationReason: currentReason,
+            replacementSaleId: currentReplacement,
+        }, {
+            cancellationReason: params.cancellationReason,
+            replacementSaleId: params.replacementSaleId,
+            cancelledAt: params.cancelledAt,
+            cancelledByAppUserId: params.cancelledByAppUserId,
+        });
+        transaction.set(currentSaleSnapshot.ref, {
+            cancellation_status: 'CANCELLED',
+            cancelled_at: currentCancelledAt ?? params.cancelledAt,
+            cancelled_by_app_user_id: currentCancelledBy ?? params.cancelledByAppUserId,
+            cancellation_reason: currentReason ?? params.cancellationReason,
+            replacement_sale_id: currentReplacement ?? params.replacementSaleId ?? admin.firestore.FieldValue.delete(),
+            confirmation_status: 'CANCELLED',
+            confirmed_points: admin.firestore.FieldValue.delete(),
+            confirmed_at: admin.firestore.FieldValue.delete(),
+            confirmation_error_code: admin.firestore.FieldValue.delete(),
+            updated_at: currentCancellationStatus === 'CANCELLED' &&
+                !shouldPersistReplacementLink &&
+                currentUpdatedAt != null
+                ? currentUpdatedAt
+                : params.cancelledAt,
+            loyalty_policy_version: admin.firestore.FieldValue.delete(),
+            confirmed_points_awarded: admin.firestore.FieldValue.delete(),
+            loyalty_ledger_entry_id: admin.firestore.FieldValue.delete(),
+            loyalty_points_per_mzn: admin.firestore.FieldValue.delete(),
+            loyalty_config_version: admin.firestore.FieldValue.delete(),
+            loyalty_status: 'CANCELLED',
+            loyalty_error_code: admin.firestore.FieldValue.delete(),
+            loyalty_error_message: admin.firestore.FieldValue.delete(),
+            loyalty_error_at: admin.firestore.FieldValue.delete(),
+            loyalty_processed_at: params.cancelledAt,
+        }, { merge: true });
+        return {
+            status: currentCancellationStatus === 'CANCELLED' ? 'ALREADY_CANCELLED' : 'CANCELLED',
+            customer_id: customerId,
+            projection_status: projectionStatus,
+            replacement_sale_link_persisted: shouldPersistReplacementLink,
+        };
+    });
+    const customerId = maybePayloadString(result, 'customer_id');
+    if (customerId && result.projection_status === 'REVERSED') {
+        return {
+            ...result,
+            classification: await updateCustomerClassification({
+                merchantId: params.merchantId,
+                customerId,
+                sourceType: 'sale',
+                sourceId: params.saleId,
+                causationId: deterministicDocumentId('evt', [
+                    params.merchantId,
+                    'PURCHASE_COMPLETED',
+                    'sale',
+                    params.saleId,
+                ]),
+                occurredAt: params.cancelledAt,
+                dryRun: false,
+            }),
+        };
+    }
+    return result;
+}
+async function permanentlyDeleteCustomer(req, customerId) {
+    const merchantId = req.merchantId;
+    const actorAppUserId = requireAuthenticatedAppUserId(req);
+    const now = Date.now();
+    const tombstoneId = buildCompoundKey('customer', merchantId, customerId);
+    const tombstonePayload = (0, sync_backend_js_1.buildSyncTombstonePayload)(tombstoneId, merchantId, 'customer', customerId, now);
+    const client = await pool.connect();
+    let transactionFinished = false;
+    try {
+        await client.query('BEGIN');
+        const existingCustomerResult = await client.query(`
+        SELECT id
+        FROM customers
+        WHERE id = $1
+          AND merchant_id = $2
+        FOR UPDATE
+      `, [customerId, merchantId]);
+        const existingTombstoneResult = await client.query(`
+        SELECT deleted_at
+        FROM sync_tombstones
+        WHERE entity_type = 'customer'
+          AND entity_id = $1
+          AND merchant_id = $2
+        LIMIT 1
+      `, [customerId, merchantId]);
+        if (existingCustomerResult.rowCount === 0) {
+            await client.query('ROLLBACK');
+            transactionFinished = true;
+            if ((existingTombstoneResult.rowCount ?? 0) > 0) {
+                const deletedAt = Number(existingTombstoneResult.rows[0].deleted_at ?? now);
+                const existingTombstonePayload = (0, sync_backend_js_1.buildSyncTombstonePayload)(tombstoneId, merchantId, 'customer', customerId, deletedAt);
+                const firestoreCleanup = await applyCustomerFirestoreHardDelete(merchantId, customerId, existingTombstonePayload);
+                return {
+                    merchant_id: merchantId,
+                    customer_id: customerId,
+                    deleted_at: deletedAt,
+                    already_deleted: true,
+                    tombstone_emitted: true,
+                    tombstone: existingTombstonePayload,
+                    firestore: firestoreCleanup,
+                };
+            }
+            throw new CustomerCoreError(404, 'customer_not_found', 'Customer not found.', {
+                merchant_id: merchantId,
+                customer_id: customerId,
+            });
+        }
+        const dependencyChecks = await resolveSqlCustomerDeleteDependencyChecks(client);
+        const blockingDependencies = [];
+        for (const check of dependencyChecks) {
+            const dependencyResult = await client.query(check.sql, [merchantId, customerId]);
+            if ((dependencyResult.rowCount ?? 0) > 0) {
+                blockingDependencies.push(check.label);
+            }
+        }
+        if (blockingDependencies.length > 0) {
+            throw new CustomerCoreError(409, 'customer_delete_blocked', 'Customer has dependent records and cannot be permanently deleted.', {
+                merchant_id: merchantId,
+                customer_id: customerId,
+                dependencies: blockingDependencies,
+            });
+        }
+        await assertNoCustomerFirestoreDependencies(merchantId, customerId);
+        await client.query(`
+        DELETE FROM customers
+        WHERE id = $1
+          AND merchant_id = $2
+      `, [customerId, merchantId]);
+        await client.query(`
+        INSERT INTO sync_tombstones (
+          id,
+          entity_type,
+          entity_id,
+          merchant_id,
+          deleted_at
+        ) VALUES ($1,'customer',$2,$3,$4)
+        ON CONFLICT (entity_type, entity_id, merchant_id) DO UPDATE SET
+          id = EXCLUDED.id,
+          deleted_at = EXCLUDED.deleted_at
+      `, [tombstoneId, customerId, merchantId, now]);
+        await client.query('COMMIT');
+        transactionFinished = true;
+        const firestoreCleanup = await applyCustomerFirestoreHardDelete(merchantId, customerId, tombstonePayload);
+        return {
+            merchant_id: merchantId,
+            customer_id: customerId,
+            deleted_at: now,
+            tombstone_emitted: true,
+            tombstone: tombstonePayload,
+            firestore: firestoreCleanup,
+        };
+    }
+    catch (error) {
+        if (!transactionFinished) {
+            await client.query('ROLLBACK');
+        }
+        throw error;
+    }
+    finally {
+        client.release();
+    }
+}
+async function assertNoCustomerFirestoreDependencies(merchantId, customerId) {
+    const [salesSnapshot, redemptionsSnapshot, ledgerSnapshot] = await Promise.all([
+        businessSalesCollectionRef(merchantId).where('customer_id', '==', customerId).limit(1).get(),
+        businessRedemptionsCollectionRef(merchantId).where('customer_id', '==', customerId).limit(1).get(),
+        loyaltyLedgerCollectionRef(merchantId).where('customer_id', '==', customerId).limit(1).get(),
+    ]);
+    const firestoreDependencies = [];
+    if (!salesSnapshot.empty)
+        firestoreDependencies.push('firestore_sales');
+    if (!redemptionsSnapshot.empty)
+        firestoreDependencies.push('firestore_redemptions');
+    if (!ledgerSnapshot.empty)
+        firestoreDependencies.push('firestore_loyalty_ledger');
+    if (firestoreDependencies.length > 0) {
+        throw new CustomerCoreError(409, 'customer_delete_blocked', 'Customer has dependent records and cannot be permanently deleted.', {
+            merchant_id: merchantId,
+            customer_id: customerId,
+            dependencies: firestoreDependencies,
+        });
+    }
+}
+async function applyCustomerFirestoreHardDelete(merchantId, customerId, tombstonePayload) {
+    return admin.firestore().runTransaction(async (transaction) => {
+        const customerRef = businessCustomerRef(merchantId, customerId);
+        const customerSnapshot = await transaction.get(customerRef);
+        const customerData = customerSnapshot.exists
+            ? snapshotDataRecord(customerSnapshot)
+            : {};
+        const canonicalCustomerId = maybePayloadString(customerData, 'canonical_customer_id', 'canonicalCustomerId');
+        if (customerSnapshot.exists) {
+            transaction.delete(customerRef);
+        }
+        transaction.delete(businessCustomerLinkRef(merchantId, customerId));
+        transaction.delete(customerRecommendationDocumentRef(merchantId, customerId));
+        transaction.set(businessSyncTombstoneRef(merchantId, tombstonePayload.id), tombstonePayload);
+        if (canonicalCustomerId) {
+            const reverseLinkRef = canonicalIdentityBusinessLinkRef(merchantId, canonicalCustomerId);
+            const reverseLinkSnapshot = await transaction.get(reverseLinkRef);
+            const reverseLinkCustomerId = reverseLinkSnapshot.exists
+                ? maybePayloadString(snapshotDataRecord(reverseLinkSnapshot), 'business_customer_id', 'customer_id')
+                : null;
+            if (!reverseLinkSnapshot.exists || reverseLinkCustomerId === customerId) {
+                transaction.delete(reverseLinkRef);
+            }
+        }
+        return {
+            customer_deleted: customerSnapshot.exists,
+            canonical_link_deleted: canonicalCustomerId != null,
+            firestore_tombstone_written: true,
+        };
+    });
+}
+async function resolveSqlCustomerDeleteDependencyChecks(client) {
+    const existingTables = await client.query(`
+      SELECT tablename
+      FROM pg_tables
+      WHERE schemaname = ANY(current_schemas(false))
+        AND tablename = ANY($1::text[])
+    `, [['loyalty_ledger', 'redemption_requests']]);
+    return (0, sync_backend_js_1.buildCustomerDeleteDependencyChecks)(existingTables.rows.map((row) => row.tablename));
 }
 async function deleteById(table, entityId, merchantId) {
     const sql = `DELETE FROM ${table} WHERE id = $1 AND merchant_id = $2`;

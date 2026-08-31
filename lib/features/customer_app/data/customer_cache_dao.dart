@@ -64,4 +64,30 @@ class CustomerCacheDao {
       whereArgs: [accountId],
     );
   }
+
+  Future<void> clearTransactionalData(String accountId) async {
+    final db = await _database.database;
+    await db.delete(
+      'customer_app_cache',
+      where:
+          'account_id = ? AND (cache_key IN (?, ?, ?, ?) OR cache_key LIKE ?)',
+      whereArgs: [
+        accountId,
+        'home',
+        'businesses',
+        'rewards',
+        'activity',
+        'business:%',
+      ],
+    );
+  }
+
+  Future<void> clear(String accountId, String key) async {
+    final db = await _database.database;
+    await db.delete(
+      'customer_app_cache',
+      where: 'account_id = ? AND cache_key = ?',
+      whereArgs: [accountId, key],
+    );
+  }
 }

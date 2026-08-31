@@ -6,6 +6,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:pinput/pinput.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/errors/app_exception.dart';
 import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
@@ -146,7 +147,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'auth_otp_verify_button');
       if (widget.actor == AuthActor.customer &&
-          e.toString().contains('aplicação de cliente não está disponível')) {
+          e is CustomerFeatureDisabledException) {
         if (mounted) context.go('/customer-disabled');
         return;
       }
@@ -243,7 +244,12 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const AuthStepProgress(currentStep: 1),
+                    AuthStepProgress(
+                      currentStep: 1,
+                      labels: widget.actor == AuthActor.customer
+                          ? const ['Telemóvel', 'Verificar']
+                          : null,
+                    ),
                     const SizedBox(height: AppSpacing.xxxl),
                     MaisUmSurface(
                       width: 56,

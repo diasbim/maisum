@@ -37,6 +37,11 @@ class RedemptionRepository {
     if (customer == null) {
       throw const UnknownException('Cliente não encontrado');
     }
+    if (customer.isArchived) {
+      throw const UnknownException(
+        'Restaure o cliente antes de resgatar uma recompensa.',
+      );
+    }
     final confirmedPoints = customer.confirmedPoints;
     if (confirmedPoints != null && confirmedPoints < pointsRequired) {
       throw const UnknownException(

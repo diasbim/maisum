@@ -91,11 +91,15 @@ class Customer with _$Customer {
     @Default(1) int schemaVersion,
     required DateTime createdAt,
     DateTime? updatedAt,
+    DateTime? archivedAt,
+    String? archivedByAppUserId,
     @Default(false) bool synced,
   }) = _Customer;
 
   factory Customer.fromJson(Map<String, dynamic> json) =>
       _$CustomerFromJson(json);
+
+  bool get isArchived => archivedAt != null;
 
   Map<String, dynamic> toDbMap() => {
         'id': id,
@@ -120,6 +124,8 @@ class Customer with _$Customer {
         'schema_version': schemaVersion,
         'created_at': createdAt.millisecondsSinceEpoch,
         'updated_at': (updatedAt ?? DateTime.now()).millisecondsSinceEpoch,
+        'archived_at': archivedAt?.millisecondsSinceEpoch,
+        'archived_by_app_user_id': archivedByAppUserId,
         'synced': synced ? 1 : 0,
       };
 
@@ -165,6 +171,8 @@ Customer customerFromMap(Map<String, dynamic> map) => Customer(
       updatedAt: map['updated_at'] != null
           ? DateTime.fromMillisecondsSinceEpoch(map['updated_at'] as int)
           : null,
+      archivedAt: _dateFromStorage(map['archived_at']),
+      archivedByAppUserId: map['archived_by_app_user_id'] as String?,
       synced: (map['synced'] as int? ?? 0) == 1,
     );
 

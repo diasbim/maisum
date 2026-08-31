@@ -13,6 +13,7 @@ import '../features/auth/presentation/pin_setup_screen.dart';
 import '../features/auth/presentation/device_link_screen.dart';
 import '../features/auth/presentation/onboarding_entry_screen.dart';
 import '../features/auth/presentation/post_auth_navigation.dart';
+import '../features/auth/presentation/role_gate_screen.dart';
 import '../features/auth/presentation/splash_screen.dart';
 import '../features/admin_portal/presentation/admin_portal_shell.dart';
 import '../features/catalog/presentation/merchant_catalog_screen.dart';
@@ -48,11 +49,13 @@ import '../features/subscription/presentation/subscription_admin_screen.dart';
 import '../features/subscription/presentation/onboarding_plan_selection_screen.dart';
 import '../features/subscription/presentation/feature_upsell_screen.dart';
 import '../features/sync/presentation/pending_sync_screen.dart';
+import '../core/theme/customer_experience_theme.dart';
 import '../features/customer_app/presentation/customer_route_guards.dart';
 import '../features/customer_app/presentation/customer_screens.dart';
 
 const _publicRoutes = {
   '/splash',
+  '/choose-role',
   '/login',
   '/customer-login',
   '/customer-login/phone',
@@ -176,7 +179,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       );
       if (customerRedirect != null) return customerRedirect;
       if (!isAuthenticated && !isPublic) return '/login';
-      if (isAuthenticated && state.matchedLocation == '/login') {
+      if (isAuthenticated &&
+          (state.matchedLocation == '/login' ||
+              state.matchedLocation == '/choose-role')) {
         final hasPin = await ref.read(secureStorageServiceProvider).hasPin();
         if (hasPin) return '/pin-entry';
         return resolvePostAuthRoute(ref.read);
@@ -249,22 +254,45 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
-      GoRoute(path: '/login', builder: (_, __) => const PhoneAuthScreen()),
+      GoRoute(
+        path: '/choose-role',
+        builder: (_, __) => const CustomerExperienceTheme(
+          child: RoleGateScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/login',
+        builder: (_, state) => PhoneAuthScreen(
+          showPhoneFormInitially: state.uri.queryParameters['source'] == 'role',
+          backRoute: state.uri.queryParameters['source'] == 'role'
+              ? '/choose-role'
+              : null,
+        ),
+      ),
       GoRoute(
         path: '/customer-login',
-        builder: (_, __) => const CustomerLoginScreen(),
+        builder: (_, __) => const CustomerExperienceTheme(
+          child: CustomerLoginScreen(),
+        ),
         routes: [
           GoRoute(
             path: 'phone',
-            builder: (_, __) => const PhoneAuthScreen(
-              actor: AuthActor.customer,
+            builder: (_, state) => CustomerExperienceTheme(
+              child: PhoneAuthScreen(
+                actor: AuthActor.customer,
+                backRoute: state.uri.queryParameters['source'] == 'role'
+                    ? '/choose-role'
+                    : null,
+              ),
             ),
           ),
         ],
       ),
       GoRoute(
         path: '/customer-disabled',
-        builder: (_, __) => const CustomerFeatureDisabledScreen(),
+        builder: (_, __) => const CustomerExperienceTheme(
+          child: CustomerFeatureDisabledScreen(),
+        ),
       ),
       GoRoute(
         path: '/admin',
@@ -309,16 +337,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/otp',
         builder: (_, state) {
           final args = state.extra as OtpScreenArgs;
-          return OTPVerificationScreen(
+          final screen = OTPVerificationScreen(
             phoneNumber: args.phone,
             verificationId: args.verificationId,
             actor: args.actor,
           );
+          return args.actor == AuthActor.customer
+              ? CustomerExperienceTheme(child: screen)
+              : screen;
         },
       ),
       GoRoute(path: '/customer', redirect: (_, __) => '/customer/home'),
       ShellRoute(
-        builder: (_, __, child) => CustomerShell(child: child),
+        builder: (_, __, child) => CustomerExperienceTheme(
+          child: CustomerShell(child: child),
+        ),
         routes: [
           GoRoute(
             path: '/customer/home',
@@ -362,6 +395,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/customer/preferences',
         builder: (_, __) => const CustomerPreferencesScreen(),
+      ),
+      GoRoute(
+        path: '/customer/terms',
+        builder: (_, __) => const TermsScreen(),
+      ),
+      GoRoute(
+        path: '/customer/privacy',
+        builder: (_, __) => const PrivacyScreen(),
       ),
       GoRoute(
         path: '/pin-setup',

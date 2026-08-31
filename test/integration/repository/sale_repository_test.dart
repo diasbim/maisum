@@ -8,6 +8,7 @@ import 'package:maisum/features/catalog/domain/merchant_item.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
 import 'package:maisum/features/sales/data/sale_dao.dart';
 import 'package:maisum/features/sales/data/sale_repository.dart';
+import 'package:maisum/features/sales/domain/sale.dart';
 import 'package:maisum/features/sales/domain/sale_item.dart';
 import 'package:maisum/features/sync/data/sync_dao.dart';
 
@@ -100,7 +101,7 @@ void main() {
       expect(payload, contains(sale.id));
     });
 
-    test('sale payload excludes server-owned confirmation fields', () async {
+    test('sale payload excludes server-owned lifecycle fields', () async {
       await repo.createSale(customerId: customerId, amount: 200);
       final payload = jsonDecode(
         (await syncDao.getPending())
@@ -112,6 +113,25 @@ void main() {
       expect(payload, isNot(contains('confirmation_status')));
       expect(payload, isNot(contains('confirmed_points')));
       expect(payload, isNot(contains('confirmed_at')));
+      expect(payload, isNot(contains('cancellation_status')));
+      expect(payload, isNot(contains('cancelled_at')));
+      expect(payload, isNot(contains('cancelled_by_app_user_id')));
+      expect(payload, isNot(contains('cancellation_reason')));
+      expect(payload, isNot(contains('replacement_sale_id')));
+    });
+
+    test('does not create a sale for an archived customer', () async {
+      await customerDao.setArchived(
+        customerId,
+        archived: true,
+        appUserId: 'staff-1',
+      );
+
+      expect(
+        () => repo.createSale(customerId: customerId, amount: 200),
+        throwsA(isA<StateError>()),
+      );
+      expect(await repo.getByCustomer(customerId), isEmpty);
     });
 
     test('registers sale with item snapshot and queues sale item after sale',
@@ -215,6 +235,59 @@ void main() {
 
     test('returns empty list for customer with no sales', () async {
       expect(await repo.getByCustomer('ghost'), isEmpty);
+    });
+  });
+
+  group('cancelSale', () {
+    test('cancels once, reverses optimistic points and queues cancellation',
+        () async {
+      final sale = await repo.createSale(
+        customerId: customerId,
+        amount: 500,
+      );
+      final beforeQueueCount = await syncDao.getPendingCount();
+
+      final cancelled = await repo.cancelSale(
+        saleId: sale.id,
+        reason: 'Valor registado incorretamente',
+      );
+
+      expect(cancelled.cancellationStatus, SaleCancellationStatus.cancelled);
+      expect(cancelled.cancellationReason, 'Valor registado incorretamente');
+      expect(cancelled.cancelledAt, isNotNull);
+      expect((await customerDao.getById(customerId))!.totalPoints, 0);
+      expect((await repo.getTodayStats())['count'], 0);
+      final cancellation = (await syncDao.getPending())
+          .where((item) => item.entityId == sale.id)
+          .last;
+      expect(cancellation.operation, 'cancel');
+      expect(await syncDao.getPendingCount(), beforeQueueCount + 1);
+
+      await repo.cancelSale(saleId: sale.id, reason: 'Outro motivo');
+      expect((await customerDao.getById(customerId))!.totalPoints, 0);
+      expect(await syncDao.getPendingCount(), beforeQueueCount + 1);
+    });
+
+    test('new corrected sale links back to cancelled sale', () async {
+      final original = await repo.createSale(
+        customerId: customerId,
+        amount: 200,
+      );
+      await repo.cancelSale(
+        saleId: original.id,
+        reason: 'Cliente pediu correção',
+      );
+
+      final replacement = await repo.createSale(
+        customerId: customerId,
+        amount: 300,
+        replacesSaleId: original.id,
+      );
+      final storedOriginal = (await repo.getByCustomer(customerId))
+          .firstWhere((sale) => sale.id == original.id);
+
+      expect(storedOriginal.replacementSaleId, replacement.id);
+      expect(storedOriginal.isCancelled, isTrue);
     });
   });
 }

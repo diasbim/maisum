@@ -8,17 +8,21 @@ import '../../features/sync/data/sync_transport.dart';
 import '../../features/sync/domain/sync_item.dart';
 
 typedef UsageEventSyncHandler = Future<void> Function(SyncItem item);
+typedef AuthoritativeSyncHandler = Future<void> Function(SyncItem item);
 
 class FirestoreSyncService implements SyncTransport {
   FirestoreSyncService(
     this._firestore,
     this._businessUid, {
     UsageEventSyncHandler? usageEventSyncHandler,
-  }) : _usageEventSyncHandler = usageEventSyncHandler;
+    AuthoritativeSyncHandler? authoritativeSyncHandler,
+  })  : _usageEventSyncHandler = usageEventSyncHandler,
+        _authoritativeSyncHandler = authoritativeSyncHandler;
 
   final FirebaseFirestore _firestore;
   final String _businessUid;
   final UsageEventSyncHandler? _usageEventSyncHandler;
+  final AuthoritativeSyncHandler? _authoritativeSyncHandler;
 
   static const _collectionMap = {
     'customer': 'customers',
@@ -45,6 +49,7 @@ class FirestoreSyncService implements SyncTransport {
     'usage_balance': 'usage_balances',
     'usage_event': 'usage_events',
     'app_user': 'app_users',
+    'sync_tombstone': 'sync_tombstones',
   };
 
   @override
@@ -137,6 +142,25 @@ class FirestoreSyncService implements SyncTransport {
     }
 
     try {
+      final payload = jsonDecode(item.payload) as Map<String, dynamic>;
+      final isCustomerArchiveMutation = item.entityType == 'customer' &&
+          item.operation == 'update' &&
+          payload.containsKey('archived_at');
+      final isAuthoritativeMutation = isCustomerArchiveMutation ||
+          (item.entityType == 'customer' && item.operation == 'delete') ||
+          (item.entityType == 'sale' && item.operation == 'cancel');
+      if (isAuthoritativeMutation) {
+        final handler = _authoritativeSyncHandler;
+        if (handler == null) {
+          throw const SyncTransportException(
+            'Authoritative sync service is unavailable',
+            code: 'unavailable',
+          );
+        }
+        await handler(item);
+        return null;
+      }
+
       final collection = _collectionMap[item.entityType] ?? item.entityType;
       final docRef = _firestore
           .collection('businesses')
@@ -147,7 +171,7 @@ class FirestoreSyncService implements SyncTransport {
       switch (item.operation) {
         case 'create':
         case 'update':
-          final data = jsonDecode(item.payload) as Map<String, dynamic>;
+          final data = payload;
           if (item.entityType == 'recovery_task') {
             return _processRecoveryTask(item, data, docRef);
           }

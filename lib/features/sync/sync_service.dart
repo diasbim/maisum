@@ -70,7 +70,16 @@ const _syncEntities = [
   _SyncEntityConfig(entityType: 'usage_balance', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'usage_event', cursorField: 'occurred_at'),
   _SyncEntityConfig(entityType: 'app_user', cursorField: 'updated_at'),
+  _SyncEntityConfig(entityType: 'sync_tombstone', cursorField: 'deleted_at'),
 ];
+
+const _entitiesRequiringLocalMerchant = {
+  'entitlement',
+  'feature_flag',
+  'remote_config',
+  'usage_balance',
+  'app_user',
+};
 
 class SyncStatus {
   const SyncStatus({
@@ -500,6 +509,15 @@ class SyncService {
   }
 
   Future<void> _pullEntityChanges(Database db, _SyncEntityConfig entity) async {
+    if (_entitiesRequiringLocalMerchant.contains(entity.entityType) &&
+        !await _hasLocalMerchant(db)) {
+      Log.w(
+        _tag,
+        'Skipping ${entity.entityType} pull until merchant bootstrap completes',
+      );
+      return;
+    }
+
     var cursor = await _readSyncCursor(db, entity.entityType);
 
     if (cursor.lastValue == null || cursor.lastDocId == null) {
@@ -554,6 +572,21 @@ class SyncService {
     }
   }
 
+  Future<bool> _hasLocalMerchant(Database db) async {
+    final merchantId = _syncDao.merchantId?.trim();
+    if (merchantId == null || merchantId.isEmpty) {
+      return false;
+    }
+    final rows = await db.query(
+      'merchants',
+      columns: const ['id'],
+      where: 'id = ?',
+      whereArgs: [merchantId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
+  }
+
   Future<void> _applyRemoteEntity(
     dynamic txn,
     String entityType,
@@ -568,6 +601,8 @@ class SyncService {
         return _applySale(txn, remote);
       case 'sale_item':
         return _applySaleItem(txn, remote);
+      case 'sync_tombstone':
+        return _applySyncTombstone(txn, remote);
       case 'reward':
         return _applyReward(txn, remote);
       case 'redemption':
@@ -763,6 +798,13 @@ class SyncService {
         for (final key in _saleServerProjectionFields)
           if (incoming.containsKey(key)) key: incoming[key],
       };
+      if (incoming['cancellation_status'] == 'CANCELLED') {
+        for (final key in _saleCancellationFields) {
+          if (incoming.containsKey(key)) {
+            serverProjection[key] = incoming[key];
+          }
+        }
+      }
       if (serverProjection.isNotEmpty) {
         await txn.update(
           'sales',
@@ -771,6 +813,7 @@ class SyncService {
           whereArgs: _entityWhereArgs([id]),
         );
       }
+
       return;
     }
 
@@ -780,6 +823,58 @@ class SyncService {
       where: _entityWhereClause('id = ?'),
       whereArgs: _entityWhereArgs([id]),
     );
+  }
+
+  Future<void> _applySyncTombstone(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id']?.toString();
+    final entityType =
+        (remote['entity_type'] ?? remote['entityType'])?.toString();
+    final entityId = (remote['entity_id'] ?? remote['entityId'])?.toString();
+    final deletedAt = _timestampToMilliseconds(
+      remote['deleted_at'] ?? remote['deletedAt'],
+    );
+    if (id == null ||
+        id.isEmpty ||
+        entityType == null ||
+        entityId == null ||
+        deletedAt == null) {
+      throw const FormatException('Invalid sync tombstone payload');
+    }
+    final merchantId =
+        (remote['merchant_id'] ?? remote['merchantId'])?.toString() ??
+            _syncDao.merchantId;
+    if (merchantId == null || merchantId.isEmpty) {
+      throw const FormatException('Sync tombstone has no merchant');
+    }
+
+    await txn.insert(
+      'sync_tombstones',
+      {
+        'id': id,
+        'merchant_id': merchantId,
+        'entity_type': entityType,
+        'entity_id': entityId,
+        'deleted_at': deletedAt,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    if (entityType == 'customer') {
+      await txn.delete(
+        'sync_queue',
+        where: _entityWhereClause(
+          "entity_type = 'customer' AND entity_id = ?",
+        ),
+        whereArgs: _entityWhereArgs([entityId]),
+      );
+      await txn.delete(
+        'customers',
+        where: _entityWhereClause('id = ?'),
+        whereArgs: _entityWhereArgs([entityId]),
+      );
+    }
   }
 
   Future<void> _applyMerchantItem(
@@ -1972,6 +2067,12 @@ class SyncService {
     _copyIfAbsent(normalized, 'schema_version', 'schemaVersion');
     _copyIfAbsent(normalized, 'created_at', 'createdAt');
     _copyIfAbsent(normalized, 'updated_at', 'updatedAt');
+    _copyIfAbsent(normalized, 'archived_at', 'archivedAt');
+    _copyIfAbsent(
+      normalized,
+      'archived_by_app_user_id',
+      'archivedByAppUserId',
+    );
 
     if (normalized['merchant_id'] == null && _syncDao.merchantId != null) {
       normalized['merchant_id'] = _syncDao.merchantId;
@@ -1983,6 +2084,8 @@ class SyncService {
     normalized['created_at'] = createdAt;
     normalized['updated_at'] =
         _timestampToMilliseconds(normalized['updated_at']) ?? createdAt;
+    normalized['archived_at'] =
+        _timestampToMilliseconds(normalized['archived_at']);
 
     return <String, dynamic>{
       for (final key in _customerLocalColumns)
@@ -2026,6 +2129,23 @@ class SyncService {
       'updated_by_app_user_id',
       'updatedByAppUserId',
     );
+    _copyIfAbsent(
+      normalized,
+      'cancellation_status',
+      'cancellationStatus',
+    );
+    _copyIfAbsent(normalized, 'cancelled_at', 'cancelledAt');
+    _copyIfAbsent(
+      normalized,
+      'cancelled_by_app_user_id',
+      'cancelledByAppUserId',
+    );
+    _copyIfAbsent(
+      normalized,
+      'cancellation_reason',
+      'cancellationReason',
+    );
+    _copyIfAbsent(normalized, 'replacement_sale_id', 'replacementSaleId');
     if (normalized['merchant_id'] == null && _syncDao.merchantId != null) {
       normalized['merchant_id'] = _syncDao.merchantId;
     }
@@ -2034,6 +2154,9 @@ class SyncService {
     }
     normalized['updated_at'] ??= normalized['created_at'];
     normalized['confirmation_status'] ??= 'PENDING';
+    normalized['cancellation_status'] ??= 'ACTIVE';
+    normalized['cancelled_at'] =
+        _timestampToMilliseconds(normalized['cancelled_at']);
     return _filterKeys(normalized, _saleLocalColumns);
   }
 
@@ -2138,6 +2261,8 @@ class SyncService {
     'schema_version',
     'created_at',
     'updated_at',
+    'archived_at',
+    'archived_by_app_user_id',
     'synced',
   };
 
@@ -2196,6 +2321,11 @@ class SyncService {
     'device_id',
     'created_by_app_user_id',
     'updated_by_app_user_id',
+    'cancellation_status',
+    'cancelled_at',
+    'cancelled_by_app_user_id',
+    'cancellation_reason',
+    'replacement_sale_id',
   };
 
   static const Set<String> _saleServerProjectionFields = <String>{
@@ -2205,6 +2335,14 @@ class SyncService {
     'confirmed_at',
     'confirmation_error_code',
     'loyalty_policy_version',
+  };
+
+  static const Set<String> _saleCancellationFields = <String>{
+    'cancellation_status',
+    'cancelled_at',
+    'cancelled_by_app_user_id',
+    'cancellation_reason',
+    'replacement_sale_id',
   };
 
   static const Set<String> _loyaltyLedgerColumns = <String>{

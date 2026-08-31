@@ -14,8 +14,9 @@ Future<String> resolvePostAuthRoute(
 ) async {
   final session = read(authControllerProvider).valueOrNull;
   if (session == null) {
-    return '/login';
+    return '/choose-role';
   }
+  if (session.isCustomer) return '/customer/home';
 
   final merchantId = read(activeMerchantIdProvider);
   if (merchantId == null || merchantId.isEmpty) {

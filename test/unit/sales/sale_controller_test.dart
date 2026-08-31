@@ -33,6 +33,7 @@ class _FakeSaleRepository extends SaleRepository {
     required String customerId,
     required double amount,
     List<SaleItemInput> items = const <SaleItemInput>[],
+    String? replacesSaleId,
   }) {
     return onCreateSale(customerId: customerId, amount: amount);
   }

@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/constants/app_strings.dart';
+import '../../../core/errors/app_exception.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/theme/app_shadows.dart';
@@ -35,9 +36,13 @@ class PhoneAuthScreen extends ConsumerStatefulWidget {
   const PhoneAuthScreen({
     super.key,
     this.actor = AuthActor.merchant,
+    this.showPhoneFormInitially = false,
+    this.backRoute,
   });
 
   final AuthActor actor;
+  final bool showPhoneFormInitially;
+  final String? backRoute;
 
   @override
   ConsumerState<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
@@ -63,6 +68,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
   @override
   void initState() {
     super.initState();
+    _showPhoneForm = widget.showPhoneFormInitially;
     _entryController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 480),
@@ -219,9 +225,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
               AppErrorReporter.report(e, st, hint: 'auth_auto_verify');
               if (!mounted) return;
               if (widget.actor == AuthActor.customer &&
-                  e
-                      .toString()
-                      .contains('aplicação de cliente não está disponível')) {
+                  e is CustomerFeatureDisabledException) {
                 context.go('/customer-disabled');
                 return;
               }
@@ -287,7 +291,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final canPop = Navigator.of(context).canPop();
-    if (!_showPhoneForm && !canPop) {
+    if (widget.actor != AuthActor.customer && !_showPhoneForm && !canPop) {
       return _WelcomeScreen(
         onStart: () => setState(() => _showPhoneForm = true),
         onTerms: () => context.push('/terms'),
@@ -311,6 +315,14 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
           onPressed: () {
             if (canPop) {
               Navigator.of(context).pop();
+              return;
+            }
+            if (widget.backRoute != null) {
+              context.go(widget.backRoute!);
+              return;
+            }
+            if (widget.actor == AuthActor.customer) {
+              context.go('/customer-login');
               return;
             }
             setState(() => _showPhoneForm = false);
@@ -370,7 +382,11 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
                                   if (!keyboardOpen)
-                                    _PhoneAuthHero(compact: compact),
+                                    _PhoneAuthHero(
+                                      compact: compact,
+                                      customerMode:
+                                          widget.actor == AuthActor.customer,
+                                    ),
                                   if (!keyboardOpen)
                                     SizedBox(
                                       height: compact
@@ -388,14 +404,25 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        const AuthStepProgress(currentStep: 0),
+                                        AuthStepProgress(
+                                          currentStep: 0,
+                                          labels:
+                                              widget.actor == AuthActor.customer
+                                                  ? const [
+                                                      'Telemóvel',
+                                                      'Verificar',
+                                                    ]
+                                                  : null,
+                                        ),
                                         SizedBox(
                                           height: compact
                                               ? AppSpacing.lg
                                               : AppSpacing.xxl,
                                         ),
                                         Text(
-                                          'O seu número',
+                                          widget.actor == AuthActor.customer
+                                              ? 'Entre com o telemóvel'
+                                              : 'O seu número',
                                           style: theme.textTheme.titleLarge
                                               ?.copyWith(
                                             color: AppColors.primaryDarker,
@@ -404,7 +431,9 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                         ),
                                         const SizedBox(height: AppSpacing.xs),
                                         Text(
-                                          'Enviaremos um código único por SMS. Sem palavras-passe.',
+                                          widget.actor == AuthActor.customer
+                                              ? 'Use o número associado aos seus pontos. Enviaremos um código por SMS.'
+                                              : 'Enviaremos um código único por SMS. Sem palavras-passe.',
                                           style: theme.textTheme.bodyMedium
                                               ?.copyWith(
                                             color: AppColors.onSurfaceVariant,
@@ -445,7 +474,7 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                               ],
                                               label: 'Número de telemóvel',
                                               hintText: '84 326 2347',
-                                              prefix:
+                                              prefixIcon:
                                                   const _CountryCodePrefix(),
                                               validationState:
                                                   _phoneValidationState,
@@ -470,29 +499,37 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                               AppColors.primaryDarker,
                                         ),
                                         if (!keyboardOpen) ...[
-                                          const SizedBox(height: AppSpacing.lg),
-                                          const _AuthDivider(),
-                                          const SizedBox(height: AppSpacing.lg),
-                                          KeyedSubtree(
-                                            key:
-                                                const Key('google_auth_button'),
-                                            child: MaisUmButton(
-                                              onPressed: (_isSendingCode ||
-                                                      _isGoogleLoading)
-                                                  ? null
-                                                  : _continueWithGoogle,
-                                              isLoading: _isGoogleLoading,
-                                              label: 'Continuar com Google',
-                                              loadingLabel: 'A autenticar...',
-                                              variant:
-                                                  MaisUmButtonVariant.outlined,
-                                              leadingIcon:
-                                                  Icons.g_mobiledata_rounded,
-                                              radius: AppRadius.lg,
-                                              foregroundColor:
-                                                  AppColors.onSurface,
+                                          if (widget.actor !=
+                                              AuthActor.customer) ...[
+                                            const SizedBox(
+                                              height: AppSpacing.lg,
                                             ),
-                                          ),
+                                            const _AuthDivider(),
+                                            const SizedBox(
+                                              height: AppSpacing.lg,
+                                            ),
+                                            KeyedSubtree(
+                                              key: const Key(
+                                                'google_auth_button',
+                                              ),
+                                              child: MaisUmButton(
+                                                onPressed: (_isSendingCode ||
+                                                        _isGoogleLoading)
+                                                    ? null
+                                                    : _continueWithGoogle,
+                                                isLoading: _isGoogleLoading,
+                                                label: 'Continuar com Google',
+                                                loadingLabel: 'A autenticar...',
+                                                variant: MaisUmButtonVariant
+                                                    .outlined,
+                                                leadingIcon:
+                                                    Icons.g_mobiledata_rounded,
+                                                radius: AppRadius.lg,
+                                                foregroundColor:
+                                                    AppColors.onSurface,
+                                              ),
+                                            ),
+                                          ],
                                           const SizedBox(height: AppSpacing.md),
                                           _AuthLegalLinks(
                                             key: const Key('terms_section'),
@@ -600,9 +637,13 @@ class _SecureAccessBadge extends StatelessWidget {
 }
 
 class _PhoneAuthHero extends StatelessWidget {
-  const _PhoneAuthHero({required this.compact});
+  const _PhoneAuthHero({
+    required this.compact,
+    this.customerMode = false,
+  });
 
   final bool compact;
+  final bool customerMode;
 
   @override
   Widget build(BuildContext context) {
@@ -621,7 +662,7 @@ class _PhoneAuthHero extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         Text(
-          'Bem-vindo',
+          customerMode ? 'A sua carteira de pontos' : 'Bem-vindo',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 color: Colors.white,
@@ -631,7 +672,9 @@ class _PhoneAuthHero extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'Entre na sua conta ou comece agora.',
+          customerMode
+              ? 'Acesso seguro, rápido e sem palavra-passe.'
+              : 'Entre na sua conta ou comece agora.',
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: Colors.white.withValues(alpha: 0.70),
@@ -1379,24 +1422,32 @@ class _WelcomeTerms extends StatelessWidget {
 
 class AuthStepProgress extends StatelessWidget {
   final int currentStep;
-  const AuthStepProgress({super.key, required this.currentStep});
+  final List<String>? labels;
+  const AuthStepProgress({
+    super.key,
+    required this.currentStep,
+    this.labels,
+  });
   static const _labels = ['Telemóvel', 'Verificar', 'PIN', 'Pronto'];
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final effectiveLabels = labels ?? _labels;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          children: List.generate(4, (i) {
+          children: List.generate(effectiveLabels.length, (i) {
             final active = i <= currentStep;
             return Expanded(
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 curve: Curves.easeOut,
                 height: 4,
-                margin: EdgeInsets.only(right: i < 3 ? 6 : 0),
+                margin: EdgeInsets.only(
+                  right: i < effectiveLabels.length - 1 ? 6 : 0,
+                ),
                 decoration: BoxDecoration(
                   color: active
                       ? AppColors.primaryLight
@@ -1409,16 +1460,18 @@ class AuthStepProgress extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Row(
-          children: List.generate(4, (i) {
+          children: List.generate(effectiveLabels.length, (i) {
             final isCurrent = i == currentStep;
             return Expanded(
               child: Padding(
-                padding: EdgeInsets.only(right: i < 3 ? 6 : 0),
+                padding: EdgeInsets.only(
+                  right: i < effectiveLabels.length - 1 ? 6 : 0,
+                ),
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    _labels[i],
+                    effectiveLabels[i],
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: isCurrent
                           ? AppColors.primaryLight

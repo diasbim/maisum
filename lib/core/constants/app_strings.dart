@@ -204,7 +204,8 @@ class AppStrings {
   static const String taxaPontos = 'Taxa de pontos';
   static const String versao = 'Versão';
   static const String confirmarLogout = 'Confirmar saída';
-  static const String confirmarLogoutMsg = 'Tem a certeza que quer sair?';
+  static const String confirmarLogoutMsg =
+      'Tem a certeza que quer terminar a sessão? Terá de voltar a autenticar-se para entrar.';
   static const String cancelar = 'Cancelar';
 
   // PIN Setup

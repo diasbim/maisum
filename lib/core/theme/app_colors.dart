@@ -11,7 +11,10 @@ class AppColors {
   static const Color secondary =
       Color(0xFFE8B84B); // --gold  oklch(82% .18  82)
   static const Color secondaryDark = Color(0xFFD4A030); // --goldDk
+  static const Color secondaryForeground =
+      Color(0xFF856200); // Accessible gold text on light surfaces
   static const Color secondaryLight = Color(0xFFFBF7E8); // --goldLt
+  static const Color cream = secondaryLight;
 
   // ── Surface ───────────────────────────────────────────────────────────────
   static const Color white = Color(0xFFFEFDF9);
@@ -26,7 +29,7 @@ class AppColors {
   // ── Status ────────────────────────────────────────────────────────────────
   static const Color green = Color(0xFF27A26A);
   static const Color greenLight = Color(0xFFE6F7F0);
-  static const Color red = Color(0xFFCB3311);
+  static const Color red = Color(0xFFC63110);
   static const Color redLight = Color(0xFFFCEAE6);
   static const Color amber = Color(0xFFD9A020);
   static const Color amberLight = Color(0xFFFCF3E0);
@@ -39,7 +42,7 @@ class AppColors {
   static const Color card = white;
   static const Color divider = g100;
   static const Color onSurface = g800;
-  static const Color onSurfaceVariant = g500;
+  static const Color onSurfaceVariant = Color(0xFF667085);
   static const Color mediumGray = g300;
   static const Color outlineVariant = g300;
   static const Color surfaceContainerLowest = white;
@@ -60,8 +63,10 @@ class AppColors {
   static const Color warning = amber;
   static const Color warningLight = amberLight;
   static const Color textPrimary = g800;
-  static const Color textSecondary = g500;
+  static const Color textSecondary = onSurfaceVariant;
+  static const Color textTertiary = g500;
   static const Color textHint = g300;
+  static const Color border = g100;
   static const Color offline = g500;
   static const Color offlineBg = g100;
   static const Color syncPending = amber;

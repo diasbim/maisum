@@ -31,6 +31,7 @@ class _FakeSaleController extends SaleController {
     required String customerId,
     required double amount,
     List<SaleItemInput> items = const <SaleItemInput>[],
+    String? replacesSaleId,
   }) async {
     final handler = onCreateSale;
     if (handler != null) {

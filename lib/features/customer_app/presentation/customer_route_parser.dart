@@ -6,6 +6,8 @@ const _customerFixedRoutes = <String>{
   '/customer/profile',
   '/customer/qr',
   '/customer/preferences',
+  '/customer/terms',
+  '/customer/privacy',
 };
 
 final _customerIdPattern = RegExp(r'^[A-Za-z0-9_-]{1,128}$');

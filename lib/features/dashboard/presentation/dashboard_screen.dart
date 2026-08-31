@@ -361,6 +361,7 @@ class _RetentionOverviewCard extends StatelessWidget {
                 child: Text(
                   'Retenção de clientes',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.onSurface,
                         fontWeight: FontWeight.w800,
                       ),
                 ),
@@ -399,13 +400,21 @@ class _RetentionOverviewCard extends StatelessWidget {
                               style: Theme.of(context)
                                   .textTheme
                                   .titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.w800),
+                                  ?.copyWith(
+                                    color: AppColors.onSurface,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               metric.$1,
                               maxLines: 2,
-                              style: Theme.of(context).textTheme.labelSmall,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                    color: AppColors.onSurfaceVariant,
+                                  ),
                             ),
                           ],
                         ),

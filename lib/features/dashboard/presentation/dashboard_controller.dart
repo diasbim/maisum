@@ -148,7 +148,7 @@ final scheduledCustomersTodayProvider =
   for (final appointment in appointments) {
     final customer =
         await ref.read(customerDaoProvider).getById(appointment.customerId);
-    if (customer == null) continue;
+    if (customer == null || customer.isArchived) continue;
     result.add(
       DashboardQuickCustomer(
         customer: customer,

@@ -59,6 +59,7 @@ class CustomerReward {
     required this.confirmedPoints,
     required this.pointsRemaining,
     required this.eligible,
+    this.expiresAt,
   });
 
   final String id;
@@ -69,6 +70,7 @@ class CustomerReward {
   final int confirmedPoints;
   final int pointsRemaining;
   final bool eligible;
+  final DateTime? expiresAt;
 
   factory CustomerReward.fromJson(Map<String, dynamic> json) => CustomerReward(
         id: json['reward_id'] as String? ?? '',
@@ -79,6 +81,7 @@ class CustomerReward {
         confirmedPoints: (json['confirmed_points'] as num?)?.toInt() ?? 0,
         pointsRemaining: (json['points_remaining'] as num?)?.toInt() ?? 0,
         eligible: json['eligible'] == true,
+        expiresAt: _optionalDateTime(json['expires_at']),
       );
 }
 
@@ -90,6 +93,9 @@ class CustomerBusiness {
     required this.phone,
     required this.confirmedPoints,
     required this.rewards,
+    this.logoUrl,
+    this.lastVisitAt,
+    this.nextReward,
   });
 
   final String id;
@@ -98,6 +104,9 @@ class CustomerBusiness {
   final String? phone;
   final int confirmedPoints;
   final List<CustomerReward> rewards;
+  final String? logoUrl;
+  final DateTime? lastVisitAt;
+  final CustomerReward? nextReward;
 
   factory CustomerBusiness.fromJson(Map<String, dynamic> json) =>
       CustomerBusiness(
@@ -106,6 +115,8 @@ class CustomerBusiness {
         address: json['address'] as String?,
         phone: json['phone'] as String?,
         confirmedPoints: (json['confirmed_points'] as num?)?.toInt() ?? 0,
+        logoUrl: json['logo_url'] as String?,
+        lastVisitAt: _optionalDateTime(json['last_visit_at']),
         rewards: ((json['rewards'] as List?) ?? const [])
             .whereType<Map>()
             .map((item) => CustomerReward.fromJson({
@@ -113,6 +124,12 @@ class CustomerBusiness {
                   'business_id': json['business_id'],
                 }))
             .toList(),
+        nextReward: json['next_reward'] is Map
+            ? CustomerReward.fromJson({
+                ...(json['next_reward'] as Map).cast<String, dynamic>(),
+                'business_id': json['business_id'],
+              })
+            : null,
       );
 }
 
@@ -123,6 +140,9 @@ class CustomerActivity {
     required this.type,
     required this.pointsDelta,
     required this.occurredAt,
+    this.rewardId,
+    this.businessName,
+    this.rewardName,
   });
 
   final String id;
@@ -130,6 +150,9 @@ class CustomerActivity {
   final String type;
   final int pointsDelta;
   final DateTime occurredAt;
+  final String? rewardId;
+  final String? businessName;
+  final String? rewardName;
 
   factory CustomerActivity.fromJson(Map<String, dynamic> json) =>
       CustomerActivity(
@@ -140,6 +163,9 @@ class CustomerActivity {
         occurredAt: DateTime.fromMillisecondsSinceEpoch(
           (json['occurred_at'] as num?)?.toInt() ?? 0,
         ),
+        rewardId: json['reward_id'] as String?,
+        businessName: json['business_name'] as String?,
+        rewardName: json['reward_name'] as String?,
       );
 }
 
@@ -204,4 +230,9 @@ class CustomerQr {
           (json['expires_at'] as num?)?.toInt() ?? 0,
         ),
       );
+}
+
+DateTime? _optionalDateTime(dynamic value) {
+  if (value is! num || value.toInt() <= 0) return null;
+  return DateTime.fromMillisecondsSinceEpoch(value.toInt());
 }

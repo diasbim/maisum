@@ -32,6 +32,12 @@ mixin _$Sale {
   DateTime? get confirmedAt => throw _privateConstructorUsedError;
   String? get confirmationErrorCode => throw _privateConstructorUsedError;
   int? get loyaltyPolicyVersion => throw _privateConstructorUsedError;
+  SaleCancellationStatus get cancellationStatus =>
+      throw _privateConstructorUsedError;
+  DateTime? get cancelledAt => throw _privateConstructorUsedError;
+  String? get cancelledByAppUserId => throw _privateConstructorUsedError;
+  String? get cancellationReason => throw _privateConstructorUsedError;
+  String? get replacementSaleId => throw _privateConstructorUsedError;
   List<SaleItem> get items => throw _privateConstructorUsedError;
   bool get synced => throw _privateConstructorUsedError;
 
@@ -61,6 +67,11 @@ abstract class $SaleCopyWith<$Res> {
       DateTime? confirmedAt,
       String? confirmationErrorCode,
       int? loyaltyPolicyVersion,
+      SaleCancellationStatus cancellationStatus,
+      DateTime? cancelledAt,
+      String? cancelledByAppUserId,
+      String? cancellationReason,
+      String? replacementSaleId,
       List<SaleItem> items,
       bool synced});
 }
@@ -91,6 +102,11 @@ class _$SaleCopyWithImpl<$Res, $Val extends Sale>
     Object? confirmedAt = freezed,
     Object? confirmationErrorCode = freezed,
     Object? loyaltyPolicyVersion = freezed,
+    Object? cancellationStatus = null,
+    Object? cancelledAt = freezed,
+    Object? cancelledByAppUserId = freezed,
+    Object? cancellationReason = freezed,
+    Object? replacementSaleId = freezed,
     Object? items = null,
     Object? synced = null,
   }) {
@@ -139,6 +155,26 @@ class _$SaleCopyWithImpl<$Res, $Val extends Sale>
           ? _value.loyaltyPolicyVersion
           : loyaltyPolicyVersion // ignore: cast_nullable_to_non_nullable
               as int?,
+      cancellationStatus: null == cancellationStatus
+          ? _value.cancellationStatus
+          : cancellationStatus // ignore: cast_nullable_to_non_nullable
+              as SaleCancellationStatus,
+      cancelledAt: freezed == cancelledAt
+          ? _value.cancelledAt
+          : cancelledAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      cancelledByAppUserId: freezed == cancelledByAppUserId
+          ? _value.cancelledByAppUserId
+          : cancelledByAppUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      cancellationReason: freezed == cancellationReason
+          ? _value.cancellationReason
+          : cancellationReason // ignore: cast_nullable_to_non_nullable
+              as String?,
+      replacementSaleId: freezed == replacementSaleId
+          ? _value.replacementSaleId
+          : replacementSaleId // ignore: cast_nullable_to_non_nullable
+              as String?,
       items: null == items
           ? _value.items
           : items // ignore: cast_nullable_to_non_nullable
@@ -170,6 +206,11 @@ abstract class _$$SaleImplCopyWith<$Res> implements $SaleCopyWith<$Res> {
       DateTime? confirmedAt,
       String? confirmationErrorCode,
       int? loyaltyPolicyVersion,
+      SaleCancellationStatus cancellationStatus,
+      DateTime? cancelledAt,
+      String? cancelledByAppUserId,
+      String? cancellationReason,
+      String? replacementSaleId,
       List<SaleItem> items,
       bool synced});
 }
@@ -197,6 +238,11 @@ class __$$SaleImplCopyWithImpl<$Res>
     Object? confirmedAt = freezed,
     Object? confirmationErrorCode = freezed,
     Object? loyaltyPolicyVersion = freezed,
+    Object? cancellationStatus = null,
+    Object? cancelledAt = freezed,
+    Object? cancelledByAppUserId = freezed,
+    Object? cancellationReason = freezed,
+    Object? replacementSaleId = freezed,
     Object? items = null,
     Object? synced = null,
   }) {
@@ -245,6 +291,26 @@ class __$$SaleImplCopyWithImpl<$Res>
           ? _value.loyaltyPolicyVersion
           : loyaltyPolicyVersion // ignore: cast_nullable_to_non_nullable
               as int?,
+      cancellationStatus: null == cancellationStatus
+          ? _value.cancellationStatus
+          : cancellationStatus // ignore: cast_nullable_to_non_nullable
+              as SaleCancellationStatus,
+      cancelledAt: freezed == cancelledAt
+          ? _value.cancelledAt
+          : cancelledAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      cancelledByAppUserId: freezed == cancelledByAppUserId
+          ? _value.cancelledByAppUserId
+          : cancelledByAppUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      cancellationReason: freezed == cancellationReason
+          ? _value.cancellationReason
+          : cancellationReason // ignore: cast_nullable_to_non_nullable
+              as String?,
+      replacementSaleId: freezed == replacementSaleId
+          ? _value.replacementSaleId
+          : replacementSaleId // ignore: cast_nullable_to_non_nullable
+              as String?,
       items: null == items
           ? _value._items
           : items // ignore: cast_nullable_to_non_nullable
@@ -272,6 +338,11 @@ class _$SaleImpl extends _Sale {
       this.confirmedAt,
       this.confirmationErrorCode,
       this.loyaltyPolicyVersion,
+      this.cancellationStatus = SaleCancellationStatus.active,
+      this.cancelledAt,
+      this.cancelledByAppUserId,
+      this.cancellationReason,
+      this.replacementSaleId,
       final List<SaleItem> items = const <SaleItem>[],
       this.synced = false})
       : _items = items,
@@ -303,6 +374,17 @@ class _$SaleImpl extends _Sale {
   final String? confirmationErrorCode;
   @override
   final int? loyaltyPolicyVersion;
+  @override
+  @JsonKey()
+  final SaleCancellationStatus cancellationStatus;
+  @override
+  final DateTime? cancelledAt;
+  @override
+  final String? cancelledByAppUserId;
+  @override
+  final String? cancellationReason;
+  @override
+  final String? replacementSaleId;
   final List<SaleItem> _items;
   @override
   @JsonKey()
@@ -318,7 +400,7 @@ class _$SaleImpl extends _Sale {
 
   @override
   String toString() {
-    return 'Sale(id: $id, customerId: $customerId, amount: $amount, points: $points, createdAt: $createdAt, updatedAt: $updatedAt, confirmationStatus: $confirmationStatus, confirmedPoints: $confirmedPoints, confirmedAt: $confirmedAt, confirmationErrorCode: $confirmationErrorCode, loyaltyPolicyVersion: $loyaltyPolicyVersion, items: $items, synced: $synced)';
+    return 'Sale(id: $id, customerId: $customerId, amount: $amount, points: $points, createdAt: $createdAt, updatedAt: $updatedAt, confirmationStatus: $confirmationStatus, confirmedPoints: $confirmedPoints, confirmedAt: $confirmedAt, confirmationErrorCode: $confirmationErrorCode, loyaltyPolicyVersion: $loyaltyPolicyVersion, cancellationStatus: $cancellationStatus, cancelledAt: $cancelledAt, cancelledByAppUserId: $cancelledByAppUserId, cancellationReason: $cancellationReason, replacementSaleId: $replacementSaleId, items: $items, synced: $synced)';
   }
 
   @override
@@ -345,6 +427,16 @@ class _$SaleImpl extends _Sale {
                 other.confirmationErrorCode == confirmationErrorCode) &&
             (identical(other.loyaltyPolicyVersion, loyaltyPolicyVersion) ||
                 other.loyaltyPolicyVersion == loyaltyPolicyVersion) &&
+            (identical(other.cancellationStatus, cancellationStatus) ||
+                other.cancellationStatus == cancellationStatus) &&
+            (identical(other.cancelledAt, cancelledAt) ||
+                other.cancelledAt == cancelledAt) &&
+            (identical(other.cancelledByAppUserId, cancelledByAppUserId) ||
+                other.cancelledByAppUserId == cancelledByAppUserId) &&
+            (identical(other.cancellationReason, cancellationReason) ||
+                other.cancellationReason == cancellationReason) &&
+            (identical(other.replacementSaleId, replacementSaleId) ||
+                other.replacementSaleId == replacementSaleId) &&
             const DeepCollectionEquality().equals(other._items, _items) &&
             (identical(other.synced, synced) || other.synced == synced));
   }
@@ -364,6 +456,11 @@ class _$SaleImpl extends _Sale {
       confirmedAt,
       confirmationErrorCode,
       loyaltyPolicyVersion,
+      cancellationStatus,
+      cancelledAt,
+      cancelledByAppUserId,
+      cancellationReason,
+      replacementSaleId,
       const DeepCollectionEquality().hash(_items),
       synced);
 
@@ -396,6 +493,11 @@ abstract class _Sale extends Sale {
       final DateTime? confirmedAt,
       final String? confirmationErrorCode,
       final int? loyaltyPolicyVersion,
+      final SaleCancellationStatus cancellationStatus,
+      final DateTime? cancelledAt,
+      final String? cancelledByAppUserId,
+      final String? cancellationReason,
+      final String? replacementSaleId,
       final List<SaleItem> items,
       final bool synced}) = _$SaleImpl;
   const _Sale._() : super._();
@@ -424,6 +526,16 @@ abstract class _Sale extends Sale {
   String? get confirmationErrorCode;
   @override
   int? get loyaltyPolicyVersion;
+  @override
+  SaleCancellationStatus get cancellationStatus;
+  @override
+  DateTime? get cancelledAt;
+  @override
+  String? get cancelledByAppUserId;
+  @override
+  String? get cancellationReason;
+  @override
+  String? get replacementSaleId;
   @override
   List<SaleItem> get items;
   @override

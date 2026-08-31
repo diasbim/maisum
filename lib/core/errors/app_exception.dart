@@ -15,6 +15,12 @@ final class AuthException extends AppException {
       [super.message = 'Sessão expirada. Faça login novamente.']);
 }
 
+final class CustomerFeatureDisabledException extends AppException {
+  const CustomerFeatureDisabledException([
+    super.message = 'A aplicação de cliente não está disponível.',
+  ]);
+}
+
 final class ServerException extends AppException {
   const ServerException(
       {required this.statusCode, String message = 'Erro no servidor.'})

@@ -751,34 +751,20 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
-  void _confirmLogout(BuildContext context, WidgetRef ref) {
-    showDialog(
+  Future<void> _confirmLogout(BuildContext context, WidgetRef ref) async {
+    final confirmed = await MaisUmModal.confirm(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(AppStrings.confirmarLogout),
-        content: const Text(AppStrings.confirmarLogoutMsg),
-        actions: [
-          MaisUmButton(
-            onPressed: () => Navigator.pop(ctx),
-            label: AppStrings.cancelar,
-            variant: MaisUmButtonVariant.ghost,
-            fullWidth: false,
-            height: 40,
-          ),
-          MaisUmButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await ref.read(authControllerProvider.notifier).logout();
-              if (context.mounted) context.go('/login');
-            },
-            label: AppStrings.logout,
-            variant: MaisUmButtonVariant.danger,
-            fullWidth: false,
-            height: 40,
-          ),
-        ],
-      ),
+      title: AppStrings.confirmarLogout,
+      message: AppStrings.confirmarLogoutMsg,
+      primaryLabel: AppStrings.logout,
+      secondaryLabel: AppStrings.cancelar,
+      icon: Icons.logout_rounded,
+      destructive: true,
     );
+    if (confirmed != true || !context.mounted) return;
+
+    await ref.read(authControllerProvider.notifier).logout();
+    if (context.mounted) context.go('/choose-role');
   }
 }
 

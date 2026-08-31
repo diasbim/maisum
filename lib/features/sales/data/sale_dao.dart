@@ -47,6 +47,20 @@ class SaleDao {
     return _attachItemsToSales(sales);
   }
 
+  Future<Sale?> getById(String id) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'sales',
+      where: _withMerchantScope('id = ?'),
+      whereArgs: _withMerchantArgs([id]),
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    final sale = saleFromMap(rows.first);
+    final withItems = await _attachItemsToSales([sale]);
+    return withItems.first;
+  }
+
   Future<List<Sale>> getUnsynced() async {
     final db = await _db.database;
     final rows = await db.query(
@@ -97,12 +111,16 @@ class SaleDao {
               'c.total_points as customer_total_points '
               'FROM sales s '
               'LEFT JOIN customers c ON s.customer_id = c.id '
+              "WHERE s.cancellation_status = 'ACTIVE' "
+              'AND c.archived_at IS NULL '
               'ORDER BY s.created_at DESC LIMIT 1'
           : 'SELECT s.*, c.name as customer_name, c.phone as customer_phone, '
               'c.total_points as customer_total_points '
               'FROM sales s '
               'LEFT JOIN customers c ON s.customer_id = c.id '
-              'WHERE s.merchant_id = ? '
+              "WHERE s.merchant_id = ? "
+              "AND s.cancellation_status = 'ACTIVE' "
+              'AND c.archived_at IS NULL '
               'ORDER BY s.created_at DESC LIMIT 1',
       merchantId == null ? const [] : [merchantId],
     );
@@ -121,9 +139,11 @@ class SaleDao {
     final rows = await db.rawQuery(
       merchantId == null
           ? 'SELECT COUNT(*) as count, COALESCE(SUM(points), 0) as total_points '
-              'FROM sales WHERE created_at >= ?'
+              "FROM sales WHERE cancellation_status = 'ACTIVE' "
+              'AND created_at >= ?'
           : 'SELECT COUNT(*) as count, COALESCE(SUM(points), 0) as total_points '
-              'FROM sales WHERE merchant_id = ? AND created_at >= ?',
+              "FROM sales WHERE merchant_id = ? "
+              "AND cancellation_status = 'ACTIVE' AND created_at >= ?",
       merchantId == null
           ? [startOfDay.millisecondsSinceEpoch]
           : [merchantId, startOfDay.millisecondsSinceEpoch],
@@ -141,10 +161,12 @@ class SaleDao {
     final rows = await db.rawQuery(
       merchantId == null
           ? 'SELECT DISTINCT date(created_at / 1000, "unixepoch") as day '
-              'FROM sales WHERE created_at >= ? '
+              "FROM sales WHERE cancellation_status = 'ACTIVE' "
+              'AND created_at >= ? '
               'ORDER BY day DESC'
           : 'SELECT DISTINCT date(created_at / 1000, "unixepoch") as day '
-              'FROM sales WHERE merchant_id = ? AND created_at >= ? '
+              "FROM sales WHERE merchant_id = ? "
+              "AND cancellation_status = 'ACTIVE' AND created_at >= ? "
               'ORDER BY day DESC',
       merchantId == null
           ? [start.millisecondsSinceEpoch]
@@ -165,12 +187,13 @@ class SaleDao {
       merchantId == null
           ? 'SELECT COUNT(*) as count FROM ('
               'SELECT customer_id FROM sales '
-              'WHERE created_at >= ? '
+              "WHERE cancellation_status = 'ACTIVE' AND created_at >= ? "
               'GROUP BY customer_id HAVING COUNT(*) >= 2'
               ')'
           : 'SELECT COUNT(*) as count FROM ('
               'SELECT customer_id FROM sales '
-              'WHERE merchant_id = ? AND created_at >= ? '
+              "WHERE merchant_id = ? AND cancellation_status = 'ACTIVE' "
+              'AND created_at >= ? '
               'GROUP BY customer_id HAVING COUNT(*) >= 2'
               ')',
       merchantId == null
@@ -184,8 +207,10 @@ class SaleDao {
     final db = await _db.database;
     final rows = await db.rawQuery(
       merchantId == null
-          ? 'SELECT amount FROM sales ORDER BY created_at DESC LIMIT 1'
-          : 'SELECT amount FROM sales WHERE merchant_id = ? '
+          ? "SELECT amount FROM sales WHERE cancellation_status = 'ACTIVE' "
+              'ORDER BY created_at DESC LIMIT 1'
+          : "SELECT amount FROM sales WHERE merchant_id = ? "
+              "AND cancellation_status = 'ACTIVE' "
               'ORDER BY created_at DESC LIMIT 1',
       merchantId == null ? const [] : [merchantId],
     );

@@ -7,6 +7,8 @@ part 'sale.g.dart';
 
 enum SaleConfirmationStatus { pending, confirmed, rejected, baselineRequired }
 
+enum SaleCancellationStatus { active, cancelled }
+
 extension SaleConfirmationStatusStorage on SaleConfirmationStatus {
   String get storageValue => switch (this) {
         SaleConfirmationStatus.pending => 'PENDING',
@@ -14,6 +16,10 @@ extension SaleConfirmationStatusStorage on SaleConfirmationStatus {
         SaleConfirmationStatus.rejected => 'REJECTED',
         SaleConfirmationStatus.baselineRequired => 'BASELINE_REQUIRED',
       };
+}
+
+extension SaleCancellationStatusStorage on SaleCancellationStatus {
+  String get storageValue => name.toUpperCase();
 }
 
 @freezed
@@ -33,11 +39,20 @@ class Sale with _$Sale {
     DateTime? confirmedAt,
     String? confirmationErrorCode,
     int? loyaltyPolicyVersion,
+    @Default(SaleCancellationStatus.active)
+    SaleCancellationStatus cancellationStatus,
+    DateTime? cancelledAt,
+    String? cancelledByAppUserId,
+    String? cancellationReason,
+    String? replacementSaleId,
     @Default(<SaleItem>[]) List<SaleItem> items,
     @Default(false) bool synced,
   }) = _Sale;
 
   factory Sale.fromJson(Map<String, dynamic> json) => _$SaleFromJson(json);
+
+  bool get isCancelled =>
+      cancellationStatus == SaleCancellationStatus.cancelled;
 
   Map<String, dynamic> toDbMap() => {
         'id': id,
@@ -51,6 +66,11 @@ class Sale with _$Sale {
         'confirmed_at': confirmedAt?.millisecondsSinceEpoch,
         'confirmation_error_code': confirmationErrorCode,
         'loyalty_policy_version': loyaltyPolicyVersion,
+        'cancellation_status': cancellationStatus.storageValue,
+        'cancelled_at': cancelledAt?.millisecondsSinceEpoch,
+        'cancelled_by_app_user_id': cancelledByAppUserId,
+        'cancellation_reason': cancellationReason,
+        'replacement_sale_id': replacementSaleId,
         'synced': synced ? 1 : 0,
       };
 
@@ -85,6 +105,16 @@ Sale saleFromMap(Map<String, dynamic> map) => Sale(
             ),
       confirmationErrorCode: map['confirmation_error_code'] as String?,
       loyaltyPolicyVersion: (map['loyalty_policy_version'] as num?)?.toInt(),
+      cancellationStatus:
+          _saleCancellationStatusFromStorage(map['cancellation_status']),
+      cancelledAt: map['cancelled_at'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(
+              (map['cancelled_at'] as num).toInt(),
+            ),
+      cancelledByAppUserId: map['cancelled_by_app_user_id'] as String?,
+      cancellationReason: map['cancellation_reason'] as String?,
+      replacementSaleId: map['replacement_sale_id'] as String?,
       items: saleItemsFromValue(map['items']),
       synced: (map['synced'] as int? ?? 0) == 1,
     );
@@ -96,4 +126,10 @@ SaleConfirmationStatus _saleConfirmationStatusFromStorage(Object? value) {
     'BASELINE_REQUIRED' => SaleConfirmationStatus.baselineRequired,
     _ => SaleConfirmationStatus.pending,
   };
+}
+
+SaleCancellationStatus _saleCancellationStatusFromStorage(Object? value) {
+  return value?.toString().toUpperCase() == 'CANCELLED'
+      ? SaleCancellationStatus.cancelled
+      : SaleCancellationStatus.active;
 }

@@ -6,6 +6,8 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:maisum/app/providers.dart';
 import 'package:maisum/core/constants/app_strings.dart';
 import 'package:maisum/core/database/app_database.dart';
+import 'package:maisum/core/theme/app_colors.dart';
+import 'package:maisum/core/theme/app_theme.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
 import 'package:maisum/features/customers/data/customer_repository.dart';
 import 'package:maisum/features/dashboard/presentation/dashboard_controller.dart';
@@ -56,6 +58,7 @@ extension on DashboardStats {
     bool isOnline = true,
     int customersCount = 1,
     SyncStatus syncStatus = const SyncStatus(isOnline: true),
+    ThemeMode themeMode = ThemeMode.light,
   }) =>
       ProviderScope(
         overrides: [
@@ -70,7 +73,12 @@ extension on DashboardStats {
             _FakeCustomerRepository(customersCount),
           ),
         ],
-        child: const MaterialApp(home: DashboardScreen()),
+        child: MaterialApp(
+          theme: AppTheme.light,
+          darkTheme: AppTheme.dark,
+          themeMode: themeMode,
+          home: const DashboardScreen(),
+        ),
       );
 }
 
@@ -140,6 +148,35 @@ void main() {
       expect(find.text('Retenção'), findsOneWidget);
       expect(find.text(AppStrings.historicoVendas), findsNothing);
       expect(find.textContaining(AppStrings.pendentes), findsNothing);
+    });
+
+    testWidgets('keeps retention content readable in system dark mode',
+        (tester) async {
+      await tester.pumpWidget(
+        const DashboardStats(
+          totalCustomers: 10,
+          retentionRate: 0.6,
+          averageVisitsPerCustomer: 4.2,
+        ).buildDashboard(themeMode: ThemeMode.dark),
+      );
+      await tester.pumpAndSettle();
+
+      final title = tester.widget<Text>(find.text('Retenção de clientes'));
+      final value = tester.widget<Text>(find.text('60%'));
+      final label = tester.widget<Text>(find.text('Taxa de retorno'));
+      final detailsContext = tester.element(find.text('Ver detalhes'));
+
+      expect(title.style?.color, AppColors.onSurface);
+      expect(value.style?.color, AppColors.onSurface);
+      expect(label.style?.color, AppColors.onSurfaceVariant);
+      expect(
+        Theme.of(detailsContext)
+            .textButtonTheme
+            .style
+            ?.foregroundColor
+            ?.resolve(<WidgetState>{}),
+        AppColors.secondaryForeground,
+      );
     });
 
     testWidgets('shows synced when queue is empty after a previous failure',

@@ -193,6 +193,64 @@ void main() {
       expect(names, ['Abel', 'Maria', 'Zara']);
     });
 
+    group('archive lifecycle', () {
+      test('archived customers leave active queries and can be restored',
+          () async {
+        final customer =
+            await dao.create(name: 'Arquivada', phone: '841111020');
+
+        final archived = await dao.setArchived(
+          customer.id,
+          archived: true,
+          appUserId: 'staff-1',
+        );
+
+        expect(archived.isArchived, isTrue);
+        expect(archived.archivedByAppUserId, 'staff-1');
+        expect(await dao.getAll(), isEmpty);
+        expect(await dao.search('Arquivada'), isEmpty);
+        expect(await dao.searchForSale('Arquivada'), isEmpty);
+        expect(await dao.getCount(), 0);
+        expect((await dao.getArchived()).single.id, customer.id);
+
+        final restored = await dao.setArchived(
+          customer.id,
+          archived: false,
+          appUserId: 'staff-1',
+        );
+        expect(restored.isArchived, isFalse);
+        expect((await dao.getAll()).single.id, customer.id);
+      });
+
+      test('permanent deletion succeeds only without dependencies', () async {
+        final disposable =
+            await dao.create(name: 'Sem histórico', phone: '841111021');
+        await dao.deletePermanently(disposable.id);
+        expect(await dao.getById(disposable.id), isNull);
+
+        final linked =
+            await dao.create(name: 'Com histórico', phone: '841111022');
+        final db = await AppDatabase.instance.database;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await db.insert('sales', {
+          'id': 'sale-linked',
+          'customer_id': linked.id,
+          'amount': 100,
+          'points': 1,
+          'created_at': now,
+          'updated_at': now,
+          'merchant_id': null,
+        });
+
+        expect(await dao.getDeleteDependencies(linked.id), contains('sales'));
+        expect(
+          () => dao.deletePermanently(linked.id),
+          throwsA(isA<StateError>()),
+        );
+        expect(await dao.getById(linked.id), isNotNull);
+      });
+    });
+
     test('returns empty list when no customers', () async {
       expect(await dao.getAll(), isEmpty);
     });

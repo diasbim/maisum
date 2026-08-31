@@ -57,17 +57,53 @@ class MaisUmSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = _SurfaceStyle.resolve(variant, selected: selected);
     final borderRadius = BorderRadius.circular(radius);
+    final effectiveBackground = backgroundColor ?? style.background;
+    final isDark = _isDarkSurface(effectiveBackground, backgroundGradient);
+    final foreground = isDark ? AppColors.white : AppColors.onSurface;
+    final secondaryForeground = isDark
+        ? AppColors.white.withValues(alpha: 0.78)
+        : AppColors.onSurfaceVariant;
+    final actionColor =
+        isDark ? AppColors.secondary : AppColors.secondaryForeground;
+    final inheritedTheme = Theme.of(context);
+    final contentTheme = inheritedTheme.copyWith(
+      colorScheme: inheritedTheme.colorScheme.copyWith(
+        primary: actionColor,
+        onPrimary: isDark ? AppColors.primaryDarker : AppColors.white,
+        surface: effectiveBackground,
+        onSurface: foreground,
+        onSurfaceVariant: secondaryForeground,
+        error: AppColors.error,
+        errorContainer: AppColors.errorContainer,
+        onErrorContainer: AppColors.error,
+      ),
+      textTheme: _surfaceTextTheme(
+        inheritedTheme.textTheme,
+        foreground: foreground,
+        secondaryForeground: secondaryForeground,
+      ),
+      iconTheme: inheritedTheme.iconTheme.copyWith(color: foreground),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: actionColor),
+      ),
+      focusColor: actionColor.withValues(alpha: 0.18),
+      hoverColor: actionColor.withValues(alpha: 0.08),
+      splashColor: actionColor.withValues(alpha: 0.12),
+      highlightColor: actionColor.withValues(alpha: 0.08),
+    );
+    final effectiveAnimationDuration =
+        MediaQuery.maybeOf(context)?.disableAnimations == true
+            ? Duration.zero
+            : animationDuration;
     final surface = AnimatedContainer(
-      duration: animationDuration,
+      duration: effectiveAnimationDuration,
       curve: Curves.easeOutCubic,
       width: width,
       height: height,
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: backgroundGradient == null
-            ? backgroundColor ?? style.background
-            : null,
+        color: backgroundGradient == null ? effectiveBackground : null,
         gradient: backgroundGradient,
         borderRadius: borderRadius,
         border: Border.all(
@@ -90,15 +126,60 @@ class MaisUmSurface extends StatelessWidget {
             ),
           );
 
-    if (semanticLabel == null && !semanticButton) {
-      return content;
-    }
+    final semanticContent = semanticLabel == null && !semanticButton
+        ? content
+        : Semantics(
+            label: semanticLabel,
+            button: semanticButton || onTap != null,
+            selected: selected,
+            child: content,
+          );
 
-    return Semantics(
-      label: semanticLabel,
-      button: semanticButton || onTap != null,
-      selected: selected,
-      child: content,
+    return Theme(
+      data: contentTheme,
+      child: DefaultTextStyle.merge(
+        style: TextStyle(color: foreground),
+        child: IconTheme.merge(
+          data: IconThemeData(color: foreground),
+          child: semanticContent,
+        ),
+      ),
+    );
+  }
+
+  bool _isDarkSurface(Color background, Gradient? gradient) {
+    final colors = gradient?.colors ?? [background];
+    final darkColors = colors.where(
+      (color) => ThemeData.estimateBrightnessForColor(color) == Brightness.dark,
+    );
+    return darkColors.length > colors.length / 2;
+  }
+
+  TextTheme _surfaceTextTheme(
+    TextTheme source, {
+    required Color foreground,
+    required Color secondaryForeground,
+  }) {
+    TextStyle? primary(TextStyle? style) => style?.copyWith(color: foreground);
+    TextStyle? secondary(TextStyle? style) =>
+        style?.copyWith(color: secondaryForeground);
+
+    return source.copyWith(
+      displayLarge: primary(source.displayLarge),
+      displayMedium: primary(source.displayMedium),
+      displaySmall: primary(source.displaySmall),
+      headlineLarge: primary(source.headlineLarge),
+      headlineMedium: primary(source.headlineMedium),
+      headlineSmall: primary(source.headlineSmall),
+      titleLarge: primary(source.titleLarge),
+      titleMedium: primary(source.titleMedium),
+      titleSmall: secondary(source.titleSmall),
+      bodyLarge: primary(source.bodyLarge),
+      bodyMedium: primary(source.bodyMedium),
+      bodySmall: secondary(source.bodySmall),
+      labelLarge: primary(source.labelLarge),
+      labelMedium: secondary(source.labelMedium),
+      labelSmall: secondary(source.labelSmall),
     );
   }
 }
@@ -133,7 +214,7 @@ class _SurfaceStyle {
       MaisUmSurfaceVariant.standard => _SurfaceStyle(
           background: AppColors.white,
           border: AppColors.g100,
-          borderWidth: 1.5,
+          borderWidth: 1,
           shadows: AppShadows.sm,
         ),
       MaisUmSurfaceVariant.muted => _SurfaceStyle(

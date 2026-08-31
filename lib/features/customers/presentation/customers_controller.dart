@@ -89,6 +89,29 @@ class CustomersController extends AsyncNotifier<List<Customer>> {
     state = const AsyncLoading();
     state = await AsyncValue.guard(_load);
   }
+
+  Future<void> archiveCustomer(String id) async {
+    await ref.read(customerRepositoryProvider).archiveCustomer(id);
+    ref.invalidate(customerDetailProvider(id));
+    ref.invalidate(archivedCustomersProvider);
+    state = await AsyncValue.guard(_load);
+    ref.read(syncServiceProvider).processQueue();
+  }
+
+  Future<void> restoreCustomer(String id) async {
+    await ref.read(customerRepositoryProvider).restoreCustomer(id);
+    ref.invalidate(customerDetailProvider(id));
+    ref.invalidate(archivedCustomersProvider);
+    state = await AsyncValue.guard(_load);
+    ref.read(syncServiceProvider).processQueue();
+  }
+
+  Future<void> deleteCustomerPermanently(String id) async {
+    await ref.read(customerRepositoryProvider).deleteCustomerPermanently(id);
+    ref.invalidate(customerDetailProvider(id));
+    ref.invalidate(archivedCustomersProvider);
+    state = await AsyncValue.guard(_load);
+  }
 }
 
 final customersControllerProvider =
@@ -112,4 +135,8 @@ final customerSalesProvider = FutureProvider.family<List<Sale>, String>((
 
 final recentCustomersProvider = FutureProvider<List<Customer>>((ref) {
   return ref.read(customerRepositoryProvider).getRecent(limit: 6);
+});
+
+final archivedCustomersProvider = FutureProvider<List<Customer>>((ref) {
+  return ref.read(customerRepositoryProvider).getArchived();
 });

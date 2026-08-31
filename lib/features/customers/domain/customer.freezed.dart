@@ -47,6 +47,8 @@ mixin _$Customer {
   int get schemaVersion => throw _privateConstructorUsedError;
   DateTime get createdAt => throw _privateConstructorUsedError;
   DateTime? get updatedAt => throw _privateConstructorUsedError;
+  DateTime? get archivedAt => throw _privateConstructorUsedError;
+  String? get archivedByAppUserId => throw _privateConstructorUsedError;
   bool get synced => throw _privateConstructorUsedError;
 
   /// Serializes this Customer to a JSON map.
@@ -87,6 +89,8 @@ abstract class $CustomerCopyWith<$Res> {
       int schemaVersion,
       DateTime createdAt,
       DateTime? updatedAt,
+      DateTime? archivedAt,
+      String? archivedByAppUserId,
       bool synced});
 }
 
@@ -127,6 +131,8 @@ class _$CustomerCopyWithImpl<$Res, $Val extends Customer>
     Object? schemaVersion = null,
     Object? createdAt = null,
     Object? updatedAt = freezed,
+    Object? archivedAt = freezed,
+    Object? archivedByAppUserId = freezed,
     Object? synced = null,
   }) {
     return _then(_value.copyWith(
@@ -218,6 +224,14 @@ class _$CustomerCopyWithImpl<$Res, $Val extends Customer>
           ? _value.updatedAt
           : updatedAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      archivedAt: freezed == archivedAt
+          ? _value.archivedAt
+          : archivedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      archivedByAppUserId: freezed == archivedByAppUserId
+          ? _value.archivedByAppUserId
+          : archivedByAppUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
       synced: null == synced
           ? _value.synced
           : synced // ignore: cast_nullable_to_non_nullable
@@ -257,6 +271,8 @@ abstract class _$$CustomerImplCopyWith<$Res>
       int schemaVersion,
       DateTime createdAt,
       DateTime? updatedAt,
+      DateTime? archivedAt,
+      String? archivedByAppUserId,
       bool synced});
 }
 
@@ -295,6 +311,8 @@ class __$$CustomerImplCopyWithImpl<$Res>
     Object? schemaVersion = null,
     Object? createdAt = null,
     Object? updatedAt = freezed,
+    Object? archivedAt = freezed,
+    Object? archivedByAppUserId = freezed,
     Object? synced = null,
   }) {
     return _then(_$CustomerImpl(
@@ -386,6 +404,14 @@ class __$$CustomerImplCopyWithImpl<$Res>
           ? _value.updatedAt
           : updatedAt // ignore: cast_nullable_to_non_nullable
               as DateTime?,
+      archivedAt: freezed == archivedAt
+          ? _value.archivedAt
+          : archivedAt // ignore: cast_nullable_to_non_nullable
+              as DateTime?,
+      archivedByAppUserId: freezed == archivedByAppUserId
+          ? _value.archivedByAppUserId
+          : archivedByAppUserId // ignore: cast_nullable_to_non_nullable
+              as String?,
       synced: null == synced
           ? _value.synced
           : synced // ignore: cast_nullable_to_non_nullable
@@ -420,6 +446,8 @@ class _$CustomerImpl extends _Customer {
       this.schemaVersion = 1,
       required this.createdAt,
       this.updatedAt,
+      this.archivedAt,
+      this.archivedByAppUserId,
       this.synced = false})
       : super._();
 
@@ -482,12 +510,16 @@ class _$CustomerImpl extends _Customer {
   @override
   final DateTime? updatedAt;
   @override
+  final DateTime? archivedAt;
+  @override
+  final String? archivedByAppUserId;
+  @override
   @JsonKey()
   final bool synced;
 
   @override
   String toString() {
-    return 'Customer(id: $id, merchantId: $merchantId, canonicalCustomerId: $canonicalCustomerId, name: $name, phone: $phone, totalPoints: $totalPoints, confirmedPoints: $confirmedPoints, accountState: $accountState, relationshipStatus: $relationshipStatus, lifecycleStage: $lifecycleStage, retentionStatus: $retentionStatus, firstVisitAt: $firstVisitAt, lastVisitAt: $lastVisitAt, totalVisits: $totalVisits, totalSpent: $totalSpent, averageSpend: $averageSpend, averageVisitIntervalDays: $averageVisitIntervalDays, marketingConsentStatus: $marketingConsentStatus, whatsappConsentStatus: $whatsappConsentStatus, schemaVersion: $schemaVersion, createdAt: $createdAt, updatedAt: $updatedAt, synced: $synced)';
+    return 'Customer(id: $id, merchantId: $merchantId, canonicalCustomerId: $canonicalCustomerId, name: $name, phone: $phone, totalPoints: $totalPoints, confirmedPoints: $confirmedPoints, accountState: $accountState, relationshipStatus: $relationshipStatus, lifecycleStage: $lifecycleStage, retentionStatus: $retentionStatus, firstVisitAt: $firstVisitAt, lastVisitAt: $lastVisitAt, totalVisits: $totalVisits, totalSpent: $totalSpent, averageSpend: $averageSpend, averageVisitIntervalDays: $averageVisitIntervalDays, marketingConsentStatus: $marketingConsentStatus, whatsappConsentStatus: $whatsappConsentStatus, schemaVersion: $schemaVersion, createdAt: $createdAt, updatedAt: $updatedAt, archivedAt: $archivedAt, archivedByAppUserId: $archivedByAppUserId, synced: $synced)';
   }
 
   @override
@@ -537,6 +569,10 @@ class _$CustomerImpl extends _Customer {
                 other.createdAt == createdAt) &&
             (identical(other.updatedAt, updatedAt) ||
                 other.updatedAt == updatedAt) &&
+            (identical(other.archivedAt, archivedAt) ||
+                other.archivedAt == archivedAt) &&
+            (identical(other.archivedByAppUserId, archivedByAppUserId) ||
+                other.archivedByAppUserId == archivedByAppUserId) &&
             (identical(other.synced, synced) || other.synced == synced));
   }
 
@@ -566,6 +602,8 @@ class _$CustomerImpl extends _Customer {
         schemaVersion,
         createdAt,
         updatedAt,
+        archivedAt,
+        archivedByAppUserId,
         synced
       ]);
 
@@ -609,6 +647,8 @@ abstract class _Customer extends Customer {
       final int schemaVersion,
       required final DateTime createdAt,
       final DateTime? updatedAt,
+      final DateTime? archivedAt,
+      final String? archivedByAppUserId,
       final bool synced}) = _$CustomerImpl;
   const _Customer._() : super._();
 
@@ -659,6 +699,10 @@ abstract class _Customer extends Customer {
   DateTime get createdAt;
   @override
   DateTime? get updatedAt;
+  @override
+  DateTime? get archivedAt;
+  @override
+  String? get archivedByAppUserId;
   @override
   bool get synced;
 

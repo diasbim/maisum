@@ -276,7 +276,7 @@ class AuthRepository {
     }
     final customerSession = await api.session(token);
     if (!customerSession.flags.appEnabled) {
-      throw StateError('A aplicação de cliente não está disponível.');
+      throw const CustomerFeatureDisabledException();
     }
     final session = AuthSession(
       userId: user.uid,

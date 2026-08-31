@@ -7,6 +7,10 @@ import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../design_system/design_system.dart';
 import '../../../app/providers.dart';
+import '../domain/sale.dart';
+import 'new_sale_screen.dart';
+import 'sale_cancellation_dialog.dart';
+import 'package:go_router/go_router.dart';
 
 class SalesHistoryScreen extends ConsumerWidget {
   const SalesHistoryScreen({super.key});
@@ -120,12 +124,12 @@ class _HistorySummary extends StatelessWidget {
   }
 }
 
-class _SaleHistoryTile extends StatelessWidget {
+class _SaleHistoryTile extends ConsumerWidget {
   const _SaleHistoryTile({required this.data});
   final Map<String, dynamic> data;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final createdAt = DateTime.fromMillisecondsSinceEpoch(
       data['created_at'] as int,
@@ -134,6 +138,7 @@ class _SaleHistoryTile extends StatelessWidget {
     final points = data['points'] as int;
     final customerName = data['customer_name'] as String? ?? 'Cliente';
     final synced = (data['synced'] as int? ?? 0) == 1;
+    final sale = saleFromMap(data);
     final items = (data['items'] as List? ?? const [])
         .whereType<Map>()
         .map((item) => item['name_snapshot'] as String? ?? '')
@@ -179,6 +184,18 @@ class _SaleHistoryTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (sale.isCancelled &&
+                    sale.cancellationReason?.isNotEmpty == true) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Motivo: ${sale.cancellationReason}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppColors.error,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
                 if (items.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text(
@@ -204,13 +221,17 @@ class _SaleHistoryTile extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.secondaryLight,
+                  color: sale.isCancelled
+                      ? AppColors.error.withValues(alpha: 0.08)
+                      : AppColors.secondaryLight,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  '+$points pts',
-                  style: const TextStyle(
-                    color: AppColors.secondaryDark,
+                  sale.isCancelled ? 'Anulada' : '+$points pts',
+                  style: TextStyle(
+                    color: sale.isCancelled
+                        ? AppColors.error
+                        : AppColors.secondaryDark,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -222,6 +243,43 @@ class _SaleHistoryTile extends StatelessWidget {
                 size: 14,
                 color: synced ? AppColors.green : AppColors.amber,
               ),
+              if (!sale.isCancelled)
+                PopupMenuButton<String>(
+                  tooltip: 'Ações da venda',
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.more_horiz_rounded, size: 20),
+                  onSelected: (value) async {
+                    if (value != 'cancel') return;
+                    final cancelled =
+                        await showSaleCancellationDialog(context, ref, sale);
+                    if (!cancelled || !context.mounted) return;
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Venda anulada com sucesso.'),
+                        action: SnackBarAction(
+                          label: 'Registar correta',
+                          onPressed: () => context.push(
+                            '/new-sale',
+                            extra: NewSaleArgs(
+                              preselectedCustomerId: sale.customerId,
+                              replacesSaleId: sale.id,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                      value: 'cancel',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.cancel_outlined),
+                        title: Text('Anular venda'),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ],

@@ -57,3 +57,6 @@ app.*.map.json
 # Node.js dependencies (local only)
 /node_modules/
 /functions/node_modules/
+
+# Firebase Functions local environment values
+/functions/.env*

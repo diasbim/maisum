@@ -7,6 +7,7 @@ import '../domain/sale.dart';
 import '../domain/sale_item.dart';
 import '../../customers/domain/customer.dart';
 import '../../customers/presentation/customers_controller.dart';
+import '../../dashboard/presentation/dashboard_controller.dart';
 
 class SaleResult {
   const SaleResult({required this.sale, required this.customer});
@@ -93,14 +94,18 @@ class SaleController extends AsyncNotifier<SaleResult?> {
     required String customerId,
     required double amount,
     List<SaleItemInput> items = const <SaleItemInput>[],
+    String? replacesSaleId,
   }) async {
     if (amount < 1) throw ArgumentError(AppStrings.amountInvalid);
     state = const AsyncLoading();
 
     try {
-      final sale = await ref
-          .read(saleRepositoryProvider)
-          .createSale(customerId: customerId, amount: amount, items: items);
+      final sale = await ref.read(saleRepositoryProvider).createSale(
+            customerId: customerId,
+            amount: amount,
+            items: items,
+            replacesSaleId: replacesSaleId,
+          );
 
       try {
         await ref.read(usageTrackerProvider).record(
@@ -164,6 +169,24 @@ class SaleController extends AsyncNotifier<SaleResult?> {
       state = AsyncError(e, st);
       rethrow;
     }
+  }
+
+  Future<Sale> cancelSale({
+    required String saleId,
+    required String customerId,
+    required String reason,
+  }) async {
+    final sale = await ref.read(saleRepositoryProvider).cancelSale(
+          saleId: saleId,
+          reason: reason,
+        );
+    ref.invalidate(customerDetailProvider(customerId));
+    ref.invalidate(customerSalesProvider(customerId));
+    ref.invalidate(allSalesWithCustomerProvider);
+    ref.invalidate(dashboardControllerProvider);
+    ref.invalidate(lastSaleAmountProvider);
+    ref.read(syncServiceProvider).processQueue();
+    return sale;
   }
 
   void reset() => state = const AsyncData(null);

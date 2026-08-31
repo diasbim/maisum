@@ -14,6 +14,14 @@ void main() {
         ),
         '/customer/redeem/reward_123',
       );
+      expect(
+        parseCustomerDeepLink(Uri.parse('maisum://app/customer/terms')),
+        '/customer/terms',
+      );
+      expect(
+        parseCustomerDeepLink(Uri.parse('maisum://app/customer/privacy')),
+        '/customer/privacy',
+      );
     });
 
     test('rejects unknown origins, query strings, and non-customer routes', () {

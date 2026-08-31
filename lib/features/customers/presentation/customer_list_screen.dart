@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -64,6 +64,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
   @override
   Widget build(BuildContext context) {
     final customers = ref.watch(customersControllerProvider);
+    final archivedCustomers = ref.watch(archivedCustomersProvider);
     final searchText = _searchCtrl.text.trim();
 
     return Scaffold(
@@ -75,17 +76,28 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
             ),
       body: customers.when(
         data: (list) {
-          final filtered = _applyFilter(list);
+          final showingArchived = _filter == _CustomerFilter.archived;
+          final source = showingArchived
+              ? archivedCustomers.valueOrNull ?? const []
+              : list;
+          final filtered = _applyFilter(source, searchText: searchText);
           final isSearching = searchText.isNotEmpty;
-          final emptyTitle =
-              isSearching ? 'Sem resultados' : AppStrings.semClientes;
+          final emptyTitle = isSearching
+              ? 'Sem resultados'
+              : showingArchived
+                  ? 'Nenhum cliente arquivado'
+                  : AppStrings.semClientes;
           final emptySubtitle = isSearching
               ? 'Nenhum cliente encontrado para "$searchText". Ajuste a pesquisa ou limpe o campo para ver todos.'
-              : 'Crie o primeiro cliente para começar a registar vendas e pontos sem complicação.';
+              : showingArchived
+                  ? 'Os clientes arquivados aparecerão aqui e poderão ser restaurados.'
+                  : 'Crie o primeiro cliente para começar a registar vendas e pontos sem complicação.';
           return RefreshIndicator(
             color: AppColors.secondary,
-            onRefresh: () =>
-                ref.read(customersControllerProvider.notifier).refresh(),
+            onRefresh: () async {
+              await ref.read(customersControllerProvider.notifier).refresh();
+              ref.invalidate(archivedCustomersProvider);
+            },
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -96,17 +108,21 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                     isSearching: _isSearching,
                     showClear: _searchCtrl.text.isNotEmpty,
                     filter: _filter,
-                    totalCustomers: list.length,
+                    totalCustomers: source.length,
                     visibleCustomers: filtered.length,
                     onSearchChanged: (q) {
                       setState(() {});
-                      _scheduleSearch(q);
+                      if (!showingArchived) _scheduleSearch(q);
                     },
                     onClear: () {
                       _searchDebounce?.cancel();
                       _searchCtrl.clear();
                       setState(() {});
-                      ref.read(customersControllerProvider.notifier).search('');
+                      if (!showingArchived) {
+                        ref
+                            .read(customersControllerProvider.notifier)
+                            .search('');
+                      }
                     },
                     onFilterChanged: (filter) {
                       setState(() => _filter = filter);
@@ -120,8 +136,10 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
                     child: EmptyState(
                       title: emptyTitle,
                       subtitle: emptySubtitle,
-                      actionLabel: AppStrings.adicionarCliente,
-                      onAction: _openCustomerCreateScreen,
+                      actionLabel:
+                          showingArchived ? null : AppStrings.adicionarCliente,
+                      onAction:
+                          showingArchived ? null : _openCustomerCreateScreen,
                     ),
                   )
                 else
@@ -216,8 +234,19 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
     return '$diff dias atrás';
   }
 
-  List<Customer> _applyFilter(List<Customer> list) {
-    final copy = [...list];
+  List<Customer> _applyFilter(
+    List<Customer> list, {
+    required String searchText,
+  }) {
+    final normalizedQuery = searchText.toLowerCase();
+    final copy = list
+        .where(
+          (customer) =>
+              normalizedQuery.isEmpty ||
+              customer.name.toLowerCase().contains(normalizedQuery) ||
+              customer.phone.contains(normalizedQuery),
+        )
+        .toList();
     switch (_filter) {
       case _CustomerFilter.recent:
         copy.sort((a, b) =>
@@ -226,6 +255,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
       case _CustomerFilter.top:
         copy.sort((a, b) => b.totalPoints.compareTo(a.totalPoints));
       case _CustomerFilter.all:
+      case _CustomerFilter.archived:
         break;
     }
     return copy;
@@ -266,7 +296,7 @@ class _CustomerListScreenState extends ConsumerState<CustomerListScreen> {
   }
 }
 
-enum _CustomerFilter { all, recent, top }
+enum _CustomerFilter { all, recent, top, archived }
 
 class _CustomerHeader extends StatelessWidget {
   const _CustomerHeader({
@@ -410,6 +440,13 @@ class _CustomerHeader extends StatelessWidget {
                       icon: Icons.emoji_events_rounded,
                       active: filter == _CustomerFilter.top,
                       onTap: () => onFilterChanged(_CustomerFilter.top),
+                    ),
+                    const SizedBox(width: 10),
+                    _FilterChip(
+                      label: 'Arquivados',
+                      icon: Icons.archive_outlined,
+                      active: filter == _CustomerFilter.archived,
+                      onTap: () => onFilterChanged(_CustomerFilter.archived),
                     ),
                   ],
                 ),

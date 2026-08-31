@@ -14,6 +14,7 @@ export type CustomerRewardDto = {
   confirmed_points: number;
   points_remaining: number;
   eligible: boolean;
+  expired: boolean;
   expires_at: number | null;
 };
 
@@ -31,11 +32,13 @@ export type CustomerBusinessDto = {
 
 export type CustomerActivityDto = {
   business_id: string;
+  business_name: string | null;
   entry_id: string;
   type: 'SALE' | 'REDEMPTION';
   points_delta: number;
   occurred_at: number;
   reward_id: string | null;
+  reward_name: string | null;
 };
 
 export type CustomerPreferencesDto = {

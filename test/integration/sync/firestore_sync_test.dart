@@ -82,15 +82,15 @@ void main() {
       await fakeFirestore
           .collection('businesses')
           .doc(businessUid)
-          .collection('customers')
-          .doc('cust-3')
-          .set({'name': 'Temp Customer'});
+          .collection('rewards')
+          .doc('reward-3')
+          .set({'name': 'Temp Reward'});
 
       final item = SyncItem(
         id: 'sync-3',
         operation: 'delete',
-        entityType: 'customer',
-        entityId: 'cust-3',
+        entityType: 'reward',
+        entityId: 'reward-3',
         payload: '{}',
         createdAt: DateTime.now(),
       );
@@ -99,8 +99,8 @@ void main() {
       final doc = await fakeFirestore
           .collection('businesses')
           .doc(businessUid)
-          .collection('customers')
-          .doc('cust-3')
+          .collection('rewards')
+          .doc('reward-3')
           .get();
       expect(doc.exists, false);
     });
@@ -188,6 +188,68 @@ void main() {
       expect(doc.exists, isFalse);
     });
 
+    test('sensitive corrections use the authoritative API handler', () async {
+      final handled = <SyncItem>[];
+      service = FirestoreSyncService(
+        fakeFirestore,
+        businessUid,
+        authoritativeSyncHandler: (item) async => handled.add(item),
+      );
+      final items = [
+        SyncItem(
+          id: 'sync-archive',
+          operation: 'update',
+          entityType: 'customer',
+          entityId: 'customer-archive',
+          payload:
+              '{"id":"customer-archive","archived_at":1234,"updated_at":1234}',
+          createdAt: DateTime.now(),
+        ),
+        SyncItem(
+          id: 'sync-delete',
+          operation: 'delete',
+          entityType: 'customer',
+          entityId: 'customer-delete',
+          payload: '{"id":"customer-delete"}',
+          createdAt: DateTime.now(),
+        ),
+        SyncItem(
+          id: 'sync-cancel',
+          operation: 'cancel',
+          entityType: 'sale',
+          entityId: 'sale-cancel',
+          payload: '{"id":"sale-cancel","cancellation_reason":"Erro de valor"}',
+          createdAt: DateTime.now(),
+        ),
+      ];
+
+      for (final item in items) {
+        await service.processSyncItem(item);
+      }
+
+      expect(handled, items);
+      expect(
+        (await fakeFirestore
+                .collection('businesses')
+                .doc(businessUid)
+                .collection('customers')
+                .doc('customer-archive')
+                .get())
+            .exists,
+        isFalse,
+      );
+      expect(
+        (await fakeFirestore
+                .collection('businesses')
+                .doc(businessUid)
+                .collection('sales')
+                .doc('sale-cancel')
+                .get())
+            .exists,
+        isFalse,
+      );
+    });
+
     test('sync entity types map to Firestore collection names', () async {
       const mappings = {
         'merchant_item': 'merchant_items',
@@ -235,6 +297,26 @@ void main() {
             .get();
         expect(fallbackDoc.exists, false, reason: entry.key);
       }
+    });
+
+    test('sync_tombstone pulls from the plural Firestore collection', () async {
+      await fakeFirestore
+          .collection('businesses')
+          .doc(businessUid)
+          .collection('sync_tombstones')
+          .doc('tombstone-1')
+          .set({
+        'merchant_id': businessUid,
+        'entity_type': 'customer',
+        'entity_id': 'customer-deleted',
+        'deleted_at': 1234,
+      });
+
+      final rows = await service.fetchCollection('sync_tombstone');
+
+      expect(rows, hasLength(1));
+      expect(rows.single['id'], 'tombstone-1');
+      expect(rows.single['entity_id'], 'customer-deleted');
     });
 
     test('recovery task sync returns canonical open task across devices',

@@ -30,6 +30,12 @@ void callbackDispatcher() {
     try {
       Log.i('BackgroundSync', 'Starting background task $task');
 
+      const storage = SecureStorageService(FlutterSecureStorage());
+      if (await storage.getAuthActor() == 'customer') {
+        Log.i('BackgroundSync', 'Skipping merchant sync for customer session');
+        return Future.value(true);
+      }
+
       final appDatabase = AppDatabase.instance;
       final unscopedStats = await SyncDao(appDatabase).getStats();
       if (unscopedStats.pendingReady == 0) {
@@ -43,7 +49,6 @@ void callbackDispatcher() {
         );
       }
 
-      const storage = SecureStorageService(FlutterSecureStorage());
       final authUid = FirebaseAuth.instance.currentUser?.uid;
       final storedFirebaseUid = await storage.getFirebaseUid();
       final storedUserId = await storage.getUserId();

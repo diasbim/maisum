@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/core/database/app_database.dart';
 import 'package:maisum/features/customers/data/customer_dao.dart';
@@ -40,15 +42,36 @@ void main() {
 
     test('payload contains customer data', () async {
       final c = await repo.createCustomer(name: 'Hugo', phone: '840000203');
-      final payload = (await syncDao.getPending()).first.payload;
-      expect(payload, contains(c.id));
-      expect(payload, contains('840000203'));
+      final payload = jsonDecode(
+        (await syncDao.getPending()).first.payload,
+      ) as Map<String, dynamic>;
+      expect(payload['id'], c.id);
+      expect(payload['phone'], '840000203');
+      expect(payload, isNot(contains('archived_at')));
+      expect(payload, isNot(contains('archived_by_app_user_id')));
     });
 
     test('each customer creates one sync item', () async {
       await repo.createCustomer(name: 'I', phone: '840000210');
       await repo.createCustomer(name: 'J', phone: '840000211');
       expect(await syncDao.getPendingCount(), 2);
+    });
+
+    group('archiveCustomer', () {
+      test('enqueues the server-authoritative archive fields', () async {
+        final c = await repo.createCustomer(name: 'Lina', phone: '840000212');
+
+        await repo.archiveCustomer(c.id);
+
+        final item = (await syncDao.getPending()).firstWhere(
+          (candidate) =>
+              candidate.entityId == c.id && candidate.operation == 'update',
+        );
+        final payload = jsonDecode(item.payload) as Map<String, dynamic>;
+        expect(item.operation, 'update');
+        expect(payload['archived_at'], isA<int>());
+        expect(payload, contains('archived_by_app_user_id'));
+      });
     });
   });
 

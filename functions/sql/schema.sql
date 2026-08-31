@@ -190,6 +190,43 @@ CREATE TABLE IF NOT EXISTS usage_balances (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_balances_window
   ON usage_balances(merchant_id, metric_key, window_start, window_end);
+
+ALTER TABLE IF EXISTS customers
+  ADD COLUMN IF NOT EXISTS archived_at BIGINT,
+  ADD COLUMN IF NOT EXISTS archived_by_app_user_id TEXT;
+
+ALTER TABLE IF EXISTS sales
+  ADD COLUMN IF NOT EXISTS updated_at BIGINT,
+  ADD COLUMN IF NOT EXISTS cancellation_status TEXT NOT NULL DEFAULT 'ACTIVE',
+  ADD COLUMN IF NOT EXISTS cancelled_at BIGINT,
+  ADD COLUMN IF NOT EXISTS cancelled_by_app_user_id TEXT,
+  ADD COLUMN IF NOT EXISTS cancellation_reason TEXT,
+  ADD COLUMN IF NOT EXISTS replacement_sale_id TEXT;
+
+DO $$
+BEGIN
+  IF to_regclass('public.sales') IS NOT NULL THEN
+    EXECUTE 'UPDATE sales SET updated_at = COALESCE(updated_at, created_at) WHERE updated_at IS NULL';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_sales_merchant_updated ON sales(merchant_id, updated_at, id)';
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_sales_merchant_cancellation_status ON sales(merchant_id, cancellation_status, updated_at)';
+  END IF;
+  IF to_regclass('public.customers') IS NOT NULL THEN
+    EXECUTE 'CREATE INDEX IF NOT EXISTS idx_customers_merchant_archived_at ON customers(merchant_id, archived_at, updated_at, id)';
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS sync_tombstones (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  deleted_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_tombstones_entity
+  ON sync_tombstones(merchant_id, entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_sync_tombstones_deleted
+  ON sync_tombstones(merchant_id, deleted_at, id);
 CREATE TABLE IF NOT EXISTS merchant_items (
   id TEXT PRIMARY KEY,
   merchant_id TEXT NOT NULL REFERENCES merchants(id),

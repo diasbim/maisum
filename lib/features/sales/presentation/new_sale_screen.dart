@@ -23,9 +23,14 @@ import 'sale_controller.dart';
 import 'sale_success_screen.dart';
 
 class NewSaleArgs {
-  const NewSaleArgs({this.preselectedCustomerId, this.prefilledAmount});
+  const NewSaleArgs({
+    this.preselectedCustomerId,
+    this.prefilledAmount,
+    this.replacesSaleId,
+  });
   final String? preselectedCustomerId;
   final double? prefilledAmount;
+  final String? replacesSaleId;
 }
 
 class NewSaleScreen extends ConsumerStatefulWidget {
@@ -81,7 +86,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       final preselected =
           await ref.read(customerRepositoryProvider).getById(preselectedId);
       if (!mounted) return;
-      if (preselected != null) {
+      if (preselected != null && !preselected.isArchived) {
         final latestSale =
             await ref.read(saleDaoProvider).getLatestWithCustomer();
         if (!mounted) return;
@@ -139,7 +144,9 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     if (customerId == null || customerId.isEmpty) {
       return null;
     }
-    return ref.read(customerRepositoryProvider).getById(customerId);
+    final customer =
+        await ref.read(customerRepositoryProvider).getById(customerId);
+    return customer == null || customer.isArchived ? null : customer;
   }
 
   Future<void> _openCustomerSelector({List<Customer>? customers}) async {
@@ -261,6 +268,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         customerId: customer.id,
         amount: _amount,
         items: _selectedSaleItems,
+        replacesSaleId: widget.args?.replacesSaleId,
       );
 
       if (!mounted) return;

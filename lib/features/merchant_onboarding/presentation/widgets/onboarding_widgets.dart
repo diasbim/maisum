@@ -417,6 +417,7 @@ class ReviewCard extends StatelessWidget {
                 child: Text(
                   title,
                   style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppColors.onSurface,
                     fontWeight: FontWeight.w800,
                   ),
                 ),

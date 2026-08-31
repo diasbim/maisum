@@ -24,6 +24,15 @@ _$SaleImpl _$$SaleImplFromJson(Map<String, dynamic> json) => _$SaleImpl(
           : DateTime.parse(json['confirmedAt'] as String),
       confirmationErrorCode: json['confirmationErrorCode'] as String?,
       loyaltyPolicyVersion: (json['loyaltyPolicyVersion'] as num?)?.toInt(),
+      cancellationStatus: $enumDecodeNullable(
+              _$SaleCancellationStatusEnumMap, json['cancellationStatus']) ??
+          SaleCancellationStatus.active,
+      cancelledAt: json['cancelledAt'] == null
+          ? null
+          : DateTime.parse(json['cancelledAt'] as String),
+      cancelledByAppUserId: json['cancelledByAppUserId'] as String?,
+      cancellationReason: json['cancellationReason'] as String?,
+      replacementSaleId: json['replacementSaleId'] as String?,
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => SaleItem.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -45,6 +54,12 @@ Map<String, dynamic> _$$SaleImplToJson(_$SaleImpl instance) =>
       'confirmedAt': instance.confirmedAt?.toIso8601String(),
       'confirmationErrorCode': instance.confirmationErrorCode,
       'loyaltyPolicyVersion': instance.loyaltyPolicyVersion,
+      'cancellationStatus':
+          _$SaleCancellationStatusEnumMap[instance.cancellationStatus]!,
+      'cancelledAt': instance.cancelledAt?.toIso8601String(),
+      'cancelledByAppUserId': instance.cancelledByAppUserId,
+      'cancellationReason': instance.cancellationReason,
+      'replacementSaleId': instance.replacementSaleId,
       'items': instance.items,
       'synced': instance.synced,
     };
@@ -54,4 +69,9 @@ const _$SaleConfirmationStatusEnumMap = {
   SaleConfirmationStatus.confirmed: 'confirmed',
   SaleConfirmationStatus.rejected: 'rejected',
   SaleConfirmationStatus.baselineRequired: 'baselineRequired',
+};
+
+const _$SaleCancellationStatusEnumMap = {
+  SaleCancellationStatus.active: 'active',
+  SaleCancellationStatus.cancelled: 'cancelled',
 };

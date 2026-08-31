@@ -86,17 +86,8 @@ final firebaseAuthServiceProvider = Provider<FirebaseAuthService>(
   (ref) => FirebaseAuthService(ref.read(firebaseAuthInstanceProvider)),
 );
 
-// Reactive UID — rebuilds when auth state changes
-final authStateChangesProvider = StreamProvider<User?>(
-  (_) => FirebaseAuth.instance.authStateChanges(),
-);
-
 final businessUidProvider = Provider<String?>((ref) {
-  final merchantId = ref.watch(activeMerchantIdProvider);
-  if (merchantId != null && merchantId.isNotEmpty) {
-    return merchantId;
-  }
-  return ref.watch(authStateChangesProvider).valueOrNull?.uid;
+  return ref.watch(activeMerchantIdProvider);
 });
 
 final activeBusinessProfileProvider =
@@ -135,6 +126,43 @@ final firestoreSyncServiceProvider = Provider<FirestoreSyncService?>((ref) {
   return FirestoreSyncService(
     ref.read(firestoreInstanceProvider),
     uid,
+    authoritativeSyncHandler: (item) async {
+      final token = await firebaseAuth.currentUser?.getIdToken();
+      if (token == null || token.isEmpty) {
+        throw const SyncTransportException(
+          'Firebase session is not available',
+          code: 'unauthenticated',
+        );
+      }
+      final payload = jsonDecode(item.payload) as Map<String, dynamic>;
+      try {
+        final response = await apiClient.post(
+          '/sync/${Uri.encodeComponent(item.entityType)}/'
+          '${Uri.encodeComponent(item.entityId)}',
+          bearerToken: token,
+          body: {
+            'operation': item.operation,
+            'payload': payload,
+          },
+        );
+        if (!response.success) {
+          throw SyncTransportException(
+            response.message ?? 'Authoritative sync failed',
+            code: 'failed-precondition',
+          );
+        }
+      } on NetworkException catch (error) {
+        throw SyncTransportException(error.message, code: 'unavailable');
+      } on ServerException catch (error) {
+        final code = switch (error.statusCode) {
+          401 => 'unauthenticated',
+          403 => 'permission-denied',
+          >= 500 => 'unavailable',
+          _ => 'failed-precondition',
+        };
+        throw SyncTransportException(error.message, code: code);
+      }
+    },
     usageEventSyncHandler: (item) async {
       if (item.operation != 'create') {
         throw const SyncTransportException(
@@ -213,6 +241,7 @@ final customerPlatformServiceProvider =
     ref.read(customerAppApiProvider),
     ref.read(firebaseAuthInstanceProvider),
     ref.read(connectivityServiceProvider),
+    ref.read(secureStorageServiceProvider),
   );
   ref.onDispose(service.dispose);
   return service;
@@ -416,6 +445,9 @@ final customerRepositoryProvider = Provider<CustomerRepository>(
   (ref) => CustomerRepository(
     ref.read(customerDaoProvider),
     ref.read(syncDaoProvider),
+    syncTransport: ref.watch(syncTransportProvider),
+    connectivity: ref.read(connectivityServiceProvider),
+    appUserId: ref.watch(activeAppUserIdProvider),
   ),
 );
 
@@ -621,6 +653,7 @@ final authRepositoryProvider = Provider<AuthRepository>(
 // ── Sync service ──────────────────────────────────────────────────────────────
 
 final syncServiceProvider = Provider<SyncService>((ref) {
+  final merchantId = ref.watch(activeMerchantIdProvider);
   final svc = SyncService(
     ref.read(appDatabaseProvider),
     ref.read(syncDaoProvider),
@@ -628,7 +661,9 @@ final syncServiceProvider = Provider<SyncService>((ref) {
     ref.read(connectivityServiceProvider),
     analytics: ref.read(analyticsServiceProvider),
   );
-  svc.init();
+  if (merchantId != null && merchantId.isNotEmpty) {
+    svc.init();
+  }
   ref.onDispose(svc.dispose);
   return svc;
 });

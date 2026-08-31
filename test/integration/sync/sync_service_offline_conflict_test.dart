@@ -139,6 +139,52 @@ void main() {
     await controller.close();
   });
 
+  test('customer tombstone removes the local customer', () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final customer = await customerDao.create(
+      name: 'Eliminar noutro dispositivo',
+      phone: '841230099',
+    );
+    final transport = _FakeSyncTransport(
+      collections: {
+        'sync_tombstone': [
+          {
+            'id': 'customer__merchant-1__${customer.id}',
+            'merchant_id': 'merchant-1',
+            'entity_type': 'customer',
+            'entity_id': customer.id,
+            'deleted_at': DateTime.now().millisecondsSinceEpoch,
+          },
+        ],
+      },
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await service.processQueue();
+
+    expect(await customerDao.getById(customer.id), isNull);
+    final db = await AppDatabase.instance.database;
+    final tombstones = await db.query(
+      'sync_tombstones',
+      where: 'entity_id = ?',
+      whereArgs: [customer.id],
+    );
+    expect(tombstones, hasLength(1));
+
+    connectivity.dispose();
+    await controller.close();
+  });
+
   test('successful processQueue can process items added by a later cycle',
       () async {
     final controller = StreamController<List<ConnectivityResult>>.broadcast();
@@ -189,6 +235,68 @@ void main() {
     );
     expect(await syncDao.getPending(), isEmpty);
     expect(service.status.phase, SyncPhase.synced);
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('defers entitlement pull until local merchant bootstrap completes',
+      () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final transport = _FakeSyncTransport(
+      collections: {
+        'entitlement': [
+          {
+            'id': 'merchant-1-analytics',
+            'merchant_id': 'merchant-1',
+            'feature_key': 'analytics',
+            'is_enabled': true,
+            'updated_at': 1000,
+          },
+        ],
+      },
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+    final db = await AppDatabase.instance.database;
+
+    await service.processQueue();
+
+    expect(await db.query('entitlements'), isEmpty);
+    expect(
+      await db.query(
+        'sync_state',
+        where: 'entity_type = ?',
+        whereArgs: ['entitlement'],
+      ),
+      isEmpty,
+    );
+
+    await db.insert('merchants', {
+      'id': 'merchant-1',
+      'phone': '+258841234567',
+      'merchant_name': 'Merchant 1',
+      'slug': 'merchant-1',
+      'subscription_status': 'TRIAL',
+      'created_at': 1000,
+      'updated_at': 1000,
+    });
+
+    await service.processQueue();
+
+    final entitlements = await db.query('entitlements');
+    expect(entitlements, hasLength(1));
+    expect(entitlements.single['feature_key'], 'analytics');
 
     service.dispose();
     connectivity.dispose();
@@ -639,6 +747,77 @@ void main() {
       ),
       hasLength(1),
     );
+
+    service.dispose();
+    connectivity.dispose();
+    await controller.close();
+  });
+
+  test('server cancellation resolves conflicting unsynced cancellation',
+      () async {
+    final controller = StreamController<List<ConnectivityResult>>.broadcast();
+    final connectivity = ConnectivityService(
+      onConnectivityChanged: controller.stream,
+      checkConnectivity: () async => [ConnectivityResult.wifi],
+      initialOnline: true,
+    );
+    final customer = await customerDao.create(
+      name: 'Venda em conflito',
+      phone: '841234598',
+    );
+    final db = await AppDatabase.instance.database;
+    await db.insert('sales', {
+      'id': 'sale-cancel-conflict',
+      'merchant_id': 'merchant-1',
+      'customer_id': customer.id,
+      'amount': 200,
+      'points': 2,
+      'created_at': 1000,
+      'updated_at': 2000,
+      'confirmation_status': 'CONFIRMED',
+      'cancellation_status': 'CANCELLED',
+      'cancelled_at': 2000,
+      'cancellation_reason': 'Motivo local',
+      'synced': 0,
+    });
+    final transport = _FakeSyncTransport(
+      collections: {
+        'sale': [
+          {
+            'id': 'sale-cancel-conflict',
+            'merchant_id': 'merchant-1',
+            'customer_id': customer.id,
+            'amount': 200,
+            'points': 2,
+            'created_at': 1000,
+            'updated_at': 3000,
+            'confirmation_status': 'CANCELLED',
+            'cancellation_status': 'CANCELLED',
+            'cancelled_at': 1500,
+            'cancelled_by_app_user_id': 'staff-server',
+            'cancellation_reason': 'Motivo confirmado no servidor',
+          },
+        ],
+      },
+    );
+    final service = SyncService(
+      AppDatabase.instance,
+      syncDao,
+      transport,
+      connectivity,
+    );
+
+    await service.processQueue();
+
+    final sale = (await db.query(
+      'sales',
+      where: 'id = ?',
+      whereArgs: ['sale-cancel-conflict'],
+    ))
+        .single;
+    expect(sale['cancellation_reason'], 'Motivo confirmado no servidor');
+    expect(sale['cancelled_by_app_user_id'], 'staff-server');
+    expect(sale['cancelled_at'], 1500);
 
     service.dispose();
     connectivity.dispose();

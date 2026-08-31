@@ -132,6 +132,11 @@ class AppMigrations {
       name: 'customer app read cache',
       up: _createV26Schema,
     ),
+    const MigrationStep(
+      version: 27,
+      name: 'customer archive and sale cancellation',
+      up: _createV27Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -247,6 +252,8 @@ class _SchemaVerifier {
       'whatsapp_consent_status',
       'schema_version',
       'confirmed_points',
+      'archived_at',
+      'archived_by_app_user_id',
     },
     'sales': {
       'id',
@@ -263,6 +270,11 @@ class _SchemaVerifier {
       'confirmed_at',
       'confirmation_error_code',
       'loyalty_policy_version',
+      'cancellation_status',
+      'cancelled_at',
+      'cancelled_by_app_user_id',
+      'cancellation_reason',
+      'replacement_sale_id',
     },
     'rewards': {
       'id',
@@ -472,6 +484,13 @@ class _SchemaVerifier {
       'updated_at',
       'last_error',
     },
+    'sync_tombstones': {
+      'id',
+      'merchant_id',
+      'entity_type',
+      'entity_id',
+      'deleted_at',
+    },
   };
 
   Future<bool> needsRepair(Database db) async {
@@ -516,6 +535,8 @@ class _SchemaVerifier {
       await _createV23Schema(txn);
       await _createV24Schema(txn);
       await _createV25Schema(txn);
+      await _createV26Schema(txn);
+      await _createV27Schema(txn);
     });
   }
 
@@ -1516,6 +1537,54 @@ Future<void> _createV26Schema(DatabaseExecutor db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_customer_app_cache_account '
     'ON customer_app_cache(account_id, updated_at)',
+  );
+}
+
+Future<void> _createV27Schema(DatabaseExecutor db) async {
+  await _addColumnIfMissing(db, 'customers', 'archived_at INTEGER');
+  await _addColumnIfMissing(
+    db,
+    'customers',
+    'archived_by_app_user_id TEXT',
+  );
+  await _addColumnIfMissing(
+    db,
+    'sales',
+    "cancellation_status TEXT NOT NULL DEFAULT 'ACTIVE'",
+  );
+  await _addColumnIfMissing(db, 'sales', 'cancelled_at INTEGER');
+  await _addColumnIfMissing(
+    db,
+    'sales',
+    'cancelled_by_app_user_id TEXT',
+  );
+  await _addColumnIfMissing(db, 'sales', 'cancellation_reason TEXT');
+  await _addColumnIfMissing(db, 'sales', 'replacement_sale_id TEXT');
+
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_customers_archive '
+    'ON customers(merchant_id, archived_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sales_cancellation '
+    'ON sales(merchant_id, cancellation_status, updated_at)',
+  );
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS sync_tombstones (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      deleted_at INTEGER NOT NULL
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_tombstones_entity '
+    'ON sync_tombstones(merchant_id, entity_type, entity_id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sync_tombstones_deleted '
+    'ON sync_tombstones(merchant_id, deleted_at, id)',
   );
 }
 

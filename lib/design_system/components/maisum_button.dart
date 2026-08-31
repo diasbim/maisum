@@ -50,13 +50,17 @@ class MaisUmButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveEnabled = enabled && !isLoading && onPressed != null;
+    final effectiveAnimationDuration =
+        MediaQuery.maybeOf(context)?.disableAnimations == true
+            ? Duration.zero
+            : animationDuration;
     final colors = _ButtonColors.resolve(
       variant: variant,
       backgroundColor: backgroundColor,
       foregroundColor: foregroundColor,
     );
     final child = AnimatedSwitcher(
-      duration: animationDuration,
+      duration: effectiveAnimationDuration,
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       child: isLoading

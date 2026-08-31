@@ -1,7 +1,6 @@
-import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../../../core/errors/app_exception.dart';
 import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/services/connectivity_service.dart';
 import '../domain/customer_models.dart';
@@ -13,10 +12,14 @@ class CustomerData<T> {
     this.value, {
     required this.fromCache,
     required this.updatedAt,
+    this.isDemo = false,
+    this.isOffline = false,
   });
   final T value;
   final bool fromCache;
   final DateTime updatedAt;
+  final bool isDemo;
+  final bool isOffline;
 }
 
 class CustomerAppRepository {
@@ -25,6 +28,20 @@ class CustomerAppRepository {
   final CustomerCacheDao _cache;
   final FirebaseAuth _auth;
   final ConnectivityService _connectivity;
+
+  Future<CustomerFeatureFlags> featureFlags() async {
+    if (!await _connectivity.check()) {
+      throw const NetworkException(
+        'É necessária ligação à internet para verificar funcionalidades.',
+      );
+    }
+    final credential = await _credential();
+    final session = await _api.session(credential.token);
+    if (_auth.currentUser?.uid != credential.accountId) {
+      throw StateError('A sessão de cliente mudou durante a atualização.');
+    }
+    return session.flags;
+  }
 
   Future<CustomerData<List<CustomerBusiness>>> home() => _resource(
         'home',
@@ -96,14 +113,44 @@ class CustomerAppRepository {
   Future<Map<String, dynamic>> redeem(
       String rewardId, String idempotencyKey) async {
     if (!await _connectivity.check()) {
-      throw StateError('É necessária ligação à internet para resgatar.');
+      throw const NetworkException(
+        'É necessária ligação à internet para resgatar.',
+      );
     }
     final credential = await _credential();
-    return _api.redeem(
+    await _cache.write(credential.accountId, 'redemption:$rewardId', {
+      'status': 'pending',
+      'reward_id': rewardId,
+      'idempotency_key': idempotencyKey,
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    });
+    final result = await _api.redeem(
       credential.token,
       rewardId: rewardId,
       idempotencyKey: idempotencyKey,
     );
+    if (_auth.currentUser?.uid != credential.accountId) {
+      throw StateError('A sessão de cliente mudou durante o resgate.');
+    }
+    await _cache.write(credential.accountId, 'redemption:$rewardId', {
+      'status': 'completed',
+      'reward_id': rewardId,
+      'idempotency_key': idempotencyKey,
+      'result': result,
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    });
+    await _cache.clearTransactionalData(credential.accountId);
+    return result;
+  }
+
+  Future<Map<String, dynamic>?> redemptionRecord(String rewardId) async {
+    final accountId = await _accountId();
+    return (await _cache.read(accountId, 'redemption:$rewardId'))?.payload;
+  }
+
+  Future<void> startNewRedemption(String rewardId) async {
+    final accountId = await _accountId();
+    await _cache.clear(accountId, 'redemption:$rewardId');
   }
 
   Future<void> event(String eventType) async {
@@ -120,31 +167,20 @@ class CustomerAppRepository {
   Future<CustomerData<T>> _resource<T>(
       String key,
       Future<Map<String, dynamic>> Function(String token) fetch,
-      T Function(Map<String, dynamic>) decode,
-      {bool preferCached = true}) async {
+      T Function(Map<String, dynamic>) decode) async {
     final accountId = await _accountId();
     final cached = await _cache.read(accountId, key);
-    if (cached != null && preferCached) {
-      if (await _connectivity.check()) {
-        try {
-          final credential = await _credential(accountId);
-          unawaited(_refreshCache(credential, key, fetch));
-        } catch (error, stackTrace) {
-          AppErrorReporter.report(
-            error,
-            stackTrace,
-            hint: 'customer_refresh_credentials:$key',
-          );
-        }
-      }
+    final isOnline = await _connectivity.check();
+    if (cached != null && !isOnline) {
       return CustomerData(
         decode(cached.payload),
         fromCache: true,
         updatedAt: cached.updatedAt,
+        isOffline: true,
       );
     }
-    if (!await _connectivity.check()) {
-      throw StateError('Sem ligação e sem dados guardados.');
+    if (!isOnline) {
+      throw const NetworkException('Sem ligação e sem dados guardados.');
     }
     try {
       final credential = await _credential(accountId);
@@ -157,28 +193,15 @@ class CustomerAppRepository {
           fromCache: false, updatedAt: DateTime.now());
     } catch (error, stackTrace) {
       AppErrorReporter.report(error, stackTrace, hint: 'customer_read:$key');
-      if (cached != null) {
+      if (cached != null && error is NetworkException) {
         return CustomerData(
           decode(cached.payload),
           fromCache: true,
           updatedAt: cached.updatedAt,
+          isOffline: true,
         );
       }
       rethrow;
-    }
-  }
-
-  Future<void> _refreshCache(
-    _CustomerCredential credential,
-    String key,
-    Future<Map<String, dynamic>> Function(String token) fetch,
-  ) async {
-    try {
-      final payload = await fetch(credential.token);
-      if (_auth.currentUser?.uid != credential.accountId) return;
-      await _cache.write(credential.accountId, key, payload);
-    } catch (error, stackTrace) {
-      AppErrorReporter.report(error, stackTrace, hint: 'customer_refresh:$key');
     }
   }
 

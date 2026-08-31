@@ -206,4 +206,37 @@ void main() {
       ]),
     );
   });
+
+  test('v27 adds customer archive, sale cancellation and tombstones', () async {
+    final db = await _openDb(version: 26);
+    await AppMigrations.migrate(db, fromVersion: 26, toVersion: 27);
+
+    expect(
+      await _columns(db, 'customers'),
+      containsAll(<String>[
+        'archived_at',
+        'archived_by_app_user_id',
+      ]),
+    );
+    expect(
+      await _columns(db, 'sales'),
+      containsAll(<String>[
+        'cancellation_status',
+        'cancelled_at',
+        'cancelled_by_app_user_id',
+        'cancellation_reason',
+        'replacement_sale_id',
+      ]),
+    );
+    expect(
+      await _columns(db, 'sync_tombstones'),
+      containsAll(<String>[
+        'id',
+        'merchant_id',
+        'entity_type',
+        'entity_id',
+        'deleted_at',
+      ]),
+    );
+  });
 }

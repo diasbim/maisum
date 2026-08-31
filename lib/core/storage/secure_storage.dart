@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../constants/app_constants.dart';
@@ -10,6 +12,7 @@ class SecureStorageService {
   static const _androidOptions = AndroidOptions(
     encryptedSharedPreferences: true,
   );
+  static const _pendingCustomerPushRemovalKey = 'customer_pending_push_removal';
 
   Future<void> saveToken(String token) => _storage.write(
         key: AppConstants.tokenKey,
@@ -143,6 +146,55 @@ class SecureStorageService {
   Future<String?> getDeviceId() =>
       _storage.read(key: AppConstants.deviceIdKey, aOptions: _androidOptions);
 
+  Future<void> savePendingCustomerPushRemoval({
+    required String accountId,
+    required String platform,
+    required String token,
+  }) =>
+      _storage.write(
+        key: _pendingCustomerPushRemovalKey,
+        value: jsonEncode({
+          'account_id': accountId,
+          'platform': platform,
+          'token': token,
+        }),
+        aOptions: _androidOptions,
+      );
+
+  Future<PendingCustomerPushRemoval?> getPendingCustomerPushRemoval() async {
+    final raw = await _storage.read(
+      key: _pendingCustomerPushRemovalKey,
+      aOptions: _androidOptions,
+    );
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final json = (jsonDecode(raw) as Map).cast<String, dynamic>();
+      final accountId = json['account_id'];
+      final platform = json['platform'];
+      final token = json['token'];
+      if (accountId is! String ||
+          accountId.isEmpty ||
+          platform is! String ||
+          platform.isEmpty ||
+          token is! String ||
+          token.isEmpty) {
+        return null;
+      }
+      return PendingCustomerPushRemoval(
+        accountId: accountId,
+        platform: platform,
+        token: token,
+      );
+    } on FormatException {
+      return null;
+    }
+  }
+
+  Future<void> clearPendingCustomerPushRemoval() => _storage.delete(
+        key: _pendingCustomerPushRemovalKey,
+        aOptions: _androidOptions,
+      );
+
   Future<void> saveTokenExpiry(DateTime expiry) => _storage.write(
         key: AppConstants.tokenExpiryKey,
         value: expiry.millisecondsSinceEpoch.toString(),
@@ -166,7 +218,20 @@ class SecureStorageService {
     return expiry.isAfter(DateTime.now());
   }
 
-  Future<void> clearAll() => _storage.deleteAll(aOptions: _androidOptions);
+  Future<void> clearAll() async {
+    final pendingPushRemoval = await _storage.read(
+      key: _pendingCustomerPushRemovalKey,
+      aOptions: _androidOptions,
+    );
+    await _storage.deleteAll(aOptions: _androidOptions);
+    if (pendingPushRemoval != null) {
+      await _storage.write(
+        key: _pendingCustomerPushRemovalKey,
+        value: pendingPushRemoval,
+        aOptions: _androidOptions,
+      );
+    }
+  }
 
   // PIN management
   Future<void> savePin(String pin) => _storage.write(
@@ -323,4 +388,16 @@ class SecureStorageService {
     if (trimmed.isEmpty) return '';
     return trimmed.replaceAll(RegExp(r'[^A-Za-z0-9_.-]'), '_');
   }
+}
+
+class PendingCustomerPushRemoval {
+  const PendingCustomerPushRemoval({
+    required this.accountId,
+    required this.platform,
+    required this.token,
+  });
+
+  final String accountId;
+  final String platform;
+  final String token;
 }
