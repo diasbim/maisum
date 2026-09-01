@@ -222,6 +222,11 @@ final isOwnerUserProvider = FutureProvider<bool>((ref) async {
   return role == AppConstants.appUserRoleOwner;
 });
 
+/// Mirrors `functions/src/admin_access.ts` -> `hasAdminClaims()` and
+/// `firestore.rules` -> `isAdmin()`. All three must accept the same claim set:
+/// an admin the API authorizes must also be able to read Firestore.
+/// Parity between the backend two is asserted by
+/// `functions/src/admin_access.test.ts`.
 bool hasInternalAdminClaim(Map<String, dynamic> claims) {
   final role = claims['role']?.toString().trim().toLowerCase();
   return claims['admin'] == true ||

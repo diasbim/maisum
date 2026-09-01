@@ -5,11 +5,24 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Mirrors functions/src/admin_access.ts -> hasAdminClaims().
+    // Parity is asserted by functions/src/admin_access.test.ts; if you change
+    // the accepted claims here, change them there and in
+    // lib/features/auth/presentation/auth_controller.dart too.
+    function hasAdminRoleClaim() {
+      return 'role' in request.auth.token &&
+        request.auth.token.role is string && (
+          request.auth.token.role.trim().lower() == 'admin' ||
+          request.auth.token.role.trim().lower() == 'internal_admin'
+        );
+    }
+
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.admin == true ||
         request.auth.token.is_admin == true ||
-        request.auth.token.role == 'admin'
+        request.auth.token.internal_admin == true ||
+        hasAdminRoleClaim()
       );
     }
 

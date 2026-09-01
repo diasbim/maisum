@@ -1,0 +1,989 @@
+/*
+ * Design system tokens, from lib/designsystem.html.
+ *
+ * Only the general-purpose parts are adopted here: colour, type, radius,
+ * shadow, motion, buttons, fields, badges and cards. The product-specific
+ * components in that file (job cards, mestre cards, testimonials, progress
+ * steps, FAQ) belong to a different surface and have no place in an operations
+ * console.
+ *
+ * The system defines a single light palette, so this portal is light-only.
+ * Inventing dark values would put the portal out of step with the brand.
+ */
+
+:root {
+  /* Brand */
+  --navy: oklch(20% 0.055 258);
+  --navy2: oklch(17% 0.05 258);
+  --navy3: oklch(14% 0.04 258);
+  --gold: oklch(82% 0.18 82);
+  --goldDk: oklch(75% 0.18 82);
+  --goldLt: oklch(97% 0.04 82);
+  --white: oklch(99% 0.004 82);
+  --off: oklch(97% 0.006 82);
+
+  /* Neutral */
+  --g100: oklch(94% 0.006 250);
+  --g300: oklch(82% 0.01 250);
+  --g500: oklch(56% 0.015 250);
+  --g800: oklch(22% 0.02 250);
+
+  /* Status */
+  --green: oklch(62% 0.18 145);
+  --red: oklch(52% 0.22 25);
+  --amber: oklch(78% 0.17 60);
+
+  /* Radius */
+  --r: 12px;
+  --rL: 18px;
+  --rXL: 24px;
+
+  /* Shadow */
+  --sh: 0 2px 10px oklch(20% 0.055 258 / 0.1);
+  --shM: 0 6px 24px oklch(20% 0.055 258 / 0.16);
+  --shL: 0 16px 56px oklch(20% 0.055 258 / 0.24);
+
+  /* Motion */
+  --t-micro: 0.15s;
+  --t-default: 0.18s;
+  --t-medium: 0.25s;
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-body), system-ui, sans-serif;
+  background: var(--off);
+  color: var(--g800);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-head), system-ui, sans-serif;
+  color: var(--navy);
+  line-height: 1.15;
+}
+
+a {
+  color: var(--navy);
+  text-decoration-color: var(--g300);
+  text-underline-offset: 2px;
+  transition: color var(--t-micro);
+}
+
+a:hover {
+  color: var(--navy2);
+  text-decoration-color: var(--gold);
+}
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+}
+
+.topbar {
+  background: var(--navy);
+  border-bottom: 1px solid oklch(100% 0 0 / 0.07);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.topbar__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.topbar__logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-head), system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--white);
+  white-space: nowrap;
+}
+
+.topbar__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex-shrink: 0;
+}
+
+.topbar__user {
+  color: oklch(100% 0 0 / 0.55);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+/* Section nav, mirroring the design system's underline-on-gold treatment. */
+.subnav {
+  background: var(--white);
+  border-bottom: 1px solid var(--g100);
+  overflow-x: auto;
+}
+
+.subnav__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+}
+
+.subnav a {
+  padding: 14px 18px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--g500);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition:
+    color var(--t-micro),
+    border-color var(--t-micro);
+}
+
+.subnav a:hover,
+.subnav a[aria-current='page'] {
+  color: var(--navy);
+  border-bottom-color: var(--gold);
+}
+
+/* ── Page furniture ─────────────────────────────────────────────────────── */
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.page-head h1 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.page-head p {
+  color: var(--g500);
+  font-size: 0.88rem;
+}
+
+.section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--g500);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--white);
+  border-radius: var(--rL);
+  padding: 24px;
+  box-shadow: var(--sh);
+  border: 1.5px solid var(--g100);
+}
+
+.card--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.metric-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--g500);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.metric-value {
+  font-family: var(--font-head), system-ui, sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--navy);
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────── */
+/* The design system has no table; these follow its surfaces and neutrals. */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--off);
+  text-align: left;
+  padding: 11px 16px;
+  color: var(--g500);
+  font-weight: 700;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border-bottom: 1.5px solid var(--g100);
+  white-space: nowrap;
+}
+
+tbody td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--g100);
+  vertical-align: top;
+}
+
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr {
+  transition: background var(--t-micro);
+}
+
+tbody tr:hover {
+  background: var(--off);
+}
+
+.scroll-x {
+  overflow-x: auto;
+}
+
+.muted {
+  color: var(--g500);
+}
+
+.micro {
+  font-size: 0.72rem;
+  color: var(--g500);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 13px 24px;
+  border-radius: var(--r);
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: all var(--t-default);
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-gold {
+  background: var(--gold);
+  color: var(--navy);
+}
+
+.btn-gold:hover:not(:disabled) {
+  background: var(--goldDk);
+  box-shadow: var(--shM);
+}
+
+.btn-navy {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.btn-navy:hover:not(:disabled) {
+  background: var(--navy2);
+  box-shadow: var(--shM);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--navy);
+  border: 1.5px solid var(--g300);
+}
+
+.btn-outline:hover:not(:disabled) {
+  border-color: var(--navy);
+}
+
+.btn-ghost-dark {
+  background: transparent;
+  color: var(--white);
+  border: 1.5px solid oklch(100% 0 0 / 0.3);
+}
+
+.btn-ghost-dark:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  border-radius: 8px;
+}
+
+.btn-lg {
+  padding: 16px 32px;
+  font-size: 1.05rem;
+  border-radius: var(--rL);
+}
+
+/* ── Fields ─────────────────────────────────────────────────────────────── */
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--g500);
+  margin-bottom: 6px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1.5px solid var(--g300);
+  border-radius: var(--r);
+  font-family: inherit;
+  font-size: 0.92rem;
+  color: var(--g800);
+  background: var(--white);
+  transition:
+    border-color var(--t-default),
+    box-shadow var(--t-default);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px oklch(82% 0.18 82 / 0.18);
+}
+
+.input::placeholder {
+  color: var(--g300);
+}
+
+.field__hint {
+  font-size: 0.75rem;
+  color: var(--g500);
+  margin-top: 5px;
+}
+
+/* ── Badges ─────────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge-gold {
+  background: var(--goldLt);
+  color: var(--navy);
+}
+
+.badge-navy {
+  background: oklch(20% 0.055 258 / 0.1);
+  color: var(--navy);
+}
+
+.badge-green {
+  background: oklch(62% 0.18 145 / 0.12);
+  color: var(--green);
+}
+
+.badge-red {
+  background: oklch(52% 0.22 25 / 0.1);
+  color: var(--red);
+}
+
+.badge-amber {
+  background: oklch(78% 0.17 60 / 0.15);
+  color: oklch(50% 0.15 60);
+}
+
+/* ── Messages ───────────────────────────────────────────────────────────── */
+
+.error {
+  color: var(--red);
+  background: oklch(52% 0.22 25 / 0.08);
+  border: 1.5px solid oklch(52% 0.22 25 / 0.2);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  font-size: 0.85rem;
+}
+
+/* The design system's info box, reused for empty states. */
+.info-box {
+  background: var(--goldLt);
+  border: 1px solid oklch(82% 0.18 82 / 0.3);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  font-size: 0.85rem;
+  color: var(--navy);
+}
+
+/* ── Auth screens ───────────────────────────────────────────────────────── */
+
+.auth-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(
+      120% 90% at 50% -10%,
+      oklch(82% 0.18 82 / 0.14),
+      transparent 60%
+    ),
+    var(--off);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--white);
+  border-radius: var(--rXL);
+  border: 1.5px solid var(--g100);
+  box-shadow: var(--shL);
+  padding: 32px;
+}
+
+/* == Shell ================================================================= */
+
+/*
+ * Two-column shell. The nav is a sidebar rather than a row of tabs because the
+ * console has five groups of sections; a single row would either wrap or scroll
+ * sideways, and both hide destinations.
+ */
+.shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr);
+  align-items: start;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.sidebar {
+  position: sticky;
+  top: 60px;
+  align-self: start;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  padding: 24px 12px 48px;
+  border-right: 1px solid var(--g100);
+}
+
+.sidebar__group {
+  margin-bottom: 22px;
+}
+
+.sidebar__label {
+  padding: 0 12px 8px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--g500);
+}
+
+.sidebar a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 1px;
+  border-radius: 9px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--g800);
+  text-decoration: none;
+  transition:
+    background var(--t-micro),
+    color var(--t-micro);
+}
+
+.sidebar a:hover {
+  background: var(--off);
+}
+
+.sidebar a[aria-current='page'] {
+  background: var(--navy);
+  color: var(--white);
+}
+
+.sidebar a[aria-current='page'] .sidebar__mark {
+  background: var(--gold);
+}
+
+.sidebar__mark {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--g300);
+  flex-shrink: 0;
+}
+
+.sidebar__soon {
+  margin-left: auto;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--g500);
+}
+
+.shell main {
+  min-width: 0;
+  padding: 32px 28px 96px;
+}
+
+/* Below the shell breakpoint the sidebar becomes a scrollable strip. */
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: static;
+    max-height: none;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 10px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--g100);
+  }
+  .sidebar__group {
+    display: flex;
+    gap: 4px;
+    margin: 0;
+  }
+  .sidebar__label,
+  .sidebar__mark,
+  .sidebar__soon {
+    display: none;
+  }
+  .sidebar a {
+    white-space: nowrap;
+  }
+  .shell main {
+    padding: 24px 16px 80px;
+  }
+}
+
+/* Keyboard users reach the content without walking the whole nav. */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  z-index: 200;
+  padding: 10px 16px;
+  background: var(--gold);
+  color: var(--navy);
+  font-weight: 700;
+  border-radius: 0 0 var(--r) 0;
+}
+
+.skip-link:focus {
+  left: 0;
+  top: 0;
+}
+
+/* == Toolbar and filters =================================================== */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.toolbar .field {
+  margin: 0;
+  min-width: 150px;
+}
+
+.toolbar__spacer {
+  flex: 1 1 auto;
+}
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  padding: 5px 12px;
+  border: 1px solid var(--g300);
+  border-radius: 999px;
+  background: var(--white);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--g800);
+  text-decoration: none;
+  transition:
+    background var(--t-micro),
+    border-color var(--t-micro),
+    color var(--t-micro);
+}
+
+.chip:hover {
+  border-color: var(--navy);
+}
+
+.chip[aria-current='true'] {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: var(--white);
+}
+
+/* == Tabs ================================================================== */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--g100);
+  margin-bottom: 24px;
+  overflow-x: auto;
+}
+
+.tabs a {
+  padding: 10px 16px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--g500);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition:
+    color var(--t-micro),
+    border-color var(--t-micro);
+}
+
+.tabs a:hover,
+.tabs a[aria-current='page'] {
+  color: var(--navy);
+  border-bottom-color: var(--gold);
+}
+
+/* == Forms ================================================================= */
+
+.form-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  align-items: end;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--g300);
+  border-radius: var(--r);
+  background: var(--white);
+  cursor: pointer;
+  transition: border-color var(--t-micro);
+}
+
+.check:hover {
+  border-color: var(--navy);
+}
+
+.check input {
+  margin-top: 2px;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--gold);
+  flex-shrink: 0;
+}
+
+.check span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.check em {
+  display: block;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.73rem;
+  color: var(--g500);
+  margin-top: 2px;
+}
+
+/* The apply toggle is the one control here that changes production data. */
+.check--danger {
+  border-color: var(--amber);
+  background: var(--goldLt);
+}
+
+.check--danger input {
+  accent-color: var(--red);
+}
+
+textarea.input {
+  min-height: 110px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+select.input {
+  cursor: pointer;
+}
+
+/* == Feedback ============================================================== */
+
+.notice {
+  display: flex;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--r);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  border: 1px solid;
+}
+
+.notice--ok {
+  background: oklch(96% 0.04 145);
+  border-color: oklch(80% 0.1 145);
+  color: oklch(35% 0.12 145);
+}
+
+.notice--error {
+  background: oklch(96% 0.03 25);
+  border-color: oklch(82% 0.09 25);
+  color: oklch(40% 0.16 25);
+}
+
+.notice__mark {
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.output {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--r);
+  background: var(--navy3);
+  color: oklch(92% 0.01 250);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* == Loading =============================================================== */
+
+/*
+ * Skeletons, not spinners. Each panel streams in on its own Suspense boundary,
+ * so the page settles progressively instead of blocking on the slowest query.
+ */
+.skeleton {
+  border-radius: var(--r);
+  background: linear-gradient(
+    90deg,
+    var(--g100) 25%,
+    var(--off) 37%,
+    var(--g100) 63%
+  );
+  background-size: 400% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+.skeleton--line {
+  height: 12px;
+  margin-bottom: 9px;
+}
+
+.skeleton--row {
+  height: 42px;
+  margin-bottom: 4px;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* == Matrix ================================================================ */
+
+/*
+ * The advertised-vs-provisioned view. Colour never carries the verdict alone;
+ * every cell also has a glyph and a title, so it survives being printed,
+ * screenshotted in greyscale, or read by someone who cannot tell the green
+ * from the amber.
+ */
+.matrix td {
+  vertical-align: top;
+}
+
+.verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.verdict__mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.68rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.verdict--ok .verdict__mark {
+  background: oklch(92% 0.08 145);
+  color: oklch(38% 0.14 145);
+}
+
+.verdict--gap .verdict__mark {
+  background: oklch(93% 0.07 25);
+  color: oklch(42% 0.16 25);
+}
+
+.verdict--open .verdict__mark {
+  background: var(--goldLt);
+  color: var(--goldDk);
+}
+
+.verdict--na .verdict__mark {
+  background: var(--g100);
+  color: var(--g500);
+}
+
+/* == Misc ================================================================== */
+
+.stack {
+  display: grid;
+  gap: 12px;
+}
+
+.split {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.card__title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.card__hint {
+  font-size: 0.76rem;
+  color: var(--g500);
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+code.inline {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--off);
+  border: 1px solid var(--g100);
+  font-size: 0.76rem;
+}

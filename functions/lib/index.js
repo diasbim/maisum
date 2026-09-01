@@ -36,15 +36,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.usageReconcileWeekly = exports.usageBackfillDaily = exports.retentionInactivityScanDaily = exports.retentionDomainEventPostgresProjection = exports.loyaltyLedgerSaleOnSaleWrite = exports.customerCoreCanonicalLinkOnCustomerWrite = exports.api = void 0;
+exports.usageReconcileWeekly = exports.usageBackfillDaily = exports.retentionInactivityScanDaily = exports.retentionDomainEventPostgresProjection = exports.merchantProfilePostgresProjection = exports.loyaltyLedgerSaleOnSaleWrite = exports.customerCoreCanonicalLinkOnCustomerWrite = exports.api = void 0;
 const admin = __importStar(require("firebase-admin"));
+const firestore_1 = require("firebase-admin/firestore");
 const crypto_1 = require("crypto");
 const express_1 = __importDefault(require("express"));
-const firestore_1 = require("firebase-functions/v2/firestore");
+const firestore_2 = require("firebase-functions/v2/firestore");
 const https_1 = require("firebase-functions/v2/https");
 const params_1 = require("firebase-functions/params");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const pg_1 = require("pg");
+const admin_access_js_1 = require("./admin_access.js");
+const admin_api_contracts_js_1 = require("./admin_api_contracts.js");
 const customer_account_binding_js_1 = require("./customer_account_binding.js");
 const customer_feature_flags_js_1 = require("./customer_feature_flags.js");
 const customer_push_tokens_js_1 = require("./customer_push_tokens.js");
@@ -53,6 +56,8 @@ const customer_redemption_fulfillment_js_1 = require("./customer_redemption_fulf
 const customer_redemption_observability_js_1 = require("./customer_redemption_observability.js");
 const customer_qr_js_1 = require("./customer_qr.js");
 const customer_nfc_js_1 = require("./customer_nfc.js");
+const cors_origins_js_1 = require("./cors_origins.js");
+const merchant_projection_js_1 = require("./merchant_projection.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
 const sync_backend_js_1 = require("./sync_backend.js");
@@ -303,11 +308,13 @@ app.use(async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if ((!authHeader || !authHeader.startsWith('Bearer ')) &&
         isAdminPath(req) &&
-        hasValidAdminApiKey(req)) {
+        (0, admin_access_js_1.isAdminApiKeyPath)(req.path) &&
+        (0, admin_access_js_1.adminApiKeyMatches)(process.env.ADMIN_API_KEY, pickHeaderString(req.headers['x-admin-key']))) {
         const authedReq = req;
         authedReq.merchantId = '';
         authedReq.appUserId = 'admin-key';
         authedReq.appUserRole = 'ADMIN';
+        authedReq.adminKeyGranted = true;
         return next();
     }
     if ((!authHeader || !authHeader.startsWith('Bearer ')) && allowDev) {
@@ -326,7 +333,7 @@ app.use(async (req, res, next) => {
     const token = authHeader.replace('Bearer ', '').trim();
     try {
         const decoded = await admin.auth().verifyIdToken(token);
-        const adminAccess = isAdminPath(req) && hasAdminClaims(decoded);
+        const adminAccess = isAdminPath(req) && (0, admin_access_js_1.hasAdminClaims)(decoded);
         const requestScope = (0, customer_request_auth_js_1.resolveAuthenticatedRequestScope)({
             path: req.path,
             resolvedMerchantId: resolveMerchantId(decoded),
@@ -351,6 +358,26 @@ app.use(async (req, res, next) => {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
     }
 });
+/**
+ * Structured failure for an admin endpoint.
+ *
+ * These handlers used to swallow the cause entirely — `catch` returned a bare
+ * "Server error" and logged nothing, so a 500 in production told an operator
+ * exactly as much as it told the browser: nothing. The cause is now in Cloud
+ * Logging under `event="admin_api_error"`, while the response body stays
+ * generic so no SQL, hostname or connection detail reaches the client.
+ */
+function respondAdminServerError(res, operation, error) {
+    const code = error?.code;
+    console.error('admin_api_error', {
+        event: 'admin_api_error',
+        operation,
+        error_name: error instanceof Error ? error.name : typeof error,
+        error_code: typeof code === 'string' || typeof code === 'number' ? code : null,
+        error_message: error instanceof Error ? error.message : String(error),
+    });
+    return res.status(500).json({ success: false, message: 'Server error' });
+}
 const adminRouter = express_1.default.Router();
 adminRouter.use((req, res, next) => {
     if (!isAdminRequest(req)) {
@@ -373,6 +400,20 @@ adminRouter.get('/merchants', async (req, res) => {
       OR m.name ILIKE $${params.length}
       OR m.phone ILIKE $${params.length}
     )`);
+    }
+    // Subscription status and plan filters. Both compare against the joined
+    // subscription_state row, so a merchant with no subscription at all is
+    // excluded by either filter rather than silently matching.
+    const status = pickQueryString(req.query.status);
+    if (status) {
+        params.push(status.toUpperCase());
+        where.push(`UPPER(ss.status) = $${params.length}`);
+    }
+    const planCode = pickQueryString(req.query.plan_code) ??
+        pickQueryString(req.query.planCode);
+    if (planCode) {
+        params.push(planCode);
+        where.push(`ss.plan_code = $${params.length}`);
     }
     const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     params.push(limit);
@@ -419,16 +460,12 @@ adminRouter.get('/merchants', async (req, res) => {
         const result = await pool.query(sql, params);
         return res.json({
             success: true,
-            data: result.rows,
-            paging: {
-                limit,
-                offset,
-                has_more: result.rows.length === limit,
-            },
+            data: result.rows.map(admin_api_contracts_js_1.toAdminMerchantSummary),
+            paging: (0, admin_api_contracts_js_1.toAdminPaging)(limit, offset, result.rows.length),
         });
     }
     catch (error) {
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'get_merchants', error);
     }
 });
 adminRouter.get('/audit-events', async (req, res) => {
@@ -453,6 +490,14 @@ adminRouter.get('/audit-events', async (req, res) => {
     if (merchantId) {
         params.push(merchantId);
         where.push(`merchant_id = $${params.length}`);
+    }
+    // Filtering by action is how an operator answers "who changed entitlements
+    // this week" without reading every row. Matched exactly, not by prefix: the
+    // actions are a closed set written by recordAdminAuditEvent.
+    const action = pickQueryString(req.query.action);
+    if (action) {
+        params.push(action);
+        where.push(`action = $${params.length}`);
     }
     const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
     params.push(limit);
@@ -480,16 +525,12 @@ adminRouter.get('/audit-events', async (req, res) => {
         const result = await pool.query(sql, params);
         return res.json({
             success: true,
-            data: result.rows,
-            paging: {
-                limit,
-                offset,
-                has_more: result.rows.length === limit,
-            },
+            data: result.rows.map(admin_api_contracts_js_1.toAdminAuditEvent),
+            paging: (0, admin_api_contracts_js_1.toAdminPaging)(limit, offset, result.rows.length),
         });
     }
     catch (error) {
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'get_audit_events', error);
     }
 });
 adminRouter.get('/operations/summary', async (_req, res) => {
@@ -511,10 +552,13 @@ adminRouter.get('/operations/summary', async (_req, res) => {
   `;
     try {
         const result = await pool.query(sql, [dayAgo]);
-        return res.json({ success: true, data: result.rows[0] ?? {} });
+        return res.json({
+            success: true,
+            data: (0, admin_api_contracts_js_1.toAdminOperationsSummary)(result.rows[0]),
+        });
     }
     catch (error) {
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'get_operations_summary', error);
     }
 });
 adminRouter.get('/merchants/:merchantId', async (req, res) => {
@@ -571,10 +615,13 @@ adminRouter.get('/merchants/:merchantId', async (req, res) => {
                 .status(404)
                 .json({ success: false, message: 'Merchant not found' });
         }
-        return res.json({ success: true, data: result.rows[0] });
+        return res.json({
+            success: true,
+            data: (0, admin_api_contracts_js_1.toAdminMerchantDetail)(result.rows[0]),
+        });
     }
     catch (error) {
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'get_merchant_detail', error);
     }
 });
 adminRouter.get('/plans', async (_req, res) => {
@@ -627,10 +674,10 @@ adminRouter.get('/plans', async (_req, res) => {
   `;
     try {
         const result = await pool.query(sql);
-        return res.json({ success: true, data: result.rows });
+        return res.json({ success: true, data: result.rows.map(admin_api_contracts_js_1.toAdminPlan) });
     }
     catch (error) {
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'get_plans', error);
     }
 });
 adminRouter.post('/merchants/:merchantId/entitlements', async (req, res) => {
@@ -714,7 +761,7 @@ adminRouter.post('/merchants/:merchantId/entitlements', async (req, res) => {
     }
     catch (error) {
         await client.query('ROLLBACK');
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'override_entitlement', error);
     }
     finally {
         client.release();
@@ -769,7 +816,7 @@ adminRouter.post('/plans', async (req, res) => {
     }
     catch (error) {
         await client.query('ROLLBACK');
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'upsert_plan', error);
     }
     finally {
         client.release();
@@ -840,7 +887,7 @@ adminRouter.post('/prices', async (req, res) => {
     }
     catch (error) {
         await client.query('ROLLBACK');
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'upsert_price', error);
     }
     finally {
         client.release();
@@ -916,7 +963,7 @@ adminRouter.post('/plans/:planCode/features', async (req, res) => {
     }
     catch (error) {
         await client.query('ROLLBACK');
-        return res.status(500).json({ success: false, message: 'Server error' });
+        return respondAdminServerError(res, 'upsert_plan_feature', error);
     }
     finally {
         client.release();
@@ -974,6 +1021,512 @@ adminRouter.post('/retention/classifications/scan', async (req, res) => {
     }
     catch (error) {
         return respondCustomerCoreError(res, error);
+    }
+});
+/* -- Read surfaces the console needs ------------------------------------- */
+/**
+ * The entitlement overrides in force for one merchant.
+ *
+ * The merchant detail endpoint only counts these. A count is enough to notice
+ * that overrides exist and useless for deciding whether to add another, so the
+ * rows are served separately rather than widening that already-large query.
+ */
+adminRouter.get('/merchants/:merchantId/entitlements', async (req, res) => {
+    const merchantId = isNonEmptyString(req.params.merchantId)
+        ? req.params.merchantId.trim()
+        : null;
+    if (!merchantId) {
+        return res
+            .status(400)
+            .json({ success: false, message: 'Missing merchant id' });
+    }
+    try {
+        const merchantResult = await pool.query('SELECT id FROM merchants WHERE id = $1', [merchantId]);
+        if (merchantResult.rowCount === 0) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Merchant not found' });
+        }
+        const result = await pool.query(`
+        SELECT id, merchant_id, feature_key, is_enabled, limit_value, unit, updated_at
+        FROM entitlements
+        WHERE merchant_id = $1
+        ORDER BY feature_key ASC
+      `, [merchantId]);
+        return res.json({
+            success: true,
+            data: result.rows.map(admin_api_contracts_js_1.toAdminEntitlement),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'get_merchant_entitlements', error);
+    }
+});
+/**
+ * Staff accounts across every merchant.
+ *
+ * There was no way to see who can sign in to a business without opening the
+ * Firebase console. Phone is the identifier these accounts are keyed on, so it
+ * is both the search field and what comes back.
+ */
+adminRouter.get('/access/staff', async (req, res) => {
+    const limit = clampLimit(req.query.limit, 50, 100);
+    const offset = Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0));
+    const search = pickQueryString(req.query.search);
+    const merchantId = pickQueryString(req.query.merchant_id) ??
+        pickQueryString(req.query.merchantId);
+    const status = pickQueryString(req.query.status);
+    const role = pickQueryString(req.query.role);
+    const params = [];
+    const where = [];
+    if (search) {
+        params.push(`%${search}%`);
+        where.push(`(au.phone ILIKE $${params.length} OR au.id ILIKE $${params.length})`);
+    }
+    if (merchantId) {
+        params.push(merchantId);
+        where.push(`au.merchant_id = $${params.length}`);
+    }
+    if (status) {
+        params.push(status.toUpperCase());
+        where.push(`UPPER(au.status) = $${params.length}`);
+    }
+    if (role) {
+        params.push(role.toUpperCase());
+        where.push(`UPPER(au.role) = $${params.length}`);
+    }
+    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
+    params.push(limit);
+    const limitParam = params.length;
+    params.push(offset);
+    const offsetParam = params.length;
+    const sql = `
+    SELECT
+      au.id,
+      au.merchant_id,
+      m.name AS merchant_name,
+      au.phone,
+      au.role,
+      au.status,
+      au.invited_at,
+      au.accepted_at,
+      au.deactivated_at,
+      au.last_login_at,
+      au.created_at,
+      au.updated_at
+    FROM app_users au
+    LEFT JOIN merchants m ON m.id = au.merchant_id
+    ${whereSql}
+    ORDER BY au.updated_at DESC, au.id ASC
+    LIMIT $${limitParam} OFFSET $${offsetParam}
+  `;
+    try {
+        const result = await pool.query(sql, params);
+        return res.json({
+            success: true,
+            data: result.rows.map(admin_api_contracts_js_1.toAdminStaffUser),
+            paging: (0, admin_api_contracts_js_1.toAdminPaging)(limit, offset, result.rows.length),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'get_access_staff', error);
+    }
+});
+/**
+ * Who currently holds an administrator claim.
+ *
+ * Read from Firebase Auth, because that is where the claim lives — there is no
+ * table of administrators to query. `listUsers` pages through the whole
+ * directory, so this is capped: it answers "who has this power", and a
+ * directory large enough to exceed the cap needs a different mechanism than a
+ * scan anyway.
+ */
+const ADMIN_DIRECTORY_SCAN_LIMIT = 2000;
+adminRouter.get('/access/admins', async (_req, res) => {
+    try {
+        const admins = [];
+        let pageToken;
+        let scanned = 0;
+        do {
+            const page = await admin.auth().listUsers(1000, pageToken);
+            scanned += page.users.length;
+            for (const user of page.users) {
+                if (!(0, admin_access_js_1.hasAdminClaims)(user.customClaims))
+                    continue;
+                admins.push({
+                    uid: user.uid,
+                    email: user.email ?? null,
+                    display_name: user.displayName ?? null,
+                    disabled: user.disabled,
+                    // Which claim grants it matters when revoking: the three boolean
+                    // claims and the role claim are set by different paths.
+                    claims: (0, admin_access_js_1.adminClaimNames)(user.customClaims),
+                    last_sign_in_at: user.metadata.lastSignInTime
+                        ? Date.parse(user.metadata.lastSignInTime)
+                        : null,
+                    created_at: user.metadata.creationTime
+                        ? Date.parse(user.metadata.creationTime)
+                        : null,
+                });
+            }
+            pageToken = page.pageToken;
+        } while (pageToken && scanned < ADMIN_DIRECTORY_SCAN_LIMIT);
+        return res.json({
+            success: true,
+            data: admins,
+            // Reported so the console can say the list is partial rather than
+            // presenting a truncated scan as the complete set of administrators.
+            truncated: pageToken != null,
+            scanned,
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'get_access_admins', error);
+    }
+});
+/* -- Customer support surfaces ------------------------------------------- */
+/**
+ * Finds one customer.
+ *
+ * Deliberately a lookup, not a search. The canonical id is an HMAC of the
+ * phone number, so a phone resolves to exactly one document with no scan — and
+ * there is no way to list or browse customers by name. That is a property
+ * worth keeping: an internal console that cannot enumerate the customer base
+ * cannot leak it either.
+ *
+ * Accepts a phone, a card UID, or the canonical id itself.
+ */
+adminRouter.get('/customers/lookup', async (req, res) => {
+    const phone = pickQueryString(req.query.phone);
+    const cardUid = pickQueryString(req.query.card_uid) ??
+        pickQueryString(req.query.cardUid);
+    const canonicalId = pickQueryString(req.query.canonical_customer_id) ??
+        pickQueryString(req.query.canonicalCustomerId);
+    let canonicalCustomerId;
+    try {
+        if (phone) {
+            canonicalCustomerId = buildCanonicalCustomerId(normalizeMozambiquePhoneToE164(phone));
+        }
+        else if (cardUid) {
+            const normalizedUid = (0, customer_nfc_js_1.tryNormalizeNfcCardUid)(cardUid);
+            if (!normalizedUid) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: 'Invalid card UID.' });
+            }
+            const cardSnapshot = await nfcCardRef(normalizedUid).get();
+            if (!cardSnapshot.exists) {
+                return res
+                    .status(404)
+                    .json({ success: false, message: 'Card not found.' });
+            }
+            const linked = maybePayloadString(snapshotDataRecord(cardSnapshot), 'canonical_customer_id');
+            if (!linked) {
+                return res
+                    .status(404)
+                    .json({ success: false, message: 'Card is not linked to a customer.' });
+            }
+            canonicalCustomerId = linked;
+        }
+        else if (canonicalId) {
+            canonicalCustomerId = canonicalId;
+        }
+        else {
+            return res.status(400).json({
+                success: false,
+                message: 'Provide phone, card_uid or canonical_customer_id.',
+            });
+        }
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+    try {
+        const [identitySnapshot, linkSnapshot, cardsSnapshot, accountLinkSnapshot] = await Promise.all([
+            canonicalCustomerIdentityRef(canonicalCustomerId).get(),
+            admin
+                .firestore()
+                .collection(CANONICAL_IDENTITY_BUSINESS_LINK_COLLECTION)
+                .where('canonical_customer_id', '==', canonicalCustomerId)
+                .limit(50)
+                .get(),
+            admin
+                .firestore()
+                .collection(CUSTOMER_NFC_CARD_COLLECTION)
+                .where('canonical_customer_id', '==', canonicalCustomerId)
+                .limit(50)
+                .get(),
+            customerIdentityAccountLinkRef(canonicalCustomerId).get(),
+        ]);
+        if (!identitySnapshot.exists) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Customer not found.' });
+        }
+        const identity = snapshotDataRecord(identitySnapshot);
+        // Each business the customer is known to, with the id that business uses
+        // for them — which is what the ledger endpoint needs.
+        const businesses = linkSnapshot.docs.map((doc) => {
+            const data = snapshotDataRecord(doc);
+            return {
+                merchant_id: maybePayloadString(data, 'merchant_id') ?? '',
+                business_customer_id: maybePayloadString(data, 'business_customer_id', 'customer_id') ?? '',
+                linked_at: pickNumber(data, 'linked_at') ?? pickNumber(data, 'created_at'),
+            };
+        });
+        const cards = cardsSnapshot.docs.map((doc) => {
+            const data = snapshotDataRecord(doc);
+            return {
+                card_uid_last4: last4(maybePayloadString(data, 'card_uid') ?? doc.id),
+                status: maybePayloadString(data, 'status') ?? 'UNKNOWN',
+                source: maybePayloadString(data, 'source') ?? null,
+                linked_by_merchant_id: maybePayloadString(data, 'linked_by_merchant_id'),
+                created_at: pickNumber(data, 'created_at'),
+                updated_at: pickNumber(data, 'updated_at'),
+            };
+        });
+        return res.json({
+            success: true,
+            data: {
+                canonical_customer_id: canonicalCustomerId,
+                // Only the last four digits. The operator already knows the number
+                // they searched with; echoing the full number back for every result
+                // would turn this into a way to read numbers out of the system.
+                phone_last4: maybePayloadString(identity, 'phone_last4') ?? null,
+                account_state: maybePayloadString(identity, 'account_state') ?? 'UNCLAIMED',
+                account_linked: accountLinkSnapshot.exists,
+                created_at: pickNumber(identity, 'created_at'),
+                updated_at: pickNumber(identity, 'updated_at'),
+                created_by_merchant_id: maybePayloadString(identity, 'created_by_merchant_id'),
+                last_linked_merchant_id: maybePayloadString(identity, 'last_linked_merchant_id'),
+                businesses,
+                cards,
+            },
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'lookup_customer', error);
+    }
+});
+/**
+ * One customer's points ledger at one business.
+ *
+ * The ledger is a subcollection of the business, so both ids are required.
+ * This is the screen that was missing when a customer disputes a balance:
+ * `reconcile` could already fix drift, but nothing could show what the entries
+ * actually say.
+ */
+adminRouter.get('/customers/:canonicalCustomerId/ledger', async (req, res) => {
+    const canonicalCustomerId = isNonEmptyString(req.params.canonicalCustomerId)
+        ? req.params.canonicalCustomerId.trim()
+        : null;
+    const merchantId = pickQueryString(req.query.merchant_id) ??
+        pickQueryString(req.query.merchantId);
+    const businessCustomerId = pickQueryString(req.query.customer_id) ??
+        pickQueryString(req.query.customerId);
+    const limit = clampLimit(req.query.limit, 50, 200);
+    if (!canonicalCustomerId) {
+        return res
+            .status(400)
+            .json({ success: false, message: 'Missing canonical customer id' });
+    }
+    if (!merchantId) {
+        return res
+            .status(400)
+            .json({ success: false, message: 'Provide merchant_id.' });
+    }
+    try {
+        let query = loyaltyLedgerCollectionRef(merchantId)
+            .where('canonical_customer_id', '==', canonicalCustomerId);
+        // Entries written before the canonical id existed carry only the business
+        // customer id, so that is queried instead when it is supplied.
+        if (businessCustomerId) {
+            query = loyaltyLedgerCollectionRef(merchantId).where('customer_id', '==', businessCustomerId);
+        }
+        const snapshot = await query.limit(limit).get();
+        const entries = snapshot.docs
+            .map((doc) => snapshotDataRecord(doc))
+            .map((data) => ({
+            id: maybePayloadString(data, 'id') ?? '',
+            entry_type: maybePayloadString(data, 'entry_type') ?? 'SALE',
+            source_type: maybePayloadString(data, 'source_type') ?? 'sale',
+            source_id: maybePayloadString(data, 'source_id') ?? '',
+            points_delta: pickNumber(data, 'points_delta') ?? 0,
+            balance_after: pickNumber(data, 'balance_after') ?? 0,
+            amount_mzn: pickNumber(data, 'amount_mzn') ?? 0,
+            reward_id: maybePayloadString(data, 'reward_id'),
+            reversal_of_entry_id: maybePayloadString(data, 'reversal_of_entry_id'),
+            reversal_reason: maybePayloadString(data, 'reversal_reason'),
+            occurred_at: pickNumber(data, 'occurred_at') ?? 0,
+            created_at: pickNumber(data, 'created_at') ?? 0,
+        }))
+            // Newest first. Sorted here rather than in the query so no composite
+            // index is needed for a read that is already bounded to one customer.
+            .sort((a, b) => b.occurred_at - a.occurred_at);
+        const net = entries.reduce((total, entry) => total + entry.points_delta, 0);
+        return res.json({
+            success: true,
+            data: {
+                canonical_customer_id: canonicalCustomerId,
+                merchant_id: merchantId,
+                entry_count: entries.length,
+                net_points: net,
+                entries,
+            },
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'get_customer_ledger', error);
+    }
+});
+/**
+ * The NFC card registry.
+ *
+ * Looked up by card UID or by customer, never listed in bulk — the same
+ * reasoning as the customer lookup. A UID is not secret, but a browsable list
+ * of every card in circulation is a different thing from checking one.
+ */
+adminRouter.get('/nfc-cards', async (req, res) => {
+    const cardUid = pickQueryString(req.query.card_uid) ??
+        pickQueryString(req.query.cardUid);
+    const canonicalCustomerId = pickQueryString(req.query.canonical_customer_id) ??
+        pickQueryString(req.query.canonicalCustomerId);
+    try {
+        if (cardUid) {
+            const normalized = (0, customer_nfc_js_1.tryNormalizeNfcCardUid)(cardUid);
+            if (!normalized) {
+                return res
+                    .status(400)
+                    .json({ success: false, message: 'Invalid card UID.' });
+            }
+            const snapshot = await nfcCardRef(normalized).get();
+            if (!snapshot.exists) {
+                return res.json({ success: true, data: [] });
+            }
+            return res.json({
+                success: true,
+                data: [(0, admin_api_contracts_js_1.toAdminNfcCard)(normalized, snapshotDataRecord(snapshot))],
+            });
+        }
+        if (canonicalCustomerId) {
+            const snapshot = await admin
+                .firestore()
+                .collection(CUSTOMER_NFC_CARD_COLLECTION)
+                .where('canonical_customer_id', '==', canonicalCustomerId)
+                .limit(50)
+                .get();
+            return res.json({
+                success: true,
+                data: snapshot.docs.map((doc) => (0, admin_api_contracts_js_1.toAdminNfcCard)(doc.id, snapshotDataRecord(doc))),
+            });
+        }
+        return res.status(400).json({
+            success: false,
+            message: 'Provide card_uid or canonical_customer_id.',
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'get_nfc_cards', error);
+    }
+});
+/**
+ * Projects the businesses that already exist.
+ *
+ * The trigger only fires on writes from now on; every business created before
+ * it was deployed needs this once. Pages through `businesses` with a cursor,
+ * like the other maintenance jobs, and defaults to a dry run.
+ */
+adminRouter.post('/merchants/backfill', async (req, res) => {
+    const payload = req.body != null && typeof req.body === 'object'
+        ? req.body
+        : {};
+    const dryRun = maybePayloadBoolean(payload, 'dry_run', 'dryRun') ?? true;
+    const limit = clampLimit(payload.limit, 50, 200);
+    const startAfter = maybePayloadString(payload, 'start_after_merchant_id', 'startAfterMerchantId');
+    const client = await pool.connect();
+    try {
+        // Built inside the try: anything that throws while composing the query
+        // must become a 500, not an unhandled rejection that kills the worker.
+        let query = admin
+            .firestore()
+            .collection('businesses')
+            .orderBy(firestore_1.FieldPath.documentId())
+            .limit(limit);
+        if (startAfter)
+            query = query.startAfter(startAfter);
+        const snapshot = await query.get();
+        const now = Date.now();
+        const results = [];
+        let writtenCount = 0;
+        let skippedCount = 0;
+        let conflictCount = 0;
+        for (const doc of snapshot.docs) {
+            const projection = (0, merchant_projection_js_1.projectBusinessToMerchant)(doc.id, snapshotDataRecord(doc), now);
+            if (projection.status === 'skipped') {
+                skippedCount += 1;
+                results.push({
+                    merchant_id: doc.id,
+                    status: 'skipped',
+                    reason: projection.reason,
+                    message: merchant_projection_js_1.SKIP_EXPLANATIONS[projection.reason],
+                });
+                continue;
+            }
+            if (dryRun) {
+                writtenCount += 1;
+                results.push({
+                    merchant_id: doc.id,
+                    status: 'would_write',
+                    name: projection.row.name,
+                });
+                continue;
+            }
+            const outcome = await upsertProjectedMerchant(client, projection.row);
+            if (outcome === 'phone_conflict') {
+                conflictCount += 1;
+                results.push({
+                    merchant_id: doc.id,
+                    status: 'phone_conflict',
+                    message: 'Outro negócio já tem este telefone. merchants.phone é único.',
+                });
+                continue;
+            }
+            writtenCount += 1;
+            results.push({ merchant_id: doc.id, status: 'written' });
+        }
+        const nextCursor = snapshot.docs.length === limit
+            ? snapshot.docs[snapshot.docs.length - 1].id
+            : null;
+        if (!dryRun && writtenCount > 0) {
+            await recordAdminAuditEvent(client, req, {
+                action: 'merchant.backfill',
+                targetType: 'merchant',
+                targetId: null,
+                details: {
+                    written: writtenCount,
+                    skipped: skippedCount,
+                    conflicts: conflictCount,
+                },
+            });
+        }
+        return res.json({
+            success: true,
+            data: {
+                dry_run: dryRun,
+                scanned: snapshot.docs.length,
+                written: writtenCount,
+                skipped: skippedCount,
+                phone_conflicts: conflictCount,
+                next_cursor: nextCursor,
+                results,
+            },
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'backfill_merchants', error);
+    }
+    finally {
+        client.release();
     }
 });
 app.use('/admin', adminRouter);
@@ -2285,11 +2838,11 @@ app.get('/engage/analytics', async (req, res) => {
     }
 });
 exports.api = (0, https_1.onRequest)({
-    cors: true,
+    cors: (0, cors_origins_js_1.allowedOrigins)(process.env, (0, cors_origins_js_1.runningInEmulator)(process.env)),
     invoker: 'public',
     secrets: [customerIdentityHmacSecret],
 }, app);
-exports.customerCoreCanonicalLinkOnCustomerWrite = (0, firestore_1.onDocumentWritten)({
+exports.customerCoreCanonicalLinkOnCustomerWrite = (0, firestore_2.onDocumentWritten)({
     document: 'businesses/{merchantId}/customers/{customerId}',
     secrets: [customerIdentityHmacSecret],
 }, async (event) => {
@@ -2355,7 +2908,7 @@ exports.customerCoreCanonicalLinkOnCustomerWrite = (0, firestore_1.onDocumentWri
         throw error;
     }
 });
-exports.loyaltyLedgerSaleOnSaleWrite = (0, firestore_1.onDocumentWritten)({
+exports.loyaltyLedgerSaleOnSaleWrite = (0, firestore_2.onDocumentWritten)({
     document: 'businesses/{merchantId}/sales/{saleId}',
     secrets: [customerIdentityHmacSecret],
 }, async (event) => {
@@ -2474,32 +3027,11 @@ function resolveAppUserRole(decoded) {
     return 'OWNER';
 }
 function isAdminRequest(req) {
-    if (hasValidAdminApiKey(req))
+    // Reads the flag the auth middleware set; never re-derives it from headers,
+    // so a stray `x-admin-key` on a Bearer-authenticated request grants nothing.
+    if (req.adminKeyGranted === true)
         return true;
-    return hasAdminClaims(req.auth);
-}
-function hasAdminClaims(claims) {
-    if (!claims)
-        return false;
-    if (claims.admin === true)
-        return true;
-    if (claims.is_admin === true)
-        return true;
-    if (claims.internal_admin === true)
-        return true;
-    const role = typeof claims.role === 'string'
-        ? claims.role.trim().toLowerCase()
-        : null;
-    if (role === 'admin')
-        return true;
-    if (role === 'internal_admin')
-        return true;
-    return false;
-}
-function hasValidAdminApiKey(req) {
-    const adminKey = process.env.ADMIN_API_KEY;
-    const headerKey = pickHeaderString(req.headers['x-admin-key']);
-    return Boolean(adminKey && headerKey && adminKey === headerKey);
+    return (0, admin_access_js_1.hasAdminClaims)(req.auth);
 }
 function isAdminPath(req) {
     return req.path === '/admin' || req.path.startsWith('/admin/');
@@ -2558,7 +3090,77 @@ function pickBoolean(payload, key) {
     }
     return null;
 }
-exports.retentionDomainEventPostgresProjection = (0, firestore_1.onDocumentWritten)('businesses/{merchantId}/domain_events/{eventId}', async (event) => {
+/* -- businesses -> merchants projection ---------------------------------- */
+/**
+ * Writes one projected business into `merchants`.
+ *
+ * `phone` is UNIQUE, so two businesses sharing a number cannot both own the
+ * row. Rather than letting the constraint abort a whole backfill, the conflict
+ * is caught and reported: it means two sign-ups used one number, which is a
+ * data question for a person, not something this job should guess at.
+ */
+async function upsertProjectedMerchant(client, row) {
+    const owner = await client.query('SELECT id FROM merchants WHERE phone = $1', [row.phone]);
+    if ((owner.rowCount ?? 0) > 0 && owner.rows[0].id !== row.id) {
+        return 'phone_conflict';
+    }
+    await client.query(`
+      INSERT INTO merchants (id, name, phone, created_at, updated_at)
+      VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        phone = EXCLUDED.phone,
+        updated_at = EXCLUDED.updated_at
+    `, [row.id, row.name, row.phone, row.created_at, row.updated_at]);
+    return 'written';
+}
+/**
+ * Keeps `merchants` in step with Firestore as businesses are created and
+ * edited.
+ *
+ * Modelled on retentionDomainEventPostgresProjection, which already projects
+ * Firestore writes into PostgreSQL. Without this the table has no writer, and
+ * every admin read surface built on it returns nothing — which is exactly what
+ * was happening.
+ *
+ * A deletion is deliberately not propagated: `merchants` is referenced by
+ * app_users, entitlements and subscription_state, so removing the row would
+ * either fail on the foreign keys or orphan real operational history.
+ */
+exports.merchantProfilePostgresProjection = (0, firestore_2.onDocumentWritten)('businesses/{merchantId}', async (event) => {
+    const afterSnapshot = event.data?.after;
+    if (!afterSnapshot?.exists)
+        return;
+    const merchantId = isNonEmptyString(event.params.merchantId)
+        ? event.params.merchantId.trim()
+        : '';
+    if (!merchantId)
+        return;
+    const result = (0, merchant_projection_js_1.projectBusinessToMerchant)(merchantId, snapshotDataRecord(afterSnapshot), Date.now());
+    if (result.status === 'skipped') {
+        // An unfinished sign-up is the normal case here, not a failure. Throwing
+        // would make Firestore retry a document that cannot become valid until a
+        // person finishes filling it in.
+        console.info('merchant_projection_skipped', {
+            merchant_id: merchantId,
+            reason: result.reason,
+        });
+        return;
+    }
+    const client = await pool.connect();
+    try {
+        const outcome = await upsertProjectedMerchant(client, result.row);
+        if (outcome === 'phone_conflict') {
+            console.warn('merchant_projection_phone_conflict', {
+                merchant_id: merchantId,
+            });
+        }
+    }
+    finally {
+        client.release();
+    }
+});
+exports.retentionDomainEventPostgresProjection = (0, firestore_2.onDocumentWritten)('businesses/{merchantId}/domain_events/{eventId}', async (event) => {
     const beforeSnapshot = event.data?.before;
     const afterSnapshot = event.data?.after;
     if (beforeSnapshot?.exists || !afterSnapshot?.exists) {
@@ -4780,7 +5382,7 @@ async function handleCustomerCoreBackfillRequest(req, body) {
         .collection('businesses')
         .doc(merchantId)
         .collection('customers')
-        .orderBy(admin.firestore.FieldPath.documentId())
+        .orderBy(firestore_1.FieldPath.documentId())
         .limit(limit);
     if (startAfterCustomerId) {
         query = query.startAfter(startAfterCustomerId);
@@ -5638,7 +6240,7 @@ async function handleLoyaltyLedgerBackfillRequest(req, body) {
     let query = (sourceType === 'sales'
         ? businessSalesCollectionRef(merchantId)
         : businessRedemptionsCollectionRef(merchantId))
-        .orderBy(admin.firestore.FieldPath.documentId())
+        .orderBy(firestore_1.FieldPath.documentId())
         .limit(limit);
     if (startAfterId) {
         query = query.startAfter(startAfterId);
@@ -5739,7 +6341,7 @@ async function handleLoyaltyLedgerReconcileRequest(req, body) {
     const startAfterCustomerId = maybePayloadString(payload, 'start_after_customer_id', 'startAfterCustomerId');
     let query = businessDocumentRef(merchantId)
         .collection('customers')
-        .orderBy(admin.firestore.FieldPath.documentId())
+        .orderBy(firestore_1.FieldPath.documentId())
         .limit(limit);
     if (startAfterCustomerId) {
         query = query.startAfter(startAfterCustomerId);
@@ -6752,7 +7354,7 @@ async function handleRetentionClassificationScanRequest(req, body) {
     const startAfterCustomerId = maybePayloadString(payload, 'start_after_customer_id', 'startAfterCustomerId');
     let query = businessDocumentRef(merchantId)
         .collection('customers')
-        .orderBy(admin.firestore.FieldPath.documentId())
+        .orderBy(firestore_1.FieldPath.documentId())
         .limit(limit);
     if (startAfterCustomerId)
         query = query.startAfter(startAfterCustomerId);
@@ -8763,7 +9365,7 @@ exports.retentionInactivityScanDaily = (0, scheduler_1.onSchedule)({
         Date.now() - startedAt < timeBudgetMs) {
         let query = admin.firestore()
             .collectionGroup('customers')
-            .orderBy(admin.firestore.FieldPath.documentId())
+            .orderBy(firestore_1.FieldPath.documentId())
             .limit(limit);
         if (cursorPath)
             query = query.startAfter(cursorPath);

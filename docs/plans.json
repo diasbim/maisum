@@ -1,0 +1,107 @@
+{
+  "$comment": [
+    "Fonte declarada do que cada plano promete publicamente.",
+    "Mantida a par de docs/index.html (cartoes de plano), functions/sql/seed_plans.sql",
+    "e functions/sql/seed_plan_features.sql.",
+    "Validar com: dart run tool/check_plan_catalog.dart",
+    "Contexto e decisoes pendentes: docs/landing_page_recommendations.md"
+  ],
+  "version": 1,
+  "currency": "MZN",
+  "pricingPolicy": "Precos de tabela sao internos. A landing page nao os publica; as condicoes sao negociadas por conversa. Ver docs/landing_page_recommendations.md secao 4.2 do plano do portal.",
+  "backingKinds": {
+    "core": "Capacidade base, disponivel em todos os planos por desenho. Nao e gated.",
+    "feature_key": "Suportada por uma entitlement em seed_plan_features.sql.",
+    "inherits": "Reafirma o plano imediatamente inferior. Nao e capacidade nova.",
+    "none": "Sem contrapartida tecnica. Tem de constar em openDecisions."
+  },
+  "plans": [
+    {
+      "code": "free",
+      "publicName": "Free",
+      "advertised": true,
+      "tagline": "Para começar a organizar clientes e recompensas.",
+      "promises": [
+        { "text": "Perfis de clientes", "backing": "core" },
+        { "text": "Registo de vendas", "backing": "core" },
+        { "text": "Pontos e recompensas", "backing": "core" }
+      ]
+    },
+    {
+      "code": "starter",
+      "publicName": "Starter",
+      "advertised": true,
+      "tagline": "Para começar a medir e melhorar o regresso.",
+      "promises": [
+        { "text": "Base do plano Free", "backing": "inherits", "inheritsFrom": "free" },
+        { "text": "Analytics de negócio", "backing": "feature_key", "featureKey": "analytics" },
+        { "text": "Mais capacidade para crescer", "backing": "none", "decision": "L2" }
+      ]
+    },
+    {
+      "code": "pro",
+      "publicName": "Pro",
+      "advertised": true,
+      "badge": "Retenção",
+      "tagline": "Para agir sobre clientes que podem afastar-se.",
+      "promises": [
+        { "text": "Base do Starter", "backing": "inherits", "inheritsFrom": "starter" },
+        { "text": "Visão de clientes em risco", "backing": "feature_key", "featureKey": "engage_view_risk" },
+        { "text": "Retenção mais aprofundada", "backing": "inherits", "inheritsFrom": "starter" }
+      ]
+    },
+    {
+      "code": "business",
+      "publicName": "Business",
+      "advertised": true,
+      "tagline": "Para equipas e operações com mais exigência.",
+      "promises": [
+        { "text": "Base do Pro", "backing": "inherits", "inheritsFrom": "pro" },
+        { "text": "Recuperação avançada", "backing": "feature_key", "featureKey": "engage_manage_recovery" },
+        { "text": "Vários dispositivos", "backing": "feature_key", "featureKey": "multi_device" },
+        { "text": "Gestão de equipa", "backing": "none", "decision": "L1" }
+      ]
+    },
+    {
+      "code": "growth",
+      "publicName": "Growth",
+      "advertised": false,
+      "tagline": "Plano existente na base de dados e nao anunciado. Destino por decidir.",
+      "decision": "L3",
+      "promises": []
+    }
+  ],
+  "openDecisions": [
+    {
+      "id": "L1",
+      "summary": "\"Gestao de equipa\" e anunciada como diferenciador do Business, mas nao existe feature key para ela. staff_management_screen.dart nao referencia FeatureKeys e o router protege /staff-management apenas por papel de responsavel. Todos os planos a tem.",
+      "affects": ["business"],
+      "options": [
+        "Remover a linha do cartao Business",
+        "Criar a feature key staff_management e passar a aplica-la",
+        "Mover para uma seccao de capacidades comuns a todos os planos"
+      ]
+    },
+    {
+      "id": "L2",
+      "summary": "\"Mais capacidade para crescer\" (Starter) nao tem contrapartida tecnica: limit_value e NULL em todas as linhas de seed_plan_features.sql.",
+      "affects": ["starter"],
+      "options": [
+        "Configurar quotas reais por plano",
+        "Substituir pela capacidade concreta que o Starter ganha (campaigns)"
+      ]
+    },
+    {
+      "id": "L3",
+      "summary": "O plano growth existe em seed_plans.sql a 5000 MZN, o mesmo preco do Business, com entitlements proprios, e nao e anunciado.",
+      "affects": ["growth"],
+      "options": ["Anunciar", "Desativar", "Manter como plano interno ou legado"]
+    },
+    {
+      "id": "L4",
+      "summary": "O plano Free tem whatsapp_automation a true sem que isso seja anunciado. Capacidade concedida sem intencao declarada.",
+      "affects": ["free"],
+      "options": ["Confirmar que e deliberado", "Desativar no Free"]
+    }
+  ]
+}

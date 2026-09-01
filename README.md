@@ -17,6 +17,17 @@ Validate register coverage locally:
 dart run tool/check_feature_decision_register.dart
 ```
 
+The public plan catalog is declared in `docs/plans.json` and cross-checked
+against the landing page cards and the provisioned entitlements in
+`functions/sql/`. Validate locally:
+
+```bash
+dart run tool/check_plan_catalog.dart
+```
+
+Open product decisions on plan promises are tracked in the `openDecisions` block
+of `docs/plans.json`. See `docs/landing_page_recommendations.md`.
+
 ## GitHub Pages Deployment
 
 This repository deploys the static landing page from `docs/` to GitHub Pages via GitHub Actions.
@@ -125,6 +136,38 @@ transaction.
 - **Offline mode**: any 6 digits are accepted and an offline session is created with a 30-day expiry.
 - Token stored with `flutter_secure_storage` (Android encrypted shared preferences).
 - Router guard redirects unauthenticated users to `/login` on every navigation.
+
+## Internal Admin Access
+
+Admin access is granted by a Firebase custom claim. The accepted claim set is
+defined once in `functions/src/admin_access.ts` and mirrored — by necessity, not
+by import — in `firestore.rules` (`isAdmin()`) and
+`lib/features/auth/presentation/auth_controller.dart`
+(`hasInternalAdminClaim()`). `functions/src/admin_access.test.ts` asserts the
+first two stay in parity, so an admin the API authorizes can always read
+Firestore too.
+
+Grant, revoke and list admins (run from `functions/`, with credentials for the
+target project):
+
+```bash
+node scripts/admin_claims.js --list
+node scripts/admin_claims.js --grant  --email ops@example.com --yes
+node scripts/admin_claims.js --revoke --email ops@example.com --yes
+```
+
+Mutations require `--yes`. Granting takes effect once the user obtains a fresh
+ID token; revoking also invalidates refresh tokens.
+
+### `ADMIN_API_KEY`
+
+The shared `x-admin-key` header authenticates automation, not a person, so it is
+accepted **only** on the batch endpoints listed in `ADMIN_API_KEY_PATHS`
+(customer-core and ledger backfills, ledger reconcile, classification scan).
+Reads, plan and price writes, and entitlement overrides require a real admin
+identity that the audit trail can attribute. The key is also ignored on requests
+that carry a `Bearer` token, so a stray header cannot widen an ordinary user's
+access.
 
 ## API Contract
 
