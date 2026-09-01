@@ -19,6 +19,7 @@ Covered modules:
 - dashboard
 - engage
 - legal
+- nfc_cards
 - onboarding
 - retention
 - rewards
@@ -274,6 +275,48 @@ Simplified MVP version:
 - Keep static legal pages clear and lightweight.
 - Avoid legal UX complexity in primary flow.
 - Keep compliance content accessible from settings.
+
+### Module: nfc_cards
+
+Feature name: Physical NFC card identification and association
+Problem: The business owner app can only identify a customer via QR code or manual phone lookup; some merchants already have physical NFC loyalty cards from a legacy system, and staff need a fast, phone-free way to recognize repeat customers at the point of sale.
+Target user moment: At checkout, and when a merchant first issues/links a physical card to a customer (with or without the customer app installed).
+
+Hard gate:
+
+- Increase daily sales registrations? Yes
+- Reduce friction? Yes
+- Improve retention? Yes
+- Improve WhatsApp engagement? No
+- Improve offline reliability? No
+
+Scoring:
+
+- Sales registrations (0-5): 4
+- Friction reduction (0-5): 4
+- Retention (0-5): 4
+- WhatsApp engagement (0-5): 1
+- Offline reliability (0-5): 2
+
+Weighted total:
+
+- Sales: (4/5) x 30 = 24
+- Friction: (4/5) x 25 = 20
+- Retention: (4/5) x 20 = 16
+- WhatsApp: (1/5) x 10 = 2
+- Offline: (2/5) x 15 = 6
+- Total = 68
+
+Evidence level: C
+Delivery risk: Medium
+Enabler override needed? No
+Decision: Simplify, then schedule
+Simplified MVP version:
+
+- Identify cards only by factory UID (no on-card secret/write step).
+- Always resolve/link online through the backend; do not treat the local UID cache as authoritative.
+- Ship staff-assisted association first (works without the customer app); self-service association in the customer app reuses the same backend contract.
+- Defer the legacy data migration itself until the source system for existing card-to-customer associations is confirmed; the backfill endpoint is ready but unpopulated until then.
 
 ### Module: onboarding
 

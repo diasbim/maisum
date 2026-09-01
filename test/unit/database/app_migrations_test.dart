@@ -239,4 +239,66 @@ void main() {
       ]),
     );
   });
+
+  test('v28 adds nfc card uid cache with per-merchant uniqueness', () async {
+    final db = await _openDb(version: 27);
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    await db.insert('customers', {
+      'id': 'c2',
+      'merchant_id': 'm2',
+      'name': 'Beatriz',
+      'phone': '841234568',
+      'total_points': 0,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+
+    await AppMigrations.migrate(db, fromVersion: 27, toVersion: 28);
+
+    expect(await _columns(db, 'customers'), contains('nfc_card_uid'));
+
+    await db.update(
+      'customers',
+      {'nfc_card_uid': '04A22C9B'},
+      where: 'id = ?',
+      whereArgs: ['c1'],
+    );
+    // Same UID is allowed for a different merchant.
+    await db.update(
+      'customers',
+      {'nfc_card_uid': '04A22C9B'},
+      where: 'id = ?',
+      whereArgs: ['c2'],
+    );
+    // A second customer in the same merchant reusing that UID must fail.
+    await db.insert('customers', {
+      'id': 'c3',
+      'merchant_id': 'm1',
+      'name': 'Carlos',
+      'phone': '841234569',
+      'total_points': 0,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    expect(
+      () => db.update(
+        'customers',
+        {'nfc_card_uid': '04A22C9B'},
+        where: 'id = ?',
+        whereArgs: ['c3'],
+      ),
+      throwsA(anything),
+    );
+  });
 }

@@ -13,6 +13,7 @@ test('customer feature flags default to disabled', () => {
     customerAppEnabled: false,
     customerRedemptionEnabled: false,
     customerQrEnabled: false,
+    customerNfcEnabled: false,
     customerPushEnabled: false,
     customerDeepLinksEnabled: false,
   });
@@ -23,6 +24,7 @@ test('customer feature flags only enable literal true values', () => {
     CUSTOMER_APP_ENABLED: 'true',
     CUSTOMER_REDEMPTION_ENABLED: 'TRUE',
     CUSTOMER_QR_ENABLED: 'true',
+    CUSTOMER_NFC_ENABLED: 'true',
     CUSTOMER_PUSH_ENABLED: 'false',
     CUSTOMER_DEEP_LINKS_ENABLED: '1',
   });
@@ -30,6 +32,7 @@ test('customer feature flags only enable literal true values', () => {
   assert.equal(flags.customerAppEnabled, true);
   assert.equal(flags.customerRedemptionEnabled, false);
   assert.equal(flags.customerQrEnabled, true);
+  assert.equal(flags.customerNfcEnabled, true);
   assert.equal(flags.customerPushEnabled, false);
   assert.equal(flags.customerDeepLinksEnabled, false);
 });

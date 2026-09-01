@@ -128,6 +128,125 @@ void main() {
 
     await server.close(force: true);
   });
+
+  test('uses the customer-owned NFC card link and revoke contracts', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final api = CustomerAppApi(
+      JsonApiClient(baseUrl: 'http://${server.address.address}:${server.port}'),
+    );
+    final requests = server.asBroadcastStream();
+
+    final link = api.linkCustomerNfcCard('token', '04A22C9B');
+    final linkRequest = await requests.first;
+    expect(linkRequest.method, 'POST');
+    expect(linkRequest.uri.path, '/customer/nfc-cards/link');
+    expect(
+      jsonDecode(await utf8.decoder.bind(linkRequest).join()),
+      {'card_uid': '04A22C9B'},
+    );
+    linkRequest.response
+      ..statusCode = 200
+      ..write(jsonEncode({
+        'success': true,
+        'data': {
+          'card_uid': '04A22C9B',
+          'canonical_customer_id': 'cust_1',
+          'linked': true,
+        },
+      }));
+    await linkRequest.response.close();
+    expect((await link)['linked'], isTrue);
+
+    final revoke = api.revokeCustomerNfcCard('token', '04A22C9B');
+    final revokeRequest = await requests.first;
+    expect(revokeRequest.method, 'POST');
+    expect(revokeRequest.uri.path, '/customer/nfc-cards/revoke');
+    expect(
+      jsonDecode(await utf8.decoder.bind(revokeRequest).join()),
+      {'card_uid': '04A22C9B'},
+    );
+    revokeRequest.response
+      ..statusCode = 200
+      ..write(jsonEncode({
+        'success': true,
+        'data': {'card_uid': '04A22C9B', 'revoked': true},
+      }));
+    await revokeRequest.response.close();
+    expect((await revoke)['revoked'], isTrue);
+
+    await server.close(force: true);
+  });
+
+  test('uses the merchant-owned NFC card link and resolve contracts',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final api = CustomerAppApi(
+      JsonApiClient(baseUrl: 'http://${server.address.address}:${server.port}'),
+    );
+    final requests = server.asBroadcastStream();
+
+    final link = api.linkMerchantNfcCard(
+      'token',
+      cardUid: '04A22C9B',
+      phone: '841234567',
+      customerName: 'Ana',
+    );
+    final linkRequest = await requests.first;
+    expect(linkRequest.method, 'POST');
+    expect(linkRequest.uri.path, '/merchant/customer-nfc/link');
+    expect(
+      jsonDecode(await utf8.decoder.bind(linkRequest).join()),
+      {
+        'card_uid': '04A22C9B',
+        'phone': '841234567',
+        'customer_name': 'Ana',
+        'create_customer_if_missing': true,
+      },
+    );
+    linkRequest.response
+      ..statusCode = 200
+      ..write(jsonEncode({
+        'success': true,
+        'data': {
+          'card_uid': '04A22C9B',
+          'business_id': 'm1',
+          'customer_id': 'c1',
+          'canonical_customer_id': 'cust_1',
+          'customer_created': true,
+        },
+      }));
+    await linkRequest.response.close();
+    expect((await link)['customer_created'], isTrue);
+
+    final resolve = api.resolveMerchantNfcCard('token', cardUid: '04A22C9B');
+    final resolveRequest = await requests.first;
+    expect(resolveRequest.method, 'POST');
+    expect(resolveRequest.uri.path, '/merchant/customer-nfc/resolve');
+    expect(
+      jsonDecode(await utf8.decoder.bind(resolveRequest).join()),
+      {'card_uid': '04A22C9B', 'create_customer_if_missing': true},
+    );
+    resolveRequest.response
+      ..statusCode = 200
+      ..write(jsonEncode({
+        'success': true,
+        'data': {
+          'business_id': 'm1',
+          'customer': {
+            'customer_id': 'c1',
+            'name': 'Ana',
+            'phone': '841234567',
+            'total_points': 120,
+          },
+          'customer_created': false,
+        },
+      }));
+    await resolveRequest.response.close();
+    final resolved = await resolve;
+    expect((resolved['customer'] as Map)['customer_id'], 'c1');
+
+    await server.close(force: true);
+  });
 }
 
 Future<void> _writeRedemptionResponse(

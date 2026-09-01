@@ -132,6 +132,59 @@ class CustomerAppApi {
   Future<Map<String, dynamic>> resolveMerchantQr(String token, String value) =>
       _post('/merchant/customer-qr/resolve', token, {'token': value});
 
+  /// Customer app: links a physical NFC card (already read and normalized,
+  /// see [NfcCardUidUtils]) to the authenticated customer's own account.
+  Future<Map<String, dynamic>> linkCustomerNfcCard(
+    String token,
+    String cardUid,
+  ) =>
+      _post('/customer/nfc-cards/link', token, {'card_uid': cardUid});
+
+  /// Customer app: revokes a previously self-linked NFC card.
+  Future<Map<String, dynamic>> revokeCustomerNfcCard(
+    String token,
+    String cardUid,
+  ) =>
+      _post('/customer/nfc-cards/revoke', token, {'card_uid': cardUid});
+
+  /// Business owner app: assisted association of a physical NFC card to one
+  /// of the merchant's customers (existing or newly created).
+  Future<Map<String, dynamic>> linkMerchantNfcCard(
+    String token, {
+    required String cardUid,
+    String? customerId,
+    String? phone,
+    String? customerName,
+    bool createCustomerIfMissing = true,
+  }) =>
+      _post('/merchant/customer-nfc/link', token, {
+        'card_uid': cardUid,
+        if (customerId != null) 'customer_id': customerId,
+        if (phone != null) 'phone': phone,
+        if (customerName != null) 'customer_name': customerName,
+        'create_customer_if_missing': createCustomerIfMissing,
+      });
+
+  /// Business owner app: resolves a tapped NFC card to the merchant's
+  /// customer, to process a sale or attribute a benefit.
+  Future<Map<String, dynamic>> resolveMerchantNfcCard(
+    String token, {
+    required String cardUid,
+    bool createCustomerIfMissing = true,
+  }) =>
+      _post('/merchant/customer-nfc/resolve', token, {
+        'card_uid': cardUid,
+        'create_customer_if_missing': createCustomerIfMissing,
+      });
+
+  /// Business owner app: revokes an NFC card linked to one of the
+  /// merchant's own customers (e.g. lost/stolen card).
+  Future<Map<String, dynamic>> revokeMerchantNfcCard(
+    String token,
+    String cardUid,
+  ) =>
+      _post('/merchant/customer-nfc/revoke', token, {'card_uid': cardUid});
+
   Future<Map<String, dynamic>> _get(String path, String token) async {
     final response = await _client.get(path, bearerToken: token);
     return _mapResponse(response.success, response.data, response.message);

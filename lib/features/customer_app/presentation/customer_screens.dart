@@ -1437,6 +1437,13 @@ class CustomerProfileScreen extends ConsumerWidget {
                     subtitle: delivery,
                     onTap: () => context.push('/customer/preferences'),
                   ),
+                  const Divider(),
+                  _SettingsTile(
+                    icon: LucideIcons.nfc,
+                    title: 'Cartão físico',
+                    subtitle: 'Associe um cartão NFC à sua conta.',
+                    onTap: () => context.push('/customer/nfc-card'),
+                  ),
                 ],
               ),
             ),

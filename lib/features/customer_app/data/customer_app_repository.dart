@@ -157,6 +157,29 @@ class CustomerAppRepository {
     return result;
   }
 
+  /// Links a physical NFC card (already read and normalized, see
+  /// [NfcCardUidUtils]) to this customer's own account.
+  Future<Map<String, dynamic>> linkNfcCard(String cardUid) async {
+    if (!await _connectivity.check()) {
+      throw const NetworkException(
+        'É necessária ligação à internet para associar o cartão.',
+      );
+    }
+    final credential = await _credential();
+    return _api.linkCustomerNfcCard(credential.token, cardUid);
+  }
+
+  /// Revokes a previously self-linked NFC card.
+  Future<Map<String, dynamic>> revokeNfcCard(String cardUid) async {
+    if (!await _connectivity.check()) {
+      throw const NetworkException(
+        'É necessária ligação à internet para revogar o cartão.',
+      );
+    }
+    final credential = await _credential();
+    return _api.revokeCustomerNfcCard(credential.token, cardUid);
+  }
+
   Future<CustomerRedemptionReceipt> reissueRedemption({
     required String redemptionId,
     required String idempotencyKey,

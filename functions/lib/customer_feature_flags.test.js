@@ -11,6 +11,7 @@ const customer_feature_flags_js_1 = require("./customer_feature_flags.js");
         customerAppEnabled: false,
         customerRedemptionEnabled: false,
         customerQrEnabled: false,
+        customerNfcEnabled: false,
         customerPushEnabled: false,
         customerDeepLinksEnabled: false,
     });
@@ -20,12 +21,14 @@ const customer_feature_flags_js_1 = require("./customer_feature_flags.js");
         CUSTOMER_APP_ENABLED: 'true',
         CUSTOMER_REDEMPTION_ENABLED: 'TRUE',
         CUSTOMER_QR_ENABLED: 'true',
+        CUSTOMER_NFC_ENABLED: 'true',
         CUSTOMER_PUSH_ENABLED: 'false',
         CUSTOMER_DEEP_LINKS_ENABLED: '1',
     });
     strict_1.default.equal(flags.customerAppEnabled, true);
     strict_1.default.equal(flags.customerRedemptionEnabled, false);
     strict_1.default.equal(flags.customerQrEnabled, true);
+    strict_1.default.equal(flags.customerNfcEnabled, true);
     strict_1.default.equal(flags.customerPushEnabled, false);
     strict_1.default.equal(flags.customerDeepLinksEnabled, false);
 });

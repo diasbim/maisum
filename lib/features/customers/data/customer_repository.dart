@@ -187,6 +187,36 @@ class CustomerRepository {
     await _dao.updatePoints(customerId, newTotal);
   }
 
+  /// Reconciles the local read cache after a business owner resolves a
+  /// physical NFC card via the backend (see `/merchant/customer-nfc/resolve`
+  /// in functions/src/index.ts). The backend response is authoritative;
+  /// this only mirrors it locally so the sale/benefit screens have a
+  /// [Customer] to work with immediately, including on the customer's
+  /// first tap at this merchant.
+  Future<Customer> upsertCustomerFromNfcResolve({
+    required String customerId,
+    required String? name,
+    required String? phone,
+    required int totalPoints,
+    required String cardUid,
+  }) async {
+    final merchantId = _dao.merchantId;
+    final now = DateTime.now();
+    final customer = await _dao.upsertFromServer(
+      Customer(
+        id: customerId,
+        merchantId: merchantId,
+        name: (name == null || name.isEmpty) ? 'Cliente' : name,
+        phone: phone ?? '',
+        totalPoints: totalPoints,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await _dao.setNfcCardUidCache(customer.id, cardUid);
+    return (await _dao.getById(customer.id)) ?? customer;
+  }
+
   Map<String, dynamic> _customerPayload(
     Customer customer, {
     bool includeArchive = false,

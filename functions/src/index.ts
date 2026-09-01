@@ -32,6 +32,11 @@ import {
   createCustomerQrToken,
   verifyCustomerQrToken,
 } from './customer_qr.js';
+import {
+  logCustomerNfcEvent,
+  normalizeNfcCardUid,
+  type NfcCardLinkSource,
+} from './customer_nfc.js';
 import { resolveAuthenticatedRequestScope } from './customer_request_auth.js';
 import { createOrGetOpenRecoveryTask } from './recovery_task_creation.js';
 import {
@@ -245,6 +250,7 @@ const CUSTOMER_ANALYTICS_EVENT_COLLECTION = 'customer_analytics_events';
 const CUSTOMER_PUSH_TOKEN_COLLECTION = 'customer_push_tokens';
 const BUSINESS_CUSTOMER_LINK_COLLECTION = 'business_customer_identity_links';
 const CANONICAL_IDENTITY_BUSINESS_LINK_COLLECTION = 'canonical_identity_business_links';
+const CUSTOMER_NFC_CARD_COLLECTION = 'customer_nfc_cards';
 const SYNC_TOMBSTONE_COLLECTION = 'sync_tombstones';
 const LOYALTY_LEDGER_COLLECTION = 'loyalty_ledger';
 const DOMAIN_EVENT_COLLECTION = 'domain_events';
@@ -1105,6 +1111,15 @@ adminRouter.post('/customer-core/business-customers/backfill', async (req, res) 
   }
 });
 
+adminRouter.post('/customer-core/nfc-cards/backfill', async (req, res) => {
+  try {
+    const result = await handleNfcCardBackfillRequest(req.body);
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
 adminRouter.post('/loyalty/ledger/backfill', async (req, res) => {
   try {
     const result = await handleLoyaltyLedgerBackfillRequest(
@@ -1341,6 +1356,66 @@ app.post('/customer/redemptions/:redemptionId/reissue', async (req, res) => {
 app.post('/merchant/customer-qr/resolve', async (req, res) => {
   try {
     const result = await handleMerchantCustomerQrResolveRequest(
+      req as AuthedRequest,
+      requireBodyObject(req.body),
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/customer/nfc-cards/link', async (req, res) => {
+  try {
+    const result = await handleCustomerNfcCardLinkRequest(
+      req as AuthedRequest,
+      requireBodyObject(req.body),
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/customer/nfc-cards/revoke', async (req, res) => {
+  try {
+    const result = await handleCustomerNfcCardRevokeRequest(
+      req as AuthedRequest,
+      requireBodyObject(req.body),
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/merchant/customer-nfc/link', async (req, res) => {
+  try {
+    const result = await handleMerchantNfcCardLinkRequest(
+      req as AuthedRequest,
+      requireBodyObject(req.body),
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/merchant/customer-nfc/resolve', async (req, res) => {
+  try {
+    const result = await handleMerchantNfcCardResolveRequest(
+      req as AuthedRequest,
+      requireBodyObject(req.body),
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/merchant/customer-nfc/revoke', async (req, res) => {
+  try {
+    const result = await handleMerchantNfcCardRevokeRequest(
       req as AuthedRequest,
       requireBodyObject(req.body),
     );
@@ -3375,6 +3450,10 @@ function canonicalIdentityBusinessLinkRef(
     .doc(buildCompoundKey(merchantId, canonicalCustomerId));
 }
 
+function nfcCardRef(cardUid: string) {
+  return admin.firestore().collection(CUSTOMER_NFC_CARD_COLLECTION).doc(cardUid);
+}
+
 function requestHasMerchantClaim(
   decoded: admin.auth.DecodedIdToken | undefined,
   merchantId: string,
@@ -3814,6 +3893,7 @@ function serializeCustomerFeatureFlags(
           merchantIds,
         )),
     customer_qr_enabled: appEnabled && flags.customerQrEnabled,
+    customer_nfc_enabled: appEnabled && flags.customerNfcEnabled,
     customer_push_enabled: appEnabled && flags.customerPushEnabled,
     customer_deep_links_enabled:
       appEnabled && flags.customerDeepLinksEnabled,
@@ -3822,7 +3902,7 @@ function serializeCustomerFeatureFlags(
 
 function requireCustomerFeature(
   feature: 'customerAppEnabled' | 'customerRedemptionEnabled' | 'customerQrEnabled' |
-    'customerPushEnabled' | 'customerDeepLinksEnabled',
+    'customerNfcEnabled' | 'customerPushEnabled' | 'customerDeepLinksEnabled',
 ): void {
   const flags = resolveCustomerFeatureFlags(process.env);
   if (!flags.customerAppEnabled || !flags[feature]) {
@@ -5821,6 +5901,495 @@ async function linkCanonicalCustomerToBusinessCustomer(options: {
     dryRun: false,
   });
   return { ...result, classification };
+}
+
+// --- Physical NFC card identification -------------------------------------
+//
+// Cards are identified only by their factory UID (see customer_nfc.ts). The
+// UID is not a secret, so every link/resolve/revoke path below re-validates
+// authorization (merchant access, account ownership) instead of trusting the
+// UID by itself. A card maps to exactly one active canonical customer at a
+// time; re-linking an already-linked card requires revoking it first.
+
+type NfcCardLink = {
+  cardUid: string;
+  canonicalCustomerId: string;
+  status: 'ACTIVE' | 'REVOKED';
+};
+
+function nfcCardLinkFromSnapshot(
+  cardUid: string,
+  snapshot: admin.firestore.DocumentSnapshot,
+): NfcCardLink | null {
+  if (!snapshot.exists) return null;
+  const data = snapshotDataRecord(snapshot);
+  const canonicalCustomerId = maybePayloadString(data, 'canonical_customer_id');
+  if (!canonicalCustomerId) return null;
+  return {
+    cardUid,
+    canonicalCustomerId,
+    status: maybePayloadString(data, 'status') === 'REVOKED' ? 'REVOKED' : 'ACTIVE',
+  };
+}
+
+async function findActiveNfcCardLink(cardUid: string): Promise<NfcCardLink | null> {
+  const snapshot = await nfcCardRef(cardUid).get();
+  const link = nfcCardLinkFromSnapshot(cardUid, snapshot);
+  return link != null && link.status === 'ACTIVE' ? link : null;
+}
+
+async function linkNfcCardToCanonicalCustomer(options: {
+  cardUid: string;
+  canonicalCustomerId: string;
+  linkedBy: 'customer' | 'merchant' | 'admin';
+  linkedByAppUserId?: string | null;
+  linkedByMerchantId?: string | null;
+  source: NfcCardLinkSource;
+}): Promise<{
+  cardUid: string;
+  canonicalCustomerId: string;
+  created: boolean;
+  reassigned: boolean;
+}> {
+  const { cardUid, canonicalCustomerId } = options;
+  const now = Date.now();
+  return admin.firestore().runTransaction(async (transaction) => {
+    const ref = nfcCardRef(cardUid);
+    const snapshot = await transaction.get(ref);
+    const existing = nfcCardLinkFromSnapshot(cardUid, snapshot);
+
+    if (
+      existing != null &&
+      existing.status === 'ACTIVE' &&
+      existing.canonicalCustomerId !== canonicalCustomerId
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'nfc_card_already_linked',
+        'This NFC card is already linked to a different customer.',
+        { card_uid_last4: last4(cardUid) },
+      );
+    }
+
+    if (existing != null && existing.status === 'ACTIVE') {
+      return { cardUid, canonicalCustomerId, created: false, reassigned: false };
+    }
+
+    const reassigned = existing != null && existing.status === 'REVOKED';
+    const previousCreatedAt = snapshot.exists
+      ? pickNumber(snapshotDataRecord(snapshot), 'created_at')
+      : null;
+    transaction.set(
+      ref,
+      {
+        card_uid: cardUid,
+        canonical_customer_id: canonicalCustomerId,
+        status: 'ACTIVE',
+        linked_by: options.linkedBy,
+        linked_by_app_user_id: options.linkedByAppUserId ?? null,
+        linked_by_merchant_id: options.linkedByMerchantId ?? null,
+        source: options.source,
+        created_at: previousCreatedAt ?? now,
+        updated_at: now,
+      },
+      { merge: true },
+    );
+    return { cardUid, canonicalCustomerId, created: !snapshot.exists, reassigned };
+  });
+}
+
+async function revokeNfcCardLink(options: {
+  cardUid: string;
+  expectedCanonicalCustomerId?: string | null;
+}): Promise<void> {
+  const { cardUid } = options;
+  await admin.firestore().runTransaction(async (transaction) => {
+    const ref = nfcCardRef(cardUid);
+    const snapshot = await transaction.get(ref);
+    const existing = nfcCardLinkFromSnapshot(cardUid, snapshot);
+    if (!existing || existing.status !== 'ACTIVE') {
+      throw new CustomerCoreError(
+        404,
+        'nfc_card_not_found',
+        'NFC card is not currently linked.',
+      );
+    }
+    if (
+      options.expectedCanonicalCustomerId != null &&
+      existing.canonicalCustomerId !== options.expectedCanonicalCustomerId
+    ) {
+      throw new CustomerCoreError(
+        403,
+        'nfc_card_owner_mismatch',
+        'This NFC card does not belong to the requesting account.',
+      );
+    }
+    transaction.set(ref, { status: 'REVOKED', updated_at: Date.now() }, { merge: true });
+  });
+}
+
+async function resolveBusinessRelationshipForCanonicalId(
+  merchantId: string,
+  canonicalCustomerId: string,
+): Promise<CustomerBusinessRelationship | null> {
+  try {
+    return await requireCustomerBusinessRelationship(
+      { firebaseUid: '', canonicalCustomerId, accountData: {} },
+      merchantId,
+    );
+  } catch (error) {
+    if (error instanceof CustomerCoreError && error.code === 'customer_business_not_found') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function requireMerchantRequestAccess(req: AuthedRequest): Promise<string> {
+  if (!req.merchantId || !(await requestCanAccessMerchant(req, req.merchantId))) {
+    throw new CustomerCoreError(403, 'merchant_access_denied', 'Merchant access is required.');
+  }
+  return req.merchantId;
+}
+
+async function handleCustomerNfcCardLinkRequest(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  requireCustomerFeature('customerNfcEnabled');
+  const account = await requireBoundCustomerAccount(req);
+  const cardUid = normalizeNfcCardUid(requirePayloadString(payload, 'card_uid'));
+  const result = await linkNfcCardToCanonicalCustomer({
+    cardUid,
+    canonicalCustomerId: account.canonicalCustomerId,
+    linkedBy: 'customer',
+    linkedByAppUserId: account.firebaseUid,
+    source: 'self_service',
+  });
+  logCustomerNfcEvent({
+    event: result.created || result.reassigned ? 'linked' : 'link_replayed',
+    surface: 'customer',
+    cardUidLast4: last4(cardUid),
+  });
+  return {
+    card_uid: cardUid,
+    canonical_customer_id: result.canonicalCustomerId,
+    linked: true,
+  };
+}
+
+async function handleCustomerNfcCardRevokeRequest(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  requireCustomerFeature('customerNfcEnabled');
+  const account = await requireBoundCustomerAccount(req);
+  const cardUid = normalizeNfcCardUid(requirePayloadString(payload, 'card_uid'));
+  await revokeNfcCardLink({
+    cardUid,
+    expectedCanonicalCustomerId: account.canonicalCustomerId,
+  });
+  logCustomerNfcEvent({ event: 'revoked', surface: 'customer', cardUidLast4: last4(cardUid) });
+  return { card_uid: cardUid, revoked: true };
+}
+
+async function handleMerchantNfcCardLinkRequest(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  requireCustomerFeature('customerNfcEnabled');
+  const merchantId = await requireMerchantRequestAccess(req);
+  const cardUid = normalizeNfcCardUid(requirePayloadString(payload, 'card_uid'));
+  const customerId = maybePayloadString(payload, 'customer_id', 'customerId');
+  const rawPhone = maybePayloadString(payload, 'phone');
+  const customerName = maybePayloadString(payload, 'customer_name', 'customerName', 'name');
+  const createCustomerIfMissing =
+    maybePayloadBoolean(payload, 'create_customer_if_missing', 'createCustomerIfMissing') ?? true;
+
+  const businessLink = await linkCanonicalCustomerToBusinessCustomer({
+    merchantId,
+    customerId,
+    rawPhone,
+    customerName,
+    createCustomerIfMissing,
+    dryRun: false,
+  });
+
+  const cardLink = await linkNfcCardToCanonicalCustomer({
+    cardUid,
+    canonicalCustomerId: businessLink.canonical_customer_id,
+    linkedBy: 'merchant',
+    linkedByMerchantId: merchantId,
+    source: 'merchant_assisted',
+  });
+
+  logCustomerNfcEvent({
+    event: cardLink.created || cardLink.reassigned ? 'linked' : 'link_replayed',
+    surface: 'merchant',
+    merchantId,
+    cardUidLast4: last4(cardUid),
+  });
+
+  return {
+    card_uid: cardUid,
+    business_id: merchantId,
+    customer_id: businessLink.customer_id,
+    canonical_customer_id: businessLink.canonical_customer_id,
+    customer_created: businessLink.customer_created,
+  };
+}
+
+async function handleMerchantNfcCardResolveRequest(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  requireCustomerFeature('customerNfcEnabled');
+  const merchantId = await requireMerchantRequestAccess(req);
+  const cardUid = normalizeNfcCardUid(requirePayloadString(payload, 'card_uid'));
+  const createCustomerIfMissing =
+    maybePayloadBoolean(payload, 'create_customer_if_missing', 'createCustomerIfMissing') ?? true;
+
+  const cardLink = await findActiveNfcCardLink(cardUid);
+  if (!cardLink) {
+    logCustomerNfcEvent({
+      event: 'resolve_not_found',
+      surface: 'merchant',
+      merchantId,
+      cardUidLast4: last4(cardUid),
+    });
+    throw new CustomerCoreError(
+      404,
+      'nfc_card_not_found',
+      'NFC card is not linked to any customer.',
+    );
+  }
+
+  let relationship = await resolveBusinessRelationshipForCanonicalId(
+    merchantId,
+    cardLink.canonicalCustomerId,
+  );
+  let customerCreated = false;
+  if (!relationship) {
+    if (!createCustomerIfMissing) {
+      throw new CustomerCoreError(
+        404,
+        'customer_business_not_found',
+        'Business is not linked to this customer yet.',
+      );
+    }
+    const identitySnapshot = await canonicalCustomerIdentityRef(
+      cardLink.canonicalCustomerId,
+    ).get();
+    const phoneE164 = maybePayloadString(snapshotDataRecord(identitySnapshot), 'phone_e164');
+    if (!phoneE164) {
+      throw new CustomerCoreError(
+        409,
+        'customer_identity_missing_phone',
+        'Customer identity has no phone number to bootstrap a new business customer.',
+      );
+    }
+    await linkCanonicalCustomerToBusinessCustomer({
+      merchantId,
+      customerId: null,
+      rawPhone: phoneE164,
+      customerName: 'Cliente',
+      createCustomerIfMissing: true,
+      dryRun: false,
+    });
+    customerCreated = true;
+    relationship = await resolveBusinessRelationshipForCanonicalId(
+      merchantId,
+      cardLink.canonicalCustomerId,
+    );
+    if (!relationship) {
+      throw new CustomerCoreError(
+        500,
+        'customer_core_resolution_failed',
+        'Unable to resolve business customer after creation.',
+      );
+    }
+  }
+
+  logCustomerNfcEvent({
+    event: 'resolved',
+    surface: 'merchant',
+    merchantId,
+    cardUidLast4: last4(cardUid),
+  });
+
+  return {
+    business_id: relationship.merchantId,
+    customer: {
+      customer_id: relationship.customerId,
+      name: maybePayloadString(relationship.customerData, 'name'),
+      phone: maybePayloadString(relationship.customerData, 'phone'),
+      total_points: pickNumber(relationship.customerData, 'total_points') ?? 0,
+    },
+    customer_created: customerCreated,
+  };
+}
+
+async function handleMerchantNfcCardRevokeRequest(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  requireCustomerFeature('customerNfcEnabled');
+  const merchantId = await requireMerchantRequestAccess(req);
+  const cardUid = normalizeNfcCardUid(requirePayloadString(payload, 'card_uid'));
+  const cardLink = await findActiveNfcCardLink(cardUid);
+  if (!cardLink) {
+    throw new CustomerCoreError(
+      404,
+      'nfc_card_not_found',
+      'NFC card is not currently linked.',
+    );
+  }
+  const relationship = await resolveBusinessRelationshipForCanonicalId(
+    merchantId,
+    cardLink.canonicalCustomerId,
+  );
+  if (!relationship) {
+    throw new CustomerCoreError(
+      403,
+      'merchant_nfc_card_access_denied',
+      'This card does not belong to a customer of your business.',
+    );
+  }
+  await revokeNfcCardLink({ cardUid });
+  logCustomerNfcEvent({
+    event: 'revoked',
+    surface: 'merchant',
+    merchantId,
+    cardUidLast4: last4(cardUid),
+  });
+  return { card_uid: cardUid, revoked: true };
+}
+
+async function resolveCanonicalCustomerIdForNfcBackfillItem(
+  phoneE164: string,
+  merchantId: string | null,
+  customerName: string,
+  dryRun: boolean,
+): Promise<string> {
+  if (dryRun) {
+    const existing = await findCanonicalCustomerIdentity(phoneE164);
+    return existing?.canonicalCustomerId ?? buildCanonicalCustomerId(phoneE164);
+  }
+  if (merchantId) {
+    const linkResult = await linkCanonicalCustomerToBusinessCustomer({
+      merchantId,
+      customerId: null,
+      rawPhone: phoneE164,
+      customerName,
+      createCustomerIfMissing: true,
+      dryRun: false,
+    });
+    return linkResult.canonical_customer_id;
+  }
+  const identity = await findOrCreateCanonicalCustomerIdentity('legacy-import', phoneE164);
+  return identity.canonicalCustomerId;
+}
+
+/**
+ * Idempotent import of legacy card <-> customer associations from the old
+ * app. The exact source/shape of that legacy data is not confirmed yet, so
+ * this accepts a generic { card_uid, phone, merchant_id?, customer_name? }
+ * shape per item; adapt the caller (a one-off script/CSV loader) once the
+ * source system is known instead of changing this contract.
+ */
+async function handleNfcCardBackfillRequest(
+  body: unknown,
+): Promise<Record<string, unknown>> {
+  const payload = requireBodyObject(body);
+  const dryRun = maybePayloadBoolean(payload, 'dry_run', 'dryRun') ?? false;
+  const rawItems = payload.items;
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    throw new CustomerCoreError(
+      400,
+      'nfc_backfill_items_required',
+      'Provide a non-empty items array.',
+    );
+  }
+  if (rawItems.length > 200) {
+    throw new CustomerCoreError(
+      400,
+      'nfc_backfill_batch_too_large',
+      'Provide at most 200 items per request.',
+    );
+  }
+
+  const results: Array<Record<string, unknown>> = [];
+  let linkedCount = 0;
+  let skippedCount = 0;
+
+  for (const rawItem of rawItems) {
+    if (rawItem == null || typeof rawItem !== 'object' || Array.isArray(rawItem)) {
+      skippedCount += 1;
+      results.push({ status: 'error', message: 'Invalid item.' });
+      continue;
+    }
+    const item = rawItem as Record<string, unknown>;
+    try {
+      const cardUid = normalizeNfcCardUid(requirePayloadString(item, 'card_uid'));
+      const phoneE164 = normalizeMozambiquePhoneToE164(requirePayloadString(item, 'phone'));
+      const merchantId = maybePayloadString(item, 'merchant_id', 'merchantId');
+      const customerName = maybePayloadString(item, 'customer_name', 'customerName') ?? 'Cliente';
+
+      const canonicalCustomerId = await resolveCanonicalCustomerIdForNfcBackfillItem(
+        phoneE164,
+        merchantId,
+        customerName,
+        dryRun,
+      );
+
+      if (dryRun) {
+        const existingCardLink = await findActiveNfcCardLink(cardUid);
+        results.push({
+          card_uid: cardUid,
+          status:
+            existingCardLink && existingCardLink.canonicalCustomerId === canonicalCustomerId
+              ? 'already_linked'
+              : 'dry_run',
+          canonical_customer_id: canonicalCustomerId,
+        });
+        continue;
+      }
+
+      const cardLink = await linkNfcCardToCanonicalCustomer({
+        cardUid,
+        canonicalCustomerId,
+        linkedBy: 'admin',
+        source: 'legacy_import',
+      });
+      const status = cardLink.created || cardLink.reassigned ? 'linked' : 'already_linked';
+      if (status === 'linked') linkedCount += 1;
+      results.push({
+        card_uid: cardUid,
+        status,
+        canonical_customer_id: canonicalCustomerId,
+        merchant_id: merchantId ?? null,
+      });
+    } catch (error) {
+      skippedCount += 1;
+      if (error instanceof CustomerCoreError) {
+        results.push({
+          status: error.status >= 500 ? 'error' : 'skipped',
+          code: error.code,
+          message: error.message,
+        });
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return {
+    dry_run: dryRun,
+    processed: rawItems.length,
+    linked: linkedCount,
+    skipped: skippedCount,
+    results,
+  };
 }
 
 async function handleCustomerCoreBackfillRequest(

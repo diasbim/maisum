@@ -107,6 +107,22 @@ class CustomerDao {
     return customerFromMap(rows.first);
   }
 
+  /// Local read cache only: looks up a customer by the last NFC card UID
+  /// resolved for this merchant. The backend (customer_nfc_cards) remains
+  /// the source of truth; this enables fast offline recognition of repeat
+  /// taps but must not be relied on for authorization decisions.
+  Future<Customer?> findByNfcCardUid(String cardUid) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'customers',
+      where: _withMerchantScope('nfc_card_uid = ? AND archived_at IS NULL'),
+      whereArgs: _withMerchantArgs([cardUid]),
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return customerFromMap(rows.first);
+  }
+
   Future<List<Customer>> getAll() async {
     final db = await _db.database;
     final rows = await db.query(
@@ -242,6 +258,77 @@ class CustomerDao {
       throw StateError('Customer not found after archive update');
     }
     return customer;
+  }
+
+  /// Caches the resolved NFC card UID on the local customer row (see
+  /// [findByNfcCardUid]). Clearing an existing UID from another customer at
+  /// this merchant first avoids the unique index rejecting a reassignment
+  /// after the backend confirms a card was moved (e.g. reissued).
+  Future<void> setNfcCardUidCache(String customerId, String? cardUid) async {
+    final db = await _db.database;
+    await db.transaction((txn) async {
+      if (cardUid != null) {
+        await txn.update(
+          'customers',
+          {'nfc_card_uid': null},
+          where: _withMerchantScope('nfc_card_uid = ? AND id != ?'),
+          whereArgs: _withMerchantArgs([cardUid, customerId]),
+        );
+      }
+      final updated = await txn.update(
+        'customers',
+        {
+          'nfc_card_uid': cardUid,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+        },
+        where: _withMerchantScope('id = ?'),
+        whereArgs: _withMerchantArgs([customerId]),
+      );
+      if (updated != 1) {
+        throw StateError('Customer not found in the active merchant');
+      }
+    });
+  }
+
+  /// Upserts a customer record that is already authoritative on the
+  /// backend (e.g. resolved via an NFC card tap that auto-created the
+  /// business customer server-side on first visit). Marked as synced since
+  /// the server is the source of truth for this data. Reuses an existing
+  /// local row by id or by phone instead of blindly overwriting, to avoid
+  /// orphaning sales/history tied to a pre-existing local customer id.
+  Future<Customer> upsertFromServer(Customer customer) async {
+    final db = await _db.database;
+    final existingById = await getById(customer.id);
+    if (existingById != null) {
+      await db.update(
+        'customers',
+        {
+          'name': customer.name,
+          'phone': customer.phone,
+          'total_points': customer.totalPoints,
+          'canonical_customer_id': customer.canonicalCustomerId,
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+          'synced': 1,
+        },
+        where: _withMerchantScope('id = ?'),
+        whereArgs: _withMerchantArgs([customer.id]),
+      );
+      return (await getById(customer.id))!;
+    }
+
+    final existingByPhone = await findByPhone(customer.phone);
+    if (existingByPhone != null) {
+      // A local record already represents this phone under a different
+      // (locally created) id; reuse it instead of inserting a duplicate.
+      return existingByPhone;
+    }
+
+    await db.insert('customers', customer.copyWith(synced: true).toDbMap());
+    final saved = await getById(customer.id);
+    if (saved == null) {
+      throw StateError('Customer not found after server upsert');
+    }
+    return saved;
   }
 
   Future<Map<String, int>> getDeleteDependencies(String id) async {

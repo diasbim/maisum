@@ -137,6 +137,11 @@ class AppMigrations {
       name: 'customer archive and sale cancellation',
       up: _createV27Schema,
     ),
+    const MigrationStep(
+      version: 28,
+      name: 'customer nfc card cache',
+      up: _createV28Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -537,6 +542,7 @@ class _SchemaVerifier {
       await _createV25Schema(txn);
       await _createV26Schema(txn);
       await _createV27Schema(txn);
+      await _createV28Schema(txn);
     });
   }
 
@@ -1585,6 +1591,20 @@ Future<void> _createV27Schema(DatabaseExecutor db) async {
   await db.execute(
     'CREATE INDEX IF NOT EXISTS idx_sync_tombstones_deleted '
     'ON sync_tombstones(merchant_id, deleted_at, id)',
+  );
+}
+
+Future<void> _createV28Schema(DatabaseExecutor db) async {
+  // Local read cache of the last NFC card UID resolved for a customer, so
+  // repeat taps at the same merchant can be recognised quickly. The backend
+  // (customer_nfc_cards collection) remains the source of truth for
+  // link/resolve/revoke; this column only speeds up local lookups and must
+  // never be trusted on its own for authorization decisions.
+  await _addColumnIfMissing(db, 'customers', 'nfc_card_uid TEXT');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_nfc_card_uid '
+    'ON customers(merchant_id, nfc_card_uid) '
+    'WHERE nfc_card_uid IS NOT NULL',
   );
 }
 

@@ -36,6 +36,8 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
 	</dict>
+	<key>NFCReaderUsageDescription</key>
+	<string>Precisamos de ler cartões NFC físicos para identificar o cliente e registar vendas ou benefícios.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

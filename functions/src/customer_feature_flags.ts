@@ -2,6 +2,7 @@ export type CustomerFeatureFlags = {
   customerAppEnabled: boolean;
   customerRedemptionEnabled: boolean;
   customerQrEnabled: boolean;
+  customerNfcEnabled: boolean;
   customerPushEnabled: boolean;
   customerDeepLinksEnabled: boolean;
 };
@@ -32,6 +33,7 @@ export function resolveCustomerFeatureFlags(
     customerAppEnabled: isEnabled(environment.CUSTOMER_APP_ENABLED),
     customerRedemptionEnabled: isEnabled(environment.CUSTOMER_REDEMPTION_ENABLED),
     customerQrEnabled: isEnabled(environment.CUSTOMER_QR_ENABLED),
+    customerNfcEnabled: isEnabled(environment.CUSTOMER_NFC_ENABLED),
     customerPushEnabled: isEnabled(environment.CUSTOMER_PUSH_ENABLED),
     customerDeepLinksEnabled: isEnabled(
       environment.CUSTOMER_DEEP_LINKS_ENABLED,

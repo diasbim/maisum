@@ -325,6 +325,24 @@ class _DashboardBody extends ConsumerWidget {
                 SizedBox(
                   width: tileWidth,
                   child: _MiniActionTile(
+                    label: 'Código do cliente',
+                    subtitle: 'Ler QR para identificar cliente',
+                    icon: Icons.qr_code_rounded,
+                    onTap: () => context.push('/merchant/customer-qr'),
+                  ),
+                ),
+                SizedBox(
+                  width: tileWidth,
+                  child: _MiniActionTile(
+                    label: 'Cartão NFC',
+                    subtitle: 'Ler cartão físico do cliente',
+                    icon: Icons.nfc_rounded,
+                    onTap: () => context.push('/merchant/customer-nfc'),
+                  ),
+                ),
+                SizedBox(
+                  width: tileWidth,
+                  child: _MiniActionTile(
                     label: 'Retenção',
                     subtitle: 'Clientes em risco e recorrentes',
                     icon: Icons.insights_rounded,

@@ -49,6 +49,7 @@ mixin _$Customer {
   DateTime? get updatedAt => throw _privateConstructorUsedError;
   DateTime? get archivedAt => throw _privateConstructorUsedError;
   String? get archivedByAppUserId => throw _privateConstructorUsedError;
+  String? get nfcCardUid => throw _privateConstructorUsedError;
   bool get synced => throw _privateConstructorUsedError;
 
   /// Serializes this Customer to a JSON map.
@@ -91,6 +92,7 @@ abstract class $CustomerCopyWith<$Res> {
       DateTime? updatedAt,
       DateTime? archivedAt,
       String? archivedByAppUserId,
+      String? nfcCardUid,
       bool synced});
 }
 
@@ -133,6 +135,7 @@ class _$CustomerCopyWithImpl<$Res, $Val extends Customer>
     Object? updatedAt = freezed,
     Object? archivedAt = freezed,
     Object? archivedByAppUserId = freezed,
+    Object? nfcCardUid = freezed,
     Object? synced = null,
   }) {
     return _then(_value.copyWith(
@@ -232,6 +235,10 @@ class _$CustomerCopyWithImpl<$Res, $Val extends Customer>
           ? _value.archivedByAppUserId
           : archivedByAppUserId // ignore: cast_nullable_to_non_nullable
               as String?,
+      nfcCardUid: freezed == nfcCardUid
+          ? _value.nfcCardUid
+          : nfcCardUid // ignore: cast_nullable_to_non_nullable
+              as String?,
       synced: null == synced
           ? _value.synced
           : synced // ignore: cast_nullable_to_non_nullable
@@ -273,6 +280,7 @@ abstract class _$$CustomerImplCopyWith<$Res>
       DateTime? updatedAt,
       DateTime? archivedAt,
       String? archivedByAppUserId,
+      String? nfcCardUid,
       bool synced});
 }
 
@@ -313,6 +321,7 @@ class __$$CustomerImplCopyWithImpl<$Res>
     Object? updatedAt = freezed,
     Object? archivedAt = freezed,
     Object? archivedByAppUserId = freezed,
+    Object? nfcCardUid = freezed,
     Object? synced = null,
   }) {
     return _then(_$CustomerImpl(
@@ -412,6 +421,10 @@ class __$$CustomerImplCopyWithImpl<$Res>
           ? _value.archivedByAppUserId
           : archivedByAppUserId // ignore: cast_nullable_to_non_nullable
               as String?,
+      nfcCardUid: freezed == nfcCardUid
+          ? _value.nfcCardUid
+          : nfcCardUid // ignore: cast_nullable_to_non_nullable
+              as String?,
       synced: null == synced
           ? _value.synced
           : synced // ignore: cast_nullable_to_non_nullable
@@ -448,6 +461,7 @@ class _$CustomerImpl extends _Customer {
       this.updatedAt,
       this.archivedAt,
       this.archivedByAppUserId,
+      this.nfcCardUid,
       this.synced = false})
       : super._();
 
@@ -514,12 +528,14 @@ class _$CustomerImpl extends _Customer {
   @override
   final String? archivedByAppUserId;
   @override
+  final String? nfcCardUid;
+  @override
   @JsonKey()
   final bool synced;
 
   @override
   String toString() {
-    return 'Customer(id: $id, merchantId: $merchantId, canonicalCustomerId: $canonicalCustomerId, name: $name, phone: $phone, totalPoints: $totalPoints, confirmedPoints: $confirmedPoints, accountState: $accountState, relationshipStatus: $relationshipStatus, lifecycleStage: $lifecycleStage, retentionStatus: $retentionStatus, firstVisitAt: $firstVisitAt, lastVisitAt: $lastVisitAt, totalVisits: $totalVisits, totalSpent: $totalSpent, averageSpend: $averageSpend, averageVisitIntervalDays: $averageVisitIntervalDays, marketingConsentStatus: $marketingConsentStatus, whatsappConsentStatus: $whatsappConsentStatus, schemaVersion: $schemaVersion, createdAt: $createdAt, updatedAt: $updatedAt, archivedAt: $archivedAt, archivedByAppUserId: $archivedByAppUserId, synced: $synced)';
+    return 'Customer(id: $id, merchantId: $merchantId, canonicalCustomerId: $canonicalCustomerId, name: $name, phone: $phone, totalPoints: $totalPoints, confirmedPoints: $confirmedPoints, accountState: $accountState, relationshipStatus: $relationshipStatus, lifecycleStage: $lifecycleStage, retentionStatus: $retentionStatus, firstVisitAt: $firstVisitAt, lastVisitAt: $lastVisitAt, totalVisits: $totalVisits, totalSpent: $totalSpent, averageSpend: $averageSpend, averageVisitIntervalDays: $averageVisitIntervalDays, marketingConsentStatus: $marketingConsentStatus, whatsappConsentStatus: $whatsappConsentStatus, schemaVersion: $schemaVersion, createdAt: $createdAt, updatedAt: $updatedAt, archivedAt: $archivedAt, archivedByAppUserId: $archivedByAppUserId, nfcCardUid: $nfcCardUid, synced: $synced)';
   }
 
   @override
@@ -573,6 +589,8 @@ class _$CustomerImpl extends _Customer {
                 other.archivedAt == archivedAt) &&
             (identical(other.archivedByAppUserId, archivedByAppUserId) ||
                 other.archivedByAppUserId == archivedByAppUserId) &&
+            (identical(other.nfcCardUid, nfcCardUid) ||
+                other.nfcCardUid == nfcCardUid) &&
             (identical(other.synced, synced) || other.synced == synced));
   }
 
@@ -604,6 +622,7 @@ class _$CustomerImpl extends _Customer {
         updatedAt,
         archivedAt,
         archivedByAppUserId,
+        nfcCardUid,
         synced
       ]);
 
@@ -649,6 +668,7 @@ abstract class _Customer extends Customer {
       final DateTime? updatedAt,
       final DateTime? archivedAt,
       final String? archivedByAppUserId,
+      final String? nfcCardUid,
       final bool synced}) = _$CustomerImpl;
   const _Customer._() : super._();
 
@@ -703,6 +723,8 @@ abstract class _Customer extends Customer {
   DateTime? get archivedAt;
   @override
   String? get archivedByAppUserId;
+  @override
+  String? get nfcCardUid;
   @override
   bool get synced;
 

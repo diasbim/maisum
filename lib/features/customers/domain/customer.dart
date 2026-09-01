@@ -93,6 +93,7 @@ class Customer with _$Customer {
     DateTime? updatedAt,
     DateTime? archivedAt,
     String? archivedByAppUserId,
+    String? nfcCardUid,
     @Default(false) bool synced,
   }) = _Customer;
 
@@ -126,6 +127,7 @@ class Customer with _$Customer {
         'updated_at': (updatedAt ?? DateTime.now()).millisecondsSinceEpoch,
         'archived_at': archivedAt?.millisecondsSinceEpoch,
         'archived_by_app_user_id': archivedByAppUserId,
+        'nfc_card_uid': nfcCardUid,
         'synced': synced ? 1 : 0,
       };
 
@@ -173,6 +175,7 @@ Customer customerFromMap(Map<String, dynamic> map) => Customer(
           : null,
       archivedAt: _dateFromStorage(map['archived_at']),
       archivedByAppUserId: map['archived_by_app_user_id'] as String?,
+      nfcCardUid: map['nfc_card_uid'] as String?,
       synced: (map['synced'] as int? ?? 0) == 1,
     );
 

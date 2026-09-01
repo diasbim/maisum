@@ -53,6 +53,9 @@ import '../core/theme/customer_experience_theme.dart';
 import '../features/customer_app/presentation/customer_route_guards.dart';
 import '../features/customer_app/presentation/customer_screens.dart';
 import '../features/customer_app/presentation/merchant_redemption_validation_screen.dart';
+import '../features/nfc_cards/presentation/customer_nfc_card_screen.dart';
+import '../features/nfc_cards/presentation/merchant_nfc_card_link_screen.dart';
+import '../features/nfc_cards/presentation/merchant_nfc_card_screen.dart';
 
 const _publicRoutes = {
   '/splash',
@@ -387,6 +390,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/merchant/customer-qr',
         builder: (_, __) => const MerchantCustomerQrResolveScreen(),
+      ),
+      GoRoute(
+        path: '/merchant/customer-nfc',
+        builder: (_, __) => const MerchantNfcCardScreen(),
+      ),
+      GoRoute(
+        path: '/merchant/customer-nfc/link',
+        builder: (_, __) => const MerchantNfcCardLinkScreen(),
+      ),
+      GoRoute(
+        path: '/customer/nfc-card',
+        builder: (_, __) => const CustomerNfcCardScreen(),
       ),
       GoRoute(
         path: '/merchant/redemptions/validate',

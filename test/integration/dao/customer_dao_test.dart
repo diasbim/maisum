@@ -135,6 +135,74 @@ void main() {
     });
   });
 
+  group('nfc card uid cache', () {
+    test('finds a customer by cached card uid within the same merchant',
+        () async {
+      final merchantOne = CustomerDao(
+        AppDatabase.instance,
+        merchantId: 'merchant-nfc-1',
+      );
+      final customer =
+          await merchantOne.create(name: 'Eva', phone: '840000030');
+
+      await merchantOne.setNfcCardUidCache(customer.id, '04A22C9B');
+
+      final found = await merchantOne.findByNfcCardUid('04A22C9B');
+      expect(found?.id, customer.id);
+    });
+
+    test('does not leak a cached card uid across merchants', () async {
+      final merchantOne = CustomerDao(
+        AppDatabase.instance,
+        merchantId: 'merchant-nfc-2',
+      );
+      final merchantTwo = CustomerDao(
+        AppDatabase.instance,
+        merchantId: 'merchant-nfc-3',
+      );
+      final customer =
+          await merchantOne.create(name: 'Fabio', phone: '840000031');
+      await merchantOne.setNfcCardUidCache(customer.id, '04A22C9C');
+
+      expect(await merchantTwo.findByNfcCardUid('04A22C9C'), isNull);
+    });
+
+    test('reassigning a uid clears it from the previous customer', () async {
+      final merchant = CustomerDao(
+        AppDatabase.instance,
+        merchantId: 'merchant-nfc-4',
+      );
+      final first = await merchant.create(name: 'Gil', phone: '840000032');
+      final second = await merchant.create(name: 'Helena', phone: '840000033');
+
+      await merchant.setNfcCardUidCache(first.id, '04A22C9D');
+      await merchant.setNfcCardUidCache(second.id, '04A22C9D');
+
+      expect(await merchant.getById(first.id).then((c) => c?.nfcCardUid), isNull);
+      expect(
+        await merchant.getById(second.id).then((c) => c?.nfcCardUid),
+        '04A22C9D',
+      );
+      expect(
+        (await merchant.findByNfcCardUid('04A22C9D'))?.id,
+        second.id,
+      );
+    });
+
+    test('clearing the cache with null removes the mapping', () async {
+      final merchant = CustomerDao(
+        AppDatabase.instance,
+        merchantId: 'merchant-nfc-5',
+      );
+      final customer = await merchant.create(name: 'Ivo', phone: '840000034');
+      await merchant.setNfcCardUidCache(customer.id, '04A22C9E');
+
+      await merchant.setNfcCardUidCache(customer.id, null);
+
+      expect(await merchant.findByNfcCardUid('04A22C9E'), isNull);
+    });
+  });
+
   group('search', () {
     setUp(() async {
       await dao.create(name: 'Ana Costa', phone: '841000001');

@@ -53,6 +53,7 @@ _$CustomerImpl _$$CustomerImplFromJson(Map<String, dynamic> json) =>
           ? null
           : DateTime.parse(json['archivedAt'] as String),
       archivedByAppUserId: json['archivedByAppUserId'] as String?,
+      nfcCardUid: json['nfcCardUid'] as String?,
       synced: json['synced'] as bool? ?? false,
     );
 
@@ -87,6 +88,7 @@ Map<String, dynamic> _$$CustomerImplToJson(_$CustomerImpl instance) =>
       'updatedAt': instance.updatedAt?.toIso8601String(),
       'archivedAt': instance.archivedAt?.toIso8601String(),
       'archivedByAppUserId': instance.archivedByAppUserId,
+      'nfcCardUid': instance.nfcCardUid,
       'synced': instance.synced,
     };
 
