@@ -357,9 +357,29 @@ test('sync tombstone payload matches the generic contract exactly', () => {
   );
 });
 
-test('schema and sync handler expose tombstones and updated_at sale pulls', () => {
+test('authoritative corrections use Firestore and expose tombstones', () => {
   const schema = readFileSync(resolve(process.cwd(), 'sql/schema.sql'), 'utf8');
   const source = readFileSync(resolve(process.cwd(), 'src/index.ts'), 'utf8');
+  const archiveHandler = source.slice(
+    source.indexOf('async function archiveCustomerViaSync'),
+    source.indexOf('async function upsertCustomer'),
+  );
+  const cancellationHandler = source.slice(
+    source.indexOf('async function cancelSaleViaSync'),
+    source.indexOf('async function applySaleCancellationToLoyaltyState'),
+  );
+  const cancellationTransaction = source.slice(
+    source.indexOf('async function applySaleCancellationToLoyaltyState'),
+    source.indexOf('async function permanentlyDeleteCustomer'),
+  );
+  const deletionHandler = source.slice(
+    source.indexOf('async function permanentlyDeleteCustomer'),
+    source.indexOf('function customerFirestoreDependencyQueries'),
+  );
+  const hardDeleteTransaction = source.slice(
+    source.indexOf('async function applyCustomerFirestoreHardDelete'),
+    source.indexOf('async function resolveSqlCustomerDeleteDependencyChecks'),
+  );
 
   assert.match(schema, /CREATE TABLE IF NOT EXISTS sync_tombstones/i);
   assert.match(
@@ -392,7 +412,57 @@ test('schema and sync handler expose tombstones and updated_at sale pulls', () =
   assert.doesNotMatch(source, /DELETE FROM sync_tombstones[\s\S]*entity_type = 'customer'/s);
   assert.match(source, /buildCustomerArchiveFirestorePatch\(archiveMutation, updatedAt\)/);
   assert.match(source, /businessCustomerRef\(merchantId, id\)\.set\(/);
+  assert.match(archiveHandler, /admin\.firestore\(\)\.runTransaction/);
+  assert.match(archiveHandler, /\.\.\.customerPatch/);
+  assert.doesNotMatch(archiveHandler, /pool\.(query|connect)/);
+  assert.match(cancellationHandler, /applySaleCancellationToLoyaltyState/);
+  assert.match(
+    source,
+    /cancelled_at: currentCancelledAt \?\? params\.cancelledAt/,
+  );
+  assert.match(
+    cancellationTransaction,
+    /cancelledAt: currentCancelledAt \?\? params\.cancelledAt/,
+  );
+  assert.match(
+    cancellationTransaction,
+    /balance_after:[\s\S]*pickNumber\(reversalLedgerData, 'balance_after'\)/,
+  );
+  assert.doesNotMatch(cancellationHandler, /pool\.(query|connect)/);
+  assert.match(deletionHandler, /applyCustomerFirestoreHardDelete/);
+  assert.doesNotMatch(deletionHandler, /pool\.(query|connect)/);
+  assert.match(source, /customer_delete_requires_archive/);
+  assert.match(
+    hardDeleteTransaction,
+    /customerSnapshot\.exists[\s\S]*archived_at[\s\S]*customer_delete_requires_archive/,
+  );
+  assert.match(
+    hardDeleteTransaction,
+    /transaction\.get\(tombstoneRef\)[\s\S]*existingTombstoneSnapshot/,
+  );
+  for (const collection of [
+    'sales',
+    'redemptions',
+    'appointments',
+    'retention_metrics',
+    'customer_risk_scores',
+    'recovery_tasks',
+    'recovery_actions',
+    'visit_reports',
+    'survey_responses',
+    'loyalty_ledger',
+    'redemption_requests',
+  ]) {
+    assert.match(source, new RegExp(`'${collection}'`));
+  }
   assert.match(source, /const SYNC_TOMBSTONE_COLLECTION = 'sync_tombstones'/);
   assert.match(source, /collection\(SYNC_TOMBSTONE_COLLECTION\)/);
-  assert.match(source, /transaction\.set\(\s*businessSyncTombstoneRef\(merchantId, tombstonePayload\.id\),\s*tombstonePayload/s);
+  assert.match(
+    source,
+    /const deletedAt =[\s\S]*pickNumber\(existingTombstone, 'deleted_at'\)/,
+  );
+  assert.match(
+    source,
+    /transaction\.set\(tombstoneRef,[\s\S]*deleted_at: deletedAt/,
+  );
 });

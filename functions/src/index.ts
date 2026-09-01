@@ -1568,6 +1568,17 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
           const result = await permanentlyDeleteCustomer(authedReq, entityId);
           return res.json({ success: true, data: result });
         }
+        if (
+          Object.prototype.hasOwnProperty.call(payload, 'archived_at') ||
+          Object.prototype.hasOwnProperty.call(payload, 'archivedAt')
+        ) {
+          const result = await archiveCustomerViaSync(
+            authedReq,
+            payload,
+            entityId,
+          );
+          return res.json({ success: true, data: result });
+        }
         await upsertCustomer(merchantId, payload, entityId, authedReq);
         return res.json({ success: true });
       case 'merchant_item':
@@ -8137,6 +8148,110 @@ function pickNumber(payload: Record<string, unknown>, key: string): number | nul
   return null;
 }
 
+async function archiveCustomerViaSync(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+  customerId: string,
+): Promise<Record<string, unknown>> {
+  const merchantId = req.merchantId;
+  const actorAppUserId = requireAuthenticatedAppUserId(req);
+  let archiveMutation: ReturnType<typeof resolveCustomerArchiveMutation>;
+  try {
+    archiveMutation = resolveCustomerArchiveMutation(
+      payload,
+      actorAppUserId,
+    );
+  } catch (error) {
+    throw new CustomerCoreError(
+      400,
+      'customer_archive_invalid',
+      error instanceof Error ? error.message : 'Invalid archive payload.',
+    );
+  }
+  if (!archiveMutation.touched) {
+    throw new CustomerCoreError(
+      400,
+      'customer_archive_missing',
+      'Customer archive mutation is missing archived_at.',
+    );
+  }
+
+  const updatedAt =
+    pickNumber(payload, 'updated_at') ??
+    pickNumber(payload, 'updatedAt') ??
+    Date.now();
+  const customerRef = businessCustomerRef(merchantId, customerId);
+  const tombstoneId = buildCompoundKey('customer', merchantId, customerId);
+  const tombstoneRef = businessSyncTombstoneRef(merchantId, tombstoneId);
+  const customerPatch: Record<string, unknown> = {};
+  for (const key of [
+    'id',
+    'merchant_id',
+    'device_id',
+    'name',
+    'phone',
+    'total_points',
+    'marketing_consent_status',
+    'whatsapp_consent_status',
+    'created_at',
+    'synced',
+  ]) {
+    if (
+      Object.prototype.hasOwnProperty.call(payload, key) &&
+      payload[key] !== undefined
+    ) {
+      customerPatch[key] = payload[key];
+    }
+  }
+
+  await admin.firestore().runTransaction(async (transaction) => {
+    const [customerSnapshot, tombstoneSnapshot] = await Promise.all([
+      transaction.get(customerRef),
+      transaction.get(tombstoneRef),
+    ]);
+    if (tombstoneSnapshot.exists) {
+      const tombstone = snapshotDataRecord(tombstoneSnapshot);
+      throw new CustomerCoreError(
+        409,
+        'customer_deleted_tombstone_conflict',
+        'Customer was permanently deleted and cannot be restored or updated.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          deleted_at: pickNumber(tombstone, 'deleted_at') ?? Date.now(),
+        },
+      );
+    }
+    if (!customerSnapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'customer_not_found',
+        'Customer not found.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+        },
+      );
+    }
+    transaction.set(
+      customerRef,
+      {
+        ...customerPatch,
+        ...buildCustomerArchiveFirestorePatch(archiveMutation, updatedAt),
+      },
+      { merge: true },
+    );
+  });
+
+  return {
+    merchant_id: merchantId,
+    customer_id: customerId,
+    archived_at: archiveMutation.archivedAt,
+    archived_by_app_user_id: archiveMutation.archivedByAppUserId,
+    updated_at: updatedAt,
+  };
+}
+
 async function upsertCustomer(
   merchantId: string,
   payload: Record<string, unknown>,
@@ -10034,153 +10149,42 @@ async function cancelSaleViaSync(
     );
   }
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const existingSaleResult = await client.query(
-      `
-        SELECT
-          id,
-          merchant_id,
-          customer_id,
-          amount,
-          points,
-          created_at,
-          updated_at,
-          device_id,
-          created_by_app_user_id,
-          updated_by_app_user_id,
-          cancellation_status,
-          cancelled_at,
-          cancelled_by_app_user_id,
-          cancellation_reason,
-          replacement_sale_id
-        FROM sales
-        WHERE id = $1
-          AND merchant_id = $2
-        FOR UPDATE
-      `,
-      [saleId, merchantId],
-    );
-    if (existingSaleResult.rowCount === 0) {
-      throw new CustomerCoreError(404, 'sale_not_found', 'Sale not found.', {
-        merchant_id: merchantId,
-        sale_id: saleId,
-      });
-    }
-
-    const existingSale = existingSaleResult.rows[0] as Record<string, unknown>;
-    const alreadyCancelled =
-      normalizeSaleCancellationStatus(existingSale.cancellation_status) === 'CANCELLED';
-    const shouldPersistReplacementLink = shouldPersistReplacementSaleLinkOnReplay(
-      {
-        cancellationStatus: existingSale.cancellation_status,
-        cancellationReason: existingSale.cancellation_reason,
-        replacementSaleId: existingSale.replacement_sale_id,
-      },
-      cancellationRequest,
-    );
-    if (
-      alreadyCancelled &&
-      !isCompatibleRepeatedSaleCancellation(
-        {
-          cancellationStatus: existingSale.cancellation_status,
-          cancellationReason: existingSale.cancellation_reason,
-          replacementSaleId: existingSale.replacement_sale_id,
-        },
-        cancellationRequest,
-      )
-    ) {
-      throw new CustomerCoreError(
-        409,
-        'sale_cancellation_conflict',
-        'Sale is already cancelled with different cancellation metadata.',
-        {
-          merchant_id: merchantId,
-          sale_id: saleId,
-        },
-      );
-    }
-
-    const loyaltyResult = await applySaleCancellationToLoyaltyState({
-      merchantId,
-      saleId,
-      cancellationReason: cancellationRequest.cancellationReason,
-      replacementSaleId: cancellationRequest.replacementSaleId,
-      cancelledAt: cancellationRequest.cancelledAt,
-      cancelledByAppUserId: cancellationRequest.cancelledByAppUserId,
-    });
-
-    if (!alreadyCancelled) {
-      await client.query(
-        `
-          UPDATE sales
-          SET cancellation_status = 'CANCELLED',
-              cancelled_at = $3,
-              cancelled_by_app_user_id = $4,
-              cancellation_reason = $5,
-              replacement_sale_id = $6,
-              updated_at = $3,
-              updated_by_app_user_id = $4
-          WHERE id = $1
-            AND merchant_id = $2
-        `,
-        [
-          saleId,
-          merchantId,
-          cancellationRequest.cancelledAt,
-          cancellationRequest.cancelledByAppUserId,
-          cancellationRequest.cancellationReason,
-          cancellationRequest.replacementSaleId,
-        ],
-      );
-    } else if (shouldPersistReplacementLink) {
-      await client.query(
-        `
-          UPDATE sales
-          SET replacement_sale_id = $3,
-              updated_at = $4,
-              updated_by_app_user_id = $5
-          WHERE id = $1
-            AND merchant_id = $2
-            AND replacement_sale_id IS NULL
-        `,
-        [
-          saleId,
-          merchantId,
-          cancellationRequest.replacementSaleId,
-          cancellationRequest.cancelledAt,
-          cancellationRequest.cancelledByAppUserId,
-        ],
-      );
-    }
-
-    await client.query('COMMIT');
-    return {
+  const loyaltyResult = await applySaleCancellationToLoyaltyState({
+    merchantId,
+    saleId,
+    cancellationReason: cancellationRequest.cancellationReason,
+    replacementSaleId: cancellationRequest.replacementSaleId,
+    cancelledAt: cancellationRequest.cancelledAt,
+    cancelledByAppUserId: cancellationRequest.cancelledByAppUserId,
+  });
+  if (loyaltyResult.status === 'NO_FIRESTORE_SALE') {
+    throw new CustomerCoreError(404, 'sale_not_found', 'Sale not found.', {
       merchant_id: merchantId,
       sale_id: saleId,
-      cancellation_status: 'CANCELLED',
-      cancelled_at:
-        pickNumber(existingSale, 'cancelled_at') ?? cancellationRequest.cancelledAt,
-      cancelled_by_app_user_id:
-        maybePayloadString(existingSale, 'cancelled_by_app_user_id') ??
-        cancellationRequest.cancelledByAppUserId,
-      cancellation_reason:
-        maybePayloadString(existingSale, 'cancellation_reason') ??
-        cancellationRequest.cancellationReason,
-      replacement_sale_id:
-        maybePayloadString(existingSale, 'replacement_sale_id') ??
-        cancellationRequest.replacementSaleId,
-      already_cancelled: alreadyCancelled,
-      replacement_sale_link_persisted: shouldPersistReplacementLink,
-      loyalty: loyaltyResult,
-    };
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
+    });
   }
+
+  return {
+    merchant_id: merchantId,
+    sale_id: saleId,
+    cancellation_status: 'CANCELLED',
+    cancelled_at:
+      pickNumber(loyaltyResult, 'cancelled_at') ??
+      cancellationRequest.cancelledAt,
+    cancelled_by_app_user_id:
+      maybePayloadString(loyaltyResult, 'cancelled_by_app_user_id') ??
+      cancellationRequest.cancelledByAppUserId,
+    cancellation_reason:
+      maybePayloadString(loyaltyResult, 'cancellation_reason') ??
+      cancellationRequest.cancellationReason,
+    replacement_sale_id:
+      maybePayloadString(loyaltyResult, 'replacement_sale_id') ??
+      cancellationRequest.replacementSaleId,
+    already_cancelled: loyaltyResult.status === 'ALREADY_CANCELLED',
+    replacement_sale_link_persisted:
+      loyaltyResult.replacement_sale_link_persisted === true,
+    loyalty: loyaltyResult,
+  };
 }
 
 async function applySaleCancellationToLoyaltyState(params: {
@@ -10192,11 +10196,6 @@ async function applySaleCancellationToLoyaltyState(params: {
   cancelledByAppUserId: string;
 }): Promise<Record<string, unknown>> {
   const saleRef = businessSalesCollectionRef(params.merchantId).doc(params.saleId);
-  const saleSnapshot = await saleRef.get();
-  if (!saleSnapshot.exists) {
-    return { status: 'NO_FIRESTORE_SALE' };
-  }
-
   const saleLedgerEntryId = buildDeterministicLoyaltyLedgerEntryId('SALE', params.saleId);
   const reversalLedgerEntryId = buildDeterministicLoyaltyLedgerEntryId(
     'SALE_REVERSAL',
@@ -10259,6 +10258,24 @@ async function applySaleCancellationToLoyaltyState(params: {
     const reversalLedgerData = reversalLedgerSnapshot.exists
       ? snapshotDataRecord(reversalLedgerSnapshot)
       : {};
+    const currentCancelledAt =
+      pickNumber(currentSaleData, 'cancelled_at') ??
+      pickNumber(currentSaleData, 'cancelledAt');
+    const currentCancelledBy = maybePayloadString(
+      currentSaleData,
+      'cancelled_by_app_user_id',
+      'cancelledByAppUserId',
+    );
+    const currentReason = maybePayloadString(
+      currentSaleData,
+      'cancellation_reason',
+      'cancellationReason',
+    );
+    const currentReplacement = maybePayloadString(
+      currentSaleData,
+      'replacement_sale_id',
+      'replacementSaleId',
+    );
     const customerId =
       maybePayloadString(saleLedgerData, 'customer_id') ??
       maybePayloadString(reversalLedgerData, 'customer_id') ??
@@ -10267,20 +10284,28 @@ async function applySaleCancellationToLoyaltyState(params: {
 
     if (saleLedgerSnapshot.exists) {
       const originalSaleEntry = loyaltyLedgerEntryFromData(saleLedgerData);
-      const reversalEntry = buildSaleReversalLoyaltyLedgerEntry({
+      const expectedReversalEntry = buildSaleReversalLoyaltyLedgerEntry({
         id: reversalLedgerEntryId,
         merchantId: params.merchantId,
         customerId: originalSaleEntry.customer_id,
         canonicalCustomerId: originalSaleEntry.canonical_customer_id ?? null,
         saleId: params.saleId,
         originalSaleEntry,
-        cancellationReason: params.cancellationReason,
-        cancelledAt: params.cancelledAt,
+        cancellationReason: currentReason ?? params.cancellationReason,
+        cancelledAt: currentCancelledAt ?? params.cancelledAt,
         createdAt: reversalLedgerSnapshot.exists
           ? pickNumber(reversalLedgerData, 'created_at') ?? params.cancelledAt
           : params.cancelledAt,
         updatedAt: params.cancelledAt,
       });
+      const reversalEntry = reversalLedgerSnapshot.exists
+        ? {
+            ...expectedReversalEntry,
+            balance_after:
+              pickNumber(reversalLedgerData, 'balance_after') ??
+              expectedReversalEntry.balance_after,
+          }
+        : expectedReversalEntry;
       if (
         reversalLedgerSnapshot.exists &&
         loyaltyLedgerEntryHasDrift(reversalLedgerData, reversalEntry)
@@ -10322,24 +10347,6 @@ async function applySaleCancellationToLoyaltyState(params: {
     }
 
     const currentUpdatedAt = pickNumber(currentSaleData, 'updated_at');
-    const currentCancelledAt =
-      pickNumber(currentSaleData, 'cancelled_at') ??
-      pickNumber(currentSaleData, 'cancelledAt');
-    const currentCancelledBy = maybePayloadString(
-      currentSaleData,
-      'cancelled_by_app_user_id',
-      'cancelledByAppUserId',
-    );
-    const currentReason = maybePayloadString(
-      currentSaleData,
-      'cancellation_reason',
-      'cancellationReason',
-    );
-    const currentReplacement = maybePayloadString(
-      currentSaleData,
-      'replacement_sale_id',
-      'replacementSaleId',
-    );
     const shouldPersistReplacementLink = shouldPersistReplacementSaleLinkOnReplay(
       {
         cancellationStatus: currentCancellationStatus,
@@ -10389,6 +10396,12 @@ async function applySaleCancellationToLoyaltyState(params: {
     return {
       status: currentCancellationStatus === 'CANCELLED' ? 'ALREADY_CANCELLED' : 'CANCELLED',
       customer_id: customerId,
+      cancelled_at: currentCancelledAt ?? params.cancelledAt,
+      cancelled_by_app_user_id:
+        currentCancelledBy ?? params.cancelledByAppUserId,
+      cancellation_reason: currentReason ?? params.cancellationReason,
+      replacement_sale_id:
+        currentReplacement ?? params.replacementSaleId,
       projection_status: projectionStatus,
       replacement_sale_link_persisted: shouldPersistReplacementLink,
     };
@@ -10409,7 +10422,7 @@ async function applySaleCancellationToLoyaltyState(params: {
           'sale',
           params.saleId,
         ]),
-        occurredAt: params.cancelledAt,
+        occurredAt: pickNumber(result, 'cancelled_at') ?? params.cancelledAt,
         dryRun: false,
       }),
     };
@@ -10423,7 +10436,7 @@ async function permanentlyDeleteCustomer(
   customerId: string,
 ): Promise<Record<string, unknown>> {
   const merchantId = req.merchantId;
-  const actorAppUserId = requireAuthenticatedAppUserId(req);
+  requireAuthenticatedAppUserId(req);
   const now = Date.now();
   const tombstoneId = buildCompoundKey('customer', merchantId, customerId);
   const tombstonePayload = buildSyncTombstonePayload(
@@ -10433,161 +10446,54 @@ async function permanentlyDeleteCustomer(
     customerId,
     now,
   );
-  const client = await pool.connect();
-  let transactionFinished = false;
-  try {
-    await client.query('BEGIN');
-    const existingCustomerResult = await client.query(
-      `
-        SELECT id
-        FROM customers
-        WHERE id = $1
-          AND merchant_id = $2
-        FOR UPDATE
-      `,
-      [customerId, merchantId],
-    );
-    const existingTombstoneResult = await client.query(
-      `
-        SELECT deleted_at
-        FROM sync_tombstones
-        WHERE entity_type = 'customer'
-          AND entity_id = $1
-          AND merchant_id = $2
-        LIMIT 1
-      `,
-      [customerId, merchantId],
-    );
-
-    if (existingCustomerResult.rowCount === 0) {
-      await client.query('ROLLBACK');
-      transactionFinished = true;
-      if ((existingTombstoneResult.rowCount ?? 0) > 0) {
-        const deletedAt = Number(existingTombstoneResult.rows[0].deleted_at ?? now);
-        const existingTombstonePayload = buildSyncTombstonePayload(
-          tombstoneId,
-          merchantId,
-          'customer',
-          customerId,
-          deletedAt,
-        );
-        const firestoreCleanup = await applyCustomerFirestoreHardDelete(
-          merchantId,
-          customerId,
-          existingTombstonePayload,
-        );
-        return {
-          merchant_id: merchantId,
-          customer_id: customerId,
-          deleted_at: deletedAt,
-          already_deleted: true,
-          tombstone_emitted: true,
-          tombstone: existingTombstonePayload,
-          firestore: firestoreCleanup,
-        };
-      }
-      throw new CustomerCoreError(404, 'customer_not_found', 'Customer not found.', {
-        merchant_id: merchantId,
-        customer_id: customerId,
-      });
-    }
-
-    const dependencyChecks = await resolveSqlCustomerDeleteDependencyChecks(client);
-    const blockingDependencies: string[] = [];
-    for (const check of dependencyChecks) {
-      const dependencyResult = await client.query(check.sql, [merchantId, customerId]);
-      if ((dependencyResult.rowCount ?? 0) > 0) {
-        blockingDependencies.push(check.label);
-      }
-    }
-    if (blockingDependencies.length > 0) {
-      throw new CustomerCoreError(
-        409,
-        'customer_delete_blocked',
-        'Customer has dependent records and cannot be permanently deleted.',
-        {
-          merchant_id: merchantId,
-          customer_id: customerId,
-          dependencies: blockingDependencies,
-        },
-      );
-    }
-
-    await assertNoCustomerFirestoreDependencies(merchantId, customerId);
-    await client.query(
-      `
-        DELETE FROM customers
-        WHERE id = $1
-          AND merchant_id = $2
-      `,
-      [customerId, merchantId],
-    );
-    await client.query(
-      `
-        INSERT INTO sync_tombstones (
-          id,
-          entity_type,
-          entity_id,
-          merchant_id,
-          deleted_at
-        ) VALUES ($1,'customer',$2,$3,$4)
-        ON CONFLICT (entity_type, entity_id, merchant_id) DO UPDATE SET
-          id = EXCLUDED.id,
-          deleted_at = EXCLUDED.deleted_at
-      `,
-      [tombstoneId, customerId, merchantId, now],
-    );
-    await client.query('COMMIT');
-    transactionFinished = true;
-    const firestoreCleanup = await applyCustomerFirestoreHardDelete(
-      merchantId,
-      customerId,
-      tombstonePayload,
-    );
-    return {
-      merchant_id: merchantId,
-      customer_id: customerId,
-      deleted_at: now,
-      tombstone_emitted: true,
-      tombstone: tombstonePayload,
-      firestore: firestoreCleanup,
-    };
-  } catch (error) {
-    if (!transactionFinished) {
-      await client.query('ROLLBACK');
-    }
-    throw error;
-  } finally {
-    client.release();
-  }
+  const firestoreCleanup = await applyCustomerFirestoreHardDelete(
+    merchantId,
+    customerId,
+    tombstonePayload,
+  );
+  const deletedAt = pickNumber(firestoreCleanup, 'deleted_at') ?? now;
+  const authoritativeTombstonePayload = buildSyncTombstonePayload(
+    tombstoneId,
+    merchantId,
+    'customer',
+    customerId,
+    deletedAt,
+  );
+  return {
+    merchant_id: merchantId,
+    customer_id: customerId,
+    deleted_at: deletedAt,
+    already_deleted: firestoreCleanup.customer_deleted === false,
+    tombstone_emitted: true,
+    tombstone: authoritativeTombstonePayload,
+    firestore: firestoreCleanup,
+  };
 }
 
-async function assertNoCustomerFirestoreDependencies(
+function customerFirestoreDependencyQueries(
   merchantId: string,
   customerId: string,
-): Promise<void> {
-  const [salesSnapshot, redemptionsSnapshot, ledgerSnapshot] = await Promise.all([
-    businessSalesCollectionRef(merchantId).where('customer_id', '==', customerId).limit(1).get(),
-    businessRedemptionsCollectionRef(merchantId).where('customer_id', '==', customerId).limit(1).get(),
-    loyaltyLedgerCollectionRef(merchantId).where('customer_id', '==', customerId).limit(1).get(),
-  ]);
-
-  const firestoreDependencies: string[] = [];
-  if (!salesSnapshot.empty) firestoreDependencies.push('firestore_sales');
-  if (!redemptionsSnapshot.empty) firestoreDependencies.push('firestore_redemptions');
-  if (!ledgerSnapshot.empty) firestoreDependencies.push('firestore_loyalty_ledger');
-  if (firestoreDependencies.length > 0) {
-    throw new CustomerCoreError(
-      409,
-      'customer_delete_blocked',
-      'Customer has dependent records and cannot be permanently deleted.',
-      {
-        merchant_id: merchantId,
-        customer_id: customerId,
-        dependencies: firestoreDependencies,
-      },
-    );
-  }
+) {
+  const businessRef = businessDocumentRef(merchantId);
+  return [
+    'sales',
+    'redemptions',
+    'appointments',
+    'retention_metrics',
+    'customer_risk_scores',
+    'recovery_tasks',
+    'recovery_actions',
+    'visit_reports',
+    'survey_responses',
+    'loyalty_ledger',
+    'redemption_requests',
+  ].map((collection) => ({
+    label: `firestore_${collection}`,
+    query: businessRef
+      .collection(collection)
+      .where('customer_id', '==', customerId)
+      .limit(1),
+  }));
 }
 
 async function applyCustomerFirestoreHardDelete(
@@ -10603,48 +10509,110 @@ async function applyCustomerFirestoreHardDelete(
 ): Promise<Record<string, unknown>> {
   return admin.firestore().runTransaction(async (transaction) => {
     const customerRef = businessCustomerRef(merchantId, customerId);
-    const customerSnapshot = await transaction.get(customerRef);
+    const tombstoneRef = businessSyncTombstoneRef(
+      merchantId,
+      tombstonePayload.id,
+    );
+    const dependencies = customerFirestoreDependencyQueries(
+      merchantId,
+      customerId,
+    );
+    const [
+      customerSnapshot,
+      existingTombstoneSnapshot,
+      ...dependencySnapshots
+    ] = await Promise.all([
+      transaction.get(customerRef),
+      transaction.get(tombstoneRef),
+      ...dependencies.map(({ query }) => transaction.get(query)),
+    ]);
+    const blockingDependencies = dependencies
+      .filter((_, index) => !dependencySnapshots[index].empty)
+      .map(({ label }) => label);
+    if (blockingDependencies.length > 0) {
+      throw new CustomerCoreError(
+        409,
+        'customer_delete_blocked',
+        'Customer has dependent records and cannot be permanently deleted.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+          dependencies: blockingDependencies,
+        },
+      );
+    }
     const customerData = customerSnapshot.exists
       ? snapshotDataRecord(customerSnapshot)
       : {};
+    if (!customerSnapshot.exists && !existingTombstoneSnapshot.exists) {
+      throw new CustomerCoreError(404, 'customer_not_found', 'Customer not found.', {
+        merchant_id: merchantId,
+        customer_id: customerId,
+      });
+    }
+    if (
+      customerSnapshot.exists &&
+      pickNumber(customerData, 'archived_at') == null &&
+      pickNumber(customerData, 'archivedAt') == null
+    ) {
+      throw new CustomerCoreError(
+        409,
+        'customer_delete_requires_archive',
+        'Customer must be archived before permanent deletion.',
+        {
+          merchant_id: merchantId,
+          customer_id: customerId,
+        },
+      );
+    }
     const canonicalCustomerId = maybePayloadString(
       customerData,
       'canonical_customer_id',
       'canonicalCustomerId',
     );
+    const reverseLinkRef = canonicalCustomerId
+      ? canonicalIdentityBusinessLinkRef(merchantId, canonicalCustomerId)
+      : null;
+    const reverseLinkSnapshot = reverseLinkRef
+      ? await transaction.get(reverseLinkRef)
+      : null;
+    const reverseLinkCustomerId =
+      reverseLinkSnapshot?.exists === true
+        ? maybePayloadString(
+            snapshotDataRecord(reverseLinkSnapshot),
+            'business_customer_id',
+            'customer_id',
+          )
+        : null;
 
     if (customerSnapshot.exists) {
       transaction.delete(customerRef);
     }
     transaction.delete(businessCustomerLinkRef(merchantId, customerId));
     transaction.delete(customerRecommendationDocumentRef(merchantId, customerId));
-    transaction.set(
-      businessSyncTombstoneRef(merchantId, tombstonePayload.id),
-      tombstonePayload,
-    );
+    const existingTombstone = existingTombstoneSnapshot.exists
+      ? snapshotDataRecord(existingTombstoneSnapshot)
+      : {};
+    const deletedAt =
+      pickNumber(existingTombstone, 'deleted_at') ??
+      tombstonePayload.deleted_at;
+    transaction.set(tombstoneRef, {
+      ...tombstonePayload,
+      deleted_at: deletedAt,
+    });
 
-    if (canonicalCustomerId) {
-      const reverseLinkRef = canonicalIdentityBusinessLinkRef(
-        merchantId,
-        canonicalCustomerId,
-      );
-      const reverseLinkSnapshot = await transaction.get(reverseLinkRef);
-      const reverseLinkCustomerId = reverseLinkSnapshot.exists
-        ? maybePayloadString(
-          snapshotDataRecord(reverseLinkSnapshot),
-          'business_customer_id',
-          'customer_id',
-        )
-        : null;
-      if (!reverseLinkSnapshot.exists || reverseLinkCustomerId === customerId) {
-        transaction.delete(reverseLinkRef);
-      }
+    if (
+      reverseLinkRef &&
+      (!reverseLinkSnapshot?.exists || reverseLinkCustomerId === customerId)
+    ) {
+      transaction.delete(reverseLinkRef);
     }
 
     return {
       customer_deleted: customerSnapshot.exists,
       canonical_link_deleted: canonicalCustomerId != null,
       firestore_tombstone_written: true,
+      deleted_at: deletedAt,
     };
   });
 }

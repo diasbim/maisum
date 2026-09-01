@@ -239,9 +239,14 @@ const sync_backend_js_1 = require("./sync_backend.js");
         deleted_at: 1234,
     });
 });
-(0, node_test_1.default)('schema and sync handler expose tombstones and updated_at sale pulls', () => {
+(0, node_test_1.default)('authoritative corrections use Firestore and expose tombstones', () => {
     const schema = (0, node_fs_1.readFileSync)((0, node_path_1.resolve)(process.cwd(), 'sql/schema.sql'), 'utf8');
     const source = (0, node_fs_1.readFileSync)((0, node_path_1.resolve)(process.cwd(), 'src/index.ts'), 'utf8');
+    const archiveHandler = source.slice(source.indexOf('async function archiveCustomerViaSync'), source.indexOf('async function upsertCustomer'));
+    const cancellationHandler = source.slice(source.indexOf('async function cancelSaleViaSync'), source.indexOf('async function applySaleCancellationToLoyaltyState'));
+    const cancellationTransaction = source.slice(source.indexOf('async function applySaleCancellationToLoyaltyState'), source.indexOf('async function permanentlyDeleteCustomer'));
+    const deletionHandler = source.slice(source.indexOf('async function permanentlyDeleteCustomer'), source.indexOf('function customerFirestoreDependencyQueries'));
+    const hardDeleteTransaction = source.slice(source.indexOf('async function applyCustomerFirestoreHardDelete'), source.indexOf('async function resolveSqlCustomerDeleteDependencyChecks'));
     strict_1.default.match(schema, /CREATE TABLE IF NOT EXISTS sync_tombstones/i);
     strict_1.default.match(schema, /CREATE TABLE IF NOT EXISTS sync_tombstones \(\s*id TEXT PRIMARY KEY,\s*merchant_id TEXT NOT NULL REFERENCES merchants\(id\),\s*entity_type TEXT NOT NULL,\s*entity_id TEXT NOT NULL,\s*deleted_at BIGINT NOT NULL\s*\);/s);
     strict_1.default.match(schema, /ADD COLUMN IF NOT EXISTS archived_at BIGINT/i);
@@ -267,7 +272,36 @@ const sync_backend_js_1 = require("./sync_backend.js");
     strict_1.default.doesNotMatch(source, /DELETE FROM sync_tombstones[\s\S]*entity_type = 'customer'/s);
     strict_1.default.match(source, /buildCustomerArchiveFirestorePatch\(archiveMutation, updatedAt\)/);
     strict_1.default.match(source, /businessCustomerRef\(merchantId, id\)\.set\(/);
+    strict_1.default.match(archiveHandler, /admin\.firestore\(\)\.runTransaction/);
+    strict_1.default.match(archiveHandler, /\.\.\.customerPatch/);
+    strict_1.default.doesNotMatch(archiveHandler, /pool\.(query|connect)/);
+    strict_1.default.match(cancellationHandler, /applySaleCancellationToLoyaltyState/);
+    strict_1.default.match(source, /cancelled_at: currentCancelledAt \?\? params\.cancelledAt/);
+    strict_1.default.match(cancellationTransaction, /cancelledAt: currentCancelledAt \?\? params\.cancelledAt/);
+    strict_1.default.match(cancellationTransaction, /balance_after:[\s\S]*pickNumber\(reversalLedgerData, 'balance_after'\)/);
+    strict_1.default.doesNotMatch(cancellationHandler, /pool\.(query|connect)/);
+    strict_1.default.match(deletionHandler, /applyCustomerFirestoreHardDelete/);
+    strict_1.default.doesNotMatch(deletionHandler, /pool\.(query|connect)/);
+    strict_1.default.match(source, /customer_delete_requires_archive/);
+    strict_1.default.match(hardDeleteTransaction, /customerSnapshot\.exists[\s\S]*archived_at[\s\S]*customer_delete_requires_archive/);
+    strict_1.default.match(hardDeleteTransaction, /transaction\.get\(tombstoneRef\)[\s\S]*existingTombstoneSnapshot/);
+    for (const collection of [
+        'sales',
+        'redemptions',
+        'appointments',
+        'retention_metrics',
+        'customer_risk_scores',
+        'recovery_tasks',
+        'recovery_actions',
+        'visit_reports',
+        'survey_responses',
+        'loyalty_ledger',
+        'redemption_requests',
+    ]) {
+        strict_1.default.match(source, new RegExp(`'${collection}'`));
+    }
     strict_1.default.match(source, /const SYNC_TOMBSTONE_COLLECTION = 'sync_tombstones'/);
     strict_1.default.match(source, /collection\(SYNC_TOMBSTONE_COLLECTION\)/);
-    strict_1.default.match(source, /transaction\.set\(\s*businessSyncTombstoneRef\(merchantId, tombstonePayload\.id\),\s*tombstonePayload/s);
+    strict_1.default.match(source, /const deletedAt =[\s\S]*pickNumber\(existingTombstone, 'deleted_at'\)/);
+    strict_1.default.match(source, /transaction\.set\(tombstoneRef,[\s\S]*deleted_at: deletedAt/);
 });
