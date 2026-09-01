@@ -241,8 +241,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('1 prémio disponível'), findsOneWidget);
-    expect(find.text('1 pronto · 1 em progresso'), findsOneWidget);
+    expect(find.text('1 prémio pronto'), findsOneWidget);
+    expect(find.text('1 em progresso · atualiza com novos pontos'),
+        findsOneWidget);
 
     await tester.pumpWidget(
       ProviderScope(

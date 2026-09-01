@@ -731,9 +731,7 @@ class CustomerBusinessDetailScreen extends ConsumerWidget {
                       primaryActionLabel: customerRewardState(reward) ==
                                   CustomerRewardState.available &&
                               flags?.redemptionEnabled != false
-                          ? (data.isDemo
-                              ? 'Ver como resgatar'
-                              : 'Resgatar prémio')
+                          ? 'Resgatar agora'
                           : 'Meu código',
                       onPrimaryAction: customerRewardState(reward) ==
                                   CustomerRewardState.expired ||
@@ -2041,7 +2039,7 @@ Widget _customerHomeContent(
           reward: availableReward,
           businessName: _businessNameForReward(businesses, availableReward),
           compact: true,
-          primaryActionLabel: demo ? 'Ver como resgatar' : 'Resgatar prémio',
+          primaryActionLabel: 'Resgatar agora',
           onPrimaryAction: redemptionEnabled
               ? () => demo
                   ? _showDemoMessage(context)
@@ -2208,7 +2206,7 @@ Widget _customerRewardsContent(
               reward: reward,
               primaryActionLabel:
                   customerRewardState(reward) == CustomerRewardState.available
-                      ? (demo ? 'Ver como resgatar' : 'Resgatar prémio')
+                      ? 'Resgatar agora'
                       : 'Meu código',
               onPrimaryAction:
                   customerRewardState(reward) == CustomerRewardState.expired ||
@@ -2266,12 +2264,7 @@ Widget _customerActivityContent(
         used: used,
         transactions: activity.length,
       ),
-      const SizedBox(height: AppSpacing.xxl),
-      const CustomerSectionHeader(
-        title: 'Movimentos recentes',
-        subtitle: 'Um registo claro de pontos ganhos e utilizados.',
-      ),
-      const SizedBox(height: AppSpacing.md),
+      const SizedBox(height: AppSpacing.xl),
       Wrap(
         spacing: AppSpacing.sm,
         runSpacing: AppSpacing.sm,
@@ -2284,6 +2277,13 @@ Widget _customerActivityContent(
                 _CustomerActivityFilter.used => 'Utilizados',
               }),
               selected: filter == value,
+              selectedColor: AppColors.primaryDarker,
+              labelStyle: TextStyle(
+                color: filter == value
+                    ? AppColors.white
+                    : AppColors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
               onSelected: (_) => onFilterChanged(value),
             ),
         ],
@@ -2436,29 +2436,44 @@ class _PortfolioSummary extends StatelessWidget {
   Widget build(BuildContext context) => MaisUmSurface(
         padding: const EdgeInsets.all(AppSpacing.xl),
         radius: AppRadius.xl,
+        backgroundColor: AppColors.secondary,
+        borderColor: AppColors.secondary,
         child: Row(
           children: [
-            const _SurfaceIcon(icon: LucideIcons.building2),
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: AppColors.secondaryDark,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+              ),
+              child: const Icon(
+                LucideIcons.building2,
+                color: AppColors.primaryDarker,
+                size: 24,
+              ),
+            ),
             const SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    count == 1
-                        ? '1 negócio associado'
-                        : '$count negócios associados',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    '$totalPoints pontos no total',
+                    '${formatCustomerPoints(totalPoints)} pontos no total',
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           color: AppColors.primaryDarker,
                           fontWeight: FontWeight.w900,
                           letterSpacing: -0.6,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    count == 1
+                        ? '1 negócio associado'
+                        : '$count negócios associados',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          color: AppColors.primaryDarker.withValues(alpha: 0.7),
+                          fontWeight: FontWeight.w700,
                         ),
                   ),
                 ],
@@ -2505,7 +2520,7 @@ class _RewardsSummary extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$available ${available == 1 ? 'prémio disponível' : 'prémios disponíveis'}',
+                    '$available ${available == 1 ? 'prémio pronto' : 'prémios prontos'}',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           color: AppColors.primaryDarker,
                           fontWeight: FontWeight.w900,
@@ -2513,8 +2528,8 @@ class _RewardsSummary extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    '$available ${available == 1 ? 'pronto' : 'prontos'} · '
-                    '$inProgress em progresso',
+                    '$inProgress em progresso · '
+                    'atualiza com novos pontos',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppColors.onSurfaceVariant,
                           fontWeight: FontWeight.w600,
@@ -2562,14 +2577,15 @@ class _ActivitySummary extends StatelessWidget {
                 Expanded(
                   child: _LedgerMetric(
                     icon: LucideIcons.trendingUp,
-                    value: '+$earned',
+                    value: '+${formatCustomerPoints(earned)}',
                     label: 'ganhos',
                   ),
                 ),
                 Expanded(
                   child: _LedgerMetric(
                     icon: LucideIcons.ticketCheck,
-                    value: '-$used',
+                    value: '-${formatCustomerPoints(used)}',
+                    valueColor: AppColors.secondary,
                     label: 'utilizados',
                   ),
                 ),
@@ -2592,11 +2608,13 @@ class _LedgerMetric extends StatelessWidget {
     required this.icon,
     required this.value,
     required this.label,
+    this.valueColor = AppColors.white,
   });
 
   final IconData icon;
   final String value;
   final String label;
+  final Color valueColor;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -2607,7 +2625,7 @@ class _LedgerMetric extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.white,
+                  color: valueColor,
                   fontWeight: FontWeight.w900,
                 ),
           ),

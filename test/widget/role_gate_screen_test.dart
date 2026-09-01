@@ -48,10 +48,10 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    final businessAction = find.text('Entrar na área do negócio');
-    await tester.drag(find.byType(ListView), const Offset(0, -260));
+    final businessPanel = find.byKey(const Key('business_owner_role'));
+    await tester.ensureVisible(businessPanel);
     await tester.pumpAndSettle();
-    await tester.tap(businessAction);
+    await tester.tap(businessPanel);
     await tester.pumpAndSettle();
 
     expect(find.text('business:role'), findsOneWidget);
@@ -62,10 +62,10 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    final customerAction = find.text('Entrar na área do cliente');
-    await tester.drag(find.byType(ListView), const Offset(0, -620));
+    final customerPanel = find.byKey(const Key('customer_role'));
+    await tester.ensureVisible(customerPanel);
     await tester.pumpAndSettle();
-    await tester.tap(customerAction);
+    await tester.tap(customerPanel);
     await tester.pumpAndSettle();
 
     expect(find.text('customer:role'), findsOneWidget);
@@ -82,9 +82,12 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    expect(find.byType(ListView), findsOneWidget);
+    expect(find.byType(CustomScrollView), findsOneWidget);
     expect(find.text('Sou proprietário de negócio'), findsOneWidget);
-    expect(find.text('Sou cliente'), findsOneWidget);
+
+    final customerTitle = find.text('Sou cliente');
+    await tester.scrollUntilVisible(customerTitle, 300);
+    expect(customerTitle, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

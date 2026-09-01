@@ -415,6 +415,9 @@ class CustomerRewardCard extends StatelessWidget {
       semanticLabel: '${reward.name}. ${status.label}.',
       padding: EdgeInsets.all(compact ? AppSpacing.lg : AppSpacing.xl),
       radius: AppRadius.xl,
+      borderColor:
+          state == CustomerRewardState.available ? AppColors.success : null,
+      borderWidth: state == CustomerRewardState.available ? 1.5 : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -533,7 +536,7 @@ class CustomerRewardCard extends StatelessWidget {
             MaisUmButton(
               label: primaryActionLabel ??
                   (state == CustomerRewardState.available
-                      ? 'Resgatar prémio'
+                      ? 'Resgatar agora'
                       : 'Ganhar pontos'),
               onPressed: onPrimaryAction,
               variant: state == CustomerRewardState.available
@@ -685,7 +688,8 @@ class CustomerActivityItem extends StatelessWidget {
           Text(
             '${earned ? '+' : '-'}${formatCustomerPoints(activity.pointsDelta.abs())} pts',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: earned ? AppColors.success : AppColors.primaryDarker,
+                  color:
+                      earned ? AppColors.success : AppColors.secondaryForeground,
                   fontWeight: FontWeight.w900,
                 ),
           ),
@@ -1062,8 +1066,8 @@ class CustomerBottomNavigation extends StatelessWidget {
       label: 'Prémios',
     ),
     NavigationDestination(
-      icon: Icon(LucideIcons.history),
-      selectedIcon: Icon(LucideIcons.history),
+      icon: Icon(LucideIcons.clock),
+      selectedIcon: Icon(LucideIcons.clock),
       label: 'Atividade',
     ),
     NavigationDestination(
