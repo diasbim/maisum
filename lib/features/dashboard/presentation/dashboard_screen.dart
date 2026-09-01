@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -311,6 +311,15 @@ class _DashboardBody extends ConsumerWidget {
                     subtitle: AppStrings.dashboardQuickRewardsSubtitle,
                     icon: Icons.card_giftcard_rounded,
                     onTap: () => context.push('/rewards'),
+                  ),
+                ),
+                SizedBox(
+                  width: tileWidth,
+                  child: _MiniActionTile(
+                    label: 'Validar prémio',
+                    subtitle: 'Ler código de resgate',
+                    icon: Icons.qr_code_scanner_rounded,
+                    onTap: () => context.push('/merchant/redemptions/validate'),
                   ),
                 ),
                 SizedBox(

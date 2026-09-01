@@ -143,6 +143,7 @@ class CustomerActivity {
     this.rewardId,
     this.businessName,
     this.rewardName,
+    this.redemptionStatus,
   });
 
   final String id;
@@ -153,6 +154,7 @@ class CustomerActivity {
   final String? rewardId;
   final String? businessName;
   final String? rewardName;
+  final CustomerRedemptionStatus? redemptionStatus;
 
   factory CustomerActivity.fromJson(Map<String, dynamic> json) =>
       CustomerActivity(
@@ -166,6 +168,9 @@ class CustomerActivity {
         rewardId: json['reward_id'] as String?,
         businessName: json['business_name'] as String?,
         rewardName: json['reward_name'] as String?,
+        redemptionStatus: json['redemption_status'] == null
+            ? null
+            : _customerRedemptionStatus(json['redemption_status']),
       );
 }
 
@@ -230,6 +235,128 @@ class CustomerQr {
           (json['expires_at'] as num?)?.toInt() ?? 0,
         ),
       );
+}
+
+enum CustomerRedemptionStatus { pending, consumed, expired }
+
+CustomerRedemptionStatus _customerRedemptionStatus(dynamic value) {
+  return switch (value?.toString().toUpperCase()) {
+    'CONSUMED' => CustomerRedemptionStatus.consumed,
+    'EXPIRED' => CustomerRedemptionStatus.expired,
+    _ => CustomerRedemptionStatus.pending,
+  };
+}
+
+class CustomerRedemptionReceipt {
+  const CustomerRedemptionReceipt({
+    required this.id,
+    required this.businessId,
+    required this.rewardId,
+    required this.code,
+    required this.pointsSpent,
+    required this.confirmedPoints,
+    required this.redeemedAt,
+    required this.codeExpiresAt,
+    required this.status,
+    this.consumedAt,
+  });
+
+  final String id;
+  final String businessId;
+  final String rewardId;
+  final String code;
+  final int pointsSpent;
+  final int? confirmedPoints;
+  final DateTime redeemedAt;
+  final DateTime codeExpiresAt;
+  final CustomerRedemptionStatus status;
+  final DateTime? consumedAt;
+
+  CustomerRedemptionReceipt copyWith({
+    CustomerRedemptionStatus? status,
+    DateTime? consumedAt,
+  }) {
+    return CustomerRedemptionReceipt(
+      id: id,
+      businessId: businessId,
+      rewardId: rewardId,
+      code: code,
+      pointsSpent: pointsSpent,
+      confirmedPoints: confirmedPoints,
+      redeemedAt: redeemedAt,
+      codeExpiresAt: codeExpiresAt,
+      status: status ?? this.status,
+      consumedAt: consumedAt ?? this.consumedAt,
+    );
+  }
+
+  factory CustomerRedemptionReceipt.fromJson(Map<String, dynamic> json) {
+    final redeemedAt = DateTime.fromMillisecondsSinceEpoch(
+      (json['redeemed_at'] as num?)?.toInt() ?? 0,
+    );
+    final explicitCodeExpiry =
+        (json['redemption_code_expires_at'] as num?)?.toInt();
+    return CustomerRedemptionReceipt(
+      id: json['redemption_id'] as String? ?? '',
+      businessId: json['business_id'] as String? ?? '',
+      rewardId: json['reward_id'] as String? ?? '',
+      code: json['redemption_code'] as String? ?? '',
+      pointsSpent: (json['points_spent'] as num?)?.toInt() ?? 0,
+      confirmedPoints: (json['confirmed_points'] as num?)?.toInt(),
+      redeemedAt: redeemedAt,
+      codeExpiresAt: explicitCodeExpiry == null
+          ? redeemedAt.add(const Duration(minutes: 15))
+          : DateTime.fromMillisecondsSinceEpoch(explicitCodeExpiry),
+      status: _customerRedemptionStatus(json['fulfillment_status']),
+      consumedAt: _optionalDateTime(json['consumed_at']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'redemption_id': id,
+        'business_id': businessId,
+        'reward_id': rewardId,
+        'redemption_code': code,
+        'points_spent': pointsSpent,
+        'confirmed_points': confirmedPoints,
+        'redeemed_at': redeemedAt.millisecondsSinceEpoch,
+        'redemption_code_expires_at': codeExpiresAt.millisecondsSinceEpoch,
+        'fulfillment_status': status.name.toUpperCase(),
+        'consumed_at': consumedAt?.millisecondsSinceEpoch,
+      };
+}
+
+class MerchantRedemptionPreview {
+  const MerchantRedemptionPreview({
+    required this.receipt,
+    required this.customerName,
+    required this.customerPhone,
+    required this.rewardName,
+    required this.businessName,
+    required this.idempotentReplay,
+  });
+
+  final CustomerRedemptionReceipt receipt;
+  final String customerName;
+  final String? customerPhone;
+  final String rewardName;
+  final String businessName;
+  final bool idempotentReplay;
+
+  factory MerchantRedemptionPreview.fromJson(Map<String, dynamic> json) {
+    final customer =
+        (json['customer'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final reward =
+        (json['reward'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return MerchantRedemptionPreview(
+      receipt: CustomerRedemptionReceipt.fromJson(json),
+      customerName: customer['name'] as String? ?? 'Cliente MaisUm',
+      customerPhone: customer['phone'] as String?,
+      rewardName: reward['name'] as String? ?? 'Prémio',
+      businessName: json['business_name'] as String? ?? 'Negócio',
+      idempotentReplay: json['idempotent_replay'] == true,
+    );
+  }
 }
 
 DateTime? _optionalDateTime(dynamic value) {

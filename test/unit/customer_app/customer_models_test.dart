@@ -76,6 +76,7 @@ void main() {
       'reward_id': 'r-expiring',
       'business_name': 'Café',
       'reward_name': 'Benefício sazonal',
+      'redemption_status': 'PENDING',
     });
 
     expect(
@@ -83,6 +84,7 @@ void main() {
     expect(activity.rewardId, 'r-expiring');
     expect(activity.businessName, 'Café');
     expect(activity.rewardName, 'Benefício sazonal');
+    expect(activity.redemptionStatus, CustomerRedemptionStatus.pending);
   });
 
   test('expired reward is never presented as available', () {
@@ -99,6 +101,52 @@ void main() {
     );
 
     expect(customerRewardState(reward), CustomerRewardState.expired);
+  });
+
+  test('parses customer and merchant redemption lifecycle DTOs', () {
+    final preview = MerchantRedemptionPreview.fromJson({
+      'business_id': 'm1',
+      'business_name': 'Café Central',
+      'redemption_id': 'redemption-1',
+      'reward_id': 'reward-1',
+      'redemption_code': 'r1_abcdefghijklmnopqrstuvwx',
+      'points_spent': 500,
+      'confirmed_points': 250,
+      'redeemed_at': 1000,
+      'redemption_code_expires_at': 901000,
+      'fulfillment_status': 'CONSUMED',
+      'consumed_at': 2000,
+      'customer': {
+        'customer_id': 'customer-1',
+        'name': 'Ana Mucavele',
+        'phone': '841234567',
+      },
+      'reward': {
+        'reward_id': 'reward-1',
+        'name': 'Café grátis',
+      },
+      'idempotent_replay': true,
+    });
+
+    expect(preview.receipt.status, CustomerRedemptionStatus.consumed);
+    expect(preview.receipt.confirmedPoints, 250);
+    expect(preview.customerName, 'Ana Mucavele');
+    expect(preview.rewardName, 'Café grátis');
+    expect(preview.idempotentReplay, isTrue);
+    expect(
+      CustomerRedemptionReceipt.fromJson(preview.receipt.toJson()).status,
+      CustomerRedemptionStatus.consumed,
+    );
+    final legacyReceipt = CustomerRedemptionReceipt.fromJson({
+      ...preview.receipt.toJson(),
+      'redeemed_at': 1000,
+      'redemption_code_expires_at': null,
+    });
+    expect(
+      legacyReceipt.codeExpiresAt,
+      DateTime.fromMillisecondsSinceEpoch(1000)
+          .add(const Duration(minutes: 15)),
+    );
   });
 
   test('customer actor does not resolve a merchant identifier', () {

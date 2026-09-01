@@ -110,7 +110,7 @@ class CustomerAppRepository {
     return updated;
   }
 
-  Future<Map<String, dynamic>> redeem(
+  Future<CustomerRedemptionReceipt> redeem(
       String rewardId, String idempotencyKey) async {
     if (!await _connectivity.check()) {
       throw const NetworkException(
@@ -136,11 +136,62 @@ class CustomerAppRepository {
       'status': 'completed',
       'reward_id': rewardId,
       'idempotency_key': idempotencyKey,
-      'result': result,
+      'result': result.toJson(),
       'updated_at': DateTime.now().millisecondsSinceEpoch,
     });
     await _cache.clearTransactionalData(credential.accountId);
     return result;
+  }
+
+  Future<CustomerRedemptionReceipt> redemptionStatus(
+    String redemptionId,
+  ) async {
+    if (!await _connectivity.check()) {
+      throw const NetworkException(
+        'É necessária ligação à internet para atualizar o resgate.',
+      );
+    }
+    final credential = await _credential();
+    final result = await _api.redemptionStatus(credential.token, redemptionId);
+    await _verifyAndStoreRedemptionReceipt(credential, result);
+    return result;
+  }
+
+  Future<CustomerRedemptionReceipt> reissueRedemption({
+    required String redemptionId,
+    required String idempotencyKey,
+  }) async {
+    if (!await _connectivity.check()) {
+      throw const NetworkException(
+        'É necessária ligação à internet para gerar um novo código.',
+      );
+    }
+    final credential = await _credential();
+    final result = await _api.reissueRedemption(
+      credential.token,
+      redemptionId: redemptionId,
+      idempotencyKey: idempotencyKey,
+    );
+    await _verifyAndStoreRedemptionReceipt(credential, result);
+    return result;
+  }
+
+  Future<void> _verifyAndStoreRedemptionReceipt(
+    _CustomerCredential credential,
+    CustomerRedemptionReceipt receipt,
+  ) async {
+    if (_auth.currentUser?.uid != credential.accountId) {
+      throw StateError('A sessão de cliente mudou durante o resgate.');
+    }
+    final key = 'redemption:${receipt.rewardId}';
+    final current = await _cache.read(credential.accountId, key);
+    await _cache.write(credential.accountId, key, {
+      ...?current?.payload,
+      'status': 'completed',
+      'reward_id': receipt.rewardId,
+      'result': receipt.toJson(),
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    });
   }
 
   Future<Map<String, dynamic>?> redemptionRecord(String rewardId) async {

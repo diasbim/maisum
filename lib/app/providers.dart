@@ -30,6 +30,7 @@ import '../features/customer_app/data/customer_app_api.dart';
 import '../features/customer_app/data/customer_app_repository.dart';
 import '../features/customer_app/data/customer_cache_dao.dart';
 import '../features/customer_app/data/customer_platform_service.dart';
+import '../features/customer_app/data/merchant_redemption_service.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/business_profile/domain/business_profile.dart';
 import '../features/catalog/data/merchant_catalog_dao.dart';
@@ -232,6 +233,15 @@ final backendAuthApiProvider = Provider<BackendAuthApi>(
 final customerAppApiProvider = Provider<CustomerAppApi>(
   (ref) => CustomerAppApi(ref.read(cloudFunctionsApiClientProvider)),
 );
+
+final merchantRedemptionServiceProvider =
+    Provider<MerchantRedemptionService>((ref) {
+  return MerchantRedemptionService(
+    ref.read(customerAppApiProvider),
+    ref.read(firebaseAuthInstanceProvider),
+    ref.read(connectivityServiceProvider),
+  );
+});
 
 final customerPlatformServiceProvider =
     Provider<CustomerPlatformService>((ref) {

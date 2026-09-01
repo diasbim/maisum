@@ -45,15 +45,63 @@ class CustomerAppApi {
     );
   }
 
-  Future<Map<String, dynamic>> redeem(
+  Future<CustomerRedemptionReceipt> redeem(
     String token, {
     required String rewardId,
     required String idempotencyKey,
-  }) =>
-      _post('/customer/redemptions', token, {
-        'reward_id': rewardId,
-        'idempotency_key': idempotencyKey,
-      });
+  }) async =>
+      CustomerRedemptionReceipt.fromJson(
+        await _post('/customer/redemptions', token, {
+          'reward_id': rewardId,
+          'idempotency_key': idempotencyKey,
+        }),
+      );
+
+  Future<CustomerRedemptionReceipt> redemptionStatus(
+    String token,
+    String redemptionId,
+  ) async =>
+      CustomerRedemptionReceipt.fromJson(
+        await _get(
+          '/customer/redemptions/${Uri.encodeComponent(redemptionId)}',
+          token,
+        ),
+      );
+
+  Future<CustomerRedemptionReceipt> reissueRedemption(
+    String token, {
+    required String redemptionId,
+    required String idempotencyKey,
+  }) async =>
+      CustomerRedemptionReceipt.fromJson(
+        await _post(
+          '/customer/redemptions/${Uri.encodeComponent(redemptionId)}/reissue',
+          token,
+          {'idempotency_key': idempotencyKey},
+        ),
+      );
+
+  Future<MerchantRedemptionPreview> resolveMerchantRedemption(
+    String token,
+    String redemptionCode,
+  ) async =>
+      MerchantRedemptionPreview.fromJson(
+        await _post('/merchant/redemptions/resolve', token, {
+          'redemption_code': redemptionCode,
+        }),
+      );
+
+  Future<MerchantRedemptionPreview> consumeMerchantRedemption(
+    String token, {
+    required String redemptionCode,
+    required String idempotencyKey,
+  }) async =>
+      MerchantRedemptionPreview.fromJson(
+        await _post('/merchant/redemptions/consume', token, {
+          'redemption_code': redemptionCode,
+          'idempotency_key': idempotencyKey,
+        }),
+      );
 
   Future<void> event(String token, String eventType) async {
     await _post('/customer/events', token, {'event_type': eventType});

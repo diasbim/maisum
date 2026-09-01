@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -108,6 +109,12 @@ CustomerBusiness? _findBusinessById(
     if (business.id == businessId) return business;
   }
   return null;
+}
+
+String _formatCustomerTime(DateTime value) {
+  final local = value.toLocal();
+  return '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
 }
 
 class CustomerLoginScreen extends StatelessWidget {
@@ -946,10 +953,11 @@ class CustomerRedeemScreen extends ConsumerStatefulWidget {
 class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
   bool _sending = false;
   bool _restoring = true;
-  String? _success;
-  int? _remainingBalance;
+  CustomerRedemptionReceipt? _receipt;
   bool _pendingAttempt = false;
   bool _restoredReceipt = false;
+  Timer? _receiptExpirationTimer;
+  DateTime? _scheduledReceiptExpiration;
   late String _idempotencyKey;
 
   @override
@@ -957,6 +965,33 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
     super.initState();
     _idempotencyKey = const Uuid().v4().replaceAll('-', '');
     _restoreRedemption();
+  }
+
+  void _scheduleReceiptExpiration(CustomerRedemptionReceipt? receipt) {
+    if (receipt == null || receipt.status != CustomerRedemptionStatus.pending) {
+      _receiptExpirationTimer?.cancel();
+      _scheduledReceiptExpiration = null;
+      return;
+    }
+    if (_scheduledReceiptExpiration == receipt.codeExpiresAt) {
+      return;
+    }
+    _scheduledReceiptExpiration = receipt.codeExpiresAt;
+    _receiptExpirationTimer?.cancel();
+    final delay = receipt.codeExpiresAt.difference(DateTime.now());
+    _receiptExpirationTimer =
+        Timer(delay <= Duration.zero ? Duration.zero : delay, () {
+      if (!mounted || _receipt?.code != receipt.code) return;
+      setState(() {
+        _receipt = receipt.copyWith(status: CustomerRedemptionStatus.expired);
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _receiptExpirationTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _restoreRedemption() async {
@@ -977,8 +1012,7 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
           record?['result'] is Map &&
           receiptIsRecent) {
         final result = (record!['result'] as Map).cast<String, dynamic>();
-        _success = _redemptionCode(result);
-        _remainingBalance = (result['confirmed_points'] as num?)?.toInt();
+        _receipt = CustomerRedemptionReceipt.fromJson(result);
         _restoredReceipt = true;
       } else if (record?['status'] == 'completed') {
         await ref
@@ -1009,8 +1043,7 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
       ref.invalidate(customerRewardsProvider);
       ref.invalidate(customerActivityProvider);
       setState(() {
-        _success = _redemptionCode(result);
-        _remainingBalance = (result['confirmed_points'] as num?)?.toInt();
+        _receipt = result;
         _pendingAttempt = false;
         _restoredReceipt = false;
       });
@@ -1029,6 +1062,68 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
       if (mounted) {
         setState(() => _sending = false);
       }
+    }
+  }
+
+  Future<void> _refreshReceipt() async {
+    final receipt = _receipt;
+    if (receipt == null || _sending) return;
+    final repository = ref.read(customerAppRepositoryProvider);
+    setState(() => _sending = true);
+    try {
+      final updated = await repository.redemptionStatus(receipt.id);
+      if (!mounted) return;
+      ref.invalidate(customerActivityProvider);
+      setState(() => _receipt = updated);
+    } catch (error, stackTrace) {
+      AppErrorReporter.report(
+        error,
+        stackTrace,
+        hint: 'customer_redemption_status',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppErrorMapper.describe(error).message)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _reissueReceipt() async {
+    final receipt = _receipt;
+    if (receipt == null ||
+        receipt.status != CustomerRedemptionStatus.expired ||
+        _sending) {
+      return;
+    }
+    final repository = ref.read(customerAppRepositoryProvider);
+    setState(() => _sending = true);
+    try {
+      final updated = await repository.reissueRedemption(
+        redemptionId: receipt.id,
+        idempotencyKey: const Uuid().v4().replaceAll('-', ''),
+      );
+      if (mounted) {
+        setState(() {
+          _receipt = updated;
+          _restoredReceipt = false;
+        });
+      }
+    } catch (error, stackTrace) {
+      AppErrorReporter.report(
+        error,
+        stackTrace,
+        hint: 'customer_redemption_reissue',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppErrorMapper.describe(error).message)),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
@@ -1081,7 +1176,7 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
     final business = reward == null
         ? null
         : _findBusinessById(businesses, reward.businessId);
-    if (reward == null && _success == null) {
+    if (reward == null && _receipt == null) {
       return const _Page(
         title: 'Confirmar resgate',
         subtitle: 'Revise e confirme quando estiver no negócio.',
@@ -1095,6 +1190,7 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
     final canRedeem = reward != null &&
         customerRewardState(reward) == CustomerRewardState.available;
     final canSubmit = canRedeem || _pendingAttempt;
+    _scheduleReceiptExpiration(_receipt);
     return _Page(
       title: 'Confirmar resgate',
       subtitle: 'Revise e confirme quando estiver no negócio.',
@@ -1102,7 +1198,7 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
         child: MaisUmSurface(
           padding: const EdgeInsets.all(AppSpacing.xxl),
           radius: AppRadius.xl,
-          child: _success == null
+          child: _receipt == null
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1143,59 +1239,132 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
               : Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const _LargeStateIcon(
-                      icon: Icons.check_rounded,
-                      success: true,
+                    _LargeStateIcon(
+                      icon: _receipt!.status == CustomerRedemptionStatus.pending
+                          ? Icons.schedule_rounded
+                          : _receipt!.status ==
+                                  CustomerRedemptionStatus.consumed
+                              ? Icons.check_rounded
+                              : Icons.timer_off_rounded,
+                      success:
+                          _receipt!.status == CustomerRedemptionStatus.consumed,
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     Text(
-                      _restoredReceipt
-                          ? 'Último resgate confirmado'
-                          : 'Resgate confirmado',
+                      switch (_receipt!.status) {
+                        CustomerRedemptionStatus.pending => _restoredReceipt
+                            ? 'Último resgate pendente'
+                            : 'Confirme no negócio',
+                        CustomerRedemptionStatus.consumed => 'Prémio utilizado',
+                        CustomerRedemptionStatus.expired => 'Código expirado',
+                      },
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             fontWeight: FontWeight.w900,
                           ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    const Text(
-                      'Apresente este código no negócio:',
+                    Text(
+                      switch (_receipt!.status) {
+                        CustomerRedemptionStatus.pending =>
+                          'Apresente este código no negócio antes de expirar:',
+                        CustomerRedemptionStatus.consumed =>
+                          'O negócio confirmou a utilização deste prémio.',
+                        CustomerRedemptionStatus.expired =>
+                          'Este código já não pode ser utilizado.',
+                      },
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    SelectableText(
-                      _success!,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppColors.primaryDarker,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1,
+                    if (_receipt!.status ==
+                        CustomerRedemptionStatus.pending) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Semantics(
+                        label: 'Código QR do resgate',
+                        image: true,
+                        child: ExcludeSemantics(
+                          child: QrImageView(
+                            data: _receipt!.code,
+                            size: 220,
+                            backgroundColor: AppColors.white,
+                            eyeStyle: const QrEyeStyle(
+                              eyeShape: QrEyeShape.square,
+                              color: AppColors.primaryDarker,
+                            ),
+                            dataModuleStyle: const QrDataModuleStyle(
+                              dataModuleShape: QrDataModuleShape.square,
+                              color: AppColors.primaryDarker,
+                            ),
                           ),
-                    ),
-                    if (_remainingBalance != null) ...[
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      SelectableText(
+                        _receipt!.code,
+                        textAlign: TextAlign.center,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: AppColors.primaryDarker,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1,
+                                ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Válido até ${_formatCustomerTime(_receipt!.codeExpiresAt)}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                    if (_receipt!.confirmedPoints != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       Text(
-                        'Saldo atual: $_remainingBalance pts',
+                        'Saldo atual: ${_receipt!.confirmedPoints} pts',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
                     const SizedBox(height: AppSpacing.xl),
+                    if (_receipt!.status ==
+                        CustomerRedemptionStatus.expired) ...[
+                      MaisUmButton(
+                        label: 'Gerar novo código',
+                        loadingLabel: 'A gerar...',
+                        isLoading: _sending,
+                        onPressed: _reissueReceipt,
+                        leadingIcon: LucideIcons.refreshCw,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
+                    if (_receipt!.status ==
+                        CustomerRedemptionStatus.pending) ...[
+                      MaisUmButton(
+                        label: 'Copiar código',
+                        onPressed: () {
+                          Clipboard.setData(
+                            ClipboardData(text: _receipt!.code),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Código copiado.')),
+                          );
+                        },
+                        leadingIcon: LucideIcons.copy,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
                     MaisUmButton(
-                      label: 'Copiar código',
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: _success!));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Código copiado.')),
-                        );
-                      },
-                      leadingIcon: LucideIcons.copy,
+                      label: 'Atualizar estado',
+                      loadingLabel: 'A atualizar...',
+                      isLoading: _sending,
+                      onPressed: _refreshReceipt,
+                      variant: MaisUmButtonVariant.outlined,
+                      leadingIcon: LucideIcons.refreshCw,
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     MaisUmButton(
                       label: 'Voltar aos prémios',
                       onPressed: () => context.go('/customer/rewards'),
-                      variant: MaisUmButtonVariant.outlined,
+                      variant: MaisUmButtonVariant.ghost,
                     ),
-                    if (canRedeem) ...[
+                    if (canRedeem &&
+                        _receipt!.status !=
+                            CustomerRedemptionStatus.pending) ...[
                       const SizedBox(height: AppSpacing.sm),
                       MaisUmButton(
                         label: 'Resgatar novamente',
@@ -1207,8 +1376,7 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
                           setState(() {
                             _idempotencyKey =
                                 const Uuid().v4().replaceAll('-', '');
-                            _success = null;
-                            _remainingBalance = null;
+                            _receipt = null;
                             _pendingAttempt = false;
                             _restoredReceipt = false;
                           });
@@ -1222,11 +1390,6 @@ class _CustomerRedeemScreenState extends ConsumerState<CustomerRedeemScreen> {
       ),
     );
   }
-
-  String _redemptionCode(Map<String, dynamic> result) =>
-      result['redemption_code']?.toString() ??
-      (result['redemption'] as Map?)?['redemption_code']?.toString() ??
-      'Resgate confirmado.';
 }
 
 class CustomerProfileScreen extends ConsumerWidget {

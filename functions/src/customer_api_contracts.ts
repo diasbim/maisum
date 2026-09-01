@@ -39,6 +39,20 @@ export type CustomerActivityDto = {
   occurred_at: number;
   reward_id: string | null;
   reward_name: string | null;
+  redemption_status: 'PENDING' | 'CONSUMED' | 'EXPIRED' | null;
+};
+
+export type CustomerRedemptionDto = {
+  business_id: string;
+  redemption_id: string;
+  reward_id: string;
+  points_spent: number;
+  confirmed_points: number | null;
+  redemption_code: string;
+  redeemed_at: number;
+  redemption_code_expires_at: number;
+  fulfillment_status: 'PENDING' | 'CONSUMED' | 'EXPIRED';
+  consumed_at: number | null;
 };
 
 export type CustomerPreferencesDto = {

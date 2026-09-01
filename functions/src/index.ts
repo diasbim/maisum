@@ -17,6 +17,11 @@ import {
 } from './customer_push_tokens.js';
 import { isCustomerRewardExpired } from './customer_reward_eligibility.js';
 import {
+  customerRedemptionCodeExpiresAt,
+  customerRedemptionFulfillmentState,
+  supportsCustomerRedemptionReissue,
+} from './customer_redemption_fulfillment.js';
+import {
   createCustomerQrToken,
   verifyCustomerQrToken,
 } from './customer_qr.js';
@@ -250,6 +255,7 @@ const DEFAULT_LOYALTY_CONFIG_VERSION = 1;
 const CUSTOMER_CORE_SECRET_ENV = 'CUSTOMER_IDENTITY_HMAC_SECRET';
 const customerIdentityHmacSecret = defineSecret(CUSTOMER_CORE_SECRET_ENV);
 const CUSTOMER_QR_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const CUSTOMER_REDEMPTION_CODE_TTL_MS = 15 * 60 * 1000;
 const MAX_CUSTOMER_ACTIVITY_ENTRIES = 100;
 const MOZAMBIQUE_PHONE_PREFIXES = new Set(['82', '83', '84', '85', '86', '87']);
 const CUSTOMER_SERVER_OWNED_FIELDS = [
@@ -1297,9 +1303,58 @@ app.post('/customer/redemptions', async (req, res) => {
   }
 });
 
+app.get('/customer/redemptions/:redemptionId', async (req, res) => {
+  try {
+    const result = await handleCustomerRedemptionStatusRequest(
+      req as unknown as AuthedRequest,
+      req.params.redemptionId,
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/customer/redemptions/:redemptionId/reissue', async (req, res) => {
+  try {
+    const result = await handleCustomerRedemptionReissueRequest(
+      req as unknown as AuthedRequest,
+      req.params.redemptionId,
+      requireBodyObject(req.body),
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
 app.post('/merchant/customer-qr/resolve', async (req, res) => {
   try {
     const result = await handleMerchantCustomerQrResolveRequest(
+      req as AuthedRequest,
+      requireBodyObject(req.body),
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/merchant/redemptions/resolve', async (req, res) => {
+  try {
+    const result = await handleMerchantRedemptionResolveRequest(
+      req as AuthedRequest,
+      requireBodyObject(req.body),
+    );
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
+  }
+});
+
+app.post('/merchant/redemptions/consume', async (req, res) => {
+  try {
+    const result = await handleMerchantRedemptionConsumeRequest(
       req as AuthedRequest,
       requireBodyObject(req.body),
     );
@@ -3970,7 +4025,7 @@ async function readCustomerActivity(
   maximumEntries: number,
 ): Promise<Array<Record<string, unknown>>> {
   const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
-  const entries = await Promise.all(locators.map(async (locator) => {
+  const entries = (await Promise.all(locators.map(async (locator) => {
     const relationship = await requireCustomerBusinessRelationship(
       account,
       locator.merchantId,
@@ -3985,44 +4040,92 @@ async function readCustomerActivity(
       relationship.customerId,
     );
     const ledgerEntries = ledgerSnapshot.docs.map((document) => ({
+      merchantId: relationship.merchantId,
+      businessName:
+        maybePayloadString(relationship.businessData, 'name', 'business_name') ??
+        null,
       documentId: document.id,
       data: loyaltyLedgerEntryFromData(snapshotDataRecord(document)),
     }));
-    const rewardIds = [...new Set(
-      ledgerEntries
-        .map((entry) => entry.data.reward_id)
-        .filter((rewardId): rewardId is string => rewardId != null),
-    )];
-    const rewardNames = new Map<string, string>();
-    await Promise.all(rewardIds.map(async (rewardId) => {
+    return ledgerEntries;
+  }))).flat()
+    .sort((left, right) => right.data.occurred_at - left.data.occurred_at)
+    .slice(0, maximumEntries);
+  const referenceKey = (merchantId: string, id: string) => `${merchantId}\0${id}`;
+  const rewardReferences = new Map<
+    string,
+    { merchantId: string; rewardId: string }
+  >();
+  const redemptionReferences = new Map<
+    string,
+    { merchantId: string; redemptionId: string }
+  >();
+  for (const entry of entries) {
+    if (entry.data.reward_id != null) {
+      rewardReferences.set(
+        referenceKey(entry.merchantId, entry.data.reward_id),
+        { merchantId: entry.merchantId, rewardId: entry.data.reward_id },
+      );
+    }
+    if (
+      entry.data.entry_type === 'REDEMPTION' &&
+      entry.data.source_id.length > 0
+    ) {
+      redemptionReferences.set(
+        referenceKey(entry.merchantId, entry.data.source_id),
+        { merchantId: entry.merchantId, redemptionId: entry.data.source_id },
+      );
+    }
+  }
+  const rewardNames = new Map<string, string>();
+  const redemptionStatuses = new Map<string, string | null>();
+  await Promise.all([
+    ...[...rewardReferences.entries()].map(async ([key, reference]) => {
       const rewardSnapshot = await businessRewardsCollectionRef(
-        relationship.merchantId,
-      ).doc(rewardId).get();
+        reference.merchantId,
+      ).doc(reference.rewardId).get();
       if (!rewardSnapshot.exists) return;
       const name = maybePayloadString(snapshotDataRecord(rewardSnapshot), 'name');
-      if (name) rewardNames.set(rewardId, name);
-    }));
-    const businessName =
-      maybePayloadString(relationship.businessData, 'name', 'business_name') ??
-      null;
-    return ledgerEntries.map(({ documentId, data }) => {
-      return {
-        business_id: relationship.merchantId,
-        business_name: businessName,
-        entry_id: documentId,
-        type: data.entry_type,
-        points_delta: data.points_delta,
-        occurred_at: data.occurred_at,
-        reward_id: data.reward_id ?? null,
-        reward_name: data.reward_id == null
-          ? null
-          : rewardNames.get(data.reward_id) ?? null,
-      };
-    });
+      if (name) rewardNames.set(key, name);
+    }),
+    ...[...redemptionReferences.entries()].map(async ([key, reference]) => {
+      const redemptionSnapshot = await businessRedemptionsCollectionRef(
+        reference.merchantId,
+      ).doc(reference.redemptionId).get();
+      if (!redemptionSnapshot.exists) return;
+      const redemptionData = snapshotDataRecord(redemptionSnapshot);
+      if (!supportsCustomerRedemptionReissue(redemptionData)) {
+        redemptionStatuses.set(key, null);
+        return;
+      }
+      redemptionStatuses.set(
+        key,
+        customerRedemptionFulfillmentState(
+          redemptionData,
+          Date.now(),
+          CUSTOMER_REDEMPTION_CODE_TTL_MS,
+        ),
+      );
+    }),
+  ]);
+  return entries.map((entry) => ({
+    business_id: entry.merchantId,
+    business_name: entry.businessName,
+    entry_id: entry.documentId,
+    type: entry.data.entry_type,
+    points_delta: entry.data.points_delta,
+    occurred_at: entry.data.occurred_at,
+    reward_id: entry.data.reward_id ?? null,
+    reward_name: entry.data.reward_id == null
+      ? null
+      : rewardNames.get(referenceKey(entry.merchantId, entry.data.reward_id)) ?? null,
+    redemption_status:
+      entry.data.entry_type === 'REDEMPTION'
+        ? redemptionStatuses.get(
+          referenceKey(entry.merchantId, entry.data.source_id),
+        ) ?? null
+        : null,
   }));
-  return entries.flat()
-    .sort((left, right) => (right.occurred_at as number) - (left.occurred_at as number))
-    .slice(0, maximumEntries);
 }
 
 async function handleCustomerHomeRequest(
@@ -4459,15 +4562,12 @@ async function handleCustomerRedemptionRequest(
         loyaltyLedgerEntryFromData(snapshotDataRecord(document))),
     );
     return {
-      business_id: relationship.merchantId,
-      redemption_id: redemptionId,
-      reward_id: rewardId,
-      points_spent:
-        pickNumber(redemption, 'confirmed_points_spent') ??
-        pickNumber(redemption, 'points_spent'),
+      ...serializeRedemptionFulfillment(
+        relationship.merchantId,
+        redemptionId,
+        redemption,
+      ),
       confirmed_points: projection.confirmedPoints,
-      redemption_code: maybePayloadString(redemption, 'redemption_code'),
-      redeemed_at: pickNumber(redemption, 'redeemed_at'),
       idempotent_replay: true,
     };
   }));
@@ -4523,17 +4623,453 @@ async function handleCustomerRedemptionRequest(
   );
   const redemption = result.redemption as Record<string, unknown>;
   return {
-    business_id: relationship.merchantId,
-    redemption_id: result.redemption_id,
-    reward_id: rewardId,
+    ...serializeRedemptionFulfillment(
+      relationship.merchantId,
+      requirePayloadString(result, 'redemption_id'),
+      redemption,
+    ),
+    confirmed_points: result.confirmed_points,
+    idempotent_replay: result.idempotent_replay === true,
+  };
+}
+
+function requireCustomerRedemptionCode(
+  payload: Record<string, unknown>,
+): string {
+  const code = requirePayloadString(payload, 'redemption_code');
+  if (!/^r1_[A-Za-z0-9_-]{20,100}$/.test(code)) {
+    throw new CustomerCoreError(
+      400,
+      'customer_redemption_code_invalid',
+      'A valid redemption_code is required.',
+    );
+  }
+  return code;
+}
+
+function serializeRedemptionFulfillment(
+  merchantId: string,
+  redemptionId: string,
+  redemption: Record<string, unknown>,
+  now = Date.now(),
+): Record<string, unknown> {
+  return {
+    business_id: merchantId,
+    redemption_id: redemptionId,
+    reward_id: maybePayloadString(redemption, 'reward_id'),
     points_spent:
       pickNumber(redemption, 'confirmed_points_spent') ??
       pickNumber(redemption, 'points_spent'),
-    confirmed_points: result.confirmed_points,
     redemption_code: maybePayloadString(redemption, 'redemption_code'),
     redeemed_at: pickNumber(redemption, 'redeemed_at'),
-    idempotent_replay: result.idempotent_replay === true,
+    redemption_code_expires_at: customerRedemptionCodeExpiresAt(
+      redemption,
+      CUSTOMER_REDEMPTION_CODE_TTL_MS,
+    ),
+    fulfillment_status: customerRedemptionFulfillmentState(
+      redemption,
+      now,
+      CUSTOMER_REDEMPTION_CODE_TTL_MS,
+    ),
+    consumed_at: pickNumber(redemption, 'consumed_at'),
   };
+}
+
+async function handleCustomerRedemptionStatusRequest(
+  req: AuthedRequest,
+  redemptionId: string,
+): Promise<Record<string, unknown>> {
+  requireCustomerFeature('customerRedemptionEnabled');
+  if (!isSafeFirestoreDocumentId(redemptionId)) {
+    throw new CustomerCoreError(
+      400,
+      'customer_redemption_invalid',
+      'Invalid redemption id.',
+    );
+  }
+  const account = await requireBoundCustomerAccount(req);
+  const match = await findCustomerAuthorizedRedemption(account, redemptionId);
+  return {
+    ...serializeRedemptionFulfillment(
+      match.relationship.merchantId,
+      redemptionId,
+      match.data,
+    ),
+    confirmed_points: Math.max(
+      0,
+      pickNumber(match.relationship.customerData, 'confirmed_points') ?? 0,
+    ),
+  };
+}
+
+async function findCustomerAuthorizedRedemption(
+  account: CustomerAccountAccess,
+  redemptionId: string,
+): Promise<{
+  relationship: CustomerBusinessRelationship;
+  data: Record<string, unknown>;
+  ref: admin.firestore.DocumentReference;
+}> {
+  const locators = await listCustomerRelationshipLocators(
+    account.canonicalCustomerId,
+  );
+  const matches = await Promise.all(locators.map(async (locator) => {
+    const relationship = await requireCustomerBusinessRelationship(
+      account,
+      locator.merchantId,
+    );
+    const ref = businessRedemptionsCollectionRef(
+      relationship.merchantId,
+    ).doc(redemptionId);
+    const snapshot = await ref.get();
+    if (!snapshot.exists) return null;
+    const data = snapshotDataRecord(snapshot);
+    if (
+      maybePayloadString(data, 'customer_id', 'customerId') !==
+      relationship.customerId
+    ) {
+      return null;
+    }
+    return {
+      relationship,
+      data,
+      ref,
+    };
+  }));
+  const authorized = matches.filter(
+    (match): match is NonNullable<typeof match> => match != null,
+  );
+  if (authorized.length !== 1) {
+    throw new CustomerCoreError(
+      authorized.length === 0 ? 404 : 409,
+      authorized.length === 0
+        ? 'customer_redemption_not_found'
+        : 'customer_redemption_ambiguous',
+      authorized.length === 0
+        ? 'Redemption was not found.'
+        : 'Redemption is ambiguous across linked businesses.',
+    );
+  }
+  return authorized[0];
+}
+
+async function handleCustomerRedemptionReissueRequest(
+  req: AuthedRequest,
+  redemptionId: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  requireCustomerFeature('customerRedemptionEnabled');
+  if (!isSafeFirestoreDocumentId(redemptionId)) {
+    throw new CustomerCoreError(
+      400,
+      'customer_redemption_invalid',
+      'Invalid redemption id.',
+    );
+  }
+  if (
+    Object.keys(payload).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(payload, 'idempotency_key')
+  ) {
+    throw new CustomerCoreError(
+      400,
+      'customer_redemption_reissue_invalid',
+      'idempotency_key is required.',
+    );
+  }
+  const idempotencyKey = requirePayloadString(payload, 'idempotency_key');
+  if (!/^[A-Za-z0-9_-]{8,200}$/.test(idempotencyKey)) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_idempotency_key_invalid',
+      'idempotency_key must be an opaque client operation identifier.',
+    );
+  }
+  const account = await requireBoundCustomerAccount(req);
+  const match = await findCustomerAuthorizedRedemption(account, redemptionId);
+  const now = Date.now();
+  const result = await admin.firestore().runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(match.ref);
+    if (!snapshot.exists) {
+      throw new CustomerCoreError(
+        404,
+        'customer_redemption_not_found',
+        'Redemption was not found.',
+      );
+    }
+    const current = snapshotDataRecord(snapshot);
+    if (!supportsCustomerRedemptionReissue(current)) {
+      throw new CustomerCoreError(
+        409,
+        'customer_redemption_reissue_unsupported',
+        'This redemption does not support customer code reissue.',
+      );
+    }
+    const state = customerRedemptionFulfillmentState(
+      current,
+      now,
+      CUSTOMER_REDEMPTION_CODE_TTL_MS,
+    );
+    if (state === 'CONSUMED') {
+      throw new CustomerCoreError(
+        409,
+        'customer_redemption_already_consumed',
+        'Consumed redemptions cannot be reissued.',
+      );
+    }
+    if (
+      state === 'PENDING' ||
+      maybePayloadString(current, 'reissue_idempotency_key') === idempotencyKey
+    ) {
+      return current;
+    }
+    const updated = {
+      ...current,
+      redemption_code: `r1_${randomBytes(18).toString('base64url')}`,
+      redemption_code_expires_at: now + CUSTOMER_REDEMPTION_CODE_TTL_MS,
+      fulfillment_status: 'PENDING',
+      reissue_idempotency_key: idempotencyKey,
+      reissued_at: now,
+      updated_at: now,
+    };
+    transaction.set(match.ref, updated, { merge: true });
+    return updated;
+  });
+  return {
+    ...serializeRedemptionFulfillment(
+      match.relationship.merchantId,
+      redemptionId,
+      result,
+    ),
+    confirmed_points: Math.max(
+      0,
+      pickNumber(match.relationship.customerData, 'confirmed_points') ?? 0,
+    ),
+  };
+}
+
+async function findMerchantRedemptionByCode(
+  merchantId: string,
+  redemptionCode: string,
+): Promise<admin.firestore.QueryDocumentSnapshot> {
+  const snapshot = await businessRedemptionsCollectionRef(merchantId)
+    .where('redemption_code', '==', redemptionCode)
+    .limit(2)
+    .get();
+  if (snapshot.size !== 1) {
+    throw new CustomerCoreError(
+      snapshot.empty ? 404 : 409,
+      snapshot.empty
+        ? 'customer_redemption_code_not_found'
+        : 'customer_redemption_code_ambiguous',
+      snapshot.empty
+        ? 'Redemption code was not found for this business.'
+        : 'Redemption code is ambiguous.',
+    );
+  }
+  return snapshot.docs[0];
+}
+
+async function serializeMerchantRedemption(
+  merchantId: string,
+  redemptionId: string,
+  redemption: Record<string, unknown>,
+  idempotentReplay = false,
+): Promise<Record<string, unknown>> {
+  const customerId = maybePayloadString(
+    redemption,
+    'customer_id',
+    'customerId',
+  );
+  const rewardId = maybePayloadString(redemption, 'reward_id', 'rewardId');
+  if (!customerId || !rewardId) {
+    throw new CustomerCoreError(
+      409,
+      'customer_redemption_inconsistent',
+      'Redemption customer or reward context is missing.',
+    );
+  }
+  const [customerSnapshot, rewardSnapshot, businessSnapshot] =
+    await Promise.all([
+      businessCustomerRef(merchantId, customerId).get(),
+      businessRewardsCollectionRef(merchantId).doc(rewardId).get(),
+      businessDocumentRef(merchantId).get(),
+    ]);
+  return {
+    ...serializeRedemptionFulfillment(
+      merchantId,
+      redemptionId,
+      redemption,
+    ),
+    customer: {
+      customer_id: customerId,
+      name: maybePayloadString(snapshotDataRecord(customerSnapshot), 'name'),
+      phone: maybePayloadString(snapshotDataRecord(customerSnapshot), 'phone'),
+    },
+    reward: {
+      reward_id: rewardId,
+      name:
+        maybePayloadString(snapshotDataRecord(rewardSnapshot), 'name') ??
+        'Prémio',
+    },
+    business_name:
+      maybePayloadString(
+        snapshotDataRecord(businessSnapshot),
+        'name',
+        'business_name',
+      ) ?? 'Negócio',
+    idempotent_replay: idempotentReplay,
+  };
+}
+
+async function requireMerchantRedemptionAccess(
+  req: AuthedRequest,
+): Promise<string> {
+  requireCustomerFeature('customerRedemptionEnabled');
+  if (
+    !req.merchantId ||
+    !(await requestCanAccessMerchant(req, req.merchantId))
+  ) {
+    throw new CustomerCoreError(
+      403,
+      'merchant_access_denied',
+      'Merchant access is required.',
+    );
+  }
+  return req.merchantId;
+}
+
+async function handleMerchantRedemptionResolveRequest(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  if (
+    Object.keys(payload).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(payload, 'redemption_code')
+  ) {
+    throw new CustomerCoreError(
+      400,
+      'customer_redemption_code_invalid',
+      'Only redemption_code is accepted.',
+    );
+  }
+  const merchantId = await requireMerchantRedemptionAccess(req);
+  const redemptionCode = requireCustomerRedemptionCode(payload);
+  const document = await findMerchantRedemptionByCode(
+    merchantId,
+    redemptionCode,
+  );
+  return serializeMerchantRedemption(
+    merchantId,
+    document.id,
+    snapshotDataRecord(document),
+  );
+}
+
+async function handleMerchantRedemptionConsumeRequest(
+  req: AuthedRequest,
+  payload: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const allowedKeys = new Set(['redemption_code', 'idempotency_key']);
+  if (
+    Object.keys(payload).length !== 2 ||
+    Object.keys(payload).some((key) => !allowedKeys.has(key))
+  ) {
+    throw new CustomerCoreError(
+      400,
+      'customer_redemption_consume_invalid',
+      'redemption_code and idempotency_key are required.',
+    );
+  }
+  const merchantId = await requireMerchantRedemptionAccess(req);
+  const redemptionCode = requireCustomerRedemptionCode(payload);
+  const idempotencyKey = requirePayloadString(payload, 'idempotency_key');
+  if (!/^[A-Za-z0-9_-]{8,200}$/.test(idempotencyKey)) {
+    throw new CustomerCoreError(
+      400,
+      'loyalty_idempotency_key_invalid',
+      'idempotency_key must be an opaque client operation identifier.',
+    );
+  }
+  const document = await findMerchantRedemptionByCode(
+    merchantId,
+    redemptionCode,
+  );
+  const now = Date.now();
+  const transactionResult = await admin.firestore().runTransaction(
+    async (transaction) => {
+      const current = await transaction.get(document.ref);
+      if (!current.exists) {
+        throw new CustomerCoreError(
+          404,
+          'customer_redemption_code_not_found',
+          'Redemption code was not found for this business.',
+        );
+      }
+      const data = snapshotDataRecord(current);
+      if (maybePayloadString(data, 'redemption_code') !== redemptionCode) {
+        throw new CustomerCoreError(
+          409,
+          'customer_redemption_code_changed',
+          'Redemption code changed during validation.',
+        );
+      }
+      const state = customerRedemptionFulfillmentState(
+        data,
+        now,
+        CUSTOMER_REDEMPTION_CODE_TTL_MS,
+      );
+      if (state === 'CONSUMED') {
+        if (
+          maybePayloadString(data, 'consumption_idempotency_key') ===
+          idempotencyKey
+        ) {
+          return { data, idempotentReplay: true };
+        }
+        throw new CustomerCoreError(
+          409,
+          'customer_redemption_already_consumed',
+          'Redemption code was already consumed.',
+          {
+            merchant_id: merchantId,
+            redemption_id: current.id,
+            consumed_at: pickNumber(data, 'consumed_at'),
+          },
+        );
+      }
+      if (state === 'EXPIRED') {
+        throw new CustomerCoreError(
+          409,
+          'customer_redemption_code_expired',
+          'Redemption code has expired.',
+          {
+            merchant_id: merchantId,
+            redemption_id: current.id,
+            redemption_code_expires_at: customerRedemptionCodeExpiresAt(
+              data,
+              CUSTOMER_REDEMPTION_CODE_TTL_MS,
+            ),
+          },
+        );
+      }
+      const updated = {
+        ...data,
+        fulfillment_status: 'CONSUMED',
+        consumed_at: now,
+        consumed_by_app_user_id: req.appUserId ?? null,
+        consumed_by_firebase_uid: req.auth?.uid ?? null,
+        consumption_idempotency_key: idempotencyKey,
+        updated_at: now,
+      };
+      transaction.set(document.ref, updated, { merge: true });
+      return { data: updated, idempotentReplay: false };
+    },
+  );
+  return serializeMerchantRedemption(
+    merchantId,
+    document.id,
+    transactionResult.data,
+    transactionResult.idempotentReplay,
+  );
 }
 
 async function handleMerchantCustomerQrResolveRequest(
@@ -7065,6 +7601,7 @@ async function handleAssistedLoyaltyRedemptionRequest(
     const existingRedemptionCode = redemptionSnapshot.exists
       ? maybePayloadString(snapshotDataRecord(redemptionSnapshot), 'redemption_code')
       : null;
+    const existingRedemptionData = snapshotDataRecord(redemptionSnapshot);
     const redemptionData: Record<string, unknown> = {
       id: redemptionId,
       merchant_id: merchantId,
@@ -7078,6 +7615,12 @@ async function handleAssistedLoyaltyRedemptionRequest(
       loyalty_ledger_entry_id: ledgerEntryId,
       loyalty_status: 'CONFIRMED',
       loyalty_processed_at: now,
+      fulfillment_status:
+        maybePayloadString(existingRedemptionData, 'fulfillment_status') ??
+        'PENDING',
+      redemption_code_expires_at:
+        pickNumber(existingRedemptionData, 'redemption_code_expires_at') ??
+        now + CUSTOMER_REDEMPTION_CODE_TTL_MS,
       created_at: pickNumber(payload, 'redeemed_at') ?? now,
       updated_at: now,
       ...(trustedCustomerRequest?.redemptionCode

@@ -638,7 +638,13 @@ class CustomerActivityItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final earned = activity.pointsDelta >= 0;
     final contextName = earned ? businessName : (rewardName ?? businessName);
-    final movementLabel = earned ? 'Pontos ganhos' : 'Prémio utilizado';
+    final movementLabel = earned
+        ? 'Pontos ganhos'
+        : switch (activity.redemptionStatus) {
+            CustomerRedemptionStatus.pending => 'Resgate pendente',
+            CustomerRedemptionStatus.expired => 'Código a renovar',
+            _ => 'Prémio utilizado',
+          };
     final date = _formatCustomerDate(activity.occurredAt);
     return MaisUmSurface(
       semanticLabel:

@@ -82,6 +82,86 @@ void main() {
     await remove;
     await server.close(force: true);
   });
+
+  test('uses merchant redemption resolve and consume contracts', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final api = CustomerAppApi(
+      JsonApiClient(baseUrl: 'http://${server.address.address}:${server.port}'),
+    );
+    final requests = server.asBroadcastStream();
+    const code = 'r1_abcdefghijklmnopqrstuvwx';
+
+    final resolve = api.resolveMerchantRedemption('token', code);
+    final resolveRequest = await requests.first;
+    expect(resolveRequest.method, 'POST');
+    expect(resolveRequest.uri.path, '/merchant/redemptions/resolve');
+    expect(
+      jsonDecode(await utf8.decoder.bind(resolveRequest).join()),
+      {'redemption_code': code},
+    );
+    await _writeRedemptionResponse(
+      resolveRequest.response,
+      status: 'PENDING',
+    );
+    expect((await resolve).receipt.status, CustomerRedemptionStatus.pending);
+
+    final consume = api.consumeMerchantRedemption(
+      'token',
+      redemptionCode: code,
+      idempotencyKey: 'operation_123',
+    );
+    final consumeRequest = await requests.first;
+    expect(consumeRequest.method, 'POST');
+    expect(consumeRequest.uri.path, '/merchant/redemptions/consume');
+    expect(
+      jsonDecode(await utf8.decoder.bind(consumeRequest).join()),
+      {
+        'redemption_code': code,
+        'idempotency_key': 'operation_123',
+      },
+    );
+    await _writeRedemptionResponse(
+      consumeRequest.response,
+      status: 'CONSUMED',
+    );
+    expect((await consume).receipt.status, CustomerRedemptionStatus.consumed);
+
+    await server.close(force: true);
+  });
+}
+
+Future<void> _writeRedemptionResponse(
+  HttpResponse response, {
+  required String status,
+}) async {
+  response
+    ..statusCode = 200
+    ..write(jsonEncode({
+      'success': true,
+      'data': {
+        'business_id': 'm1',
+        'business_name': 'Café Central',
+        'redemption_id': 'redemption-1',
+        'reward_id': 'reward-1',
+        'redemption_code': 'r1_abcdefghijklmnopqrstuvwx',
+        'points_spent': 500,
+        'confirmed_points': 250,
+        'redeemed_at': 1000,
+        'redemption_code_expires_at': 901000,
+        'fulfillment_status': status,
+        'consumed_at': status == 'CONSUMED' ? 2000 : null,
+        'customer': {
+          'customer_id': 'customer-1',
+          'name': 'Ana Mucavele',
+          'phone': '841234567',
+        },
+        'reward': {
+          'reward_id': 'reward-1',
+          'name': 'Café grátis',
+        },
+      },
+    }));
+  await response.close();
 }
 
 class _Preferences {

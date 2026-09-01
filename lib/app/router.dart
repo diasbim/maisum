@@ -52,6 +52,7 @@ import '../features/sync/presentation/pending_sync_screen.dart';
 import '../core/theme/customer_experience_theme.dart';
 import '../features/customer_app/presentation/customer_route_guards.dart';
 import '../features/customer_app/presentation/customer_screens.dart';
+import '../features/customer_app/presentation/merchant_redemption_validation_screen.dart';
 
 const _publicRoutes = {
   '/splash',
@@ -386,6 +387,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/merchant/customer-qr',
         builder: (_, __) => const MerchantCustomerQrResolveScreen(),
+      ),
+      GoRoute(
+        path: '/merchant/redemptions/validate',
+        builder: (_, __) => const MerchantRedemptionValidationScreen(),
       ),
       GoRoute(
         path: '/customer/redeem/:rewardId',
