@@ -37,3 +37,14 @@ const customer_feature_flags_js_1 = require("./customer_feature_flags.js");
     strict_1.default.equal((0, customer_feature_flags_js_1.isCustomerUidAllowed)(environment, 'uid-c'), false);
     strict_1.default.equal((0, customer_feature_flags_js_1.isCustomerUidAllowed)(environment, 'uid'), false);
 });
+(0, node_test_1.default)('redemption rollout independently restricts customers and merchants', () => {
+    const environment = {
+        CUSTOMER_REDEMPTION_ALLOWED_UIDS: 'uid-pilot',
+        CUSTOMER_REDEMPTION_ALLOWED_MERCHANT_IDS: 'merchant-pilot',
+    };
+    strict_1.default.equal((0, customer_feature_flags_js_1.isCustomerRedemptionUidAllowed)(environment, 'uid-pilot'), true);
+    strict_1.default.equal((0, customer_feature_flags_js_1.isCustomerRedemptionMerchantAllowed)(environment, 'merchant-pilot'), true);
+    strict_1.default.equal((0, customer_feature_flags_js_1.isCustomerRedemptionAvailable)(environment, 'uid-pilot', ['merchant-other', 'merchant-pilot']), true);
+    strict_1.default.equal((0, customer_feature_flags_js_1.isCustomerRedemptionAvailable)(environment, 'uid-pilot', ['merchant-other']), false);
+    strict_1.default.equal((0, customer_feature_flags_js_1.isCustomerRedemptionAvailable)(environment, 'uid-other', ['merchant-pilot']), false);
+});

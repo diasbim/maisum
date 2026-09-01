@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  isCustomerRedemptionAvailable,
+  isCustomerRedemptionMerchantAllowed,
+  isCustomerRedemptionUidAllowed,
   isCustomerUidAllowed,
   resolveCustomerFeatureFlags,
 } from './customer_feature_flags.js';
@@ -38,4 +41,39 @@ test('customer rollout allow-list is optional and matches exact Firebase UIDs', 
   assert.equal(isCustomerUidAllowed(environment, 'uid-b'), true);
   assert.equal(isCustomerUidAllowed(environment, 'uid-c'), false);
   assert.equal(isCustomerUidAllowed(environment, 'uid'), false);
+});
+
+test('redemption rollout independently restricts customers and merchants', () => {
+  const environment = {
+    CUSTOMER_REDEMPTION_ALLOWED_UIDS: 'uid-pilot',
+    CUSTOMER_REDEMPTION_ALLOWED_MERCHANT_IDS: 'merchant-pilot',
+  };
+  assert.equal(
+    isCustomerRedemptionUidAllowed(environment, 'uid-pilot'),
+    true,
+  );
+  assert.equal(
+    isCustomerRedemptionMerchantAllowed(environment, 'merchant-pilot'),
+    true,
+  );
+  assert.equal(
+    isCustomerRedemptionAvailable(
+      environment,
+      'uid-pilot',
+      ['merchant-other', 'merchant-pilot'],
+    ),
+    true,
+  );
+  assert.equal(
+    isCustomerRedemptionAvailable(
+      environment,
+      'uid-pilot',
+      ['merchant-other'],
+    ),
+    false,
+  );
+  assert.equal(
+    isCustomerRedemptionAvailable(environment, 'uid-other', ['merchant-pilot']),
+    false,
+  );
 });

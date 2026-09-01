@@ -50,6 +50,7 @@ const customer_feature_flags_js_1 = require("./customer_feature_flags.js");
 const customer_push_tokens_js_1 = require("./customer_push_tokens.js");
 const customer_reward_eligibility_js_1 = require("./customer_reward_eligibility.js");
 const customer_redemption_fulfillment_js_1 = require("./customer_redemption_fulfillment.js");
+const customer_redemption_observability_js_1 = require("./customer_redemption_observability.js");
 const customer_qr_js_1 = require("./customer_qr.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
@@ -1097,6 +1098,7 @@ app.post('/customer/redemptions', async (req, res) => {
         return res.json({ success: true, data: result });
     }
     catch (error) {
+        logCustomerRedemptionRejection('customer', error);
         return respondCustomerCoreError(res, error);
     }
 });
@@ -1106,6 +1108,7 @@ app.get('/customer/redemptions/:redemptionId', async (req, res) => {
         return res.json({ success: true, data: result });
     }
     catch (error) {
+        logCustomerRedemptionRejection('customer', error);
         return respondCustomerCoreError(res, error);
     }
 });
@@ -1115,6 +1118,7 @@ app.post('/customer/redemptions/:redemptionId/reissue', async (req, res) => {
         return res.json({ success: true, data: result });
     }
     catch (error) {
+        logCustomerRedemptionRejection('customer', error);
         return respondCustomerCoreError(res, error);
     }
 });
@@ -1133,6 +1137,7 @@ app.post('/merchant/redemptions/resolve', async (req, res) => {
         return res.json({ success: true, data: result });
     }
     catch (error) {
+        logCustomerRedemptionRejection('merchant', error, req.merchantId);
         return respondCustomerCoreError(res, error);
     }
 });
@@ -1142,6 +1147,7 @@ app.post('/merchant/redemptions/consume', async (req, res) => {
         return res.json({ success: true, data: result });
     }
     catch (error) {
+        logCustomerRedemptionRejection('merchant', error, req.merchantId);
         return respondCustomerCoreError(res, error);
     }
 });
@@ -2603,6 +2609,16 @@ function respondCustomerCoreError(res, error) {
         message: 'Server error',
     });
 }
+function logCustomerRedemptionRejection(surface, error, merchantId) {
+    (0, customer_redemption_observability_js_1.logCustomerRedemptionEvent)({
+        event: 'request_rejected',
+        surface,
+        merchantId,
+        reason: error instanceof CustomerCoreError
+            ? error.code
+            : 'customer_core_internal',
+    });
+}
 function requireBodyObject(body) {
     if (body == null || typeof body !== 'object' || Array.isArray(body)) {
         throw new CustomerCoreError(400, 'invalid_payload', 'Invalid payload.');
@@ -3075,7 +3091,7 @@ async function handleCustomerSessionRequest(req) {
     })
         .filter((link) => link.merchant_id != null && link.business_customer_id != null)
         .sort((left, right) => left.merchant_id.localeCompare(right.merchant_id));
-    const featureFlags = serializeCustomerFeatureFlags(firebaseUid);
+    const featureFlags = serializeCustomerFeatureFlags(firebaseUid, businessLinks.map((link) => link.merchant_id));
     return {
         actor: 'CUSTOMER',
         customer_app_enabled: featureFlags.customer_app_enabled,
@@ -3087,13 +3103,17 @@ async function handleCustomerSessionRequest(req) {
         business_relationships: businessLinks,
     };
 }
-function serializeCustomerFeatureFlags(firebaseUid) {
+function serializeCustomerFeatureFlags(firebaseUid, merchantIds) {
     const flags = (0, customer_feature_flags_js_1.resolveCustomerFeatureFlags)(process.env);
     const appEnabled = flags.customerAppEnabled &&
         (firebaseUid == null || (0, customer_feature_flags_js_1.isCustomerUidAllowed)(process.env, firebaseUid));
     return {
         customer_app_enabled: appEnabled,
-        customer_redemption_enabled: appEnabled && flags.customerRedemptionEnabled,
+        customer_redemption_enabled: appEnabled &&
+            flags.customerRedemptionEnabled &&
+            (merchantIds == null
+                ? (0, customer_feature_flags_js_1.isCustomerRedemptionUidAllowed)(process.env, firebaseUid)
+                : (0, customer_feature_flags_js_1.isCustomerRedemptionAvailable)(process.env, firebaseUid, merchantIds)),
         customer_qr_enabled: appEnabled && flags.customerQrEnabled,
         customer_push_enabled: appEnabled && flags.customerPushEnabled,
         customer_deep_links_enabled: appEnabled && flags.customerDeepLinksEnabled,
@@ -3103,6 +3123,16 @@ function requireCustomerFeature(feature) {
     const flags = (0, customer_feature_flags_js_1.resolveCustomerFeatureFlags)(process.env);
     if (!flags.customerAppEnabled || !flags[feature]) {
         throw new CustomerCoreError(403, 'customer_feature_disabled', 'This customer feature is not enabled.');
+    }
+}
+function requireCustomerRedemptionUid(firebaseUid) {
+    if (!(0, customer_feature_flags_js_1.isCustomerRedemptionUidAllowed)(process.env, firebaseUid)) {
+        throw new CustomerCoreError(403, 'customer_redemption_rollout_disabled', 'Customer redemption is not enabled for this pilot account.');
+    }
+}
+function requireCustomerRedemptionMerchant(merchantId) {
+    if (!(0, customer_feature_flags_js_1.isCustomerRedemptionMerchantAllowed)(process.env, merchantId)) {
+        throw new CustomerCoreError(403, 'customer_redemption_rollout_disabled', 'Customer redemption is not enabled for this pilot business.');
     }
 }
 function isSafeFirestoreDocumentId(value) {
@@ -3578,6 +3608,7 @@ async function handleCustomerRedemptionRequest(req, payload) {
         throw new CustomerCoreError(400, 'loyalty_idempotency_key_invalid', 'idempotency_key must be an opaque client operation identifier.');
     }
     const account = await requireBoundCustomerAccount(req);
+    requireCustomerRedemptionUid(account.firebaseUid);
     const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
     const replayCandidates = await Promise.all(locators.map(async (locator) => {
         const relationship = await requireCustomerBusinessRelationship(account, locator.merchantId);
@@ -3617,6 +3648,16 @@ async function handleCustomerRedemptionRequest(req, payload) {
         throw new CustomerCoreError(409, 'customer_redemption_replay_ambiguous', 'The redemption replay is ambiguous across linked businesses.');
     }
     if (existingReplays.length === 1) {
+        const replay = existingReplays[0];
+        const merchantId = requirePayloadString(replay, 'business_id');
+        requireCustomerRedemptionMerchant(merchantId);
+        (0, customer_redemption_observability_js_1.logCustomerRedemptionEvent)({
+            event: 'issue_replayed',
+            surface: 'customer',
+            merchantId,
+            redemptionId: requirePayloadString(replay, 'redemption_id'),
+            fulfillmentStatus: requirePayloadString(replay, 'fulfillment_status'),
+        });
         return existingReplays[0];
     }
     const matches = await Promise.all(locators.map(async (locator) => {
@@ -3635,17 +3676,26 @@ async function handleCustomerRedemptionRequest(req, payload) {
             : 'Reward id is ambiguous across linked businesses.');
     }
     const relationship = authorizedBusinesses[0];
+    requireCustomerRedemptionMerchant(relationship.merchantId);
     const result = await handleAssistedLoyaltyRedemptionRequest(req, { reward_id: rewardId, idempotency_key: idempotencyKey }, {
         merchantId: relationship.merchantId,
         customerId: relationship.customerId,
         redemptionCode: `r1_${(0, crypto_1.randomBytes)(18).toString('base64url')}`,
     });
     const redemption = result.redemption;
-    return {
+    const response = {
         ...serializeRedemptionFulfillment(relationship.merchantId, requirePayloadString(result, 'redemption_id'), redemption),
         confirmed_points: result.confirmed_points,
         idempotent_replay: result.idempotent_replay === true,
     };
+    (0, customer_redemption_observability_js_1.logCustomerRedemptionEvent)({
+        event: response.idempotent_replay ? 'issue_replayed' : 'issued',
+        surface: 'customer',
+        merchantId: relationship.merchantId,
+        redemptionId: requirePayloadString(response, 'redemption_id'),
+        fulfillmentStatus: requirePayloadString(response, 'fulfillment_status'),
+    });
+    return response;
 }
 function requireCustomerRedemptionCode(payload) {
     const code = requirePayloadString(payload, 'redemption_code');
@@ -3674,7 +3724,9 @@ async function handleCustomerRedemptionStatusRequest(req, redemptionId) {
         throw new CustomerCoreError(400, 'customer_redemption_invalid', 'Invalid redemption id.');
     }
     const account = await requireBoundCustomerAccount(req);
+    requireCustomerRedemptionUid(account.firebaseUid);
     const match = await findCustomerAuthorizedRedemption(account, redemptionId);
+    requireCustomerRedemptionMerchant(match.relationship.merchantId);
     return {
         ...serializeRedemptionFulfillment(match.relationship.merchantId, redemptionId, match.data),
         confirmed_points: Math.max(0, pickNumber(match.relationship.customerData, 'confirmed_points') ?? 0),
@@ -3723,7 +3775,9 @@ async function handleCustomerRedemptionReissueRequest(req, redemptionId, payload
         throw new CustomerCoreError(400, 'loyalty_idempotency_key_invalid', 'idempotency_key must be an opaque client operation identifier.');
     }
     const account = await requireBoundCustomerAccount(req);
+    requireCustomerRedemptionUid(account.firebaseUid);
     const match = await findCustomerAuthorizedRedemption(account, redemptionId);
+    requireCustomerRedemptionMerchant(match.relationship.merchantId);
     const now = Date.now();
     const result = await admin.firestore().runTransaction(async (transaction) => {
         const snapshot = await transaction.get(match.ref);
@@ -3738,9 +3792,14 @@ async function handleCustomerRedemptionReissueRequest(req, redemptionId, payload
         if (state === 'CONSUMED') {
             throw new CustomerCoreError(409, 'customer_redemption_already_consumed', 'Consumed redemptions cannot be reissued.');
         }
-        if (state === 'PENDING' ||
-            maybePayloadString(current, 'reissue_idempotency_key') === idempotencyKey) {
-            return current;
+        const replay = maybePayloadString(current, 'reissue_idempotency_key') === idempotencyKey;
+        if (state === 'PENDING' || replay) {
+            return {
+                data: current,
+                lifecycleEvent: replay
+                    ? 'reissue_replayed'
+                    : 'reissue_skipped_pending',
+            };
         }
         const updated = {
             ...current,
@@ -3752,12 +3811,23 @@ async function handleCustomerRedemptionReissueRequest(req, redemptionId, payload
             updated_at: now,
         };
         transaction.set(match.ref, updated, { merge: true });
-        return updated;
+        return {
+            data: updated,
+            lifecycleEvent: 'reissued',
+        };
     });
-    return {
-        ...serializeRedemptionFulfillment(match.relationship.merchantId, redemptionId, result),
+    const response = {
+        ...serializeRedemptionFulfillment(match.relationship.merchantId, redemptionId, result.data),
         confirmed_points: Math.max(0, pickNumber(match.relationship.customerData, 'confirmed_points') ?? 0),
     };
+    (0, customer_redemption_observability_js_1.logCustomerRedemptionEvent)({
+        event: result.lifecycleEvent,
+        surface: 'customer',
+        merchantId: match.relationship.merchantId,
+        redemptionId,
+        fulfillmentStatus: requirePayloadString(response, 'fulfillment_status'),
+    });
+    return response;
 }
 async function findMerchantRedemptionByCode(merchantId, redemptionCode) {
     const snapshot = await businessRedemptionsCollectionRef(merchantId)
@@ -3806,6 +3876,7 @@ async function requireMerchantRedemptionAccess(req) {
         !(await requestCanAccessMerchant(req, req.merchantId))) {
         throw new CustomerCoreError(403, 'merchant_access_denied', 'Merchant access is required.');
     }
+    requireCustomerRedemptionMerchant(req.merchantId);
     return req.merchantId;
 }
 async function handleMerchantRedemptionResolveRequest(req, payload) {
@@ -3816,7 +3887,18 @@ async function handleMerchantRedemptionResolveRequest(req, payload) {
     const merchantId = await requireMerchantRedemptionAccess(req);
     const redemptionCode = requireCustomerRedemptionCode(payload);
     const document = await findMerchantRedemptionByCode(merchantId, redemptionCode);
-    return serializeMerchantRedemption(merchantId, document.id, snapshotDataRecord(document));
+    const response = await serializeMerchantRedemption(merchantId, document.id, snapshotDataRecord(document));
+    const fulfillmentStatus = response.fulfillment_status;
+    (0, customer_redemption_observability_js_1.logCustomerRedemptionEvent)({
+        event: fulfillmentStatus === 'EXPIRED'
+            ? 'code_expired_observed'
+            : 'merchant_resolved',
+        surface: 'merchant',
+        merchantId,
+        redemptionId: document.id,
+        fulfillmentStatus,
+    });
+    return response;
 }
 async function handleMerchantRedemptionConsumeRequest(req, payload) {
     const allowedKeys = new Set(['redemption_code', 'idempotency_key']);
@@ -3872,7 +3954,17 @@ async function handleMerchantRedemptionConsumeRequest(req, payload) {
         transaction.set(document.ref, updated, { merge: true });
         return { data: updated, idempotentReplay: false };
     });
-    return serializeMerchantRedemption(merchantId, document.id, transactionResult.data, transactionResult.idempotentReplay);
+    const response = await serializeMerchantRedemption(merchantId, document.id, transactionResult.data, transactionResult.idempotentReplay);
+    (0, customer_redemption_observability_js_1.logCustomerRedemptionEvent)({
+        event: transactionResult.idempotentReplay
+            ? 'consume_replayed'
+            : 'consumed',
+        surface: 'merchant',
+        merchantId,
+        redemptionId: document.id,
+        fulfillmentStatus: response.fulfillment_status,
+    });
+    return response;
 }
 async function handleMerchantCustomerQrResolveRequest(req, payload) {
     requireCustomerFeature('customerQrEnabled');

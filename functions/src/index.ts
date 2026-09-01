@@ -8,6 +8,9 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { Pool, type PoolClient } from 'pg';
 import { findCustomerAccountBindingConflict } from './customer_account_binding.js';
 import {
+  isCustomerRedemptionAvailable,
+  isCustomerRedemptionMerchantAllowed,
+  isCustomerRedemptionUidAllowed,
   isCustomerUidAllowed,
   resolveCustomerFeatureFlags,
 } from './customer_feature_flags.js';
@@ -21,6 +24,10 @@ import {
   customerRedemptionFulfillmentState,
   supportsCustomerRedemptionReissue,
 } from './customer_redemption_fulfillment.js';
+import {
+  logCustomerRedemptionEvent,
+  type CustomerRedemptionEvent,
+} from './customer_redemption_observability.js';
 import {
   createCustomerQrToken,
   verifyCustomerQrToken,
@@ -1299,6 +1306,7 @@ app.post('/customer/redemptions', async (req, res) => {
     );
     return res.json({ success: true, data: result });
   } catch (error) {
+    logCustomerRedemptionRejection('customer', error);
     return respondCustomerCoreError(res, error);
   }
 });
@@ -1311,6 +1319,7 @@ app.get('/customer/redemptions/:redemptionId', async (req, res) => {
     );
     return res.json({ success: true, data: result });
   } catch (error) {
+    logCustomerRedemptionRejection('customer', error);
     return respondCustomerCoreError(res, error);
   }
 });
@@ -1324,6 +1333,7 @@ app.post('/customer/redemptions/:redemptionId/reissue', async (req, res) => {
     );
     return res.json({ success: true, data: result });
   } catch (error) {
+    logCustomerRedemptionRejection('customer', error);
     return respondCustomerCoreError(res, error);
   }
 });
@@ -1348,6 +1358,11 @@ app.post('/merchant/redemptions/resolve', async (req, res) => {
     );
     return res.json({ success: true, data: result });
   } catch (error) {
+    logCustomerRedemptionRejection(
+      'merchant',
+      error,
+      (req as AuthedRequest).merchantId,
+    );
     return respondCustomerCoreError(res, error);
   }
 });
@@ -1360,6 +1375,11 @@ app.post('/merchant/redemptions/consume', async (req, res) => {
     );
     return res.json({ success: true, data: result });
   } catch (error) {
+    logCustomerRedemptionRejection(
+      'merchant',
+      error,
+      (req as AuthedRequest).merchantId,
+    );
     return respondCustomerCoreError(res, error);
   }
 });
@@ -3067,6 +3087,22 @@ function respondCustomerCoreError(res: express.Response, error: unknown) {
   });
 }
 
+function logCustomerRedemptionRejection(
+  surface: 'customer' | 'merchant',
+  error: unknown,
+  merchantId?: string,
+): void {
+  logCustomerRedemptionEvent({
+    event: 'request_rejected',
+    surface,
+    merchantId,
+    reason:
+      error instanceof CustomerCoreError
+        ? error.code
+        : 'customer_core_internal',
+  });
+}
+
 function requireBodyObject(body: unknown): Record<string, unknown> {
   if (body == null || typeof body !== 'object' || Array.isArray(body)) {
     throw new CustomerCoreError(400, 'invalid_payload', 'Invalid payload.');
@@ -3728,7 +3764,10 @@ async function handleCustomerSessionRequest(
       left.merchant_id!.localeCompare(right.merchant_id!),
     );
 
-  const featureFlags = serializeCustomerFeatureFlags(firebaseUid);
+  const featureFlags = serializeCustomerFeatureFlags(
+    firebaseUid,
+    businessLinks.map((link) => link.merchant_id!),
+  );
   return {
     actor: 'CUSTOMER',
     customer_app_enabled: featureFlags.customer_app_enabled,
@@ -3756,6 +3795,7 @@ type CustomerBusinessRelationship = {
 
 function serializeCustomerFeatureFlags(
   firebaseUid?: string,
+  merchantIds?: string[],
 ): Record<string, boolean> {
   const flags = resolveCustomerFeatureFlags(process.env);
   const appEnabled =
@@ -3764,7 +3804,15 @@ function serializeCustomerFeatureFlags(
   return {
     customer_app_enabled: appEnabled,
     customer_redemption_enabled:
-      appEnabled && flags.customerRedemptionEnabled,
+      appEnabled &&
+      flags.customerRedemptionEnabled &&
+      (merchantIds == null
+        ? isCustomerRedemptionUidAllowed(process.env, firebaseUid)
+        : isCustomerRedemptionAvailable(
+          process.env,
+          firebaseUid,
+          merchantIds,
+        )),
     customer_qr_enabled: appEnabled && flags.customerQrEnabled,
     customer_push_enabled: appEnabled && flags.customerPushEnabled,
     customer_deep_links_enabled:
@@ -3782,6 +3830,26 @@ function requireCustomerFeature(
       403,
       'customer_feature_disabled',
       'This customer feature is not enabled.',
+    );
+  }
+}
+
+function requireCustomerRedemptionUid(firebaseUid: string): void {
+  if (!isCustomerRedemptionUidAllowed(process.env, firebaseUid)) {
+    throw new CustomerCoreError(
+      403,
+      'customer_redemption_rollout_disabled',
+      'Customer redemption is not enabled for this pilot account.',
+    );
+  }
+}
+
+function requireCustomerRedemptionMerchant(merchantId: string): void {
+  if (!isCustomerRedemptionMerchantAllowed(process.env, merchantId)) {
+    throw new CustomerCoreError(
+      403,
+      'customer_redemption_rollout_disabled',
+      'Customer redemption is not enabled for this pilot business.',
     );
   }
 }
@@ -4499,6 +4567,7 @@ async function handleCustomerRedemptionRequest(
     );
   }
   const account = await requireBoundCustomerAccount(req);
+  requireCustomerRedemptionUid(account.firebaseUid);
   const locators = await listCustomerRelationshipLocators(account.canonicalCustomerId);
   const replayCandidates = await Promise.all(locators.map(async (locator) => {
     const relationship = await requireCustomerBusinessRelationship(
@@ -4583,6 +4652,19 @@ async function handleCustomerRedemptionRequest(
     );
   }
   if (existingReplays.length === 1) {
+    const replay = existingReplays[0] as Record<string, unknown>;
+    const merchantId = requirePayloadString(replay, 'business_id');
+    requireCustomerRedemptionMerchant(merchantId);
+    logCustomerRedemptionEvent({
+      event: 'issue_replayed',
+      surface: 'customer',
+      merchantId,
+      redemptionId: requirePayloadString(replay, 'redemption_id'),
+      fulfillmentStatus: requirePayloadString(
+        replay,
+        'fulfillment_status',
+      ),
+    });
     return existingReplays[0];
   }
 
@@ -4612,6 +4694,7 @@ async function handleCustomerRedemptionRequest(
     );
   }
   const relationship = authorizedBusinesses[0];
+  requireCustomerRedemptionMerchant(relationship.merchantId);
   const result = await handleAssistedLoyaltyRedemptionRequest(
     req,
     { reward_id: rewardId, idempotency_key: idempotencyKey },
@@ -4622,7 +4705,7 @@ async function handleCustomerRedemptionRequest(
     },
   );
   const redemption = result.redemption as Record<string, unknown>;
-  return {
+  const response: Record<string, unknown> = {
     ...serializeRedemptionFulfillment(
       relationship.merchantId,
       requirePayloadString(result, 'redemption_id'),
@@ -4631,6 +4714,14 @@ async function handleCustomerRedemptionRequest(
     confirmed_points: result.confirmed_points,
     idempotent_replay: result.idempotent_replay === true,
   };
+  logCustomerRedemptionEvent({
+    event: response.idempotent_replay ? 'issue_replayed' : 'issued',
+    surface: 'customer',
+    merchantId: relationship.merchantId,
+    redemptionId: requirePayloadString(response, 'redemption_id'),
+    fulfillmentStatus: requirePayloadString(response, 'fulfillment_status'),
+  });
+  return response;
 }
 
 function requireCustomerRedemptionCode(
@@ -4688,7 +4779,9 @@ async function handleCustomerRedemptionStatusRequest(
     );
   }
   const account = await requireBoundCustomerAccount(req);
+  requireCustomerRedemptionUid(account.firebaseUid);
   const match = await findCustomerAuthorizedRedemption(account, redemptionId);
+  requireCustomerRedemptionMerchant(match.relationship.merchantId);
   return {
     ...serializeRedemptionFulfillment(
       match.relationship.merchantId,
@@ -4785,7 +4878,9 @@ async function handleCustomerRedemptionReissueRequest(
     );
   }
   const account = await requireBoundCustomerAccount(req);
+  requireCustomerRedemptionUid(account.firebaseUid);
   const match = await findCustomerAuthorizedRedemption(account, redemptionId);
+  requireCustomerRedemptionMerchant(match.relationship.merchantId);
   const now = Date.now();
   const result = await admin.firestore().runTransaction(async (transaction) => {
     const snapshot = await transaction.get(match.ref);
@@ -4816,11 +4911,15 @@ async function handleCustomerRedemptionReissueRequest(
         'Consumed redemptions cannot be reissued.',
       );
     }
-    if (
-      state === 'PENDING' ||
-      maybePayloadString(current, 'reissue_idempotency_key') === idempotencyKey
-    ) {
-      return current;
+    const replay =
+      maybePayloadString(current, 'reissue_idempotency_key') === idempotencyKey;
+    if (state === 'PENDING' || replay) {
+      return {
+        data: current,
+        lifecycleEvent: replay
+          ? 'reissue_replayed'
+          : 'reissue_skipped_pending',
+      };
     }
     const updated = {
       ...current,
@@ -4832,19 +4931,30 @@ async function handleCustomerRedemptionReissueRequest(
       updated_at: now,
     };
     transaction.set(match.ref, updated, { merge: true });
-    return updated;
+    return {
+      data: updated,
+      lifecycleEvent: 'reissued',
+    };
   });
-  return {
+  const response: Record<string, unknown> = {
     ...serializeRedemptionFulfillment(
       match.relationship.merchantId,
       redemptionId,
-      result,
+      result.data,
     ),
     confirmed_points: Math.max(
       0,
       pickNumber(match.relationship.customerData, 'confirmed_points') ?? 0,
     ),
   };
+  logCustomerRedemptionEvent({
+    event: result.lifecycleEvent as CustomerRedemptionEvent,
+    surface: 'customer',
+    merchantId: match.relationship.merchantId,
+    redemptionId,
+    fulfillmentStatus: requirePayloadString(response, 'fulfillment_status'),
+  });
+  return response;
 }
 
 async function findMerchantRedemptionByCode(
@@ -4935,6 +5045,7 @@ async function requireMerchantRedemptionAccess(
       'Merchant access is required.',
     );
   }
+  requireCustomerRedemptionMerchant(req.merchantId);
   return req.merchantId;
 }
 
@@ -4958,11 +5069,23 @@ async function handleMerchantRedemptionResolveRequest(
     merchantId,
     redemptionCode,
   );
-  return serializeMerchantRedemption(
+  const response = await serializeMerchantRedemption(
     merchantId,
     document.id,
     snapshotDataRecord(document),
   );
+  const fulfillmentStatus = response.fulfillment_status as string;
+  logCustomerRedemptionEvent({
+    event:
+      fulfillmentStatus === 'EXPIRED'
+        ? 'code_expired_observed'
+        : 'merchant_resolved',
+    surface: 'merchant',
+    merchantId,
+    redemptionId: document.id,
+    fulfillmentStatus,
+  });
+  return response;
 }
 
 async function handleMerchantRedemptionConsumeRequest(
@@ -5064,12 +5187,22 @@ async function handleMerchantRedemptionConsumeRequest(
       return { data: updated, idempotentReplay: false };
     },
   );
-  return serializeMerchantRedemption(
+  const response = await serializeMerchantRedemption(
     merchantId,
     document.id,
     transactionResult.data,
     transactionResult.idempotentReplay,
   );
+  logCustomerRedemptionEvent({
+    event: transactionResult.idempotentReplay
+      ? 'consume_replayed'
+      : 'consumed',
+    surface: 'merchant',
+    merchantId,
+    redemptionId: document.id,
+    fulfillmentStatus: response.fulfillment_status as string,
+  });
+  return response;
 }
 
 async function handleMerchantCustomerQrResolveRequest(
