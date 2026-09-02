@@ -50,39 +50,13 @@ export type {
  * travelling with the request is theirs.
  */
 
-export class AdminApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly path: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'AdminApiError';
-  }
-
-  /** The caller is signed in but the API rejected the claim. */
-  get isForbidden(): boolean {
-    return this.status === 401 || this.status === 403;
-  }
-}
-
-/**
- * A Portuguese sentence for a status the API did not explain itself.
- *
- * The status code and path are logged, not shown: "A API respondeu 409" tells
- * an operator nothing they can act on, and the number is only useful next to
- * the server log it came from.
+/*
+ * The failure type and its wording live in their own module so they can be
+ * tested without pulling this server-only file, and firebase-admin with it,
+ * into a test process. Re-exported here so callers keep one import.
  */
-function statusMessage(status: number): string {
-  if (status === 404) return 'Não foi encontrado. Confirme os dados indicados.';
-  if (status === 409) return 'Este registo entra em conflito com outro já existente.';
-  if (status === 422 || status === 400) {
-    return 'Os dados enviados não foram aceites. Reveja os campos.';
-  }
-  if (status === 429) return 'Demasiados pedidos seguidos. Aguarde e tente de novo.';
-  if (status >= 500) return 'A API de administração falhou. Tente de novo dentro de momentos.';
-  return 'O pedido não foi concluído. Tente de novo.';
-}
+export { AdminApiError } from './admin-api-error';
+import { AdminApiError, statusMessage } from './admin-api-error';
 
 type Envelope<T> = {
   success?: boolean;

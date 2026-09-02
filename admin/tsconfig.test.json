@@ -1,0 +1,27 @@
+{
+  // Compiles just the framework-free part of src/lib to CommonJS so
+  // `node --test` can run it, the same shape functions/ uses for its suite.
+  //
+  // The app itself is built by Next with bundler resolution, where imports
+  // carry no extension. Node's ESM resolver requires them, so the tests run
+  // against emitted CommonJS rather than against the TypeScript directly.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": false,
+    "incremental": false,
+    "outDir": ".test-build",
+    "rootDir": "src/lib",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2022", "dom", "dom.iterable"],
+    "types": ["node"]
+  },
+  "include": [
+    "src/lib/action-state.ts",
+    "src/lib/admin-api-error.ts",
+    "src/lib/admin-claims.ts",
+    "src/lib/form-result.ts",
+    "src/lib/*.test.ts"
+  ]
+}

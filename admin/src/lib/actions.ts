@@ -3,8 +3,9 @@
 import { revalidatePath } from 'next/cache';
 
 import type { ActionState } from './action-state';
+// Shared with the form primitives and covered by form-result.test.ts.
+import { describe, failure } from './form-result';
 import {
-  AdminApiError,
   JOB_PATHS,
   type JobPath,
   type JobResult,
@@ -23,60 +24,6 @@ import {
  * straight here; there is no client-side fetch to the admin API at all.
  */
 
-
-/**
- * Everything the operator typed, so a rejected submit can hand it straight back.
- *
- * Only string entries are kept: `File` values have no `defaultValue` to restore
- * them to, and none of these forms upload anything.
- */
-function snapshot(form: FormData): Record<string, string> {
-  const values: Record<string, string> = {};
-  for (const [key, value] of form.entries()) {
-    if (typeof value === 'string') values[key] = value;
-  }
-  return values;
-}
-
-/**
- * A validation failure.
- *
- * `field` names the input at fault so the message can render against it rather
- * than only at the foot of the form. Omit it for failures that belong to the
- * submission as a whole.
- */
-function failure(form: FormData, message: string, field?: string): ActionState {
-  return {
-    status: 'error',
-    message,
-    values: snapshot(form),
-    ...(field ? { fieldErrors: { [field]: message } } : {}),
-  };
-}
-
-/**
- * Turns a thrown error into a state the form can render.
- *
- * `AdminApiError` carries a message the API wrote, which is often English
- * ("Plan version not found") and would land mid-sentence in a Portuguese
- * console. It is shown as a quoted detail under a Portuguese lead rather than
- * passed off as our own copy, so the operator still gets the specific reason
- * without the interface changing language on them.
- */
-function describe(caught: unknown, form: FormData): ActionState {
-  if (caught instanceof AdminApiError) {
-    return {
-      status: 'error',
-      message: `Não foi possível gravar. A API respondeu: ${caught.message}`,
-      values: snapshot(form),
-    };
-  }
-  return {
-    status: 'error',
-    message: 'Erro inesperado. A operação pode não ter sido aplicada.',
-    values: snapshot(form),
-  };
-}
 
 /* ------------------------------------------------------------------- fields */
 

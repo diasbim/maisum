@@ -5,3 +5,6 @@ next-env.d.ts
 *.tsbuildinfo
 .env
 .env.local
+
+# Compiled output for the node:test suite.
+.test-build/

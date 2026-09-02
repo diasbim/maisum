@@ -4,6 +4,7 @@ import { createContext, useActionState, useContext, useEffect, useState } from '
 import { useFormStatus } from 'react-dom';
 
 import { IDLE, type ActionState } from '@/lib/action-state';
+import { restoredCheckbox } from '@/lib/form-result';
 
 /**
  * Form primitives for every mutation surface.
@@ -298,10 +299,7 @@ export function Check({
   defaultChecked?: boolean;
 }) {
   const { restored, error, fieldKey, submitted } = useFieldState(name);
-  // An unchecked box sends nothing at all, so once a submit has come back, a
-  // missing key means "the operator had it off" rather than "no opinion" —
-  // which is the difference between a dry run and one that writes.
-  const wasChecked = submitted ? restored === 'on' : defaultChecked;
+  const wasChecked = restoredCheckbox(submitted, restored, defaultChecked);
 
   return (
     <div className="field field--check">
