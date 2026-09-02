@@ -9,6 +9,7 @@ import {
 } from '@/lib/plan-catalog';
 import {
   Card,
+  ErrorState,
   PageHeader,
   Panel,
   Skeleton,
@@ -119,8 +120,8 @@ async function Matrix() {
     load(fetchPlans),
   ]);
 
-  if (catalogResult.error !== null) return <p className="error">{catalogResult.error}</p>;
-  if (liveResult.error !== null) return <p className="error">{liveResult.error}</p>;
+  if (catalogResult.error !== null) return <ErrorState message={catalogResult.error} />;
+  if (liveResult.error !== null) return <ErrorState message={liveResult.error} />;
 
   const catalog = catalogResult.catalog;
   const live = liveResult.data;
@@ -187,8 +188,8 @@ async function Matrix() {
               <table className="matrix">
                 <thead>
                   <tr>
-                    <th>Promessa pública</th>
-                    <th>Contrapartida</th>
+                    <th scope="col">Promessa pública</th>
+                    <th scope="col">Contrapartida</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -233,7 +234,7 @@ async function Matrix() {
                 <p style={{ margin: '0 0 10px', fontSize: '0.86rem' }}>
                   {decision.summary}
                 </p>
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.82rem' }}>
+                <ul style={{ margin: 0, paddingLeft: 16, fontSize: '0.82rem' }}>
                   {decision.options.map((option) => (
                     <li key={option}>{option}</li>
                   ))}

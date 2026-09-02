@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { AdminApiError } from '@/lib/admin-api';
+import { RetryButton } from './RetryButton';
 
 /**
  * Shared presentation for the read surfaces, built on the design system tokens
@@ -70,15 +71,74 @@ export function Panel({
   children?: React.ReactNode;
 }) {
   return (
-    <section style={{ marginTop: 32 }}>
+    <section className="panel">
       {title ? <p className="section-label">{title}</p> : null}
-      {error ? <p className="error">{error}</p> : children}
+      {error ? <ErrorState message={error} /> : children}
     </section>
   );
 }
 
-export function EmptyState({ message }: { message: string }) {
-  return <div className="info-box">{message}</div>;
+/**
+ * A failed panel, with the way out attached.
+ *
+ * Every read surface funnels its failures through here rather than rendering
+ * the message and stopping, so an operator is never left with a dead panel and
+ * no indication that reloading is the only recourse. `role="alert"` because
+ * these stream in on their own Suspense boundary, well after the page has
+ * settled and the operator has looked away.
+ */
+export function ErrorState({
+  message,
+  action,
+}: {
+  message: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="state state--error" role="alert">
+      <p className="state__message">
+        <span aria-hidden>⚠</span> {message}
+      </p>
+      <div className="state__actions">{action ?? <RetryButton />}</div>
+    </div>
+  );
+}
+
+/**
+ * An empty panel.
+ *
+ * `action` is what fills it, or clears the filter that emptied it — an empty
+ * state that only explains leaves the operator to work out the way forward on
+ * their own.
+ */
+export function EmptyState({
+  message,
+  action,
+}: {
+  message: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="state state--empty">
+      <p className="state__message">{message}</p>
+      {action ? <div className="state__actions">{action}</div> : null}
+    </div>
+  );
+}
+
+/** A link back to the unfiltered view, for empties caused by a filter. */
+export function ClearFilters({
+  href,
+  label = 'Limpar filtros',
+}: {
+  href: string;
+  label?: string;
+}) {
+  return (
+    <Link className="btn btn-outline btn-sm" href={href}>
+      {label}
+    </Link>
+  );
 }
 
 /**
@@ -110,29 +170,11 @@ export function DefinitionList({
   entries: Array<[string, React.ReactNode]>;
 }) {
   return (
-    <dl
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'minmax(150px, max-content) 1fr',
-        gap: '10px 18px',
-        margin: 0,
-        fontSize: '0.86rem',
-      }}
-    >
+    <dl className="dl">
       {entries.map(([label, value]) => (
-        <div key={label} style={{ display: 'contents' }}>
-          <dt
-            style={{
-              color: 'var(--g500)',
-              fontSize: '0.72rem',
-              fontWeight: 700,
-              letterSpacing: '0.05em',
-              textTransform: 'uppercase',
-            }}
-          >
-            {label}
-          </dt>
-          <dd style={{ margin: 0 }}>{value}</dd>
+        <div className="dl__row" key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
         </div>
       ))}
     </dl>
@@ -175,39 +217,38 @@ export function Pagination({
   const from = returned === 0 ? 0 : offset + 1;
   const to = offset + returned;
 
+  // A disabled end of the range is a real disabled button, not a faded span:
+  // the span was neither focusable nor announced, and 0.4 opacity put the text
+  // well under the contrast floor.
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        marginTop: 14,
-      }}
-    >
+    <nav aria-label="Paginação" className="pager">
       <span className="micro">
         {from}–{to}
       </span>
-      <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+      <span className="pager__controls">
         {offset > 0 ? (
-          <Link className="btn btn-outline btn-sm" href={href(Math.max(0, offset - limit))}>
+          <Link
+            className="btn btn-outline btn-sm"
+            href={href(Math.max(0, offset - limit))}
+          >
             ← Anteriores
           </Link>
         ) : (
-          <span className="btn btn-outline btn-sm" style={{ opacity: 0.4 }}>
+          <button className="btn btn-outline btn-sm" disabled type="button">
             ← Anteriores
-          </span>
+          </button>
         )}
         {hasMore ? (
           <Link className="btn btn-outline btn-sm" href={href(offset + limit)}>
             Seguintes →
           </Link>
         ) : (
-          <span className="btn btn-outline btn-sm" style={{ opacity: 0.4 }}>
+          <button className="btn btn-outline btn-sm" disabled type="button">
             Seguintes →
-          </span>
+          </button>
         )}
       </span>
-    </div>
+    </nav>
   );
 }
 
@@ -233,42 +274,84 @@ export function parseSearch(raw: string | string[] | undefined): string {
  * merchant query no longer holds back the metrics beside it. The skeletons are
  * sized to the content they replace so the page does not jump when data lands.
  */
-export function Skeleton({ lines = 3 }: { lines?: number }) {
+/**
+ * Says that a fetch is in flight, for anyone who cannot see the bars move.
+ *
+ * The bars themselves stay `aria-hidden` — they are decoration — but hiding
+ * them without putting anything in their place left screen reader users with
+ * silence between navigation and content.
+ */
+function Loading({ label = 'A carregar…' }: { label?: string }) {
   return (
-    <div aria-hidden>
-      {Array.from({ length: lines }, (_, index) => (
-        <div
-          className="skeleton skeleton--line"
-          key={index}
-          style={{ width: `${100 - index * 9}%` }}
-        />
-      ))}
-    </div>
+    <p className="sr-only" role="status">
+      {label}
+    </p>
   );
 }
 
-export function TableSkeleton({ rows = 6 }: { rows?: number }) {
+export function Skeleton({
+  lines = 3,
+  label,
+}: {
+  lines?: number;
+  label?: string;
+}) {
   return (
-    <div className="card" aria-hidden>
-      {Array.from({ length: rows }, (_, index) => (
-        <div className="skeleton skeleton--row" key={index} />
-      ))}
-    </div>
-  );
-}
-
-export function MetricsSkeleton({ count = 10 }: { count?: number }) {
-  return (
-    <div className="grid" aria-hidden>
-      {Array.from({ length: count }, (_, index) => (
-        <div className="card" key={index}>
-          <div className="skeleton skeleton--line" style={{ width: '70%' }} />
+    <div>
+      <Loading label={label} />
+      <div aria-hidden>
+        {Array.from({ length: lines }, (_, index) => (
           <div
             className="skeleton skeleton--line"
-            style={{ width: '40%', height: 26 }}
+            key={index}
+            style={{ width: `${100 - index * 9}%` }}
           />
-        </div>
-      ))}
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function TableSkeleton({
+  rows = 6,
+  label,
+}: {
+  rows?: number;
+  label?: string;
+}) {
+  return (
+    <div>
+      <Loading label={label} />
+      <div className="card" aria-hidden>
+        {Array.from({ length: rows }, (_, index) => (
+          <div className="skeleton skeleton--row" key={index} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function MetricsSkeleton({
+  count = 10,
+  label,
+}: {
+  count?: number;
+  label?: string;
+}) {
+  return (
+    <div>
+      <Loading label={label} />
+      <div className="grid" aria-hidden>
+        {Array.from({ length: count }, (_, index) => (
+          <div className="card" key={index}>
+            <div className="skeleton skeleton--line" style={{ width: '70%' }} />
+            <div
+              className="skeleton skeleton--line"
+              style={{ width: '40%', height: 26 }}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

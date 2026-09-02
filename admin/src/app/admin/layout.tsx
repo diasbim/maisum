@@ -1,7 +1,8 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { getAdminSession, hasValidNonAdminSession } from '@/lib/session';
-import { AdminNav } from './AdminNav';
+import { AdminNav, MobileNav } from './AdminNav';
 import { SessionRefresher } from './SessionRefresher';
 import { SignOutButton } from './SignOutButton';
 
@@ -38,13 +39,24 @@ export default async function AdminLayout({
 
       <header className="topbar">
         <div className="topbar__inner">
+          {/* Only rendered below the shell breakpoint, where the sidebar is
+              not on screen. */}
+          <MobileNav account={session.email ?? session.uid} />
+
           <div className="topbar__logo">
             <span className="topbar__dot" />
-            MaisUm · Operações
+            <span className="topbar__name">MaisUm · Operações</span>
           </div>
-          <span style={{ marginLeft: 'auto' }} />
-          <span className="topbar__user">{session.email ?? session.uid}</span>
-          <SignOutButton />
+
+          <div className="topbar__account">
+            {/* The account was previously a dead label. It is the way into the
+                profile now, which is where "what does this login let me do"
+                is answered. */}
+            <Link className="topbar__user" href="/admin/perfil">
+              {session.email ?? session.uid}
+            </Link>
+            <SignOutButton />
+          </div>
         </div>
       </header>
 

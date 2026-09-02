@@ -4,11 +4,13 @@ import { fetchNfcCards } from '@/lib/admin-api';
 import {
   Badge,
   Card,
+  ClearFilters,
   EmptyState,
-  PageHeader,
-  Panel,
+  ErrorState,
   formatDateTime,
   load,
+  PageHeader,
+  Panel,
   parseSearch,
 } from '../ui';
 
@@ -102,11 +104,14 @@ export default async function NfcPage({
         </Panel>
       ) : result.error !== null ? (
         <Panel>
-          <p className="error">{result.error}</p>
+          <ErrorState message={result.error} />
         </Panel>
       ) : result.data.length === 0 ? (
         <Panel>
-          <EmptyState message="Nenhum cartão corresponde a esta procura." />
+          <EmptyState
+            action={<ClearFilters href="/admin/nfc" label="Limpar procura" />}
+            message="Nenhum cartão corresponde a esta procura."
+          />
         </Panel>
       ) : (
         <Panel title={`${result.data.length} cartão(ões)`}>
@@ -114,12 +119,12 @@ export default async function NfcPage({
             <table>
               <thead>
                 <tr>
-                  <th>Cartão</th>
-                  <th>Estado</th>
-                  <th>Cliente</th>
-                  <th>Origem</th>
-                  <th>Associado por</th>
-                  <th>Atualizado</th>
+                  <th scope="col">Cartão</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Cliente</th>
+                  <th scope="col">Origem</th>
+                  <th scope="col">Associado por</th>
+                  <th scope="col">Atualizado</th>
                 </tr>
               </thead>
               <tbody>

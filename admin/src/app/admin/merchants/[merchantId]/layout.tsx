@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { PageHeader, load } from '../../ui';
+import { ErrorState, PageHeader, load } from '../../ui';
 import { MerchantTabs } from './MerchantTabs';
 import { getMerchant } from './data';
 
@@ -43,7 +43,7 @@ export default async function MerchantLayout({
 
       <MerchantTabs merchantId={merchantId} />
 
-      {result.error ? <p className="error">{result.error}</p> : children}
+      {result.error ? <ErrorState message={result.error} /> : children}
     </>
   );
 }

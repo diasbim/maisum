@@ -66,6 +66,24 @@ export class AdminApiError extends Error {
   }
 }
 
+/**
+ * A Portuguese sentence for a status the API did not explain itself.
+ *
+ * The status code and path are logged, not shown: "A API respondeu 409" tells
+ * an operator nothing they can act on, and the number is only useful next to
+ * the server log it came from.
+ */
+function statusMessage(status: number): string {
+  if (status === 404) return 'Não foi encontrado. Confirme os dados indicados.';
+  if (status === 409) return 'Este registo entra em conflito com outro já existente.';
+  if (status === 422 || status === 400) {
+    return 'Os dados enviados não foram aceites. Reveja os campos.';
+  }
+  if (status === 429) return 'Demasiados pedidos seguidos. Aguarde e tente de novo.';
+  if (status >= 500) return 'A API de administração falhou. Tente de novo dentro de momentos.';
+  return 'O pedido não foi concluído. Tente de novo.';
+}
+
 type Envelope<T> = {
   success?: boolean;
   message?: string;
@@ -88,7 +106,7 @@ async function call<T>(
 ): Promise<Envelope<T>> {
   const session = await getAdminSession();
   if (!session) {
-    throw new AdminApiError(401, path, 'Sessao expirada. Entre novamente.');
+    throw new AdminApiError(401, path, 'A sessão expirou. Entre novamente para continuar.');
   }
 
   const config = serverConfig();
@@ -113,10 +131,13 @@ async function call<T>(
       cache: 'no-store',
     });
   } catch {
+    // The base URL is infrastructure, not something an operator can act on, so
+    // it stays in the server log rather than on the screen.
+    console.error(`[admin-api] unreachable: ${config.adminApiBaseUrl}${path}`);
     throw new AdminApiError(
       503,
       path,
-      `Nao foi possivel contactar a API em ${config.adminApiBaseUrl}.`,
+      'A API de administração não respondeu. Verifique a ligação e tente de novo.',
     );
   }
 
@@ -130,15 +151,21 @@ async function call<T>(
   }
 
   if (!response.ok) {
+    console.error(`[admin-api] ${response.status} ${path}`, body?.message);
     throw new AdminApiError(
       response.status,
       path,
-      body?.message ?? `A API respondeu ${response.status} em ${path}.`,
+      body?.message ?? statusMessage(response.status),
     );
   }
 
   if (body === null) {
-    throw new AdminApiError(502, path, 'A API devolveu JSON invalido.');
+    console.error(`[admin-api] malformed JSON from ${path}`);
+    throw new AdminApiError(
+      502,
+      path,
+      'A API devolveu uma resposta que não foi possível ler. Tente de novo.',
+    );
   }
 
   return body;
@@ -151,7 +178,7 @@ export async function fetchOperationsSummary(): Promise<AdminOperationsSummaryDt
     '/admin/operations/summary',
   );
   if (!body.data) {
-    throw new AdminApiError(502, '/admin/operations/summary', 'Resposta vazia.');
+    throw new AdminApiError(502, '/admin/operations/summary', 'A API não devolveu dados. Tente de novo.');
   }
   return body.data;
 }

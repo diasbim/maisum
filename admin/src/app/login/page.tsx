@@ -12,8 +12,8 @@ export default function LoginPage() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
-            marginBottom: 18,
+            gap: 8,
+            marginBottom: 16,
           }}
         >
           <span

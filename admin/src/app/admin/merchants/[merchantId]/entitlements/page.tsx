@@ -1,7 +1,7 @@
 import { saveEntitlementAction } from '@/lib/actions';
 import { fetchMerchantEntitlements, fetchPlans } from '@/lib/admin-api';
 import { ActionForm, Check, Field } from '../../../forms';
-import { Card, EmptyState, formatDateTime, load } from '../../../ui';
+import { ErrorState, Card, EmptyState, formatDateTime, load } from '../../../ui';
 import { getMerchant } from '../data';
 
 export const metadata = { title: 'Entitlements | Portal MaisUm' };
@@ -41,7 +41,7 @@ export default async function EntitlementsPage({
         hint="O que este negócio tem, independentemente do que o plano concede."
       >
         {entitlementsResult.error !== null ? (
-          <p className="error">{entitlementsResult.error}</p>
+          <ErrorState message={entitlementsResult.error} />
         ) : entitlementsResult.data.length === 0 ? (
           <EmptyState message="Sem overrides. Este negócio recebe exatamente o que o plano concede." />
         ) : (
@@ -49,10 +49,10 @@ export default async function EntitlementsPage({
             <table>
               <thead>
                 <tr>
-                  <th>Funcionalidade</th>
-                  <th>Estado</th>
-                  <th>Limite</th>
-                  <th>Atualizado</th>
+                  <th scope="col">Funcionalidade</th>
+                  <th scope="col">Estado</th>
+                  <th scope="col">Limite</th>
+                  <th scope="col">Atualizado</th>
                 </tr>
               </thead>
               <tbody>

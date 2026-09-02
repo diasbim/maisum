@@ -24,22 +24,58 @@ import {
  */
 
 
-function failure(message: string): ActionState {
-  return { status: 'error', message };
+/**
+ * Everything the operator typed, so a rejected submit can hand it straight back.
+ *
+ * Only string entries are kept: `File` values have no `defaultValue` to restore
+ * them to, and none of these forms upload anything.
+ */
+function snapshot(form: FormData): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const [key, value] of form.entries()) {
+    if (typeof value === 'string') values[key] = value;
+  }
+  return values;
+}
+
+/**
+ * A validation failure.
+ *
+ * `field` names the input at fault so the message can render against it rather
+ * than only at the foot of the form. Omit it for failures that belong to the
+ * submission as a whole.
+ */
+function failure(form: FormData, message: string, field?: string): ActionState {
+  return {
+    status: 'error',
+    message,
+    values: snapshot(form),
+    ...(field ? { fieldErrors: { [field]: message } } : {}),
+  };
 }
 
 /**
  * Turns a thrown error into a state the form can render.
  *
- * `AdminApiError` already carries the API's own `message`, which is the part an
- * operator can act on ("Plan version not found"), so it is passed through
- * rather than replaced with a generic string.
+ * `AdminApiError` carries a message the API wrote, which is often English
+ * ("Plan version not found") and would land mid-sentence in a Portuguese
+ * console. It is shown as a quoted detail under a Portuguese lead rather than
+ * passed off as our own copy, so the operator still gets the specific reason
+ * without the interface changing language on them.
  */
-function describe(caught: unknown): ActionState {
+function describe(caught: unknown, form: FormData): ActionState {
   if (caught instanceof AdminApiError) {
-    return failure(caught.message);
+    return {
+      status: 'error',
+      message: `Não foi possível gravar. A API respondeu: ${caught.message}`,
+      values: snapshot(form),
+    };
   }
-  return failure('Erro inesperado. A operacao pode nao ter sido aplicada.');
+  return {
+    status: 'error',
+    message: 'Erro inesperado. A operação pode não ter sido aplicada.',
+    values: snapshot(form),
+  };
 }
 
 /* ------------------------------------------------------------------- fields */
@@ -95,11 +131,11 @@ export async function saveEntitlementAction(
   const merchantId = text(form, 'merchant_id');
   const featureKey = text(form, 'feature_key');
 
-  if (!merchantId) return failure('Negocio em falta.');
-  if (!featureKey) return failure('Indique a chave da funcionalidade.');
+  if (!merchantId) return failure(form, 'Indique o negócio.', 'merchant_id');
+  if (!featureKey) return failure(form, 'Indique a chave da funcionalidade.', 'feature_key');
 
   const limit = optionalInt(form, 'limit_value');
-  if (!limit.ok) return failure('O limite tem de ser um numero inteiro.');
+  if (!limit.ok) return failure(form, 'O limite tem de ser um número inteiro.', 'limit_value');
 
   try {
     await upsertEntitlement({
@@ -110,7 +146,7 @@ export async function saveEntitlementAction(
       unit: optionalText(form, 'unit'),
     });
   } catch (caught) {
-    return describe(caught);
+    return describe(caught, form);
   }
 
   revalidatePath(`/admin/merchants/${merchantId}`);
@@ -130,16 +166,16 @@ export async function savePlanAction(
   const name = text(form, 'name');
   const version = requiredInt(form, 'version');
 
-  if (!planCode) return failure('Indique o codigo do plano.');
-  if (!name) return failure('Indique o nome do plano.');
-  if (!version.ok) return failure('A versao tem de ser um numero inteiro.');
+  if (!planCode) return failure(form, 'Indique o código do plano.', 'plan_code');
+  if (!name) return failure(form, 'Indique o nome do plano.', 'name');
+  if (!version.ok) return failure(form, 'A versão tem de ser um número inteiro.', 'version');
 
   const isActive = checkbox(form, 'is_active');
 
   try {
     await upsertPlan({ planCode, version: version.value, name, isActive });
   } catch (caught) {
-    return describe(caught);
+    return describe(caught, form);
   }
 
   revalidatePath('/admin/plans');
@@ -149,7 +185,7 @@ export async function savePlanAction(
     // Activating a version deactivates the others for that code. That happens
     // server-side and is easy to miss, so it is stated back.
     message: isActive
-      ? `Plano ${planCode} v${version.value} gravado e activo. As outras versoes deste codigo foram desactivadas.`
+      ? `Plano ${planCode} v${version.value} gravado e activo. As outras versões deste código foram desactivadas.`
       : `Plano ${planCode} v${version.value} gravado como inactivo.`,
   };
 }
@@ -163,12 +199,12 @@ export async function savePriceAction(
   const pricingVersion = requiredInt(form, 'pricing_version');
   const amount = requiredInt(form, 'amount');
 
-  if (!planCode) return failure('Indique o codigo do plano.');
+  if (!planCode) return failure(form, 'Indique o código do plano.', 'plan_code');
   if (!pricingVersion.ok) {
-    return failure('A versao de preco tem de ser um numero inteiro.');
+    return failure(form, 'A versão de preço tem de ser um número inteiro.', 'pricing_version');
   }
-  if (!amount.ok) return failure('O valor tem de ser um numero inteiro.');
-  if (amount.value < 0) return failure('O valor nao pode ser negativo.');
+  if (!amount.ok) return failure(form, 'O valor tem de ser um número inteiro.', 'amount');
+  if (amount.value < 0) return failure(form, 'O valor não pode ser negativo.', 'amount');
 
   try {
     await upsertPrice({
@@ -180,13 +216,13 @@ export async function savePriceAction(
       isActive: checkbox(form, 'is_active'),
     });
   } catch (caught) {
-    return describe(caught);
+    return describe(caught, form);
   }
 
   revalidatePath('/admin/plans');
   return {
     status: 'ok',
-    message: `Preco ${amount.value} ${currency} gravado para ${planCode}.`,
+    message: `Preço ${amount.value} ${currency} gravado para ${planCode}.`,
   };
 }
 
@@ -198,14 +234,14 @@ export async function savePlanFeatureAction(
   const featureKey = text(form, 'feature_key');
   const planVersion = requiredInt(form, 'plan_version');
 
-  if (!planCode) return failure('Indique o codigo do plano.');
-  if (!featureKey) return failure('Indique a chave da funcionalidade.');
+  if (!planCode) return failure(form, 'Indique o código do plano.', 'plan_code');
+  if (!featureKey) return failure(form, 'Indique a chave da funcionalidade.', 'feature_key');
   if (!planVersion.ok) {
-    return failure('A versao do plano tem de ser um numero inteiro.');
+    return failure(form, 'A versão do plano tem de ser um número inteiro.', 'plan_version');
   }
 
   const limit = optionalInt(form, 'limit_value');
-  if (!limit.ok) return failure('O limite tem de ser um numero inteiro.');
+  if (!limit.ok) return failure(form, 'O limite tem de ser um número inteiro.', 'limit_value');
 
   try {
     await upsertPlanFeature({
@@ -217,7 +253,7 @@ export async function savePlanFeatureAction(
       unit: optionalText(form, 'unit'),
     });
   } catch (caught) {
-    return describe(caught);
+    return describe(caught, form);
   }
 
   revalidatePath('/admin/plans');
@@ -311,7 +347,7 @@ function parseJsonField(
     return { ok: true, value: JSON.parse(raw) };
   } catch (caught) {
     const detail = caught instanceof Error ? caught.message : String(caught);
-    return { ok: false, message: `JSON invalido: ${detail}` };
+    return { ok: false, message: `JSON inválido: ${detail}` };
   }
 }
 
@@ -321,28 +357,28 @@ export async function runJobAction(
 ): Promise<ActionState> {
   const key = text(form, 'job');
   const path = JOB_BY_KEY[key];
-  if (!path) return failure('Operacao desconhecida.');
+  if (!path) return failure(form, 'Operação desconhecida.', 'job');
 
   const payload = jobPayload(key, form);
 
   if (key === 'nfcCards') {
     const parsed = parseJsonField(form, 'items');
-    if (!parsed.ok) return failure(parsed.message);
+    if (!parsed.ok) return failure(form, parsed.message, 'items');
     if (!Array.isArray(parsed.value)) {
-      return failure('O campo items tem de ser um array JSON.');
+      return failure(form, 'O campo items tem de ser um array JSON.', 'items');
     }
     if (parsed.value.length === 0) {
-      return failure('Indique pelo menos um cartao.');
+      return failure(form, 'Indique pelo menos um cartão.', 'items');
     }
     if (parsed.value.length > 200) {
-      return failure('A API aceita no maximo 200 cartoes por pedido.');
+      return failure(form, 'A API aceita no máximo 200 cartões por pedido.', 'items');
     }
     payload.items = parsed.value;
   }
 
   if (key === 'retentionPolicy') {
     const parsed = parseJsonField(form, 'policy');
-    if (!parsed.ok) return failure(parsed.message);
+    if (!parsed.ok) return failure(form, parsed.message, 'policy');
     payload.policy = parsed.value;
   }
 
@@ -350,15 +386,15 @@ export async function runJobAction(
   try {
     result = await runJob(path, payload);
   } catch (caught) {
-    return describe(caught);
+    return describe(caught, form);
   }
 
   const applied = payload.apply === true || payload.dry_run === false;
   return {
     status: 'ok',
     message: applied
-      ? 'Executado. As alteracoes foram aplicadas.'
-      : 'Simulacao concluida. Nada foi alterado.',
+      ? 'Executado. As alterações foram aplicadas.'
+      : 'Simulação concluída. Nada foi alterado.',
     result,
   };
 }

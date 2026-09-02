@@ -31,3 +31,32 @@ export function hasAdminClaims(claims: unknown): boolean {
     role.trim().toLowerCase(),
   );
 }
+
+/**
+ * Which claims grant the access, rather than merely whether one does.
+ *
+ * Mirrors `adminClaimNames()` in `functions/src/admin_access.ts`. Three separate
+ * booleans and a role value can each open the portal, and they are set by
+ * different paths — so "you are an admin" is not enough to act on. Revoking
+ * means clearing every grant listed here; clearing one of two leaves the access
+ * in place.
+ */
+export function adminClaimNames(claims: unknown): string[] {
+  if (claims == null || typeof claims !== 'object') return [];
+  const record = claims as Record<string, unknown>;
+  const granting: string[] = [];
+
+  for (const claim of ADMIN_BOOLEAN_CLAIMS) {
+    if (record[claim] === true) granting.push(claim);
+  }
+
+  const role = record.role;
+  if (
+    typeof role === 'string' &&
+    (ADMIN_ROLE_VALUES as readonly string[]).includes(role.trim().toLowerCase())
+  ) {
+    granting.push(`role=${role.trim().toLowerCase()}`);
+  }
+
+  return granting;
+}

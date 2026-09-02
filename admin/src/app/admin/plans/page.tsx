@@ -11,12 +11,13 @@ import {
   Badge,
   Card,
   EmptyState,
-  PageHeader,
-  Panel,
-  Skeleton,
+  ErrorState,
   formatAmount,
   formatDateTime,
   load,
+  PageHeader,
+  Panel,
+  Skeleton,
 } from '../ui';
 
 export const metadata = { title: 'Planos | Portal MaisUm' };
@@ -24,7 +25,7 @@ export const dynamic = 'force-dynamic';
 
 async function Catalogue() {
   const result = await load(fetchPlans);
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
   if (result.data.length === 0) {
     return <EmptyState message="Nenhum plano no catálogo." />;
   }
@@ -39,11 +40,11 @@ async function Catalogue() {
               style={{
                 display: 'flex',
                 alignItems: 'baseline',
-                gap: 10,
+                gap: 8,
                 flexWrap: 'wrap',
               }}
             >
-              <h3 style={{ margin: 0, fontSize: 16 }}>
+              <h3 style={{ margin: 0, fontSize: '1rem' }}>
                 {plan.name ?? plan.plan_code}
               </h3>
               <code className="inline">
@@ -54,7 +55,7 @@ async function Catalogue() {
                 style={{
                   marginLeft: 'auto',
                   color: 'var(--g500)',
-                  fontSize: 12,
+                  fontSize: '0.75rem',
                 }}
               >
                 Atualizado {formatDateTime(plan.updated_at)}
@@ -65,11 +66,11 @@ async function Catalogue() {
               <div>
                 <p className="section-label">Preços</p>
                 {plan.prices.length === 0 ? (
-                  <p className="muted" style={{ fontSize: 14 }}>
+                  <p className="muted" style={{ fontSize: '0.86rem' }}>
                     Sem preços definidos.
                   </p>
                 ) : (
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: 14 }}>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: '0.86rem' }}>
                     {plan.prices.map((price, index) => (
                       <li key={`${price.pricing_version}-${index}`}>
                         {formatAmount(price.amount, price.currency)}
@@ -86,7 +87,7 @@ async function Catalogue() {
                   Funcionalidades ({enabled.length}/{plan.features.length})
                 </p>
                 {plan.features.length === 0 ? (
-                  <p className="muted" style={{ fontSize: 14 }}>
+                  <p className="muted" style={{ fontSize: '0.86rem' }}>
                     Sem funcionalidades configuradas.
                   </p>
                 ) : (
@@ -95,9 +96,9 @@ async function Catalogue() {
                       margin: 0,
                       padding: 0,
                       listStyle: 'none',
-                      fontSize: 14,
+                      fontSize: '0.86rem',
                       display: 'grid',
-                      gap: 2,
+                      gap: 4,
                     }}
                   >
                     {plan.features.map((feature) => (

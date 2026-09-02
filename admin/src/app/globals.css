@@ -60,7 +60,9 @@
 }
 
 html {
-  font-size: 16px;
+  /* A percentage, not a pixel value: pinning this to 16px overrides the text
+     size the operator set in their own browser. */
+  font-size: 100%;
 }
 
 body {
@@ -327,9 +329,17 @@ tbody tr:hover {
   transform: translateY(-2px);
 }
 
+/*
+ * A disabled control is stated in tokens rather than by fading the live one.
+ * Opacity dragged the label under the contrast floor, which left the operator
+ * reading a control they could not make out to work out why it would not move.
+ */
 .btn:disabled {
-  opacity: 0.5;
+  background: var(--g100);
+  border-color: var(--g300);
+  color: var(--g500);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .btn-gold {
@@ -396,7 +406,7 @@ tbody tr:hover {
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--g500);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
@@ -428,7 +438,7 @@ tbody tr:hover {
 .field__hint {
   font-size: 0.75rem;
   color: var(--g500);
-  margin-top: 5px;
+  margin-top: 4px;
 }
 
 /* ── Badges ─────────────────────────────────────────────────────────────── */
@@ -606,36 +616,26 @@ tbody tr:hover {
   padding: 32px 28px 96px;
 }
 
-/* Below the shell breakpoint the sidebar becomes a scrollable strip. */
+/*
+ * Below the shell breakpoint the sidebar gives way to the drawer in the topbar.
+ *
+ * It used to become a horizontal scroller with the group labels hidden, which
+ * put all ten destinations in one undifferentiated row: finding "Reconciliação"
+ * meant scrolling a strip of identical pills and reading every one. The drawer
+ * keeps the grouping, so the same reading of the map works at every width.
+ */
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
   }
   .sidebar {
-    position: static;
-    max-height: none;
-    display: flex;
-    gap: 4px;
-    overflow-x: auto;
-    padding: 10px 16px;
-    border-right: 0;
-    border-bottom: 1px solid var(--g100);
-  }
-  .sidebar__group {
-    display: flex;
-    gap: 4px;
-    margin: 0;
-  }
-  .sidebar__label,
-  .sidebar__mark,
-  .sidebar__soon {
     display: none;
-  }
-  .sidebar a {
-    white-space: nowrap;
   }
   .shell main {
     padding: 24px 16px 80px;
+  }
+  .topbar__user {
+    display: none;
   }
 }
 
@@ -737,11 +737,35 @@ tbody tr:hover {
 
 /* == Forms ================================================================= */
 
+/*
+ * Fields line up on their controls, not on their bottom edges.
+ *
+ * `align-items: end` bottom-aligned the columns, so any field carrying a hint
+ * or a validation message pushed its own label and input upward — the row of
+ * inputs stopped being a row. That is worst exactly when it matters most, on a
+ * form showing an error the operator is trying to compare against the fields
+ * beside it. Aligning to the start puts every label on one line and every
+ * control on the next, and lets the messages hang below where they belong.
+ */
 .form-grid {
+  /* One line of label plus its gap: the offset a control with no label above
+     it needs in order to land on the same row as the inputs. */
+  --field-label-block: calc(0.72rem * 1.6 + 8px);
+
   display: grid;
-  gap: 14px;
+  gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  align-items: end;
+  align-items: start;
+}
+
+/* The grid's own gap does the spacing; the stacked-field margin would double it. */
+.form-grid .field {
+  margin-bottom: 0;
+}
+
+/* A checkbox has no label above it, so it needs the offset to join the row. */
+.form-grid .field--check {
+  margin-top: var(--field-label-block);
 }
 
 .form-actions {
@@ -898,8 +922,11 @@ select.input {
   .skeleton {
     animation: none;
   }
+  /* Covers the drawer's slide and fade too, not only transitions. */
   * {
     transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 
@@ -986,4 +1013,441 @@ code.inline {
   background: var(--off);
   border: 1px solid var(--g100);
   font-size: 0.76rem;
+}
+
+/* == Accessibility helpers ================================================= */
+
+/*
+ * Present to a screen reader, absent on screen.
+ *
+ * Used for the loading announcements behind the skeletons, which are
+ * `aria-hidden` decoration on their own and would otherwise leave nothing at
+ * all between a navigation and its content.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* == Panel states ========================================================== */
+
+.panel {
+  margin-top: 32px;
+}
+
+/*
+ * The empty and failed states of a panel.
+ *
+ * Both carry their way forward in `state__actions` — a retry for a failure, a
+ * filter reset or the action that fills it for an empty — because a panel that
+ * only explains leaves the operator to work out the next move alone.
+ */
+.state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  border-radius: var(--r);
+  padding: 16px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.state__message {
+  flex: 1 1 260px;
+  margin: 0;
+}
+
+.state__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.state--error {
+  color: var(--red);
+  background: oklch(52% 0.22 25 / 0.08);
+  border: 1.5px solid oklch(52% 0.22 25 / 0.2);
+}
+
+.state--empty {
+  background: var(--goldLt);
+  border: 1px solid oklch(82% 0.18 82 / 0.3);
+  color: var(--navy);
+}
+
+/* == Definition list ======================================================= */
+
+.dl {
+  display: grid;
+  grid-template-columns: minmax(150px, max-content) 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.dl__row {
+  display: contents;
+}
+
+.dl dt {
+  color: var(--g500);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.dl dd {
+  margin: 0;
+}
+
+/* A single column when there is no room for the label beside the value. */
+@media (max-width: 560px) {
+  .dl {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .dl__row {
+    display: block;
+    margin-bottom: 12px;
+  }
+}
+
+/* == Pagination ============================================================ */
+
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pager__controls {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* == Field validation ====================================================== */
+
+/*
+ * An invalid field is marked at the field, not only in the summary below the
+ * form: on the plan and entitlement forms a single message at the foot does not
+ * say which of ten inputs to go back to.
+ */
+.input--invalid {
+  border-color: var(--red);
+}
+
+.input--invalid:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px oklch(52% 0.22 25 / 0.18);
+}
+
+.field__error {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--red);
+}
+
+.field--check {
+  margin-bottom: 0;
+}
+
+/* == Mobile navigation ===================================================== */
+
+/*
+ * The drawer that replaces the sidebar below the shell breakpoint. Hidden
+ * outright on wide screens, where the sidebar is already on the page and a
+ * second copy of the same map would be one map too many.
+ */
+.mobile-nav {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .mobile-nav {
+    display: block;
+  }
+}
+
+/*
+ * The trigger says where you are, not just that a menu exists.
+ *
+ * With the sidebar gone, the collapsed nav is the only thing on screen that can
+ * answer "which section am I in" — an unlabelled icon would take that away.
+ */
+.mobile-nav__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Comfortably past the 44px minimum, including at larger text sizes. */
+  min-height: 44px;
+  padding: 6px 12px 6px 8px;
+  margin-right: 4px;
+  border: 1px solid oklch(100% 0 0 / 0.16);
+  border-radius: var(--r);
+  background: oklch(100% 0 0 / 0.06);
+  color: var(--white);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.mobile-nav__toggle:hover {
+  background: oklch(100% 0 0 / 0.12);
+}
+
+.mobile-nav__icon {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.mobile-nav__icon span {
+  display: block;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--gold);
+}
+
+.mobile-nav__where {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.mobile-nav__group {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: oklch(100% 0 0 / 0.6);
+}
+
+.mobile-nav__item {
+  font-size: 0.82rem;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Below the narrowest phones the trigger keeps the icon and drops the label. */
+@media (max-width: 380px) {
+  .mobile-nav__where {
+    display: none;
+  }
+}
+
+.mobile-nav__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  background: oklch(20% 0.055 258 / 0.45);
+  animation: fade-in var(--t-micro) ease-out;
+}
+
+.mobile-nav__panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 200;
+  width: min(300px, 86vw);
+  display: flex;
+  flex-direction: column;
+  padding: 16px 12px 32px;
+  overflow-y: auto;
+  background: var(--white);
+  box-shadow: var(--shL);
+  animation: slide-in var(--t-medium) ease-out;
+}
+
+/*
+ * `display: flex` above outranks the user agent's `[hidden] { display: none }`,
+ * so the closed panel needs saying explicitly or it sits over every page.
+ */
+.mobile-nav__panel[hidden] {
+  display: none;
+}
+
+.mobile-nav__panel:focus {
+  outline: none;
+}
+
+.mobile-nav__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 8px 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--g100);
+}
+
+.mobile-nav__title {
+  font-family: var(--font-head), system-ui, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--navy);
+}
+
+.mobile-nav__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* A 44px target, which the bare glyph was not. */
+  width: 44px;
+  height: 44px;
+  margin-right: -8px;
+  border: none;
+  border-radius: var(--r);
+  background: transparent;
+  color: var(--g500);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.mobile-nav__close:hover {
+  background: var(--off);
+  color: var(--navy);
+}
+
+/* The drawer reuses the sidebar's own list styling, grouping included. */
+.mobile-nav__panel .sidebar__group {
+  margin-bottom: 20px;
+}
+
+.mobile-nav__panel a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Roomier than the sidebar's rows: this one is driven by thumbs. */
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--g800);
+  text-decoration: none;
+}
+
+.mobile-nav__panel a[aria-current='page'] {
+  background: var(--goldLt);
+  color: var(--navy);
+}
+
+.mobile-nav__panel a:hover {
+  background: var(--off);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+/* == Topbar layout ========================================================= */
+
+.topbar__account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.topbar__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* With the drawer trigger beside it, the wordmark has to be able to give way. */
+.topbar__logo {
+  min-width: 0;
+}
+
+/* == Account ============================================================== */
+
+/* The topbar account is a link now, so it has to look like one. */
+a.topbar__user {
+  text-decoration: none;
+  border-radius: 8px;
+  padding: 4px 8px;
+  transition: color var(--t-micro), background var(--t-micro);
+}
+
+a.topbar__user:hover {
+  color: var(--white);
+  background: oklch(100% 0 0 / 0.08);
+}
+
+.claim-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.claim-list code {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: var(--r);
+  background: var(--goldLt);
+  border: 1px solid oklch(82% 0.18 82 / 0.3);
+  color: var(--navy);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* The drawer's account line, matching the topbar's link affordance. */
+a.mobile-nav__account {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+  padding: 16px 12px 0;
+  border-top: 1px solid var(--g100);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.mobile-nav__account-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--g500);
+}
+
+.mobile-nav__account-email {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--navy);
 }
