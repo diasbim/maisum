@@ -1,40 +1,57 @@
 {
-	"flutter": {
-		"platforms": {
-			"android": {
-				"default": {
-					"projectId": "loyaltyos-fc4dd",
-					"appId": "1:517299605672:android:392da87b191d830cc7329d",
-					"fileOutput": "android/app/google-services.json"
-				}
-			},
-			"dart": {
-				"lib/firebase_options.dart": {
-					"projectId": "loyaltyos-fc4dd",
-					"configurations": {
-						"android": "1:517299605672:android:392da87b191d830cc7329d"
-					}
-				}
-			}
-		}
-	},
-	"firestore": {
-		"rules": "firestore.rules",
-		"indexes": "firestore.indexes.json"
-	},
-	"dataconnect": {
-		"source": "dataconnect"
-	},
-	"functions": {
-		"source": "functions"
-	},
-	"hosting": {
-		"public": "docs",
-		"ignore": [
-			"firebase.json",
-			"**/.*",
-			"**/node_modules/**"
-		],
-		"cleanUrls": true
-	}
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "loyaltyos-fc4dd",
+          "appId": "1:517299605672:android:392da87b191d830cc7329d",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "loyaltyos-fc4dd",
+          "configurations": {
+            "android": "1:517299605672:android:392da87b191d830cc7329d"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "dataconnect": {
+    "source": "dataconnect"
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "hosting": {
+    "public": "docs",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "cleanUrls": true
+  },
+  "emulators": {
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9099
+    },
+    "functions": {
+      "host": "127.0.0.1",
+      "port": 5099
+    },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8085
+    },
+    "ui": {
+      "enabled": false
+    }
+  }
 }

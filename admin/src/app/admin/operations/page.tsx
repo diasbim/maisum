@@ -34,54 +34,6 @@ export default function OperationsPage() {
         </p>
       </div>
 
-      <Panel title="Negócios">
-        <Card
-          title="Projetar negócios para o modelo de leitura"
-          hint={
-            <>
-              Os negócios vivem em <code className="inline">businesses</code>,
-              no Firestore. A tabela <code className="inline">merchants</code>,
-              de onde o portal lê, passou a ser mantida por um gatilho — mas o
-              gatilho só apanha escritas a partir de agora. Esta operação
-              projeta os negócios que já existiam. Corre uma vez; depois é
-              automático.
-            </>
-          }
-        >
-          <ActionForm
-            action={runJobAction}
-            submitLabel="Executar"
-            pendingLabel="A projetar…"
-          >
-            <input type="hidden" name="job" value="merchantsBackfill" />
-            <div className="form-grid">
-              <Field
-                name="limit"
-                label="Limite"
-                type="number"
-                step="1"
-                min="1"
-                max="200"
-                defaultValue="50"
-                hint="Máximo 200."
-              />
-              <Field
-                name="cursor"
-                label="Continuar a partir de"
-                placeholder="id do último negócio"
-                autoComplete="off"
-              />
-              <Check
-                name="apply"
-                label="Aplicar"
-                hint="Sem isto, apenas simula."
-                danger
-              />
-            </div>
-          </ActionForm>
-        </Card>
-      </Panel>
-
       <Panel title="Clientes">
         <div className="stack">
           <Card

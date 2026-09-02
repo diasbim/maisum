@@ -129,6 +129,57 @@ os tokens revogados.
 - **B7**, CORS restrito à origem do portal. Depende do hostname.
 - Fases 7 a 9: testes de ponta a ponta, CI e entrega, runbook.
 
+## Produção
+
+A API está publicada em `https://api-yf3t2o2a3a-uc.a.run.app`.
+
+Verificado no ar: pedido sem autenticação devolve 401; `x-admin-key` numa rota
+fora de `ADMIN_API_KEY_PATHS` devolve 401; o CORS devolve o cabeçalho para
+`https://maisum.tsintsivadigital.com` e nada para uma origem desconhecida.
+
+### O que falta para entrar
+
+**Conceder a claim de administrador.** Não existe forma de entrar no portal sem
+ela, e a consola só a lê — nunca a concede. Precisa de credenciais de aplicação
+por omissão:
+
+```bash
+gcloud auth application-default login
+cd functions
+GOOGLE_CLOUD_PROJECT=loyaltyos-fc4dd node scripts/admin_claims.js --list
+GOOGLE_CLOUD_PROJECT=loyaltyos-fc4dd node scripts/admin_claims.js --grant <email> --yes
+```
+
+Revogar tem efeito imediato: a sessão verifica cada pedido contra os tokens
+revogados.
+
+**Apontar o portal a produção**, em `admin/.env.local`:
+
+```
+ADMIN_API_BASE_URL=https://api-yf3t2o2a3a-uc.a.run.app
+NEXT_PUBLIC_FIREBASE_API_KEY=<chave web do projeto>
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=loyaltyos-fc4dd.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=loyaltyos-fc4dd
+FIREBASE_PROJECT_ID=loyaltyos-fc4dd
+```
+
+Sem `NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST` nem `FIREBASE_AUTH_EMULATOR_HOST`
+— a presença dessas variáveis é o que faz o portal falar com o emulador.
+
+**Semear o catálogo de planos.** A coleção `plans` está vazia em produção, pelo
+que a reconciliação marca tudo como lacuna e a app móvel cai nos valores por
+omissão do `PlanCatalog`. O editor em `/admin/plans` escreve exatamente para lá.
+
+## Desenvolvimento local
+
+O `firebase.json` declara os três emuladores. O de Firestore é o que importa:
+sem ele, `admin.firestore()` no emulador de Functions fala com **produção**.
+
+```bash
+firebase emulators:start --only auth,functions,firestore
+cd admin && npm run dev
+```
+
 ## Design system
 
 Os tokens vêm de `lib/designsystem.html` e vivem em `src/app/globals.css`:

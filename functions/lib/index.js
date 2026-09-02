@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.usageReconcileWeekly = exports.usageBackfillDaily = exports.retentionInactivityScanDaily = exports.retentionDomainEventPostgresProjection = exports.merchantProfilePostgresProjection = exports.loyaltyLedgerSaleOnSaleWrite = exports.customerCoreCanonicalLinkOnCustomerWrite = exports.api = void 0;
+exports.usageReconcileWeekly = exports.usageBackfillDaily = exports.retentionInactivityScanDaily = exports.retentionDomainEventPostgresProjection = exports.loyaltyLedgerSaleOnSaleWrite = exports.customerCoreCanonicalLinkOnCustomerWrite = exports.api = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const crypto_1 = require("crypto");
@@ -57,7 +57,8 @@ const customer_redemption_observability_js_1 = require("./customer_redemption_ob
 const customer_qr_js_1 = require("./customer_qr.js");
 const customer_nfc_js_1 = require("./customer_nfc.js");
 const cors_origins_js_1 = require("./cors_origins.js");
-const merchant_projection_js_1 = require("./merchant_projection.js");
+const admin_firestore_js_1 = require("./admin_firestore.js");
+const admin_audit_js_1 = require("./admin_audit.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
 const sync_backend_js_1 = require("./sync_backend.js");
@@ -385,83 +386,39 @@ adminRouter.use((req, res, next) => {
     }
     return next();
 });
+/*
+ * The console's read surfaces, over Firestore.
+ *
+ * These used to query PostgreSQL. The schema mirrored Firestore but was never
+ * connected in production, so every one of these returned 500 there. The
+ * response contracts are unchanged — only the source moved, which is why the
+ * mappers below are the same ones the SQL rows went through.
+ */
 adminRouter.get('/merchants', async (req, res) => {
     const limit = clampLimit(req.query.limit, 50, 100);
     const offset = Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0));
-    const search = typeof req.query.search === 'string'
-        ? req.query.search.trim()
-        : '';
-    const params = [];
-    const where = [];
-    if (search.length > 0) {
-        params.push(`%${search}%`);
-        where.push(`(
-      m.id ILIKE $${params.length}
-      OR m.name ILIKE $${params.length}
-      OR m.phone ILIKE $${params.length}
-    )`);
-    }
-    // Subscription status and plan filters. Both compare against the joined
-    // subscription_state row, so a merchant with no subscription at all is
-    // excluded by either filter rather than silently matching.
-    const status = pickQueryString(req.query.status);
-    if (status) {
-        params.push(status.toUpperCase());
-        where.push(`UPPER(ss.status) = $${params.length}`);
-    }
-    const planCode = pickQueryString(req.query.plan_code) ??
-        pickQueryString(req.query.planCode);
-    if (planCode) {
-        params.push(planCode);
-        where.push(`ss.plan_code = $${params.length}`);
-    }
-    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-    params.push(limit);
-    const limitParam = params.length;
-    params.push(offset);
-    const offsetParam = params.length;
-    const sql = `
-    SELECT
-      m.id,
-      m.name,
-      m.phone,
-      m.created_at,
-      m.updated_at,
-      ss.plan_code,
-      ss.plan_name,
-      ss.status AS subscription_status,
-      COUNT(DISTINCT au.id)::int AS staff_count,
-      COUNT(DISTINCT au.id) FILTER (WHERE au.status = 'ACTIVE')::int AS active_staff_count,
-      COUNT(DISTINCT ub.id)::int AS usage_balance_count,
-      MAX(GREATEST(
-        m.updated_at,
-        COALESCE(ss.updated_at, 0),
-        COALESCE(au.updated_at, 0),
-        COALESCE(ub.updated_at, 0)
-      )) AS last_operational_update_at
-    FROM merchants m
-    LEFT JOIN subscription_state ss ON ss.merchant_id = m.id
-    LEFT JOIN app_users au ON au.merchant_id = m.id
-    LEFT JOIN usage_balances ub ON ub.merchant_id = m.id
-    ${whereSql}
-    GROUP BY
-      m.id,
-      m.name,
-      m.phone,
-      m.created_at,
-      m.updated_at,
-      ss.plan_code,
-      ss.plan_name,
-      ss.status
-    ORDER BY m.updated_at DESC, m.id ASC
-    LIMIT $${limitParam} OFFSET $${offsetParam}
-  `;
     try {
-        const result = await pool.query(sql, params);
+        const page = await (0, admin_firestore_js_1.listMerchants)({
+            search: pickQueryString(req.query.search) ?? undefined,
+            status: pickQueryString(req.query.status) ?? undefined,
+            planCode: pickQueryString(req.query.plan_code) ??
+                pickQueryString(req.query.planCode) ??
+                undefined,
+            limit,
+            offset,
+        });
         return res.json({
             success: true,
-            data: result.rows.map(admin_api_contracts_js_1.toAdminMerchantSummary),
-            paging: (0, admin_api_contracts_js_1.toAdminPaging)(limit, offset, result.rows.length),
+            data: page.items.map(admin_api_contracts_js_1.toAdminMerchantSummary),
+            paging: {
+                limit,
+                offset,
+                has_more: page.hasMore,
+            },
+            // The SQL version could only say whether another page existed; the join
+            // holds the whole set, so the real total is available.
+            total: page.total,
+            truncated: page.truncated,
         });
     }
     catch (error) {
@@ -471,62 +428,23 @@ adminRouter.get('/merchants', async (req, res) => {
 adminRouter.get('/audit-events', async (req, res) => {
     const limit = clampLimit(req.query.limit, 50, 100);
     const offset = Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0));
-    const targetType = pickQueryString(req.query.target_type) ??
-        pickQueryString(req.query.targetType);
-    const targetId = pickQueryString(req.query.target_id) ??
-        pickQueryString(req.query.targetId);
-    const merchantId = pickQueryString(req.query.merchant_id) ??
-        pickQueryString(req.query.merchantId);
-    const params = [];
-    const where = [];
-    if (targetType) {
-        params.push(targetType);
-        where.push(`target_type = $${params.length}`);
-    }
-    if (targetId) {
-        params.push(targetId);
-        where.push(`target_id = $${params.length}`);
-    }
-    if (merchantId) {
-        params.push(merchantId);
-        where.push(`merchant_id = $${params.length}`);
-    }
-    // Filtering by action is how an operator answers "who changed entitlements
-    // this week" without reading every row. Matched exactly, not by prefix: the
-    // actions are a closed set written by recordAdminAuditEvent.
-    const action = pickQueryString(req.query.action);
-    if (action) {
-        params.push(action);
-        where.push(`action = $${params.length}`);
-    }
-    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-    params.push(limit);
-    const limitParam = params.length;
-    params.push(offset);
-    const offsetParam = params.length;
-    const sql = `
-    SELECT
-      id,
-      actor_app_user_id,
-      actor_firebase_uid,
-      actor_role,
-      action,
-      target_type,
-      target_id,
-      merchant_id,
-      details,
-      created_at
-    FROM admin_audit_events
-    ${whereSql}
-    ORDER BY created_at DESC, id DESC
-    LIMIT $${limitParam} OFFSET $${offsetParam}
-  `;
     try {
-        const result = await pool.query(sql, params);
+        const page = await (0, admin_audit_js_1.listAuditEvents)({
+            merchantId: pickQueryString(req.query.merchant_id) ??
+                pickQueryString(req.query.merchantId) ??
+                undefined,
+            targetType: pickQueryString(req.query.target_type) ??
+                pickQueryString(req.query.targetType) ??
+                undefined,
+            action: pickQueryString(req.query.action) ?? undefined,
+            limit,
+            offset,
+        });
         return res.json({
             success: true,
-            data: result.rows.map(admin_api_contracts_js_1.toAdminAuditEvent),
-            paging: (0, admin_api_contracts_js_1.toAdminPaging)(limit, offset, result.rows.length),
+            data: page.items.map(admin_api_contracts_js_1.toAdminAuditEvent),
+            paging: { limit, offset, has_more: page.hasMore },
+            truncated: page.truncated,
         });
     }
     catch (error) {
@@ -534,27 +452,14 @@ adminRouter.get('/audit-events', async (req, res) => {
     }
 });
 adminRouter.get('/operations/summary', async (_req, res) => {
-    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const sql = `
-    SELECT
-      (SELECT COUNT(*)::int FROM merchants) AS merchant_count,
-      (SELECT COUNT(*)::int FROM subscription_state WHERE status = 'ACTIVE') AS active_subscription_count,
-      (SELECT COUNT(*)::int FROM subscription_state WHERE status = 'TRIAL') AS trial_subscription_count,
-      (SELECT COUNT(*)::int FROM subscription_state WHERE status IN ('PAST_DUE', 'CANCELLED', 'CANCELED')) AS attention_subscription_count,
-      (SELECT COUNT(*)::int FROM app_users WHERE status = 'ACTIVE') AS active_staff_count,
-      (SELECT COUNT(*)::int FROM usage_events WHERE created_at >= $1) AS usage_events_24h,
-      (SELECT COUNT(*)::int FROM recovery_tasks WHERE LOWER(status) NOT IN ('done', 'completed', 'cancelled', 'canceled', 'superseded')) AS open_recovery_task_count,
-      (SELECT COUNT(*)::int FROM visit_reports WHERE created_at >= $1) AS visit_reports_24h,
-      (SELECT COUNT(*)::int FROM survey_responses WHERE created_at >= $1) AS survey_responses_24h,
-      (SELECT COUNT(*)::int FROM admin_audit_events WHERE created_at >= $1) AS admin_audit_events_24h,
-      (SELECT MAX(created_at) FROM admin_audit_events) AS last_admin_audit_at,
-      (SELECT MAX(created_at) FROM usage_events) AS last_usage_event_at
-  `;
     try {
-        const result = await pool.query(sql, [dayAgo]);
+        const summary = await (0, admin_firestore_js_1.getOperationsSummary)();
         return res.json({
             success: true,
-            data: (0, admin_api_contracts_js_1.toAdminOperationsSummary)(result.rows[0]),
+            data: (0, admin_api_contracts_js_1.toAdminOperationsSummary)(summary),
+            // Named individually so the console can show which tiles are blank
+            // because an index is missing, rather than reporting them as zero.
+            unavailable_metrics: summary.unavailable_metrics,
         });
     }
     catch (error) {
@@ -570,116 +475,43 @@ adminRouter.get('/merchants/:merchantId', async (req, res) => {
             .status(400)
             .json({ success: false, message: 'Missing merchant id' });
     }
-    const sql = `
-    SELECT
-      m.id,
-      m.name,
-      m.phone,
-      m.created_at,
-      m.updated_at,
-      ss.plan_code,
-      ss.plan_name,
-      ss.plan_version,
-      ss.pricing_version,
-      ss.status AS subscription_status,
-      ss.trial_ends_at,
-      ss.grace_ends_at,
-      ss.period_start,
-      ss.period_end,
-      ss.updated_at AS subscription_updated_at,
-      (SELECT COUNT(*)::int FROM app_users au WHERE au.merchant_id = m.id) AS staff_count,
-      (SELECT COUNT(*)::int FROM app_users au WHERE au.merchant_id = m.id AND au.status = 'ACTIVE') AS active_staff_count,
-      (SELECT MAX(au.last_login_at) FROM app_users au WHERE au.merchant_id = m.id) AS last_staff_login_at,
-      (SELECT COUNT(*)::int FROM usage_balances ub WHERE ub.merchant_id = m.id) AS usage_balance_count,
-      (SELECT COALESCE(SUM(ub.used), 0)::int FROM usage_balances ub WHERE ub.merchant_id = m.id) AS usage_used_total,
-      (SELECT MAX(ub.updated_at) FROM usage_balances ub WHERE ub.merchant_id = m.id) AS usage_updated_at,
-      (SELECT COUNT(*)::int FROM usage_events ue WHERE ue.merchant_id = m.id) AS usage_event_count,
-      (SELECT MAX(ue.created_at) FROM usage_events ue WHERE ue.merchant_id = m.id) AS last_usage_event_at,
-      (SELECT COUNT(*)::int FROM entitlements e WHERE e.merchant_id = m.id) AS entitlement_count,
-      (SELECT COUNT(*)::int FROM feature_flags ff WHERE ff.merchant_id = m.id) AS feature_flag_count,
-      (SELECT COUNT(*)::int FROM remote_config rc WHERE rc.merchant_id = m.id) AS remote_config_count,
-      GREATEST(
-        m.updated_at,
-        COALESCE(ss.updated_at, 0),
-        COALESCE((SELECT MAX(au.updated_at) FROM app_users au WHERE au.merchant_id = m.id), 0),
-        COALESCE((SELECT MAX(ub.updated_at) FROM usage_balances ub WHERE ub.merchant_id = m.id), 0)
-      ) AS last_operational_update_at
-    FROM merchants m
-    LEFT JOIN subscription_state ss ON ss.merchant_id = m.id
-    WHERE m.id = $1
-  `;
     try {
-        const result = await pool.query(sql, [merchantId]);
-        if (result.rowCount === 0) {
+        const detail = await (0, admin_firestore_js_1.getMerchantDetail)(merchantId);
+        if (!detail) {
             return res
                 .status(404)
                 .json({ success: false, message: 'Merchant not found' });
         }
-        return res.json({
-            success: true,
-            data: (0, admin_api_contracts_js_1.toAdminMerchantDetail)(result.rows[0]),
-        });
+        return res.json({ success: true, data: (0, admin_api_contracts_js_1.toAdminMerchantDetail)(detail) });
     }
     catch (error) {
         return respondAdminServerError(res, 'get_merchant_detail', error);
     }
 });
 adminRouter.get('/plans', async (_req, res) => {
-    const sql = `
-    SELECT
-      p.plan_code,
-      p.version,
-      p.name,
-      p.is_active,
-      p.created_at,
-      p.updated_at,
-      COALESCE(
-        jsonb_agg(
-          DISTINCT jsonb_build_object(
-            'pricing_version', pp.pricing_version,
-            'currency', pp.currency,
-            'amount', pp.amount,
-            'billing_period', pp.billing_period,
-            'is_active', pp.is_active,
-            'created_at', pp.created_at,
-            'updated_at', pp.updated_at
-          )
-        ) FILTER (WHERE pp.plan_code IS NOT NULL),
-        '[]'::jsonb
-      ) AS prices,
-      COALESCE(
-        jsonb_agg(
-          DISTINCT jsonb_build_object(
-            'feature_key', pf.feature_key,
-            'is_enabled', pf.is_enabled,
-            'limit_value', pf.limit_value,
-            'unit', pf.unit,
-            'updated_at', pf.updated_at
-          )
-        ) FILTER (WHERE pf.plan_code IS NOT NULL),
-        '[]'::jsonb
-      ) AS features
-    FROM plans p
-    LEFT JOIN plan_prices pp ON pp.plan_code = p.plan_code
-    LEFT JOIN plan_features pf
-      ON pf.plan_code = p.plan_code AND pf.plan_version = p.version
-    GROUP BY
-      p.plan_code,
-      p.version,
-      p.name,
-      p.is_active,
-      p.created_at,
-      p.updated_at
-    ORDER BY p.is_active DESC, p.plan_code ASC, p.version DESC
-  `;
     try {
-        const result = await pool.query(sql);
-        return res.json({ success: true, data: result.rows.map(admin_api_contracts_js_1.toAdminPlan) });
+        const plans = await (0, admin_firestore_js_1.listPlans)();
+        return res.json({ success: true, data: plans.map(admin_api_contracts_js_1.toAdminPlan) });
     }
     catch (error) {
         return respondAdminServerError(res, 'get_plans', error);
     }
 });
+/*
+ * The console's write surfaces.
+ *
+ * Every one records an audit entry naming the operator, which is why the portal
+ * forwards each person's own token instead of holding a credential. The audit
+ * write is deliberately allowed to fail without failing the change: an operator
+ * who saw an error would retry and apply the change twice.
+ */
+function auditActorFrom(req) {
+    return {
+        appUserId: req.appUserId ?? null,
+        firebaseUid: req.auth?.uid ?? null,
+        role: req.appUserRole ?? null,
+    };
+}
 adminRouter.post('/merchants/:merchantId/entitlements', async (req, res) => {
     const merchantId = isNonEmptyString(req.params.merchantId)
         ? req.params.merchantId.trim()
@@ -699,72 +531,30 @@ adminRouter.post('/merchants/:merchantId/entitlements', async (req, res) => {
             .status(400)
             .json({ success: false, message: 'Missing entitlement override data' });
     }
-    const client = await pool.connect();
-    const now = Date.now();
-    const entitlementId = `${merchantId}_${featureKey}`;
     try {
-        await client.query('BEGIN');
-        const merchantResult = await client.query('SELECT id FROM merchants WHERE id = $1', [merchantId]);
-        if (merchantResult.rowCount === 0) {
-            await client.query('ROLLBACK');
+        if (!(await (0, admin_firestore_js_1.merchantExists)(merchantId))) {
             return res
                 .status(404)
                 .json({ success: false, message: 'Merchant not found' });
         }
-        const beforeResult = await client.query(`
-        SELECT id, feature_key, is_enabled, limit_value, unit, updated_at
-        FROM entitlements
-        WHERE merchant_id = $1 AND feature_key = $2
-      `, [merchantId, featureKey]);
-        const before = beforeResult.rows[0] ?? null;
-        const upsertSql = `
-      INSERT INTO entitlements (
-        id,
-        merchant_id,
-        feature_key,
-        is_enabled,
-        limit_value,
-        unit,
-        updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
-      ON CONFLICT (merchant_id, feature_key) DO UPDATE SET
-        id = EXCLUDED.id,
-        is_enabled = EXCLUDED.is_enabled,
-        limit_value = EXCLUDED.limit_value,
-        unit = EXCLUDED.unit,
-        updated_at = EXCLUDED.updated_at
-      RETURNING id, feature_key, is_enabled, limit_value, unit, updated_at
-    `;
-        const upsertResult = await client.query(upsertSql, [
-            entitlementId,
+        const { before, after } = await (0, admin_firestore_js_1.upsertEntitlement)({
             merchantId,
             featureKey,
             isEnabled,
-            limitValue,
-            unit,
-            now,
-        ]);
-        const after = upsertResult.rows[0] ?? null;
-        await recordAdminAuditEvent(client, req, {
+            limitValue: limitValue ?? null,
+            unit: unit ?? null,
+        });
+        await (0, admin_audit_js_1.recordAuditEvent)(auditActorFrom(req), {
             action: 'entitlement.override',
             targetType: 'entitlement',
-            targetId: entitlementId,
+            targetId: `${merchantId}_${featureKey}`,
             merchantId,
-            details: {
-                feature_key: featureKey,
-                before,
-                after,
-            },
+            details: { feature_key: featureKey, before, after },
         });
-        await client.query('COMMIT');
         return res.json({ success: true, data: after });
     }
     catch (error) {
-        await client.query('ROLLBACK');
         return respondAdminServerError(res, 'override_entitlement', error);
-    }
-    finally {
-        client.release();
     }
 });
 adminRouter.post('/plans', async (req, res) => {
@@ -774,52 +564,21 @@ adminRouter.post('/plans', async (req, res) => {
     const name = pickString(payload, 'name');
     const isActive = pickBoolean(payload, 'is_active') ?? true;
     if (!planCode || version == null || !name) {
-        return res
-            .status(400)
-            .json({ success: false, message: 'Missing plan data' });
+        return res.status(400).json({ success: false, message: 'Missing plan data' });
     }
-    const now = Date.now();
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
-        if (isActive) {
-            await client.query('UPDATE plans SET is_active = false, updated_at = $2 WHERE plan_code = $1', [planCode, now]);
-        }
-        const sql = `
-      INSERT INTO plans (
-        plan_code,
-        version,
-        name,
-        is_active,
-        created_at,
-        updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6)
-      ON CONFLICT (plan_code, version) DO UPDATE SET
-        name = EXCLUDED.name,
-        is_active = EXCLUDED.is_active,
-        updated_at = EXCLUDED.updated_at
-    `;
-        await client.query(sql, [planCode, version, name, isActive, now, now]);
-        await recordAdminAuditEvent(client, req, {
+        await (0, admin_firestore_js_1.upsertPlan)({ planCode, version, name, isActive });
+        await (0, admin_audit_js_1.recordAuditEvent)(auditActorFrom(req), {
             action: 'plan.upsert',
             targetType: 'plan',
-            targetId: `${planCode}@${version}`,
-            details: {
-                plan_code: planCode,
-                version,
-                name,
-                is_active: isActive,
-            },
+            targetId: planCode,
+            merchantId: null,
+            details: { plan_code: planCode, version, name, is_active: isActive },
         });
-        await client.query('COMMIT');
         return res.json({ success: true });
     }
     catch (error) {
-        await client.query('ROLLBACK');
         return respondAdminServerError(res, 'upsert_plan', error);
-    }
-    finally {
-        client.release();
     }
 });
 adminRouter.post('/prices', async (req, res) => {
@@ -829,68 +588,35 @@ adminRouter.post('/prices', async (req, res) => {
     const currency = pickString(payload, 'currency');
     const amount = pickNumber(payload, 'amount');
     const billingPeriod = pickString(payload, 'billing_period') ?? 'monthly';
-    const isActive = pickBoolean(payload, 'is_active') ?? true;
     if (!planCode || pricingVersion == null || !currency || amount == null) {
         return res
             .status(400)
             .json({ success: false, message: 'Missing pricing data' });
     }
-    const now = Date.now();
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
-        if (isActive) {
-            await client.query('UPDATE plan_prices SET is_active = false, updated_at = $3 WHERE plan_code = $1 AND currency = $2', [planCode, currency, now]);
-        }
-        const sql = `
-      INSERT INTO plan_prices (
-        plan_code,
-        pricing_version,
-        currency,
-        amount,
-        billing_period,
-        is_active,
-        created_at,
-        updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-      ON CONFLICT (plan_code, pricing_version, currency) DO UPDATE SET
-        amount = EXCLUDED.amount,
-        billing_period = EXCLUDED.billing_period,
-        is_active = EXCLUDED.is_active,
-        updated_at = EXCLUDED.updated_at
-    `;
-        await client.query(sql, [
+        await (0, admin_firestore_js_1.upsertPlanPrice)({
             planCode,
-            pricingVersion,
             currency,
             amount,
             billingPeriod,
-            isActive,
-            now,
-            now,
-        ]);
-        await recordAdminAuditEvent(client, req, {
+            pricingVersion,
+        });
+        await (0, admin_audit_js_1.recordAuditEvent)(auditActorFrom(req), {
             action: 'price.upsert',
-            targetType: 'plan_price',
-            targetId: `${planCode}@${pricingVersion}:${currency}`,
+            targetType: 'price',
+            targetId: planCode,
+            merchantId: null,
             details: {
                 plan_code: planCode,
-                pricing_version: pricingVersion,
-                currency,
                 amount,
+                currency,
                 billing_period: billingPeriod,
-                is_active: isActive,
             },
         });
-        await client.query('COMMIT');
         return res.json({ success: true });
     }
     catch (error) {
-        await client.query('ROLLBACK');
         return respondAdminServerError(res, 'upsert_price', error);
-    }
-    finally {
-        client.release();
     }
 });
 adminRouter.post('/plans/:planCode/features', async (req, res) => {
@@ -898,75 +624,43 @@ adminRouter.post('/plans/:planCode/features', async (req, res) => {
         ? req.params.planCode.trim()
         : null;
     const payload = req.body ?? {};
-    const planVersion = pickNumber(payload, 'plan_version') ?? pickNumber(payload, 'planVersion');
     const featureKey = pickString(payload, 'feature_key') ?? pickString(payload, 'featureKey');
     const isEnabled = pickBoolean(payload, 'is_enabled') ?? pickBoolean(payload, 'isEnabled');
     const limitValue = pickNumber(payload, 'limit_value') ?? pickNumber(payload, 'limitValue');
-    const unit = pickString(payload, 'unit');
-    if (!planCode || planVersion == null || !featureKey || isEnabled == null) {
+    if (!planCode || !featureKey || isEnabled == null) {
         return res
             .status(400)
             .json({ success: false, message: 'Missing plan feature data' });
     }
-    const now = Date.now();
-    const client = await pool.connect();
     try {
-        await client.query('BEGIN');
-        const planResult = await client.query('SELECT plan_code, version FROM plans WHERE plan_code = $1 AND version = $2', [planCode, planVersion]);
-        if (planResult.rowCount === 0) {
-            await client.query('ROLLBACK');
-            return res
-                .status(404)
-                .json({ success: false, message: 'Plan version not found' });
-        }
-        const sql = `
-      INSERT INTO plan_features (
-        plan_code,
-        plan_version,
-        feature_key,
-        is_enabled,
-        limit_value,
-        unit,
-        updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7)
-      ON CONFLICT (plan_code, plan_version, feature_key) DO UPDATE SET
-        is_enabled = EXCLUDED.is_enabled,
-        limit_value = EXCLUDED.limit_value,
-        unit = EXCLUDED.unit,
-        updated_at = EXCLUDED.updated_at
-      RETURNING feature_key, is_enabled, limit_value, unit, updated_at
-    `;
-        const result = await client.query(sql, [
+        const result = await (0, admin_firestore_js_1.setPlanFeature)({
             planCode,
-            planVersion,
             featureKey,
             isEnabled,
-            limitValue,
-            unit,
-            now,
-        ]);
-        await recordAdminAuditEvent(client, req, {
+            limitValue: limitValue ?? null,
+        });
+        if (!result.exists) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Plan not found' });
+        }
+        await (0, admin_audit_js_1.recordAuditEvent)(auditActorFrom(req), {
             action: 'plan_feature.upsert',
             targetType: 'plan_feature',
-            targetId: `${planCode}@${planVersion}:${featureKey}`,
+            targetId: `${planCode}:${featureKey}`,
+            merchantId: null,
             details: {
                 plan_code: planCode,
-                plan_version: planVersion,
                 feature_key: featureKey,
                 is_enabled: isEnabled,
                 limit_value: limitValue,
-                unit,
+                features_after: result.features,
             },
         });
-        await client.query('COMMIT');
-        return res.json({ success: true, data: result.rows[0] });
+        return res.json({ success: true, data: { features: result.features } });
     }
     catch (error) {
-        await client.query('ROLLBACK');
         return respondAdminServerError(res, 'upsert_plan_feature', error);
-    }
-    finally {
-        client.release();
     }
 });
 adminRouter.post('/customer-core/business-customers/backfill', async (req, res) => {
@@ -1041,91 +735,40 @@ adminRouter.get('/merchants/:merchantId/entitlements', async (req, res) => {
             .json({ success: false, message: 'Missing merchant id' });
     }
     try {
-        const merchantResult = await pool.query('SELECT id FROM merchants WHERE id = $1', [merchantId]);
-        if (merchantResult.rowCount === 0) {
+        if (!(await (0, admin_firestore_js_1.merchantExists)(merchantId))) {
             return res
                 .status(404)
                 .json({ success: false, message: 'Merchant not found' });
         }
-        const result = await pool.query(`
-        SELECT id, merchant_id, feature_key, is_enabled, limit_value, unit, updated_at
-        FROM entitlements
-        WHERE merchant_id = $1
-        ORDER BY feature_key ASC
-      `, [merchantId]);
+        const entitlements = await (0, admin_firestore_js_1.listEntitlements)(merchantId);
         return res.json({
             success: true,
-            data: result.rows.map(admin_api_contracts_js_1.toAdminEntitlement),
+            data: entitlements.map(admin_api_contracts_js_1.toAdminEntitlement),
         });
     }
     catch (error) {
         return respondAdminServerError(res, 'get_merchant_entitlements', error);
     }
 });
-/**
- * Staff accounts across every merchant.
- *
- * There was no way to see who can sign in to a business without opening the
- * Firebase console. Phone is the identifier these accounts are keyed on, so it
- * is both the search field and what comes back.
- */
 adminRouter.get('/access/staff', async (req, res) => {
     const limit = clampLimit(req.query.limit, 50, 100);
     const offset = Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0));
-    const search = pickQueryString(req.query.search);
-    const merchantId = pickQueryString(req.query.merchant_id) ??
-        pickQueryString(req.query.merchantId);
-    const status = pickQueryString(req.query.status);
-    const role = pickQueryString(req.query.role);
-    const params = [];
-    const where = [];
-    if (search) {
-        params.push(`%${search}%`);
-        where.push(`(au.phone ILIKE $${params.length} OR au.id ILIKE $${params.length})`);
-    }
-    if (merchantId) {
-        params.push(merchantId);
-        where.push(`au.merchant_id = $${params.length}`);
-    }
-    if (status) {
-        params.push(status.toUpperCase());
-        where.push(`UPPER(au.status) = $${params.length}`);
-    }
-    if (role) {
-        params.push(role.toUpperCase());
-        where.push(`UPPER(au.role) = $${params.length}`);
-    }
-    const whereSql = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';
-    params.push(limit);
-    const limitParam = params.length;
-    params.push(offset);
-    const offsetParam = params.length;
-    const sql = `
-    SELECT
-      au.id,
-      au.merchant_id,
-      m.name AS merchant_name,
-      au.phone,
-      au.role,
-      au.status,
-      au.invited_at,
-      au.accepted_at,
-      au.deactivated_at,
-      au.last_login_at,
-      au.created_at,
-      au.updated_at
-    FROM app_users au
-    LEFT JOIN merchants m ON m.id = au.merchant_id
-    ${whereSql}
-    ORDER BY au.updated_at DESC, au.id ASC
-    LIMIT $${limitParam} OFFSET $${offsetParam}
-  `;
     try {
-        const result = await pool.query(sql, params);
+        const page = await (0, admin_firestore_js_1.listStaff)({
+            search: pickQueryString(req.query.search) ?? undefined,
+            merchantId: pickQueryString(req.query.merchant_id) ??
+                pickQueryString(req.query.merchantId) ??
+                undefined,
+            status: pickQueryString(req.query.status) ?? undefined,
+            role: pickQueryString(req.query.role) ?? undefined,
+            limit,
+            offset,
+        });
         return res.json({
             success: true,
-            data: result.rows.map(admin_api_contracts_js_1.toAdminStaffUser),
-            paging: (0, admin_api_contracts_js_1.toAdminPaging)(limit, offset, result.rows.length),
+            data: page.items.map(admin_api_contracts_js_1.toAdminStaffUser),
+            paging: { limit, offset, has_more: page.hasMore },
+            truncated: page.truncated,
         });
     }
     catch (error) {
@@ -1133,13 +776,11 @@ adminRouter.get('/access/staff', async (req, res) => {
     }
 });
 /**
- * Who currently holds an administrator claim.
+ * Cap on the Auth directory scan.
  *
- * Read from Firebase Auth, because that is where the claim lives — there is no
- * table of administrators to query. `listUsers` pages through the whole
- * directory, so this is capped: it answers "who has this power", and a
- * directory large enough to exceed the cap needs a different mechanism than a
- * scan anyway.
+ * listUsers pages through every account in the project. This answers 'who
+ * holds this power', and a directory large enough to exceed the cap needs a
+ * different mechanism than a scan.
  */
 const ADMIN_DIRECTORY_SCAN_LIMIT = 2000;
 adminRouter.get('/access/admins', async (_req, res) => {
@@ -1436,99 +1077,6 @@ adminRouter.get('/nfc-cards', async (req, res) => {
  * it was deployed needs this once. Pages through `businesses` with a cursor,
  * like the other maintenance jobs, and defaults to a dry run.
  */
-adminRouter.post('/merchants/backfill', async (req, res) => {
-    const payload = req.body != null && typeof req.body === 'object'
-        ? req.body
-        : {};
-    const dryRun = maybePayloadBoolean(payload, 'dry_run', 'dryRun') ?? true;
-    const limit = clampLimit(payload.limit, 50, 200);
-    const startAfter = maybePayloadString(payload, 'start_after_merchant_id', 'startAfterMerchantId');
-    const client = await pool.connect();
-    try {
-        // Built inside the try: anything that throws while composing the query
-        // must become a 500, not an unhandled rejection that kills the worker.
-        let query = admin
-            .firestore()
-            .collection('businesses')
-            .orderBy(firestore_1.FieldPath.documentId())
-            .limit(limit);
-        if (startAfter)
-            query = query.startAfter(startAfter);
-        const snapshot = await query.get();
-        const now = Date.now();
-        const results = [];
-        let writtenCount = 0;
-        let skippedCount = 0;
-        let conflictCount = 0;
-        for (const doc of snapshot.docs) {
-            const projection = (0, merchant_projection_js_1.projectBusinessToMerchant)(doc.id, snapshotDataRecord(doc), now);
-            if (projection.status === 'skipped') {
-                skippedCount += 1;
-                results.push({
-                    merchant_id: doc.id,
-                    status: 'skipped',
-                    reason: projection.reason,
-                    message: merchant_projection_js_1.SKIP_EXPLANATIONS[projection.reason],
-                });
-                continue;
-            }
-            if (dryRun) {
-                writtenCount += 1;
-                results.push({
-                    merchant_id: doc.id,
-                    status: 'would_write',
-                    name: projection.row.name,
-                });
-                continue;
-            }
-            const outcome = await upsertProjectedMerchant(client, projection.row);
-            if (outcome === 'phone_conflict') {
-                conflictCount += 1;
-                results.push({
-                    merchant_id: doc.id,
-                    status: 'phone_conflict',
-                    message: 'Outro negócio já tem este telefone. merchants.phone é único.',
-                });
-                continue;
-            }
-            writtenCount += 1;
-            results.push({ merchant_id: doc.id, status: 'written' });
-        }
-        const nextCursor = snapshot.docs.length === limit
-            ? snapshot.docs[snapshot.docs.length - 1].id
-            : null;
-        if (!dryRun && writtenCount > 0) {
-            await recordAdminAuditEvent(client, req, {
-                action: 'merchant.backfill',
-                targetType: 'merchant',
-                targetId: null,
-                details: {
-                    written: writtenCount,
-                    skipped: skippedCount,
-                    conflicts: conflictCount,
-                },
-            });
-        }
-        return res.json({
-            success: true,
-            data: {
-                dry_run: dryRun,
-                scanned: snapshot.docs.length,
-                written: writtenCount,
-                skipped: skippedCount,
-                phone_conflicts: conflictCount,
-                next_cursor: nextCursor,
-                results,
-            },
-        });
-    }
-    catch (error) {
-        return respondAdminServerError(res, 'backfill_merchants', error);
-    }
-    finally {
-        client.release();
-    }
-});
 app.use('/admin', adminRouter);
 app.get('/customer/session', async (req, res) => {
     try {
@@ -3090,76 +2638,6 @@ function pickBoolean(payload, key) {
     }
     return null;
 }
-/* -- businesses -> merchants projection ---------------------------------- */
-/**
- * Writes one projected business into `merchants`.
- *
- * `phone` is UNIQUE, so two businesses sharing a number cannot both own the
- * row. Rather than letting the constraint abort a whole backfill, the conflict
- * is caught and reported: it means two sign-ups used one number, which is a
- * data question for a person, not something this job should guess at.
- */
-async function upsertProjectedMerchant(client, row) {
-    const owner = await client.query('SELECT id FROM merchants WHERE phone = $1', [row.phone]);
-    if ((owner.rowCount ?? 0) > 0 && owner.rows[0].id !== row.id) {
-        return 'phone_conflict';
-    }
-    await client.query(`
-      INSERT INTO merchants (id, name, phone, created_at, updated_at)
-      VALUES ($1,$2,$3,$4,$5)
-      ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name,
-        phone = EXCLUDED.phone,
-        updated_at = EXCLUDED.updated_at
-    `, [row.id, row.name, row.phone, row.created_at, row.updated_at]);
-    return 'written';
-}
-/**
- * Keeps `merchants` in step with Firestore as businesses are created and
- * edited.
- *
- * Modelled on retentionDomainEventPostgresProjection, which already projects
- * Firestore writes into PostgreSQL. Without this the table has no writer, and
- * every admin read surface built on it returns nothing — which is exactly what
- * was happening.
- *
- * A deletion is deliberately not propagated: `merchants` is referenced by
- * app_users, entitlements and subscription_state, so removing the row would
- * either fail on the foreign keys or orphan real operational history.
- */
-exports.merchantProfilePostgresProjection = (0, firestore_2.onDocumentWritten)('businesses/{merchantId}', async (event) => {
-    const afterSnapshot = event.data?.after;
-    if (!afterSnapshot?.exists)
-        return;
-    const merchantId = isNonEmptyString(event.params.merchantId)
-        ? event.params.merchantId.trim()
-        : '';
-    if (!merchantId)
-        return;
-    const result = (0, merchant_projection_js_1.projectBusinessToMerchant)(merchantId, snapshotDataRecord(afterSnapshot), Date.now());
-    if (result.status === 'skipped') {
-        // An unfinished sign-up is the normal case here, not a failure. Throwing
-        // would make Firestore retry a document that cannot become valid until a
-        // person finishes filling it in.
-        console.info('merchant_projection_skipped', {
-            merchant_id: merchantId,
-            reason: result.reason,
-        });
-        return;
-    }
-    const client = await pool.connect();
-    try {
-        const outcome = await upsertProjectedMerchant(client, result.row);
-        if (outcome === 'phone_conflict') {
-            console.warn('merchant_projection_phone_conflict', {
-                merchant_id: merchantId,
-            });
-        }
-    }
-    finally {
-        client.release();
-    }
-});
 exports.retentionDomainEventPostgresProjection = (0, firestore_2.onDocumentWritten)('businesses/{merchantId}/domain_events/{eventId}', async (event) => {
     const beforeSnapshot = event.data?.before;
     const afterSnapshot = event.data?.after;

@@ -437,6 +437,14 @@ service cloud.firestore {
     }
 
     // Global plan catalog used by onboarding/settings plan selectors.
+    // Administrative audit trail. Written only by the Admin SDK, which
+    // bypasses these rules; no client ever reads or writes it. Spelled out
+    // rather than left to the default deny so the intent is explicit next to
+    // the collections that are readable.
+    match /admin_audit_events/{eventId} {
+      allow read, write: if false;
+    }
+
     match /plans/{planId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
