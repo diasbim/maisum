@@ -231,7 +231,6 @@ export async function savePlanFeatureAction(
 /* ---------------------------------------------------------------------- jobs */
 
 const JOB_BY_KEY: Record<string, JobPath> = {
-  merchantsBackfill: JOB_PATHS.merchantsBackfill,
   businessCustomers: JOB_PATHS.businessCustomersBackfill,
   nfcCards: JOB_PATHS.nfcCardsBackfill,
   loyaltyBackfill: JOB_PATHS.loyaltyLedgerBackfill,
@@ -262,11 +261,6 @@ function jobPayload(key: string, form: FormData): Record<string, unknown> {
   if (limit.ok && limit.value != null) payload.limit = limit.value;
 
   switch (key) {
-    case 'merchantsBackfill':
-      payload.dry_run = !checkbox(form, 'apply');
-      put('start_after_merchant_id', optionalText(form, 'cursor'));
-      break;
-
     case 'businessCustomers':
       payload.dry_run = !checkbox(form, 'apply');
       put('start_after_customer_id', optionalText(form, 'cursor'));

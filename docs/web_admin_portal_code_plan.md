@@ -55,6 +55,22 @@ Pelo caminho: `admin.firestore.FieldPath` era indefinido sob o emulador, o que
 partia os cinco handlers paginados. Passaram a importar `FieldPath` de
 `firebase-admin/firestore`.
 
+**v0.7** — **Consola migrada para Firestore.** Não existe PostgreSQL ligado em
+produção: `.env.loyaltyos-fc4dd` não define `PG_CONNECTION_STRING`, que aparece
+numa única linha em todo o repositório — a que a lê. Todos os endpoints `/admin`
+devolviam 500 em produção.
+
+Tudo o que a consola precisa já estava em Firestore, nos caminhos que o
+`FirestoreSyncService._collectionMap` sincroniza. O router de administração
+passou a lê-los e tem agora **zero** utilizações do `pool`. Sem junções: a lista
+de negócios usa três *collection group queries* juntadas em memória, três
+leituras por página em vez de três por negócio.
+
+`admin_audit_events` era a única coisa sem casa em Firestore. Passou a coleção
+de topo, fechada a clientes nas regras.
+
+A projeção `businesses` → `merchants` da v0.6 foi retirada: já não há destino.
+
 ---
 
 ## 1. Resumo executivo

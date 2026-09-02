@@ -313,7 +313,6 @@ export async function upsertPlanFeature(input: {
 export type JobResult = Record<string, unknown>;
 
 export const JOB_PATHS = {
-  merchantsBackfill: '/admin/merchants/backfill',
   businessCustomersBackfill: '/admin/customer-core/business-customers/backfill',
   nfcCardsBackfill: '/admin/customer-core/nfc-cards/backfill',
   loyaltyLedgerBackfill: '/admin/loyalty/ledger/backfill',

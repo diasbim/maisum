@@ -15,51 +15,80 @@ class RoleGateScreen extends StatelessWidget {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
-        systemNavigationBarColor: AppColors.secondary,
+        systemNavigationBarColor: AppColors.surfaceContainerLow,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: AppColors.secondary,
+        backgroundColor: AppColors.surfaceContainerLow,
         body: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(child: _RoleGateHero(theme: theme)),
             SliverToBoxAdapter(
-              child: _RolePanel(
-                key: const Key('business_owner_role'),
-                background: AppColors.primaryDark,
-                eyebrow: 'PARA NEGÓCIOS',
-                eyebrowColor: AppColors.secondary,
-                title: 'Sou proprietário de negócio',
-                titleColor: AppColors.white,
-                description: 'Gerir clientes, vendas, recompensas e equipa '
-                    'num só lugar.',
-                descriptionColor: AppColors.white.withValues(alpha: 0.72),
-                arrowBackground: AppColors.secondary,
-                arrowForeground: AppColors.primaryDarker,
-                semanticLabel: 'Sou proprietário de negócio. '
-                    'Entrar na área do negócio.',
-                onPressed: () => context.go('/login?source=role'),
-              ),
-            ),
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _RolePanel(
-                key: const Key('customer_role'),
-                background: AppColors.secondary,
-                eyebrow: 'PARA CLIENTES',
-                eyebrowColor: AppColors.onSurfaceVariant,
-                title: 'Sou cliente',
-                titleColor: AppColors.primaryDarker,
-                description: 'Consultar pontos, descobrir prémios e '
-                    'apresentar o seu código.',
-                descriptionColor:
-                    AppColors.primaryDarker.withValues(alpha: 0.72),
-                arrowBackground: AppColors.primaryDarker,
-                arrowForeground: AppColors.white,
-                semanticLabel: 'Sou cliente. Entrar na área do cliente.',
-                onPressed: () =>
-                    context.go('/customer-login/phone?source=role'),
-                footer: const _RoleSwitchNote(),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppLayout.contentMaxWidth,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.xxl,
+                      AppSpacing.xl,
+                      AppSpacing.xxxxl,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _RolePanel(
+                          key: const Key('business_owner_role'),
+                          icon: LucideIcons.building2,
+                          accent: AppColors.primary,
+                          accentSoft: AppColors.primary.withValues(
+                            alpha: 0.08,
+                          ),
+                          eyebrow: 'PARA NEGÓCIOS',
+                          title: 'Sou proprietário de negócio',
+                          description: 'Gerir clientes, vendas, recompensas '
+                              'e equipa num só lugar.',
+                          features: const [
+                            'Vendas e equipa em tempo real',
+                            'Campanhas de fidelização à medida',
+                          ],
+                          ctaLabel: 'Aceder à área de negócio',
+                          semanticLabel: 'Sou proprietário de negócio. '
+                              'Entrar na área do negócio.',
+                          onPressed: () =>
+                              context.go('/login?source=role'),
+                        ),
+                        const SizedBox(height: AppSpacing.lg),
+                        _RolePanel(
+                          key: const Key('customer_role'),
+                          icon: LucideIcons.userRound,
+                          accent: AppColors.secondaryForeground,
+                          accentSoft: AppColors.secondary.withValues(
+                            alpha: 0.22,
+                          ),
+                          eyebrow: 'PARA CLIENTES',
+                          title: 'Sou cliente',
+                          description: 'Consultar pontos, descobrir prémios '
+                              'e apresentar o seu código.',
+                          features: const [
+                            'Pontos e prémios em tempo real',
+                            'Código pessoal em qualquer loja',
+                          ],
+                          ctaLabel: 'Aceder à área de cliente',
+                          semanticLabel:
+                              'Sou cliente. Entrar na área do cliente.',
+                          onPressed: () => context
+                              .go('/customer-login/phone?source=role'),
+                        ),
+                        const SizedBox(height: AppSpacing.xxl),
+                        const _RoleSwitchNote(),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
@@ -75,183 +104,256 @@ class _RoleGateHero extends StatelessWidget {
   final ThemeData theme;
 
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [AppColors.primaryDarker, AppColors.primary],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(AppRadius.xxl),
+          bottomRight: Radius.circular(AppRadius.xxl),
         ),
-        child: SafeArea(
-          bottom: false,
-          child: Center(
-            child: ConstrainedBox(
-              constraints:
-                  const BoxConstraints(maxWidth: AppLayout.contentMaxWidth),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.xl,
-                  AppSpacing.xl,
-                  AppSpacing.xl,
-                  AppSpacing.xxxl,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.md,
-                        vertical: AppSpacing.sm,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.secondary.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(AppRadius.pill),
-                        border: Border.all(
-                          color: AppColors.secondary.withValues(alpha: 0.28),
-                        ),
-                      ),
-                      child: const Text(
-                        'ESCOLHA O SEU PERFIL',
-                        style: TextStyle(
-                          color: AppColors.secondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 0.9,
-                        ),
-                      ),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppColors.primaryDarker, AppColors.primary],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                top: -60,
+                right: -40,
+                child: Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        AppColors.secondary.withValues(alpha: 0.28),
+                        AppColors.secondary.withValues(alpha: 0),
+                      ],
                     ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Text(
-                      'Como quer usar\na MaisUm?',
-                      style: theme.textTheme.displaySmall?.copyWith(
-                        color: AppColors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 34,
-                        height: 1.05,
-                        letterSpacing: -0.8,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      'Cada perfil tem uma experiência própria.',
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: AppColors.white.withValues(alpha: 0.6),
-                        height: 1.45,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              SafeArea(
+                bottom: false,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      maxWidth: AppLayout.contentMaxWidth,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.xl,
+                        AppSpacing.xl,
+                        AppSpacing.xl,
+                        AppSpacing.xxxl,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm,
+                            ),
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.secondary.withValues(alpha: 0.14),
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.pill),
+                              border: Border.all(
+                                color: AppColors.secondary.withValues(
+                                  alpha: 0.28,
+                                ),
+                              ),
+                            ),
+                            child: const Text(
+                              'ESCOLHA O SEU PERFIL',
+                              style: TextStyle(
+                                color: AppColors.secondary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.9,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          Text(
+                            'Como quer usar\na MaisUm?',
+                            style: theme.textTheme.displaySmall?.copyWith(
+                              color: AppColors.white,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 34,
+                              height: 1.05,
+                              letterSpacing: -0.8,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          Text(
+                            'Cada perfil tem uma experiência própria, '
+                            'criada à medida.',
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: AppColors.white.withValues(alpha: 0.6),
+                              height: 1.45,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );
 }
 
-class _RolePanel extends StatelessWidget {
+class _RolePanel extends StatefulWidget {
   const _RolePanel({
     super.key,
-    required this.background,
+    required this.icon,
+    required this.accent,
+    required this.accentSoft,
     required this.eyebrow,
-    required this.eyebrowColor,
     required this.title,
-    required this.titleColor,
     required this.description,
-    required this.descriptionColor,
-    required this.arrowBackground,
-    required this.arrowForeground,
+    required this.features,
+    required this.ctaLabel,
     required this.semanticLabel,
     required this.onPressed,
-    this.footer,
   });
 
-  final Color background;
+  final IconData icon;
+  final Color accent;
+  final Color accentSoft;
   final String eyebrow;
-  final Color eyebrowColor;
   final String title;
-  final Color titleColor;
   final String description;
-  final Color descriptionColor;
-  final Color arrowBackground;
-  final Color arrowForeground;
+  final List<String> features;
+  final String ctaLabel;
   final String semanticLabel;
   final VoidCallback onPressed;
-  final Widget? footer;
+
+  @override
+  State<_RolePanel> createState() => _RolePanelState();
+}
+
+class _RolePanelState extends State<_RolePanel> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Semantics(
       button: true,
-      label: semanticLabel,
-      child: Material(
-        color: background,
-        child: InkWell(
-          onTap: onPressed,
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints:
-                  const BoxConstraints(maxWidth: AppLayout.contentMaxWidth),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.xl,
-                  AppSpacing.xxxxl,
-                  AppSpacing.xl,
-                  AppSpacing.xxxxl,
+      label: widget.semanticLabel,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            border: Border.all(
+              color: _hovered
+                  ? widget.accent.withValues(alpha: 0.35)
+                  : AppColors.divider,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryDarker.withValues(
+                  alpha: _hovered ? 0.12 : 0.05,
                 ),
+                blurRadius: _hovered ? 28 : 16,
+                offset: Offset(0, _hovered ? 12 : 6),
+              ),
+            ],
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.xl),
+              onTap: widget.onPressed,
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                eyebrow,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: eyebrowColor,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 0.8,
-                                ),
-                              ),
-                              const SizedBox(height: AppSpacing.sm),
-                              Text(
-                                title,
-                                style: theme.textTheme.headlineLarge?.copyWith(
-                                  color: titleColor,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 28,
-                                  height: 1.15,
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                            ],
+                        Container(
+                          width: 52,
+                          height: 52,
+                          decoration: BoxDecoration(
+                            color: widget.accentSoft,
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                          ),
+                          child: Icon(
+                            widget.icon,
+                            color: widget.accent,
+                            size: 24,
                           ),
                         ),
-                        const SizedBox(width: AppSpacing.lg),
-                        _RoleArrowButton(
-                          background: arrowBackground,
-                          foreground: arrowForeground,
+                        const Spacer(),
+                        Text(
+                          widget.eyebrow,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     Text(
-                      description,
+                      widget.title,
+                      style: theme.textTheme.headlineLarge?.copyWith(
+                        color: AppColors.primaryDarker,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 24,
+                        height: 1.15,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      widget.description,
                       style: theme.textTheme.bodyLarge?.copyWith(
-                        color: descriptionColor,
+                        color: AppColors.onSurfaceVariant,
                         height: 1.45,
                       ),
                     ),
-                    if (footer != null) ...[
-                      const SizedBox(height: AppSpacing.xl),
-                      footer!,
+                    const SizedBox(height: AppSpacing.lg),
+                    for (final feature in widget.features) ...[
+                      _FeatureRow(text: feature, accent: widget.accent),
+                      const SizedBox(height: AppSpacing.sm),
                     ],
+                    const SizedBox(height: AppSpacing.sm),
+                    const Divider(color: AppColors.divider, height: 1),
+                    const SizedBox(height: AppSpacing.lg),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.ctaLabel,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: widget.accent,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        _RoleArrowButton(accent: widget.accent),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -263,24 +365,48 @@ class _RolePanel extends StatelessWidget {
   }
 }
 
-class _RoleArrowButton extends StatelessWidget {
-  const _RoleArrowButton({
-    required this.background,
-    required this.foreground,
-  });
+class _FeatureRow extends StatelessWidget {
+  const _FeatureRow({required this.text, required this.accent});
 
-  final Color background;
-  final Color foreground;
+  final String text;
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) => Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(LucideIcons.check, size: 16, color: accent),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+          ),
+        ],
+      );
+}
+
+class _RoleArrowButton extends StatelessWidget {
+  const _RoleArrowButton({required this.accent});
+
+  final Color accent;
 
   @override
   Widget build(BuildContext context) => Container(
-        width: 52,
-        height: 52,
-        decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
         child: Icon(
-          Icons.arrow_forward_rounded,
-          color: foreground,
-          size: 22,
+          LucideIcons.arrowRight,
+          color: accent,
+          size: 18,
         ),
       );
 }
@@ -290,21 +416,33 @@ class _RoleSwitchNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = AppColors.primaryDarker.withValues(alpha: 0.65);
-    return Row(
-      children: [
-        Icon(LucideIcons.arrowLeftRight, size: 18, color: color),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Text(
-            'Pode mudar de perfil depois de terminar a sessão.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w600,
-                ),
+    const color = AppColors.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(LucideIcons.arrowLeftRight, size: 16, color: color),
+          const SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: Text(
+              'Pode mudar de perfil sempre que quiser, nas definições.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
