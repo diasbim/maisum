@@ -22,6 +22,8 @@
     "src/lib/admin-api-error.ts",
     "src/lib/admin-claims.ts",
     "src/lib/form-result.ts",
+    "src/lib/merchant-labels.ts",
+    "src/lib/merchant-list.ts",
     "src/lib/*.test.ts"
   ]
 }

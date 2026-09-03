@@ -65,6 +65,47 @@ const PAGE = { limit: 50, offset: 0 };
     strict_1.default.equal(staff.role, 'OWNER');
     strict_1.default.equal(staff.last_login_at, 1788307006310);
 });
+/* -------------------------------------------------------------------- sales */
+(0, node_test_1.default)('a sale keeps both status fields', () => {
+    const sale = (0, merchant_records_1.toSale)('s-1', {
+        amount: 350,
+        points: 35,
+        created_at: 1788288217358,
+        cancellation_status: 'CANCELLED',
+        confirmation_status: 'CONFIRMED',
+    });
+    strict_1.default.equal(sale.cancellation_status, 'CANCELLED');
+    strict_1.default.equal(sale.confirmation_status, 'CONFIRMED');
+});
+(0, node_test_1.default)('a sale amount written as a string is still an amount', () => {
+    // The app writes numbers, but a correction posted by hand or by an older
+    // build can arrive as a string, and a null amount prints as a dash on the
+    // customer's history — a visit that appears to have cost nothing.
+    const sale = (0, merchant_records_1.toSale)('s-1', { amount: '350.5', points: '35' });
+    strict_1.default.equal(sale.amount, 350.5);
+    strict_1.default.equal(sale.points, 35);
+});
+(0, node_test_1.default)('sales sort newest first, undated last', () => {
+    const sorted = (0, merchant_records_1.sortSales)([
+        (0, merchant_records_1.toSale)('a', { created_at: 100 }),
+        (0, merchant_records_1.toSale)('b', {}),
+        (0, merchant_records_1.toSale)('c', { created_at: 900 }),
+    ]);
+    strict_1.default.deepEqual(sorted.map((row) => row.id), ['c', 'a', 'b']);
+});
+/* ------------------------------------------------------------- the read cap */
+(0, node_test_1.default)('a collection sitting exactly on the cap is not truncated', () => {
+    // The reader asks for cap + 1 precisely so this case is distinguishable. Off
+    // by one here tells a business its list is incomplete when it is whole.
+    const capped = (0, merchant_records_1.capDocuments)([1, 2, 3], 3);
+    strict_1.default.equal(capped.truncated, false);
+    strict_1.default.deepEqual(capped.docs, [1, 2, 3]);
+});
+(0, node_test_1.default)('one document past the cap is truncated, and the extra is dropped', () => {
+    const capped = (0, merchant_records_1.capDocuments)([1, 2, 3, 4], 3);
+    strict_1.default.equal(capped.truncated, true);
+    strict_1.default.deepEqual(capped.docs, [1, 2, 3]);
+});
 /* ---------------------------------------------------------------- searching */
 (0, node_test_1.default)('search ignores accents and case', () => {
     strict_1.default.equal((0, merchant_records_1.fold)('João'), 'joao');

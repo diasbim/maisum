@@ -2,7 +2,19 @@ import 'server-only';
 
 import { AdminApiError, statusMessage } from './admin-api-error';
 import { serverConfig } from './env';
+import {
+  buildListQuery,
+  toMerchantList,
+  type ListQuery,
+  type MerchantList,
+} from './merchant-list';
 import { getPortalSession } from './session';
+
+export {
+  MERCHANT_PAGE_SIZE,
+  type ListQuery,
+  type MerchantList,
+} from './merchant-list';
 
 /**
  * The business owner's own view, over the same API the console uses.
@@ -104,22 +116,6 @@ export type MerchantStaff = {
   created_at: number | null;
   updated_at: number | null;
   last_login_at: number | null;
-};
-
-/** What a list screen needs: the rows, and whether they are all of them. */
-export type MerchantList<T> = {
-  items: T[];
-  hasMore: boolean;
-  total: number;
-  /** The read hit its cap, so `total` undercounts. Screens say so. */
-  truncated: boolean;
-};
-
-export type ListQuery = {
-  search?: string;
-  status?: string;
-  limit?: number;
-  offset?: number;
 };
 
 type Envelope<T> = {
@@ -228,28 +224,11 @@ export async function fetchMyEntitlements(): Promise<MerchantEntitlement[]> {
 
 /* -------------------------------------------------------------- the records */
 
-export const MERCHANT_PAGE_SIZE = 25;
-
-function query(params: ListQuery): string {
-  const search = new URLSearchParams();
-  if (params.search) search.set('search', params.search);
-  if (params.status) search.set('status', params.status);
-  search.set('limit', String(params.limit ?? MERCHANT_PAGE_SIZE));
-  if (params.offset) search.set('offset', String(params.offset));
-  return `?${search.toString()}`;
-}
-
 async function callList<T>(
   path: string,
   params: ListQuery,
 ): Promise<MerchantList<T>> {
-  const body = await call<T[]>(`${path}${query(params)}`);
-  return {
-    items: body.data ?? [],
-    hasMore: body.paging?.has_more ?? false,
-    total: body.total ?? (body.data?.length ?? 0),
-    truncated: body.truncated ?? false,
-  };
+  return toMerchantList(await call<T[]>(`${path}${buildListQuery(params)}`));
 }
 
 /**

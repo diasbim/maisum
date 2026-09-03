@@ -70,16 +70,17 @@ async function readSubcollection(merchantId, collectionId) {
         .collection('businesses')
         .doc(merchantId)
         .collection(collectionId)
+        // One past the cap, so that a collection sitting exactly on it is not
+        // reported as incomplete.
         .limit(exports.MERCHANT_SCAN_CAP + 1)
         .get();
-    const truncated = snapshot.size > exports.MERCHANT_SCAN_CAP;
-    const docs = truncated ? snapshot.docs.slice(0, exports.MERCHANT_SCAN_CAP) : snapshot.docs;
+    const capped = (0, merchant_records_js_1.capDocuments)(snapshot.docs, exports.MERCHANT_SCAN_CAP);
     return {
-        docs: docs.map((doc) => ({
+        docs: capped.docs.map((doc) => ({
             id: doc.id,
             data: (doc.data() ?? {}),
         })),
-        truncated,
+        truncated: capped.truncated,
     };
 }
 async function listCustomers(merchantId, query) {
@@ -114,27 +115,8 @@ async function listCustomerSales(merchantId, customerId, limit = 20) {
         .where('customer_id', '==', customerId)
         .limit(200)
         .get();
-    return snapshot.docs
-        .map((doc) => {
-        const data = (doc.data() ?? {});
-        const at = data.created_at;
-        return {
-            id: doc.id,
-            amount: typeof data.amount === 'number' ? data.amount : null,
-            points: typeof data.points === 'number' ? data.points : null,
-            created_at: typeof at === 'number' && at > 0 ? at : null,
-            // Carried through because a cancelled sale is still a row in this
-            // collection: showing it as a plain visit would overstate the history.
-            cancellation_status: typeof data.cancellation_status === 'string'
-                ? data.cancellation_status
-                : null,
-            confirmation_status: typeof data.confirmation_status === 'string'
-                ? data.confirmation_status
-                : null,
-        };
-    })
-        .sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0))
-        .slice(0, limit);
+    const rows = snapshot.docs.map((doc) => (0, merchant_records_js_1.toSale)(doc.id, (doc.data() ?? {})));
+    return (0, merchant_records_js_1.sortSales)(rows).slice(0, limit);
 }
 async function listCatalog(merchantId, query) {
     const { docs, truncated } = await readSubcollection(merchantId, 'merchant_items');

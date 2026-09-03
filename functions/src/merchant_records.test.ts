@@ -6,8 +6,11 @@ import {
   asEpoch,
   asNumber,
   asString,
+  capDocuments,
   fold,
   paginate,
+  sortSales,
+  toSale,
   selectCatalog,
   selectCustomers,
   selectRewards,
@@ -92,6 +95,57 @@ test('staff shape survives the seeded document', () => {
   });
   assert.equal(staff.role, 'OWNER');
   assert.equal(staff.last_login_at, 1788307006310);
+});
+
+/* -------------------------------------------------------------------- sales */
+
+test('a sale keeps both status fields', () => {
+  const sale = toSale('s-1', {
+    amount: 350,
+    points: 35,
+    created_at: 1788288217358,
+    cancellation_status: 'CANCELLED',
+    confirmation_status: 'CONFIRMED',
+  });
+  assert.equal(sale.cancellation_status, 'CANCELLED');
+  assert.equal(sale.confirmation_status, 'CONFIRMED');
+});
+
+test('a sale amount written as a string is still an amount', () => {
+  // The app writes numbers, but a correction posted by hand or by an older
+  // build can arrive as a string, and a null amount prints as a dash on the
+  // customer's history — a visit that appears to have cost nothing.
+  const sale = toSale('s-1', { amount: '350.5', points: '35' });
+  assert.equal(sale.amount, 350.5);
+  assert.equal(sale.points, 35);
+});
+
+test('sales sort newest first, undated last', () => {
+  const sorted = sortSales([
+    toSale('a', { created_at: 100 }),
+    toSale('b', {}),
+    toSale('c', { created_at: 900 }),
+  ]);
+  assert.deepEqual(
+    sorted.map((row) => row.id),
+    ['c', 'a', 'b'],
+  );
+});
+
+/* ------------------------------------------------------------- the read cap */
+
+test('a collection sitting exactly on the cap is not truncated', () => {
+  // The reader asks for cap + 1 precisely so this case is distinguishable. Off
+  // by one here tells a business its list is incomplete when it is whole.
+  const capped = capDocuments([1, 2, 3], 3);
+  assert.equal(capped.truncated, false);
+  assert.deepEqual(capped.docs, [1, 2, 3]);
+});
+
+test('one document past the cap is truncated, and the extra is dropped', () => {
+  const capped = capDocuments([1, 2, 3, 4], 3);
+  assert.equal(capped.truncated, true);
+  assert.deepEqual(capped.docs, [1, 2, 3]);
 });
 
 /* ---------------------------------------------------------------- searching */

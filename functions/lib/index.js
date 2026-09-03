@@ -1122,71 +1122,13 @@ async function businessForRequest(req) {
         return { ok: false, status: 403 };
     return { ok: true, business: accessible[0] };
 }
-merchantRouter.get('/businesses', async (req, res) => {
-    const who = merchantIdentityFrom(req);
-    if (!who) {
-        return res.status(401).json({ success: false, message: 'Unauthorized' });
-    }
-    try {
-        const businesses = await (0, merchant_firestore_js_1.listAccessibleBusinesses)(who.identity, who.claims);
-        return res.json({
-            success: true,
-            data: businesses.map((business) => ({
-                id: business.id,
-                name: business.name,
-            })),
-        });
-    }
-    catch (error) {
-        return respondAdminServerError(res, 'merchant_businesses', error);
-    }
-});
-merchantRouter.get('/profile', async (req, res) => {
-    try {
-        const resolved = await businessForRequest(req);
-        if (!resolved.ok) {
-            return res.status(resolved.status).json({
-                success: false,
-                message: resolved.status === 403
-                    ? 'No business is associated with this account.'
-                    : 'Unauthorized',
-            });
-        }
-        const detail = await (0, admin_firestore_js_1.getMerchantDetail)(resolved.business.id);
-        if (!detail) {
-            return res
-                .status(404)
-                .json({ success: false, message: 'Business not found' });
-        }
-        return res.json({ success: true, data: detail });
-    }
-    catch (error) {
-        return respondAdminServerError(res, 'merchant_profile', error);
-    }
-});
-merchantRouter.get('/entitlements', async (req, res) => {
-    try {
-        const resolved = await businessForRequest(req);
-        if (!resolved.ok) {
-            return res.status(resolved.status).json({
-                success: false,
-                message: resolved.status === 403
-                    ? 'No business is associated with this account.'
-                    : 'Unauthorized',
-            });
-        }
-        const entitlements = await (0, admin_firestore_js_1.listEntitlements)(resolved.business.id);
-        return res.json({ success: true, data: entitlements });
-    }
-    catch (error) {
-        return respondAdminServerError(res, 'merchant_entitlements', error);
-    }
-});
 /**
  * The resolve-or-deny step every record route repeats.
  *
- * Returns the business, or answers the request and returns null. Written once
- * so that adding a route cannot accidentally add one that skips the check.
+ * Returns the business, or answers the request and returns null. Written once,
+ * and above every route, so that adding a route cannot quietly add one that
+ * skips the check — `merchant_routes.test.ts` reads this file and fails if one
+ * does.
  */
 async function requireBusiness(req, res) {
     const resolved = await businessForRequest(req);
@@ -1218,6 +1160,56 @@ function merchantPageResponse(res, query, page) {
         truncated: page.truncated,
     });
 }
+merchantRouter.get('/businesses', async (req, res) => {
+    const who = merchantIdentityFrom(req);
+    if (!who) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+    try {
+        const businesses = await (0, merchant_firestore_js_1.listAccessibleBusinesses)(who.identity, who.claims);
+        return res.json({
+            success: true,
+            data: businesses.map((business) => ({
+                id: business.id,
+                name: business.name,
+            })),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_businesses', error);
+    }
+});
+merchantRouter.get('/profile', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const detail = await (0, admin_firestore_js_1.getMerchantDetail)(business.id);
+        if (!detail) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Business not found' });
+        }
+        return res.json({ success: true, data: detail });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_profile', error);
+    }
+});
+merchantRouter.get('/entitlements', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const entitlements = await (0, admin_firestore_js_1.listEntitlements)(business.id);
+        return res.json({ success: true, data: entitlements });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_entitlements', error);
+    }
+});
 merchantRouter.get('/customers', async (req, res) => {
     const request = req;
     try {

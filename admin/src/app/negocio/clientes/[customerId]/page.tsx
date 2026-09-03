@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { fetchMyCustomer, type MerchantSale } from '@/lib/merchant-api';
+import { lifecycleLabel, relationshipLabel, retentionLabel } from '@/lib/merchant-labels';
 import {
   Badge,
   Card,
@@ -14,7 +15,6 @@ import {
   formatDateTime,
   load,
 } from '../../../admin/ui';
-import { lifecycleLabel, relationshipLabel, retentionLabel } from '../../labels';
 
 // Deliberately static rather than a `generateMetadata` that names the
 // customer: that would mean a second read of the same document on every open,

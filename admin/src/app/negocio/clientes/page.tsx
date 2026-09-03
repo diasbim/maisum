@@ -6,6 +6,7 @@ import {
   MERCHANT_PAGE_SIZE,
   type MerchantCustomer,
 } from '@/lib/merchant-api';
+import { relationshipLabel } from '@/lib/merchant-labels';
 import {
   Badge,
   ChipFilter,
@@ -22,7 +23,6 @@ import {
   parseOffset,
   parseSearch,
 } from '../../admin/ui';
-import { relationshipLabel } from '../labels';
 import { ResultCount, SearchForm, TruncationNotice } from '../records';
 
 export const metadata = { title: 'Clientes | MaisUm' };

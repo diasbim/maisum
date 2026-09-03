@@ -152,6 +152,39 @@ export function toReward(id: string, data: SourceRecord): RewardRecord {
   };
 }
 
+export type SaleRecord = {
+  id: string;
+  amount: number | null;
+  points: number | null;
+  created_at: number | null;
+  cancellation_status: string | null;
+  confirmation_status: string | null;
+};
+
+/**
+ * One sale on a customer's history.
+ *
+ * The two status fields are carried through rather than collapsed into a
+ * single "state": a cancelled sale is still a row in this collection, and
+ * dropping it would make the customer's points stop adding up while showing it
+ * plainly would overstate how often they came.
+ */
+export function toSale(id: string, data: SourceRecord): SaleRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    amount: asNumber(data, 'amount'),
+    points: asNumber(data, 'points'),
+    created_at: asEpoch(data, 'created_at'),
+    cancellation_status: asString(data, 'cancellation_status'),
+    confirmation_status: asString(data, 'confirmation_status'),
+  };
+}
+
+/** Newest first. A sale with no date sorts last rather than as 1970. */
+export function sortSales(rows: SaleRecord[]): SaleRecord[] {
+  return [...rows].sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+}
+
 export type StaffRecord = {
   id: string;
   phone: string | null;
@@ -212,6 +245,21 @@ export function matchesSearch(
   const needle = fold(search);
   if (needle === '') return true;
   return fields.some((value) => value !== null && fold(value).includes(needle));
+}
+
+/**
+ * Cuts a read down to the cap and says whether anything was cut.
+ *
+ * The caller reads `cap + 1` documents so that "exactly at the cap" and "one
+ * past it" are distinguishable — otherwise a business with exactly 2000
+ * customers would be told its list is incomplete when it is not.
+ */
+export function capDocuments<T>(
+  docs: T[],
+  cap: number,
+): { docs: T[]; truncated: boolean } {
+  const truncated = docs.length > cap;
+  return { docs: truncated ? docs.slice(0, cap) : docs, truncated };
 }
 
 export function paginate<T>(rows: T[], query: RecordQuery): RecordPage<T> {

@@ -20,9 +20,12 @@ exports.asEpoch = asEpoch;
 exports.toCustomer = toCustomer;
 exports.toCatalogItem = toCatalogItem;
 exports.toReward = toReward;
+exports.toSale = toSale;
+exports.sortSales = sortSales;
 exports.toStaff = toStaff;
 exports.fold = fold;
 exports.matchesSearch = matchesSearch;
+exports.capDocuments = capDocuments;
 exports.paginate = paginate;
 exports.selectCustomers = selectCustomers;
 exports.selectCatalog = selectCatalog;
@@ -124,6 +127,28 @@ function toReward(id, data) {
         updated_at: asEpoch(data, 'updated_at'),
     };
 }
+/**
+ * One sale on a customer's history.
+ *
+ * The two status fields are carried through rather than collapsed into a
+ * single "state": a cancelled sale is still a row in this collection, and
+ * dropping it would make the customer's points stop adding up while showing it
+ * plainly would overstate how often they came.
+ */
+function toSale(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        amount: asNumber(data, 'amount'),
+        points: asNumber(data, 'points'),
+        created_at: asEpoch(data, 'created_at'),
+        cancellation_status: asString(data, 'cancellation_status'),
+        confirmation_status: asString(data, 'confirmation_status'),
+    };
+}
+/** Newest first. A sale with no date sorts last rather than as 1970. */
+function sortSales(rows) {
+    return [...rows].sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+}
 function toStaff(id, data) {
     return {
         id: asString(data, 'id') ?? id,
@@ -144,6 +169,17 @@ function matchesSearch(fields, search) {
     if (needle === '')
         return true;
     return fields.some((value) => value !== null && fold(value).includes(needle));
+}
+/**
+ * Cuts a read down to the cap and says whether anything was cut.
+ *
+ * The caller reads `cap + 1` documents so that "exactly at the cap" and "one
+ * past it" are distinguishable — otherwise a business with exactly 2000
+ * customers would be told its list is incomplete when it is not.
+ */
+function capDocuments(docs, cap) {
+    const truncated = docs.length > cap;
+    return { docs: truncated ? docs.slice(0, cap) : docs, truncated };
 }
 function paginate(rows, query) {
     const offset = Math.max(0, query.offset);

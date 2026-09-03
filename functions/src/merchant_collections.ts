@@ -1,19 +1,23 @@
 import * as admin from 'firebase-admin';
 
 import {
+  capDocuments,
   selectCatalog,
   selectCustomers,
   selectRewards,
   selectStaff,
+  sortSales,
   toCatalogItem,
   toCustomer,
   toReward,
+  toSale,
   toStaff,
   type CatalogItemRecord,
   type CustomerRecord,
   type RecordPage,
   type RecordQuery,
   type RewardRecord,
+  type SaleRecord,
   type StaffRecord,
 } from './merchant_records.js';
 
@@ -48,23 +52,27 @@ export type MerchantPage<T> = RecordPage<T> & { truncated: boolean };
 async function readSubcollection(
   merchantId: string,
   collectionId: string,
-): Promise<{ docs: Array<{ id: string; data: Record<string, unknown> }>; truncated: boolean }> {
+): Promise<{
+  docs: Array<{ id: string; data: Record<string, unknown> }>;
+  truncated: boolean;
+}> {
   const snapshot = await db()
     .collection('businesses')
     .doc(merchantId)
     .collection(collectionId)
+    // One past the cap, so that a collection sitting exactly on it is not
+    // reported as incomplete.
     .limit(MERCHANT_SCAN_CAP + 1)
     .get();
 
-  const truncated = snapshot.size > MERCHANT_SCAN_CAP;
-  const docs = truncated ? snapshot.docs.slice(0, MERCHANT_SCAN_CAP) : snapshot.docs;
+  const capped = capDocuments(snapshot.docs, MERCHANT_SCAN_CAP);
 
   return {
-    docs: docs.map((doc) => ({
+    docs: capped.docs.map((doc) => ({
       id: doc.id,
       data: (doc.data() ?? {}) as Record<string, unknown>,
     })),
-    truncated,
+    truncated: capped.truncated,
   };
 }
 
@@ -103,7 +111,7 @@ export async function listCustomerSales(
   merchantId: string,
   customerId: string,
   limit = 20,
-): Promise<Array<Record<string, unknown>>> {
+): Promise<SaleRecord[]> {
   const snapshot = await db()
     .collection('businesses')
     .doc(merchantId)
@@ -112,29 +120,10 @@ export async function listCustomerSales(
     .limit(200)
     .get();
 
-  return snapshot.docs
-    .map((doc) => {
-      const data = (doc.data() ?? {}) as Record<string, unknown>;
-      const at = data.created_at;
-      return {
-        id: doc.id,
-        amount: typeof data.amount === 'number' ? data.amount : null,
-        points: typeof data.points === 'number' ? data.points : null,
-        created_at: typeof at === 'number' && at > 0 ? at : null,
-        // Carried through because a cancelled sale is still a row in this
-        // collection: showing it as a plain visit would overstate the history.
-        cancellation_status:
-          typeof data.cancellation_status === 'string'
-            ? data.cancellation_status
-            : null,
-        confirmation_status:
-          typeof data.confirmation_status === 'string'
-            ? data.confirmation_status
-            : null,
-      };
-    })
-    .sort((a, b) => ((b.created_at as number) ?? 0) - ((a.created_at as number) ?? 0))
-    .slice(0, limit);
+  const rows = snapshot.docs.map((doc) =>
+    toSale(doc.id, (doc.data() ?? {}) as Record<string, unknown>),
+  );
+  return sortSales(rows).slice(0, limit);
 }
 
 export async function listCatalog(

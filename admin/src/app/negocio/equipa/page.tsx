@@ -4,6 +4,7 @@ import {
   fetchMyTeam,
   MERCHANT_PAGE_SIZE,
 } from '@/lib/merchant-api';
+import { staffRoleLabel, staffStatusLabel } from '@/lib/merchant-labels';
 import {
   Badge,
   ChipFilter,
@@ -19,7 +20,6 @@ import {
   parseOffset,
   parseSearch,
 } from '../../admin/ui';
-import { staffRoleLabel, staffStatusLabel } from '../labels';
 import { ResultCount, SearchForm, TruncationNotice } from '../records';
 
 export const metadata = { title: 'Equipa | MaisUm' };
