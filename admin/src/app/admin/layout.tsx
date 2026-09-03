@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { getAdminSession, hasValidNonAdminSession } from '@/lib/session';
+import { resolvePortalHome } from '@/lib/portal-home';
+import { getAdminSession } from '@/lib/session';
 import { Wordmark } from '../components/Wordmark';
 import { AdminNav, MobileNav } from './AdminNav';
 import { SessionRefresher } from './SessionRefresher';
@@ -20,11 +21,10 @@ export default async function AdminLayout({
 
   if (!session) {
     // A valid sign-in without the admin claim is a different problem from being
-    // signed out, and sending it to /login would loop.
-    if (await hasValidNonAdminSession()) {
-      redirect('/no-access');
-    }
-    redirect('/login');
+    // signed out, and sending it to /login would loop. It is also not always a
+    // dead end: a business owner who lands here has an area of their own, and
+    // `/no-access` would tell them the opposite of the truth.
+    redirect(await resolvePortalHome());
   }
 
   return (

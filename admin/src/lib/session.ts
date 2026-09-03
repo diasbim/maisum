@@ -54,14 +54,3 @@ export async function getPortalSession(): Promise<AdminSession | null> {
   };
 }
 
-/**
- * True when the token is valid but carries no admin claim — the case that
- * deserves "your account is not an admin" rather than a login prompt.
- */
-export async function hasValidNonAdminSession(): Promise<boolean> {
-  const store = await cookies();
-  const idToken = store.get(SESSION_COOKIE)?.value;
-  if (!idToken) return false;
-  const claims = await verifySessionToken(idToken);
-  return claims != null && !hasAdminClaims(claims);
-}

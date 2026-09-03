@@ -1,8 +1,7 @@
-import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { getMerchantSession } from '@/lib/merchant-session';
-import { getPortalSession } from '@/lib/session';
+import { resolvePortalHome } from '@/lib/portal-home';
 import { Wordmark } from '../components/Wordmark';
 import { SessionRefresher } from '../admin/SessionRefresher';
 import { SignOutButton } from '../admin/SignOutButton';
@@ -25,9 +24,10 @@ export default async function MerchantLayout({
 
   if (!session) {
     // Signed in but running no business is a different problem from being
-    // signed out, and sending it to /login would loop.
-    const signedIn = await getPortalSession();
-    redirect(signedIn ? '/no-access' : '/login');
+    // signed out, and sending it to /login would loop. Internal staff who end
+    // up here belong in the console, not on a page telling them they have no
+    // access at all.
+    redirect(await resolvePortalHome());
   }
 
   return (
