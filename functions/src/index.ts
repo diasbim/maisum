@@ -57,6 +57,7 @@ import {
   type NfcCardLinkSource,
 } from './customer_nfc.js';
 import { allowedOrigins, runningInEmulator } from './cors_origins.js';
+import { bootstrapDocuments } from './merchant_bootstrap.js';
 import {
   getMerchantDetail as getMerchantDetailFromFirestore,
   getOperationsSummary as getOperationsSummaryFromFirestore,
@@ -12555,3 +12556,71 @@ async function reconcileUsageBalances(
 
   await pool.query(sql, [cutoffMs, metrics, nowMs]);
 }
+
+/**
+ * Seeds a business's policy documents.
+ *
+ * `firestore.rules` makes subscription_state, entitlements, feature_flags,
+ * remote_config and usage_balances read-only to clients — correctly, since a
+ * client that could write its own entitlements could grant itself a plan. The
+ * app tried anyway and was refused, so until now every business created from
+ * the app had none of them: no plan, no quota, and a plan screen in the portal
+ * with nothing on it.
+ *
+ * Written rather than merged, and only where absent. A business whose plan was
+ * later changed in the console must not be pulled back to Free by a later
+ * write to its own document, so anything already there is left exactly as it
+ * is — this only ever fills gaps.
+ *
+ * On write rather than on create, deliberately: businesses created before this
+ * existed are missing the same documents, and they get them the next time the
+ * business document is touched instead of needing a migration.
+ */
+export const merchantPolicyBootstrapOnBusinessWrite = onDocumentWritten(
+  'businesses/{merchantId}',
+  async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+      ? event.params.merchantId.trim()
+      : '';
+    if (!merchantId) return;
+
+    const after = event.data?.after;
+    if (!after?.exists) return;
+
+    const data = snapshotDataRecord(after);
+    const status = pickString(data, 'subscription_status') ?? 'TRIAL';
+
+    const documents = bootstrapDocuments({
+      merchantId,
+      subscriptionStatus: status,
+      now: Date.now(),
+    });
+
+    const db = admin.firestore();
+    const business = db.collection('businesses').doc(merchantId);
+
+    const missing = (
+      await Promise.all(
+        documents.map(async (doc) => {
+          const ref = business.collection(doc.collection).doc(doc.id);
+          const snapshot = await ref.get();
+          return snapshot.exists ? null : { ref, data: doc.data };
+        }),
+      )
+    ).filter((entry): entry is { ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> } => entry !== null);
+
+    if (missing.length === 0) return;
+
+    const batch = db.batch();
+    for (const entry of missing) {
+      batch.set(entry.ref, entry.data);
+    }
+    await batch.commit();
+
+    console.log('merchant_policy_seeded', {
+      event: 'merchant_policy_seeded',
+      merchant_id: merchantId,
+      documents_written: missing.length,
+    });
+  },
+);

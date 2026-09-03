@@ -1022,12 +1022,11 @@ class AuthRepository {
       'created_at': existingCreatedAt,
     }, SetOptions(merge: true));
 
-    await _seedPolicyDocuments(
-      firestore,
-      merchantId: merchantId,
-      subscriptionStatus: session.subscriptionStatus,
-      now: now,
-    );
+    // The plan, entitlements, flags, quota and remote config used to be seeded
+    // from here. They are server-owned in firestore.rules, so every one of
+    // those writes was refused — the first refusal aborted the rest, and the
+    // business ended up with none of them. They are now written by
+    // `merchantPolicyBootstrapOnBusinessWrite`, which this `set` triggers.
   }
 
   Future<Map<String, dynamic>> _tryReadBusinessData(
@@ -1066,92 +1065,6 @@ class AuthRepository {
             ? cleaned.substring(cleaned.length - 8)
             : cleaned.padLeft(8, '0');
     return '${padded.substring(0, 4)}-${padded.substring(4, 8)}';
-  }
-
-  Future<void> _seedPolicyDocuments(
-    FirebaseFirestore firestore, {
-    required String merchantId,
-    required String subscriptionStatus,
-    required int now,
-  }) async {
-    final businessRef = firestore.collection('businesses').doc(merchantId);
-    final planDefinition = PlanCatalog.fromCode('free');
-    final window = _monthlyWindow(DateTime.now());
-
-    final subscriptionRef =
-        businessRef.collection('subscription_state').doc(merchantId);
-    final subscriptionSnap = await subscriptionRef.get();
-    if (!subscriptionSnap.exists) {
-      await subscriptionRef.set({
-        'merchant_id': merchantId,
-        'plan_code': planDefinition.plan.code,
-        'plan_name': planDefinition.displayName,
-        'plan_version': 1,
-        'pricing_version': 1,
-        'status': subscriptionStatus,
-        'updated_at': now,
-      });
-    }
-
-    for (final featureKey in FeatureKeys.all) {
-      final entitlementId = '${merchantId}_$featureKey';
-      final entitlementRef =
-          businessRef.collection('entitlements').doc(entitlementId);
-      final entitlementSnap = await entitlementRef.get();
-      if (!entitlementSnap.exists) {
-        await entitlementRef.set({
-          'id': entitlementId,
-          'merchant_id': merchantId,
-          'feature_key': featureKey,
-          'is_enabled': planDefinition.allowsFeature(featureKey),
-          'updated_at': now,
-        });
-      }
-
-      final flagId = '${merchantId}_$featureKey';
-      final flagRef = businessRef.collection('feature_flags').doc(flagId);
-      final flagSnap = await flagRef.get();
-      if (!flagSnap.exists) {
-        await flagRef.set({
-          'id': flagId,
-          'merchant_id': merchantId,
-          'flag_key': featureKey,
-          'is_enabled': true,
-          'updated_at': now,
-        });
-      }
-    }
-
-    final configId = '${merchantId}_billing_whatsapp_price';
-    final configRef = businessRef.collection('remote_config').doc(configId);
-    final configSnap = await configRef.get();
-    if (!configSnap.exists) {
-      await configRef.set({
-        'id': configId,
-        'merchant_id': merchantId,
-        'config_key': 'billing_whatsapp_price',
-        'payload': {'currency': 'MZN', 'amount': 2},
-        'updated_at': now,
-      });
-    }
-
-    final quotaId =
-        '${merchantId}_${UsageMetrics.whatsappMessages}_${window.start.millisecondsSinceEpoch}';
-    final quotaRef = businessRef.collection('usage_balances').doc(quotaId);
-    final quotaSnap = await quotaRef.get();
-    if (!quotaSnap.exists) {
-      await quotaRef.set({
-        'id': quotaId,
-        'merchant_id': merchantId,
-        'metric_key': UsageMetrics.whatsappMessages,
-        'window_start': window.start.millisecondsSinceEpoch,
-        'window_end': window.end.millisecondsSinceEpoch,
-        'used': 0,
-        'limit_value': planDefinition.whatsappMonthlyLimit,
-        'soft_limit': true,
-        'updated_at': now,
-      });
-    }
   }
 
   Future<void> _backfillBusinessData(
