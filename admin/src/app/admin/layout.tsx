@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { getAdminSession, hasValidNonAdminSession } from '@/lib/session';
+import { Wordmark } from '../components/Wordmark';
 import { AdminNav, MobileNav } from './AdminNav';
 import { SessionRefresher } from './SessionRefresher';
 import { SignOutButton } from './SignOutButton';
@@ -44,8 +45,7 @@ export default async function AdminLayout({
           <MobileNav account={session.email ?? session.uid} />
 
           <div className="topbar__logo">
-            <span className="topbar__dot" />
-            <span className="topbar__name">MaisUm · Operações</span>
+            <Wordmark tone="onDark" />
           </div>
 
           <div className="topbar__account">

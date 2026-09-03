@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 
+import { Wordmark } from '../components/Wordmark';
 import { LoginForm } from './LoginForm';
 
 export const metadata = { title: 'Entrar | Portal MaisUm' };
@@ -8,31 +9,8 @@ export default function LoginPage() {
   return (
     <main className="auth-shell">
       <div className="auth-card">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 16,
-          }}
-        >
-          <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: 'var(--gold)',
-            }}
-          />
-          <span
-            style={{
-              fontFamily: 'var(--font-head), system-ui, sans-serif',
-              fontWeight: 800,
-              color: 'var(--navy)',
-            }}
-          >
-            MaisUm · Operações
-          </span>
+        <div style={{ marginBottom: 16 }}>
+          <Wordmark tone="onLight" />
         </div>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: 6 }}>
           Entrar

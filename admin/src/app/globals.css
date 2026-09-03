@@ -99,6 +99,42 @@ a:hover {
   outline-offset: 2px;
 }
 
+/* ── Wordmark ───────────────────────────────────────────────────────────── */
+
+/* The brand mark shown in the topbar and again on the signed-out auth
+   screens. Same dot-plus-name layout everywhere; only the tone changes with
+   the background it sits on. */
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-head), system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wordmark__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex-shrink: 0;
+}
+
+.wordmark__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wordmark--onDark {
+  color: var(--white);
+}
+
+.wordmark--onLight {
+  color: var(--navy);
+}
+
 /* ── Layout ─────────────────────────────────────────────────────────────── */
 
 .wrap {

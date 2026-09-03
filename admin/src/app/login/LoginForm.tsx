@@ -96,7 +96,7 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit}>
       {error ? (
-        <p className="error" style={{ marginBottom: 16 }}>
+        <p className="error" role="alert" style={{ marginBottom: 16 }}>
           {error}
         </p>
       ) : null}
@@ -108,7 +108,9 @@ export function LoginForm() {
           type="email"
           name="email"
           autoComplete="username"
+          autoFocus
           required
+          disabled={busy}
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
@@ -122,6 +124,7 @@ export function LoginForm() {
           name="password"
           autoComplete="current-password"
           required
+          disabled={busy}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
@@ -130,6 +133,7 @@ export function LoginForm() {
         className="btn btn-gold btn-lg"
         type="submit"
         disabled={busy}
+        aria-busy={busy}
         style={{ width: "100%" }}
       >
         {busy ? 'A entrar…' : 'Entrar'}
