@@ -1,0 +1,94 @@
+# Runs the repository's tests.
+#
+# Until this existed, nothing did: the only workflow here deployed docs/ to
+# Pages, so the functions suite and the portal suite only ran when someone
+# remembered to. A suite that guards against quiet failures is worth nothing
+# if it is not run.
+#
+# The three projects are separate jobs rather than steps so a Flutter failure
+# still tells you whether the backend is fine, and so they run in parallel.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the older run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  functions:
+    name: functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the engines pin in functions/package.json.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - run: npm ci
+        working-directory: functions
+
+      # Compiles, then runs node --test over the emitted JS. This also guards
+      # the admin-claims parity between functions/ and the portal.
+      - run: npm test
+        working-directory: functions
+
+  admin:
+    name: admin portal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - run: npm ci
+        working-directory: admin
+
+      - run: npm run typecheck
+        working-directory: admin
+
+      - run: npm test
+        working-directory: admin
+
+      # The build catches what typecheck cannot — a 'use server' file exporting
+      # a non-async value, a bad route export — which is how those surface.
+      # .env.local is gitignored, so the values are stubs: nothing here reaches
+      # a network, and the config is read per-request rather than at build time.
+      - run: npm run build
+        working-directory: admin
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ci-not-a-real-key
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci.example.invalid
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci-project
+          FIREBASE_PROJECT_ID: ci-project
+          ADMIN_API_BASE_URL: http://127.0.0.1:9
+
+  app:
+    name: flutter app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # integration_test/ is excluded: it needs a device, which this runner
+      # has none of.
+      - run: flutter test
