@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../errors/app_error_reporter.dart';
+import '../errors/app_exception.dart';
 
 class FirebaseAuthService {
   FirebaseAuthService(this._auth);
@@ -104,12 +105,26 @@ class FirebaseAuthService {
     }
   }
 
+  // Codes Firebase/Google use when the user simply closes the account
+  // picker or backs out of the consent screen. Never treat these as errors.
+  static const _googleSignInCancelledCodes = {
+    'web-context-cancelled',
+    'cancelled-popup-request',
+    'popup-closed-by-user',
+    'canceled',
+    'user-cancelled',
+  };
+
   Future<UserCredential> signInWithGoogle() async {
     try {
       final provider = GoogleAuthProvider()
         ..setCustomParameters({'prompt': 'select_account'});
-      return _auth.signInWithProvider(provider);
+      return await _auth.signInWithProvider(provider);
     } on FirebaseAuthException catch (e) {
+      if (_googleSignInCancelledCodes.contains(e.code)) {
+        _recordPhoneAuthStage('google_sign_in_cancelled', errorCode: e.code);
+        throw const GoogleSignInCancelledException();
+      }
       AppErrorReporter.report(
         e,
         StackTrace.current,
@@ -168,7 +183,6 @@ class FirebaseAuthService {
         'user-disabled' => 'Conta desativada. Contacte o suporte.',
         'network-request-failed' =>
           'Sem internet. Verifique a ligação e tente novamente.',
-        'web-context-cancelled' => 'Login cancelado.',
         _ => 'Não foi possível autenticar com o Google.',
       };
 

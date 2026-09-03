@@ -20,11 +20,16 @@ class CustomerStatusChip extends StatelessWidget {
     required this.label,
     this.icon,
     this.tone = CustomerStatusTone.neutral,
+    this.semanticLabel,
   });
 
   final String label;
   final IconData? icon;
   final CustomerStatusTone tone;
+
+  /// Overrides the accessibility label when the visible [label] is too
+  /// terse on its own (e.g. a bare number) to make sense to screen readers.
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +56,7 @@ class CustomerStatusChip extends StatelessWidget {
         ),
     };
     return Semantics(
-      label: label,
+      label: semanticLabel ?? label,
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.symmetric(
@@ -688,8 +693,9 @@ class CustomerActivityItem extends StatelessWidget {
           Text(
             '${earned ? '+' : '-'}${formatCustomerPoints(activity.pointsDelta.abs())} pts',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color:
-                      earned ? AppColors.success : AppColors.secondaryForeground,
+                  color: earned
+                      ? AppColors.success
+                      : AppColors.secondaryForeground,
                   fontWeight: FontWeight.w900,
                 ),
           ),
@@ -848,6 +854,9 @@ class CustomerAccountHeader extends StatelessWidget {
             CustomerStatusChip(
               label: '$linkedBusinessCount',
               icon: LucideIcons.store,
+              semanticLabel: linkedBusinessCount == 1
+                  ? '1 negócio associado'
+                  : '$linkedBusinessCount negócios associados',
             ),
           ],
         ),

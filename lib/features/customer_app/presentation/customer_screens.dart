@@ -694,7 +694,7 @@ class CustomerBusinessDetailScreen extends ConsumerWidget {
                             : 'Contactar no WhatsApp',
                         onPressed: () => data.isDemo
                             ? _showDemoMessage(context)
-                            : _openWhatsApp(business.phone!),
+                            : _contactViaWhatsApp(context, business.phone!),
                         variant: MaisUmButtonVariant.outlined,
                         leadingIcon: LucideIcons.messageCircle,
                       ),
@@ -1399,6 +1399,7 @@ class CustomerProfileScreen extends ConsumerWidget {
         ref.watch(customerNotificationsProvider).valueOrNull;
     final push = notificationState?.value['push'] as Map?;
     final delivery = _customerPushStatus(push);
+    final pushNeedsRetry = _customerPushNeedsRetry(push);
     return _Page(
       title: 'Perfil',
       subtitle: 'Conta, preferências e segurança.',
@@ -1432,8 +1433,12 @@ class CustomerProfileScreen extends ConsumerWidget {
                   _SettingsTile(
                     icon: LucideIcons.bell,
                     title: 'Notificações push',
-                    subtitle: delivery,
-                    onTap: () => context.push('/customer/preferences'),
+                    subtitle: pushNeedsRetry
+                        ? '$delivery Toque para tentar ativar.'
+                        : delivery,
+                    onTap: pushNeedsRetry
+                        ? () => _retryPushActivation(context, ref)
+                        : () => context.push('/customer/preferences'),
                   ),
                   const Divider(),
                   _SettingsTile(
@@ -2578,6 +2583,7 @@ class _ActivitySummary extends StatelessWidget {
                   child: _LedgerMetric(
                     icon: LucideIcons.trendingUp,
                     value: '+${formatCustomerPoints(earned)}',
+                    valueColor: AppColors.green,
                     label: 'ganhos',
                   ),
                 ),
@@ -2651,6 +2657,26 @@ void _showDemoMessage(BuildContext context) {
   );
 }
 
+/// Opens WhatsApp for [phone] and always resolves — never leaves the tap
+/// unanswered. On failure (e.g. WhatsApp not installed, link blocked) it
+/// reports the error and tells the customer in their own terms, instead of
+/// throwing into an unawaited `Future` that nothing ever observes.
+Future<void> _contactViaWhatsApp(BuildContext context, String phone) async {
+  try {
+    await _openWhatsApp(phone);
+  } catch (error, stackTrace) {
+    AppErrorReporter.report(error, stackTrace, hint: 'customer_open_whatsapp');
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Não foi possível abrir o WhatsApp. Verifique se está instalado.',
+        ),
+      ),
+    );
+  }
+}
+
 Future<void> _openWhatsApp(String phone) async {
   final number = phone.replaceAll(RegExp(r'\D'), '');
   final uri = Uri.parse('https://wa.me/$number');
@@ -2667,4 +2693,58 @@ String _customerPushStatus(Map<dynamic, dynamic>? push) {
     'configured' => 'Ativas neste dispositivo.',
     _ => 'Disponibilidade a verificar.',
   };
+}
+
+/// Whether tapping the "Notificações push" tile can plausibly fix the
+/// current state by re-attempting activation on this device. Only true
+/// when the feature itself is enabled server-side but this device hasn't
+/// registered — never for a backend-level "unavailable" (there's nothing
+/// a retry can do about that), so we never promise a fix we can't deliver.
+bool _customerPushNeedsRetry(Map<dynamic, dynamic>? push) =>
+    push != null &&
+    push['enabled'] == true &&
+    push['delivery']?.toString() != 'configured';
+
+/// Re-attempts push activation (OS permission + token registration) for
+/// the signed-in customer and reports back what happened, instead of
+/// silently sending the customer to a screen that can't fix an OS-level
+/// permission denial.
+Future<void> _retryPushActivation(BuildContext context, WidgetRef ref) async {
+  final session = ref.read(authControllerProvider).valueOrNull;
+  final messenger = ScaffoldMessenger.of(context);
+  messenger.showSnackBar(
+    const SnackBar(content: Text('A tentar ativar as notificações...')),
+  );
+  try {
+    await ref.read(customerPlatformServiceProvider).synchronize(session);
+    ref.invalidate(customerNotificationsProvider);
+    if (!context.mounted) return;
+    final refreshed = await ref.read(customerNotificationsProvider.future);
+    if (!context.mounted) return;
+    final push = refreshed.value['push'] as Map?;
+    final stillNeedsRetry = _customerPushNeedsRetry(push);
+    // Replace the in-flight toast immediately instead of letting it sit for
+    // its full default duration before the actual result appears.
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            stillNeedsRetry
+                ? 'Continuam indisponíveis. Ative as notificações nas definições do telemóvel para o MaisUm.'
+                : 'Notificações ativadas neste dispositivo.',
+          ),
+        ),
+      );
+  } catch (error, stackTrace) {
+    AppErrorReporter.report(error, stackTrace, hint: 'customer_push_retry');
+    if (!context.mounted) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível ativar as notificações agora.'),
+        ),
+      );
+  }
 }

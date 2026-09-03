@@ -4,6 +4,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../../app/providers.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/errors/app_error_reporter.dart';
+import '../../../core/errors/app_exception.dart';
 import '../domain/auth_session.dart';
 
 class AuthController extends AsyncNotifier<AuthSession?> {
@@ -85,11 +86,17 @@ class AuthController extends AsyncNotifier<AuthSession?> {
   }
 
   Future<AuthSession> signInWithGoogle() async {
+    final previousState = state;
     state = const AsyncLoading();
     try {
       final session = await ref.read(authRepositoryProvider).signInWithGoogle();
       state = AsyncData(session);
       return session;
+    } on GoogleSignInCancelledException {
+      // Not a failure — the user backed out of the account picker. Restore
+      // the prior state instead of surfacing an error state.
+      state = previousState;
+      rethrow;
     } catch (error, stackTrace) {
       state = AsyncError(error, stackTrace);
       AppErrorReporter.report(

@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
+import '../../../design_system/components/eyebrow_badge.dart';
 
 class RoleGateScreen extends StatelessWidget {
   const RoleGateScreen({super.key});
@@ -58,8 +59,7 @@ class RoleGateScreen extends StatelessWidget {
                           ctaLabel: 'Aceder à área de negócio',
                           semanticLabel: 'Sou proprietário de negócio. '
                               'Entrar na área do negócio.',
-                          onPressed: () =>
-                              context.go('/login?source=role'),
+                          onPressed: () => context.go('/login?source=role'),
                         ),
                         const SizedBox(height: AppSpacing.lg),
                         _RolePanel(
@@ -80,8 +80,8 @@ class RoleGateScreen extends StatelessWidget {
                           ctaLabel: 'Aceder à área de cliente',
                           semanticLabel:
                               'Sou cliente. Entrar na área do cliente.',
-                          onPressed: () => context
-                              .go('/customer-login/phone?source=role'),
+                          onPressed: () =>
+                              context.go('/customer-login/phone?source=role'),
                         ),
                         const SizedBox(height: AppSpacing.xxl),
                         const _RoleSwitchNote(),
@@ -153,31 +153,9 @@ class _RoleGateHero extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: AppSpacing.md,
-                              vertical: AppSpacing.sm,
-                            ),
-                            decoration: BoxDecoration(
-                              color:
-                                  AppColors.secondary.withValues(alpha: 0.14),
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.pill),
-                              border: Border.all(
-                                color: AppColors.secondary.withValues(
-                                  alpha: 0.28,
-                                ),
-                              ),
-                            ),
-                            child: const Text(
-                              'ESCOLHA O SEU PERFIL',
-                              style: TextStyle(
-                                color: AppColors.secondary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 0.9,
-                              ),
-                            ),
+                          const EyebrowBadge(
+                            label: 'ESCOLHA O SEU PERFIL',
+                            textColor: AppColors.secondary,
                           ),
                           const SizedBox(height: AppSpacing.lg),
                           Text(
@@ -243,6 +221,7 @@ class _RolePanel extends StatefulWidget {
 
 class _RolePanelState extends State<_RolePanel> {
   bool _hovered = false;
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
@@ -254,107 +233,115 @@ class _RolePanelState extends State<_RolePanel> {
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
         cursor: SystemMouseCursors.click,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
+        child: AnimatedScale(
+          scale: _pressed ? 0.98 : 1,
+          duration: const Duration(milliseconds: 140),
           curve: Curves.easeOut,
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(AppRadius.xl),
-            border: Border.all(
-              color: _hovered
-                  ? widget.accent.withValues(alpha: 0.35)
-                  : AppColors.divider,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primaryDarker.withValues(
-                  alpha: _hovered ? 0.12 : 0.05,
-                ),
-                blurRadius: _hovered ? 28 : 16,
-                offset: Offset(0, _hovered ? 12 : 6),
-              ),
-            ],
-          ),
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            decoration: BoxDecoration(
+              color: AppColors.white,
               borderRadius: BorderRadius.circular(AppRadius.xl),
-              onTap: widget.onPressed,
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: widget.accentSoft,
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                          ),
-                          child: Icon(
-                            widget.icon,
-                            color: widget.accent,
-                            size: 24,
-                          ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          widget.eyebrow,
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: AppColors.onSurfaceVariant,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Text(
-                      widget.title,
-                      style: theme.textTheme.headlineLarge?.copyWith(
-                        color: AppColors.primaryDarker,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 24,
-                        height: 1.15,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Text(
-                      widget.description,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: AppColors.onSurfaceVariant,
-                        height: 1.45,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    for (final feature in widget.features) ...[
-                      _FeatureRow(text: feature, accent: widget.accent),
-                      const SizedBox(height: AppSpacing.sm),
-                    ],
-                    const SizedBox(height: AppSpacing.sm),
-                    const Divider(color: AppColors.divider, height: 1),
-                    const SizedBox(height: AppSpacing.lg),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            widget.ctaLabel,
-                            style: theme.textTheme.titleSmall?.copyWith(
+              border: Border.all(
+                color: _hovered
+                    ? widget.accent.withValues(alpha: 0.35)
+                    : AppColors.divider,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryDarker.withValues(
+                    alpha: _hovered ? 0.12 : 0.05,
+                  ),
+                  blurRadius: _hovered ? 28 : 16,
+                  offset: Offset(0, _hovered ? 12 : 6),
+                ),
+              ],
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.xl),
+                onTap: widget.onPressed,
+                onTapDown: (_) => setState(() => _pressed = true),
+                onTapCancel: () => setState(() => _pressed = false),
+                onTapUp: (_) => setState(() => _pressed = false),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: widget.accentSoft,
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                            ),
+                            child: Icon(
+                              widget.icon,
                               color: widget.accent,
-                              fontWeight: FontWeight.w800,
+                              size: 24,
                             ),
                           ),
+                          const Spacer(),
+                          Text(
+                            widget.eyebrow,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: AppColors.onSurfaceVariant,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      Text(
+                        widget.title,
+                        style: theme.textTheme.headlineLarge?.copyWith(
+                          color: AppColors.primaryDarker,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 24,
+                          height: 1.15,
+                          letterSpacing: -0.4,
                         ),
-                        const SizedBox(width: AppSpacing.md),
-                        _RoleArrowButton(accent: widget.accent),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      Text(
+                        widget.description,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      for (final feature in widget.features) ...[
+                        _FeatureRow(text: feature, accent: widget.accent),
+                        const SizedBox(height: AppSpacing.sm),
                       ],
-                    ),
-                  ],
+                      const SizedBox(height: AppSpacing.sm),
+                      const Divider(color: AppColors.divider, height: 1),
+                      const SizedBox(height: AppSpacing.lg),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              widget.ctaLabel,
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: widget.accent,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.md),
+                          _RoleArrowButton(accent: widget.accent),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
