@@ -12,40 +12,26 @@
  * So this builds exactly what the app used to write, and the trigger in
  * index.ts writes it with the Admin SDK, which is the only thing entitled to.
  *
- * Kept free of firebase-admin so the shapes can be tested directly, and
- * checked against the app's own definitions — `merchant_bootstrap.test.ts`
- * reads feature_keys.dart and plan_catalog.dart and fails if they drift.
+ * What the plans are and what they grant is not restated here: it is the app's
+ * to decide, in lib/features/subscription/domain, and plan_policy.generated.ts
+ * is rendered from those files by plan_policy_codegen.ts. This module decides
+ * only which plan a new business starts on and what the documents look like.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FREE_PLAN = exports.WHATSAPP_MESSAGES_METRIC = exports.FEATURE_KEYS = void 0;
 exports.monthlyWindow = monthlyWindow;
 exports.bootstrapDocuments = bootstrapDocuments;
-/** Mirrors `lib/features/subscription/domain/feature_keys.dart`. */
-exports.FEATURE_KEYS = [
-    'whatsapp_automation',
-    'campaigns',
-    'analytics',
-    'multi_device',
-    'cloud_backup',
-    'engage_view_risk',
-    'engage_manage_recovery',
-    'engage_manage_visits',
-    'engage_manage_surveys',
-];
+const plan_policy_generated_js_1 = require("./plan_policy.generated.js");
+Object.defineProperty(exports, "FEATURE_KEYS", { enumerable: true, get: function () { return plan_policy_generated_js_1.FEATURE_KEYS; } });
 exports.WHATSAPP_MESSAGES_METRIC = 'whatsapp_messages';
 /**
- * The plan a business starts on, mirroring `PlanCatalog` for `Plan.free`.
+ * The plan a business starts on.
  *
- * Only the free plan is here on purpose. Every other plan is granted by
- * someone — a person in the console, or billing — and a business that could
- * arrive on a paid plan by being created would be a way to grant one.
+ * Free on purpose. Every other plan is granted by someone — a person in the
+ * console, or billing — and a business that could arrive on a paid plan by
+ * being created would be a way to grant one.
  */
-exports.FREE_PLAN = {
-    code: 'free',
-    name: 'Free',
-    features: ['whatsapp_automation'],
-    whatsappMonthlyLimit: 150,
-};
+exports.FREE_PLAN = plan_policy_generated_js_1.PLANS.free;
 /** The calendar month `now` falls in, as the app computes it. */
 function monthlyWindow(now) {
     const start = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -77,7 +63,7 @@ function bootstrapDocuments(input) {
             updated_at: now,
         },
     });
-    for (const featureKey of exports.FEATURE_KEYS) {
+    for (const featureKey of plan_policy_generated_js_1.FEATURE_KEYS) {
         const id = `${merchantId}_${featureKey}`;
         documents.push({
             collection: 'entitlements',

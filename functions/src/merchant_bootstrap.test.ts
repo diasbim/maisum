@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import test from 'node:test';
 
 import {
@@ -28,49 +26,25 @@ function only(collection: string) {
 
 /* --------------------------------------------------- agreement with the app */
 
-const APP = path.join(__dirname, '..', '..', 'lib', 'features', 'subscription', 'domain');
-
 /**
- * These lists live in Dart and are copied here because Functions cannot import
- * them. Copies drift, so the copy is checked against the original rather than
- * trusted: a feature added to the app now fails this test instead of quietly
- * never being granted to a new business.
+ * The feature keys and what each plan grants are the app's, and reach here
+ * through plan_policy.generated.ts — plan_policy_codegen.test.ts is what holds
+ * that file to the Dart. What is left to check here is that the seeder uses
+ * them rather than deciding for itself.
  */
-test('the feature keys match the app, in the same order', () => {
-  const source = readFileSync(path.join(APP, 'feature_keys.dart'), 'utf8');
-  const block = /static const List<String> all = \[([\s\S]*?)\];/.exec(source);
-  assert.ok(block, 'feature_keys.dart no longer declares `all`');
-
-  const names = block[1]
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry !== '');
-
-  const values = names.map((name) => {
-    const declared = new RegExp(
-      `static const String ${name} = '([a-z_]+)';`,
-    ).exec(source);
-    assert.ok(declared, `${name} has no string value in feature_keys.dart`);
-    return declared[1];
-  });
-
-  assert.ok(values.length >= 9, `parsed only ${values.length} feature keys`);
-  assert.deepEqual([...FEATURE_KEYS], values);
+test('a new business starts on the free plan exactly as the app defines it', () => {
+  const state = only('subscription_state')[0];
+  assert.equal(state.data.plan_code, FREE_PLAN.code);
+  assert.equal(state.data.plan_name, FREE_PLAN.name);
 });
 
-test('the free plan grants what the app says it grants', () => {
-  const source = readFileSync(path.join(APP, 'plan_catalog.dart'), 'utf8');
-  // `\s*` rather than `\n`: the checkout has CRLF line endings on Windows.
-  const block = /Plan\.free: PlanDefinition\(([\s\S]*?)\),\s*Plan\./.exec(source);
-  assert.ok(block, 'plan_catalog.dart no longer defines Plan.free');
-
-  const features = [...block[1].matchAll(/FeatureKeys\.(\w+)/g)].map((m) => m[1]);
-  assert.equal(features.length, 1, 'the free plan gained or lost a feature');
-  assert.equal(features[0], 'whatsappAutomation');
-
-  const limit = /whatsappMonthlyLimit: (\d+)/.exec(block[1]);
-  assert.ok(limit, 'the free plan has no WhatsApp limit');
-  assert.equal(Number(limit[1]), FREE_PLAN.whatsappMonthlyLimit);
+test('the free plan is a real subset of what exists', () => {
+  // If this ever stops holding, seeding every feature would look correct.
+  assert.ok(FREE_PLAN.features.length > 0, 'the free plan grants nothing');
+  assert.ok(
+    FREE_PLAN.features.length < FEATURE_KEYS.length,
+    'the free plan grants everything the app has',
+  );
 });
 
 /* ------------------------------------------------------------ what is written */
@@ -108,11 +82,11 @@ test('every feature key gets an entitlement and a flag', () => {
   assert.equal(only('feature_flags').length, FEATURE_KEYS.length);
 });
 
-test('the free plan enables one feature and no more', () => {
+test('the entitlements enabled are exactly the ones the plan grants', () => {
   const enabled = only('entitlements')
     .filter((doc) => doc.data.is_enabled === true)
     .map((doc) => doc.data.feature_key);
-  assert.deepEqual(enabled, ['whatsapp_automation']);
+  assert.deepEqual(enabled, [...FREE_PLAN.features]);
 });
 
 test('a flag is on even where the plan does not grant the feature', () => {

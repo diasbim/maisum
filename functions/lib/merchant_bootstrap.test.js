@@ -4,8 +4,6 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const strict_1 = __importDefault(require("node:assert/strict"));
-const node_fs_1 = require("node:fs");
-const node_path_1 = __importDefault(require("node:path"));
 const node_test_1 = __importDefault(require("node:test"));
 const merchant_bootstrap_1 = require("./merchant_bootstrap");
 const MERCHANT = 'm-1';
@@ -21,40 +19,21 @@ function only(collection) {
     return seed().filter((doc) => doc.collection === collection);
 }
 /* --------------------------------------------------- agreement with the app */
-const APP = node_path_1.default.join(__dirname, '..', '..', 'lib', 'features', 'subscription', 'domain');
 /**
- * These lists live in Dart and are copied here because Functions cannot import
- * them. Copies drift, so the copy is checked against the original rather than
- * trusted: a feature added to the app now fails this test instead of quietly
- * never being granted to a new business.
+ * The feature keys and what each plan grants are the app's, and reach here
+ * through plan_policy.generated.ts — plan_policy_codegen.test.ts is what holds
+ * that file to the Dart. What is left to check here is that the seeder uses
+ * them rather than deciding for itself.
  */
-(0, node_test_1.default)('the feature keys match the app, in the same order', () => {
-    const source = (0, node_fs_1.readFileSync)(node_path_1.default.join(APP, 'feature_keys.dart'), 'utf8');
-    const block = /static const List<String> all = \[([\s\S]*?)\];/.exec(source);
-    strict_1.default.ok(block, 'feature_keys.dart no longer declares `all`');
-    const names = block[1]
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter((entry) => entry !== '');
-    const values = names.map((name) => {
-        const declared = new RegExp(`static const String ${name} = '([a-z_]+)';`).exec(source);
-        strict_1.default.ok(declared, `${name} has no string value in feature_keys.dart`);
-        return declared[1];
-    });
-    strict_1.default.ok(values.length >= 9, `parsed only ${values.length} feature keys`);
-    strict_1.default.deepEqual([...merchant_bootstrap_1.FEATURE_KEYS], values);
+(0, node_test_1.default)('a new business starts on the free plan exactly as the app defines it', () => {
+    const state = only('subscription_state')[0];
+    strict_1.default.equal(state.data.plan_code, merchant_bootstrap_1.FREE_PLAN.code);
+    strict_1.default.equal(state.data.plan_name, merchant_bootstrap_1.FREE_PLAN.name);
 });
-(0, node_test_1.default)('the free plan grants what the app says it grants', () => {
-    const source = (0, node_fs_1.readFileSync)(node_path_1.default.join(APP, 'plan_catalog.dart'), 'utf8');
-    // `\s*` rather than `\n`: the checkout has CRLF line endings on Windows.
-    const block = /Plan\.free: PlanDefinition\(([\s\S]*?)\),\s*Plan\./.exec(source);
-    strict_1.default.ok(block, 'plan_catalog.dart no longer defines Plan.free');
-    const features = [...block[1].matchAll(/FeatureKeys\.(\w+)/g)].map((m) => m[1]);
-    strict_1.default.equal(features.length, 1, 'the free plan gained or lost a feature');
-    strict_1.default.equal(features[0], 'whatsappAutomation');
-    const limit = /whatsappMonthlyLimit: (\d+)/.exec(block[1]);
-    strict_1.default.ok(limit, 'the free plan has no WhatsApp limit');
-    strict_1.default.equal(Number(limit[1]), merchant_bootstrap_1.FREE_PLAN.whatsappMonthlyLimit);
+(0, node_test_1.default)('the free plan is a real subset of what exists', () => {
+    // If this ever stops holding, seeding every feature would look correct.
+    strict_1.default.ok(merchant_bootstrap_1.FREE_PLAN.features.length > 0, 'the free plan grants nothing');
+    strict_1.default.ok(merchant_bootstrap_1.FREE_PLAN.features.length < merchant_bootstrap_1.FEATURE_KEYS.length, 'the free plan grants everything the app has');
 });
 /* ------------------------------------------------------------ what is written */
 (0, node_test_1.default)('a new business gets exactly one subscription state', () => {
@@ -86,11 +65,11 @@ const APP = node_path_1.default.join(__dirname, '..', '..', 'lib', 'features', '
     strict_1.default.equal(only('entitlements').length, merchant_bootstrap_1.FEATURE_KEYS.length);
     strict_1.default.equal(only('feature_flags').length, merchant_bootstrap_1.FEATURE_KEYS.length);
 });
-(0, node_test_1.default)('the free plan enables one feature and no more', () => {
+(0, node_test_1.default)('the entitlements enabled are exactly the ones the plan grants', () => {
     const enabled = only('entitlements')
         .filter((doc) => doc.data.is_enabled === true)
         .map((doc) => doc.data.feature_key);
-    strict_1.default.deepEqual(enabled, ['whatsapp_automation']);
+    strict_1.default.deepEqual(enabled, [...merchant_bootstrap_1.FREE_PLAN.features]);
 });
 (0, node_test_1.default)('a flag is on even where the plan does not grant the feature', () => {
     // The two answer different questions: the entitlement says whether the plan

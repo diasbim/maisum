@@ -11,39 +11,26 @@
  * So this builds exactly what the app used to write, and the trigger in
  * index.ts writes it with the Admin SDK, which is the only thing entitled to.
  *
- * Kept free of firebase-admin so the shapes can be tested directly, and
- * checked against the app's own definitions — `merchant_bootstrap.test.ts`
- * reads feature_keys.dart and plan_catalog.dart and fails if they drift.
+ * What the plans are and what they grant is not restated here: it is the app's
+ * to decide, in lib/features/subscription/domain, and plan_policy.generated.ts
+ * is rendered from those files by plan_policy_codegen.ts. This module decides
+ * only which plan a new business starts on and what the documents look like.
  */
 
-/** Mirrors `lib/features/subscription/domain/feature_keys.dart`. */
-export const FEATURE_KEYS = [
-  'whatsapp_automation',
-  'campaigns',
-  'analytics',
-  'multi_device',
-  'cloud_backup',
-  'engage_view_risk',
-  'engage_manage_recovery',
-  'engage_manage_visits',
-  'engage_manage_surveys',
-] as const;
+import { FEATURE_KEYS, PLANS } from './plan_policy.generated.js';
+
+export { FEATURE_KEYS };
 
 export const WHATSAPP_MESSAGES_METRIC = 'whatsapp_messages';
 
 /**
- * The plan a business starts on, mirroring `PlanCatalog` for `Plan.free`.
+ * The plan a business starts on.
  *
- * Only the free plan is here on purpose. Every other plan is granted by
- * someone — a person in the console, or billing — and a business that could
- * arrive on a paid plan by being created would be a way to grant one.
+ * Free on purpose. Every other plan is granted by someone — a person in the
+ * console, or billing — and a business that could arrive on a paid plan by
+ * being created would be a way to grant one.
  */
-export const FREE_PLAN = {
-  code: 'free',
-  name: 'Free',
-  features: ['whatsapp_automation'] as string[],
-  whatsappMonthlyLimit: 150,
-};
+export const FREE_PLAN = PLANS.free;
 
 export type SeedDocument = {
   collection: string;

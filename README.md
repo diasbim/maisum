@@ -28,6 +28,19 @@ dart run tool/check_plan_catalog.dart
 Open product decisions on plan promises are tracked in the `openDecisions` block
 of `docs/plans.json`. See `docs/landing_page_recommendations.md`.
 
+What the backend provisions is not declared a second time: Cloud Functions
+renders `functions/src/plan_policy.generated.ts` from the app's own
+`lib/features/subscription/domain/{feature_keys,plan,plan_catalog}.dart`. After
+changing a feature key, a plan, or what a plan grants, regenerate it — the file
+is committed because `firebase deploy` uploads only `functions/`:
+
+```bash
+cd functions && npm run codegen
+```
+
+`npm test` re-renders and compares, so forgetting to regenerate fails the suite
+instead of deploying a stale copy.
+
 ## GitHub Pages Deployment
 
 This repository deploys the static landing page from `docs/` to GitHub Pages via GitHub Actions.

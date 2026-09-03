@@ -7,6 +7,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "codegen": "tsc src/plan_policy_codegen.ts --outDir lib --module node16 --moduleResolution node16 --target es2020 --types node --skipLibCheck && node scripts/generate_plan_policy.js",
     "test": "npm run build --silent && node --test lib/*.test.js",
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions"
