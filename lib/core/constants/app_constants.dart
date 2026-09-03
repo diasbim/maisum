@@ -30,6 +30,28 @@ class AppConstants {
     'ENABLE_CRASHLYTICS_IN_DEBUG',
     defaultValue: false,
   );
+
+  /// Points Auth, Firestore and Functions at the local emulator suite.
+  ///
+  /// Off unless asked for, and refused outside debug builds: a release that
+  /// silently talked to 127.0.0.1 would be a broken app, and one that was
+  /// meant to and did not would be writing to the real database.
+  ///
+  ///     flutter run --dart-define=USE_FIREBASE_EMULATORS=true
+  ///
+  /// The ports mirror `firebase.json`; the host is settable because an Android
+  /// emulator reaches the host machine at 10.0.2.2 rather than at loopback.
+  static const bool useFirebaseEmulators = bool.fromEnvironment(
+    'USE_FIREBASE_EMULATORS',
+    defaultValue: false,
+  );
+  static const String firebaseEmulatorHost = String.fromEnvironment(
+    'FIREBASE_EMULATOR_HOST',
+    defaultValue: '127.0.0.1',
+  );
+  static const int firebaseAuthEmulatorPort = 9099;
+  static const int firestoreEmulatorPort = 8085;
+  static const int functionsEmulatorPort = 5099;
   static const String syncTransportFirestore = 'firestore';
   static const String tokenKey = 'auth_token';
   static const String userIdKey = 'user_id';

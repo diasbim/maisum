@@ -44,6 +44,32 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run -d android --dart-define=API_BASE_URL=https://your-api.example.com
 ```
 
+### Running against the local emulators
+
+Without `USE_FIREBASE_EMULATORS` the app reads and writes the real Firebase
+project even when it is running on your machine, so this is the flag that makes
+"run it locally" mean what it sounds like. It is honoured only in debug builds;
+a release build asked for it refuses to start rather than quietly using
+production.
+
+```bash
+firebase emulators:start          # auth 9099, firestore 8085, functions 5099
+
+flutter run -d emulator-5554 \
+  --dart-define=USE_FIREBASE_EMULATORS=true \
+  --dart-define=FIREBASE_EMULATOR_HOST=10.0.2.2 \
+  --dart-define=CLOUD_FUNCTIONS_API_BASE_URL=http://10.0.2.2:5099/loyaltyos-fc4dd/us-central1/api
+```
+
+`10.0.2.2` is how an Android emulator reaches its host; on a physical device
+use `adb reverse tcp:8085 tcp:8085` (and the other two ports) and leave the host
+at its `127.0.0.1` default. Cleartext to those addresses is permitted by
+`android/app/src/debug/res/xml/network_security_config.xml`, which is debug-only
+— release builds still refuse plain HTTP everywhere.
+
+The web target is not configured for Firebase (`firebase_options.dart` has
+Android only), so `-d chrome` starts but never connects.
+
 ## Stack
 
 | Layer | Package |
