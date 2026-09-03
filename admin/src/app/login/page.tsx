@@ -10,7 +10,7 @@ export default function LoginPage() {
     <main className="auth-shell">
       <div className="auth-card">
         <div style={{ marginBottom: 16 }}>
-          <Wordmark tone="onLight" />
+          <Wordmark tone="onLight" area={null} />
         </div>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: 6 }}>
           Entrar
@@ -22,7 +22,7 @@ export default function LoginPage() {
             fontSize: '0.88rem',
           }}
         >
-          Acesso restrito à equipa interna.
+          Para a equipa interna e para responsáveis de negócio.
         </p>
         <Suspense fallback={null}>
           <LoginForm />

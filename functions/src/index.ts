@@ -71,6 +71,10 @@ import {
   upsertPlanPrice as upsertPlanPriceInFirestore,
 } from './admin_firestore.js';
 import {
+  authorizeBusiness,
+  listAccessibleBusinesses,
+} from './merchant_firestore.js';
+import {
   listAuditEvents as listAuditEventsFromFirestore,
   recordAuditEvent,
   type AuditActor,
@@ -1332,6 +1336,135 @@ adminRouter.get('/nfc-cards', async (req, res) => {
  * like the other maintenance jobs, and defaults to a dry run.
  */
 app.use('/admin', adminRouter);
+
+/*
+ * The merchant's own view of their business.
+ *
+ * Separate from /admin because the question is different: /admin asks "is this
+ * person internal staff", and answers for every business. These ask "which
+ * business is this person allowed to be", and answer for exactly that one.
+ *
+ * The readers are the same ones the console uses — only the authorization in
+ * front of them is new. Every handler resolves the business from the token
+ * rather than from a parameter the caller controls.
+ */
+const merchantRouter = express.Router();
+
+/** The signed-in person, as the access predicate wants them. */
+function merchantIdentityFrom(req: AuthedRequest) {
+  const decoded = req.auth as admin.auth.DecodedIdToken | undefined;
+  if (!decoded?.uid) return null;
+  const phone = (decoded as Record<string, unknown>).phone_number;
+  return {
+    identity: {
+      uid: decoded.uid,
+      phoneNumber: typeof phone === 'string' ? phone : null,
+    },
+    claims: decoded as unknown,
+  };
+}
+
+/**
+ * The business a request acts on.
+ *
+ * `?merchant_id=` is honoured only after `authorizeBusiness` confirms it, so
+ * naming someone else's business gets a 403 rather than their data. With no
+ * parameter, the caller's first accessible business is used.
+ */
+type ResolvedBusiness =
+  | { ok: true; business: { id: string; name: string | null } }
+  | { ok: false; status: 401 | 403 };
+
+async function businessForRequest(
+  req: AuthedRequest,
+): Promise<ResolvedBusiness> {
+  const who = merchantIdentityFrom(req);
+  if (!who) return { ok: false, status: 401 };
+
+  const requested = req.query?.merchant_id;
+  if (typeof requested === 'string' && requested.trim() !== '') {
+    const business = await authorizeBusiness(
+      requested.trim(),
+      who.identity,
+      who.claims,
+    );
+    return business
+      ? { ok: true, business }
+      : { ok: false, status: 403 };
+  }
+
+  const accessible = await listAccessibleBusinesses(who.identity, who.claims);
+  if (accessible.length === 0) return { ok: false, status: 403 };
+  return { ok: true, business: accessible[0] };
+}
+
+merchantRouter.get('/businesses', async (req, res) => {
+  const who = merchantIdentityFrom(req as unknown as AuthedRequest);
+  if (!who) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
+  try {
+    const businesses = await listAccessibleBusinesses(who.identity, who.claims);
+    return res.json({
+      success: true,
+      data: businesses.map((business) => ({
+        id: business.id,
+        name: business.name,
+      })),
+    });
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_businesses', error);
+  }
+});
+
+merchantRouter.get('/profile', async (req, res) => {
+  try {
+    const resolved = await businessForRequest(req as unknown as AuthedRequest);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({
+        success: false,
+        message:
+          resolved.status === 403
+            ? 'No business is associated with this account.'
+            : 'Unauthorized',
+      });
+    }
+
+    const detail = await getMerchantDetailFromFirestore(resolved.business.id);
+    if (!detail) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Business not found' });
+    }
+    return res.json({ success: true, data: detail });
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_profile', error);
+  }
+});
+
+merchantRouter.get('/entitlements', async (req, res) => {
+  try {
+    const resolved = await businessForRequest(req as unknown as AuthedRequest);
+    if (!resolved.ok) {
+      return res.status(resolved.status).json({
+        success: false,
+        message:
+          resolved.status === 403
+            ? 'No business is associated with this account.'
+            : 'Unauthorized',
+      });
+    }
+
+    const entitlements = await listEntitlementsFromFirestore(
+      resolved.business.id,
+    );
+    return res.json({ success: true, data: entitlements });
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_entitlements', error);
+  }
+});
+
+app.use('/merchant', merchantRouter);
 
 app.get('/customer/session', async (req, res) => {
   try {

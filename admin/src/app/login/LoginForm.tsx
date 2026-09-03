@@ -71,8 +71,8 @@ export function LoginForm() {
       });
 
       if (!response.ok) {
-        // The account authenticated but is not an admin, so drop the Firebase
-        // session too rather than leaving a half-signed-in state.
+        // The account authenticated but has no portal access, so drop the
+        // Firebase session too rather than leaving a half-signed-in state.
         await signOut(auth).catch(() => undefined);
         const body: unknown = await response.json().catch(() => null);
         const message =
@@ -83,8 +83,21 @@ export function LoginForm() {
         return;
       }
 
+      // The exchange says which area this account belongs to; a business owner
+      // sent to /admin would only bounce off its guard.
+      const body: unknown = await response.json().catch(() => null);
+      const area =
+        typeof body === 'object' && body !== null && 'area' in body
+          ? String((body as { area: unknown }).area)
+          : 'admin';
+      const home = area === 'merchant' ? '/negocio' : '/admin';
+
       const next = params.get('next');
-      router.replace(next && next.startsWith('/') ? next : '/admin');
+      // A saved destination is only honoured inside the area the account can
+      // actually reach.
+      const destination =
+        next && next.startsWith(home) ? next : home;
+      router.replace(destination);
       router.refresh();
     } catch (caught) {
       setError(describe(caught));

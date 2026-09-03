@@ -24,13 +24,27 @@ export type AdminSession = {
  * before the app and is the wrong place to be the only gate.
  */
 export async function getAdminSession(): Promise<AdminSession | null> {
+  const session = await getPortalSession();
+  if (!session) return null;
+  if (!hasAdminClaims(session.claims)) return null;
+  return session;
+}
+
+/**
+ * A verified signed-in person, with no opinion on what they may do.
+ *
+ * The portal now has two audiences — internal staff under `/admin`, and
+ * business owners under `/negocio` — and they are gated by different questions.
+ * This answers only "is this a real, current session"; each area then asks its
+ * own. Nothing routes off this alone.
+ */
+export async function getPortalSession(): Promise<AdminSession | null> {
   const store = await cookies();
   const idToken = store.get(SESSION_COOKIE)?.value;
   if (!idToken) return null;
 
   const claims = await verifySessionToken(idToken);
   if (!claims) return null;
-  if (!hasAdminClaims(claims)) return null;
 
   return {
     uid: claims.uid,
