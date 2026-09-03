@@ -1069,7 +1069,8 @@ void main() {
       await _tapVisibleText(tester, 'Adicionar depois');
 
       expect(find.text('Segunda Firestore'), findsOneWidget);
-      expect(find.text('09:15 - 17:45'), findsOneWidget);
+      expect(find.text('09:15'), findsOneWidget);
+      expect(find.text('17:45'), findsOneWidget);
       await _tapVisibleText(tester, 'Configurar depois');
 
       await _tapVisibleText(tester, 'Configurar depois');
@@ -1109,6 +1110,66 @@ void main() {
         isNull,
       );
       expect(find.text('onboarding-plan-route'), findsOneWidget);
+    });
+
+    testWidgets(
+        'working hours page lets the operator adjust the default open/close time',
+        (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      await _seedMerchantOnboardingConfig(firestore);
+      final storage = _SpySecureStorageService(initialPlanConfirmed: false);
+      final session = AuthSession(
+        userId: 'user-1',
+        merchantId: 'merchant-1',
+        merchantName: 'Minha Loja',
+        firebaseUid: 'firebase-user-1',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+
+      await tester.pumpWidget(
+        _buildMerchantOnboardingFlow(
+          session: session,
+          firestore: firestore,
+          storage: storage,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(
+        const Key('business_type_option_barber_from_firestore'),
+      ));
+      await tester.pumpAndSettle();
+      await _tapVisibleText(tester, 'Continuar');
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nome do negócio *'),
+        'Barbearia Firebase',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Cidade *'),
+        'Matola',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Bairro ou distrito *'),
+        'Matola A',
+      );
+      await tester.pumpAndSettle();
+      await _tapVisibleText(tester, 'Continuar');
+      await _tapVisibleText(tester, 'Adicionar depois');
+
+      // The default template is the same for every merchant; without a way
+      // to correct it, every business onboarded through this screen would be
+      // stuck with whatever hours Firestore happens to default to.
+      expect(find.text('09:15'), findsOneWidget);
+      await tester.tap(find.text('09:15'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+
+      // Cancelling must not silently change anything.
+      await _tapVisibleText(tester, 'Cancel');
+      expect(find.text('09:15'), findsOneWidget);
     });
 
     testWidgets('editing business type from review returns to review',
