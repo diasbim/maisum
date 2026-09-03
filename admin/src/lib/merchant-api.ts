@@ -44,10 +44,91 @@ export type MerchantEntitlement = {
   updated_at: number | null;
 };
 
+export type MerchantCustomer = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  total_points: number;
+  total_visits: number;
+  total_spent: number;
+  average_spend: number | null;
+  lifecycle_stage: string | null;
+  retention_status: string | null;
+  relationship_status: string | null;
+  first_visit_at: number | null;
+  last_visit_at: number | null;
+  created_at: number | null;
+  updated_at: number | null;
+  archived_at: number | null;
+};
+
+export type MerchantSale = {
+  id: string;
+  amount: number | null;
+  points: number | null;
+  created_at: number | null;
+  cancellation_status: string | null;
+  confirmation_status: string | null;
+};
+
+export type MerchantCustomerDetail = MerchantCustomer & {
+  sales: MerchantSale[];
+};
+
+export type MerchantCatalogItem = {
+  id: string;
+  name: string | null;
+  type: string | null;
+  default_price: number | null;
+  is_active: boolean | null;
+  display_order: number;
+  created_at: number | null;
+  updated_at: number | null;
+};
+
+export type MerchantReward = {
+  id: string;
+  name: string | null;
+  description: string | null;
+  points_required: number | null;
+  is_active: boolean | null;
+  created_at: number | null;
+  updated_at: number | null;
+};
+
+export type MerchantStaff = {
+  id: string;
+  phone: string | null;
+  role: string | null;
+  status: string | null;
+  created_at: number | null;
+  updated_at: number | null;
+  last_login_at: number | null;
+};
+
+/** What a list screen needs: the rows, and whether they are all of them. */
+export type MerchantList<T> = {
+  items: T[];
+  hasMore: boolean;
+  total: number;
+  /** The read hit its cap, so `total` undercounts. Screens say so. */
+  truncated: boolean;
+};
+
+export type ListQuery = {
+  search?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+};
+
 type Envelope<T> = {
   success?: boolean;
   message?: string;
   data?: T;
+  paging?: { limit?: number; offset?: number; has_more?: boolean };
+  total?: number;
+  truncated?: boolean;
 };
 
 /**
@@ -143,4 +224,70 @@ export async function fetchMyProfile(): Promise<MerchantProfile | null> {
 export async function fetchMyEntitlements(): Promise<MerchantEntitlement[]> {
   const body = await call<MerchantEntitlement[]>('/merchant/entitlements');
   return body.data ?? [];
+}
+
+/* -------------------------------------------------------------- the records */
+
+export const MERCHANT_PAGE_SIZE = 25;
+
+function query(params: ListQuery): string {
+  const search = new URLSearchParams();
+  if (params.search) search.set('search', params.search);
+  if (params.status) search.set('status', params.status);
+  search.set('limit', String(params.limit ?? MERCHANT_PAGE_SIZE));
+  if (params.offset) search.set('offset', String(params.offset));
+  return `?${search.toString()}`;
+}
+
+async function callList<T>(
+  path: string,
+  params: ListQuery,
+): Promise<MerchantList<T>> {
+  const body = await call<T[]>(`${path}${query(params)}`);
+  return {
+    items: body.data ?? [],
+    hasMore: body.paging?.has_more ?? false,
+    total: body.total ?? (body.data?.length ?? 0),
+    truncated: body.truncated ?? false,
+  };
+}
+
+/**
+ * The business's own customers.
+ *
+ * The console has no equivalent, on purpose — internal staff can look a
+ * customer up by phone and no further, so nobody inside can enumerate the
+ * customer base. A business listing the customers it serves is a different
+ * question: the till already holds this list offline, and the rules have
+ * always allowed the owner to read it.
+ */
+export function fetchMyCustomers(params: ListQuery = {}) {
+  return callList<MerchantCustomer>('/merchant/customers', params);
+}
+
+/** One customer with their recent visits. `null` when no such customer. */
+export async function fetchMyCustomer(
+  customerId: string,
+): Promise<MerchantCustomerDetail | null> {
+  try {
+    const body = await call<MerchantCustomerDetail>(
+      `/merchant/customers/${encodeURIComponent(customerId)}`,
+    );
+    return body.data ?? null;
+  } catch (caught) {
+    if (caught instanceof AdminApiError && caught.status === 404) return null;
+    throw caught;
+  }
+}
+
+export function fetchMyCatalog(params: ListQuery = {}) {
+  return callList<MerchantCatalogItem>('/merchant/catalog', params);
+}
+
+export function fetchMyRewards(params: ListQuery = {}) {
+  return callList<MerchantReward>('/merchant/rewards', params);
+}
+
+export function fetchMyTeam(params: ListQuery = {}) {
+  return callList<MerchantStaff>('/merchant/team', params);
 }

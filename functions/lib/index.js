@@ -59,6 +59,7 @@ const customer_nfc_js_1 = require("./customer_nfc.js");
 const cors_origins_js_1 = require("./cors_origins.js");
 const admin_firestore_js_1 = require("./admin_firestore.js");
 const merchant_firestore_js_1 = require("./merchant_firestore.js");
+const merchant_collections_js_1 = require("./merchant_collections.js");
 const admin_audit_js_1 = require("./admin_audit.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
@@ -1179,6 +1180,118 @@ merchantRouter.get('/entitlements', async (req, res) => {
     }
     catch (error) {
         return respondAdminServerError(res, 'merchant_entitlements', error);
+    }
+});
+/**
+ * The resolve-or-deny step every record route repeats.
+ *
+ * Returns the business, or answers the request and returns null. Written once
+ * so that adding a route cannot accidentally add one that skips the check.
+ */
+async function requireBusiness(req, res) {
+    const resolved = await businessForRequest(req);
+    if (resolved.ok)
+        return resolved.business;
+    res.status(resolved.status).json({
+        success: false,
+        message: resolved.status === 403
+            ? 'No business is associated with this account.'
+            : 'Unauthorized',
+    });
+    return null;
+}
+/** The paging and filtering every record route accepts. */
+function merchantRecordQuery(req) {
+    return {
+        search: pickQueryString(req.query.search) ?? undefined,
+        status: pickQueryString(req.query.status) ?? undefined,
+        limit: clampLimit(req.query.limit, 50, 200),
+        offset: Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0)),
+    };
+}
+function merchantPageResponse(res, query, page) {
+    return res.json({
+        success: true,
+        data: page.items,
+        paging: { limit: query.limit, offset: query.offset, has_more: page.hasMore },
+        total: page.total,
+        truncated: page.truncated,
+    });
+}
+merchantRouter.get('/customers', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listCustomers)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_customers', error);
+    }
+});
+merchantRouter.get('/customers/:customerId', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const customerId = String(req.params.customerId ?? '').trim();
+        const customer = customerId
+            ? await (0, merchant_collections_js_1.getCustomer)(business.id, customerId)
+            : null;
+        if (!customer) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Customer not found' });
+        }
+        // The visit history is the reason to open a customer at all, so it is part
+        // of the same response rather than a second round trip.
+        const sales = await (0, merchant_collections_js_1.listCustomerSales)(business.id, customer.id);
+        return res.json({ success: true, data: { ...customer, sales } });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_customer_detail', error);
+    }
+});
+merchantRouter.get('/catalog', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listCatalog)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_catalog', error);
+    }
+});
+merchantRouter.get('/rewards', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listRewards)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_rewards', error);
+    }
+});
+merchantRouter.get('/team', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listTeam)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_team', error);
     }
 });
 app.use('/merchant', merchantRouter);

@@ -329,6 +329,17 @@ tbody tr:hover {
   background: var(--off);
 }
 
+/*
+ * Numeric cells. Right-aligned and tabular so that points, visits and amounts
+ * line up on the decimal — a column of money that does not is read digit by
+ * digit instead of at a glance.
+ */
+td.num,
+th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .scroll-x {
   overflow-x: auto;
 }
@@ -897,9 +908,32 @@ select.input {
   color: oklch(40% 0.16 25);
 }
 
+/* Not an error: the screen worked, it just cannot show everything at once. */
+.notice--warn {
+  background: oklch(97% 0.04 85);
+  border-color: oklch(82% 0.11 85);
+  color: oklch(42% 0.12 85);
+}
+
 .notice__mark {
   font-weight: 800;
   flex-shrink: 0;
+}
+
+/*
+ * The search line above a list. Wraps rather than compressing the input: a
+ * search box narrower than the phone number being pasted into it is useless.
+ */
+.record-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.record-search .input {
+  flex: 1 1 260px;
+  min-width: 0;
 }
 
 .output {

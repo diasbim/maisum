@@ -148,16 +148,34 @@ export function ClearFilters({
  * rather than derived: anything unrecognized stays neutral instead of being
  * coloured by accident.
  */
-export function Badge({ label }: { label: string | null }) {
+/**
+ * A status, coloured by what it means.
+ *
+ * `tone` exists because the two areas write the same state differently: the
+ * console shows the stored value, which is what internal staff match against
+ * logs, while the business area translates it. Passing the raw value as the
+ * tone keeps "Ativo" green without teaching this component every language it
+ * might be rendered in.
+ */
+export function Badge({
+  label,
+  tone: toneSource,
+}: {
+  label: string | null;
+  tone?: string | null;
+}) {
   if (!label) return <span className="muted">—</span>;
 
-  const tone = label.trim().toUpperCase();
+  const tone = (toneSource ?? label).trim().toUpperCase();
   const variant =
     tone === 'ACTIVE'
       ? 'badge-green'
-      : tone === 'TRIAL'
+      : tone === 'TRIAL' || tone === 'PENDING'
         ? 'badge-amber'
-        : tone === 'PAST_DUE' || tone === 'CANCELLED' || tone === 'CANCELED'
+        : tone === 'PAST_DUE' ||
+            tone === 'CANCELLED' ||
+            tone === 'CANCELED' ||
+            tone === 'FAILED'
           ? 'badge-red'
           : 'badge-navy';
 

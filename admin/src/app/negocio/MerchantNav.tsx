@@ -7,11 +7,20 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 /**
  * The business area's map.
  *
- * Two entries today. It is grouped anyway, and shaped like the console's nav,
- * because the plan adds clientes, catálogo, recompensas and equipa to the same
- * structure — a flat list now would have to be rebuilt then.
+ * Grouped by the question being asked rather than by where the data lives:
+ * "Operação" is what happens day to day and is where an owner spends their
+ * time, so it leads; "Negócio" is the account itself, visited rarely.
  */
 const GROUPS = [
+  {
+    label: 'Operação',
+    items: [
+      { href: '/negocio/clientes', label: 'Clientes' },
+      { href: '/negocio/catalogo', label: 'Catálogo' },
+      { href: '/negocio/recompensas', label: 'Recompensas' },
+      { href: '/negocio/equipa', label: 'Equipa' },
+    ],
+  },
   {
     label: 'Negócio',
     items: [
@@ -26,13 +35,22 @@ function isCurrent(href: string, pathname: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function currentLabel(pathname: string): string {
+/**
+ * Where the drawer trigger says you are.
+ *
+ * Both halves, because with two groups the section alone is ambiguous: the
+ * group is the part that says whether you are looking at the day's work or at
+ * the account.
+ */
+function currentWhere(pathname: string): { group: string | null; item: string } {
   for (const group of GROUPS) {
     for (const item of group.items) {
-      if (isCurrent(item.href, pathname)) return item.label;
+      if (isCurrent(item.href, pathname)) {
+        return { group: group.label, item: item.label };
+      }
     }
   }
-  return 'Secções';
+  return { group: null, item: 'Secções' };
 }
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -67,6 +85,7 @@ export function MerchantNav() {
 /** The same drawer the console uses, so the two areas behave identically. */
 export function MerchantMobileNav({ business }: { business: string }) {
   const pathname = usePathname();
+  const where = currentWhere(pathname);
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -137,8 +156,10 @@ export function MerchantMobileNav({ business }: { business: string }) {
           <span />
         </span>
         <span className="mobile-nav__where">
-          <span className="mobile-nav__group">Negócio</span>
-          <span className="mobile-nav__item">{currentLabel(pathname)}</span>
+          {where.group ? (
+            <span className="mobile-nav__group">{where.group}</span>
+          ) : null}
+          <span className="mobile-nav__item">{where.item}</span>
         </span>
       </button>
 

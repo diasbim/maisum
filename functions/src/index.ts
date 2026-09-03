@@ -75,6 +75,14 @@ import {
   listAccessibleBusinesses,
 } from './merchant_firestore.js';
 import {
+  getCustomer,
+  listCatalog,
+  listCustomerSales,
+  listCustomers,
+  listRewards,
+  listTeam,
+} from './merchant_collections.js';
+import {
   listAuditEvents as listAuditEventsFromFirestore,
   recordAuditEvent,
   type AuditActor,
@@ -1461,6 +1469,133 @@ merchantRouter.get('/entitlements', async (req, res) => {
     return res.json({ success: true, data: entitlements });
   } catch (error) {
     return respondAdminServerError(res, 'merchant_entitlements', error);
+  }
+});
+
+/**
+ * The resolve-or-deny step every record route repeats.
+ *
+ * Returns the business, or answers the request and returns null. Written once
+ * so that adding a route cannot accidentally add one that skips the check.
+ */
+async function requireBusiness(
+  req: AuthedRequest,
+  res: express.Response,
+): Promise<{ id: string; name: string | null } | null> {
+  const resolved = await businessForRequest(req);
+  if (resolved.ok) return resolved.business;
+  res.status(resolved.status).json({
+    success: false,
+    message:
+      resolved.status === 403
+        ? 'No business is associated with this account.'
+        : 'Unauthorized',
+  });
+  return null;
+}
+
+/** The paging and filtering every record route accepts. */
+function merchantRecordQuery(req: AuthedRequest) {
+  return {
+    search: pickQueryString(req.query.search) ?? undefined,
+    status: pickQueryString(req.query.status) ?? undefined,
+    limit: clampLimit(req.query.limit, 50, 200),
+    offset: Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0)),
+  };
+}
+
+function merchantPageResponse<T>(
+  res: express.Response,
+  query: { limit: number; offset: number },
+  page: { items: T[]; hasMore: boolean; total: number; truncated: boolean },
+) {
+  return res.json({
+    success: true,
+    data: page.items,
+    paging: { limit: query.limit, offset: query.offset, has_more: page.hasMore },
+    total: page.total,
+    truncated: page.truncated,
+  });
+}
+
+merchantRouter.get('/customers', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(
+      res,
+      query,
+      await listCustomers(business.id, query),
+    );
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_customers', error);
+  }
+});
+
+merchantRouter.get('/customers/:customerId', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const customerId = String(req.params.customerId ?? '').trim();
+    const customer = customerId
+      ? await getCustomer(business.id, customerId)
+      : null;
+    if (!customer) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Customer not found' });
+    }
+
+    // The visit history is the reason to open a customer at all, so it is part
+    // of the same response rather than a second round trip.
+    const sales = await listCustomerSales(business.id, customer.id);
+    return res.json({ success: true, data: { ...customer, sales } });
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_customer_detail', error);
+  }
+});
+
+merchantRouter.get('/catalog', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(res, query, await listCatalog(business.id, query));
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_catalog', error);
+  }
+});
+
+merchantRouter.get('/rewards', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(res, query, await listRewards(business.id, query));
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_rewards', error);
+  }
+});
+
+merchantRouter.get('/team', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(res, query, await listTeam(business.id, query));
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_team', error);
   }
 });
 
