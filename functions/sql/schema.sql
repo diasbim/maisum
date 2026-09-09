@@ -365,6 +365,89 @@ CREATE INDEX IF NOT EXISTS idx_recovery_actions_merchant_customer
 CREATE INDEX IF NOT EXISTS idx_recovery_actions_merchant_task
   ON recovery_actions(merchant_id, task_id);
 
+-- Retention Engine: rule catalog (per merchant, seeded from the MVP rule
+-- set), cooldown/idempotency log, and the Bonus de Regresso feature. Follows
+-- the same generated-column "one active row" idiom as recovery_tasks so
+-- concurrent/replayed sync writes cannot create two active bonuses.
+CREATE TABLE IF NOT EXISTS retention_rules (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  rule_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  event TEXT NOT NULL,
+  action TEXT NOT NULL,
+  conditions JSONB NOT NULL DEFAULT '{}'::jsonb,
+  priority INTEGER NOT NULL DEFAULT 100,
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  cooldown_hours INTEGER NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_retention_rules_merchant_key
+  ON retention_rules(merchant_id, rule_key);
+
+CREATE TABLE IF NOT EXISTS retention_rule_executions (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  customer_id TEXT NOT NULL,
+  rule_key TEXT NOT NULL,
+  action TEXT NOT NULL,
+  message_priority SMALLINT,
+  source_type TEXT,
+  source_id TEXT,
+  executed_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+-- Same source event (e.g. the same sale) can never trigger the same rule
+-- twice, even across retried/duplicate sync writes.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_retention_rule_executions_idem
+  ON retention_rule_executions(merchant_id, customer_id, rule_key, source_id);
+CREATE INDEX IF NOT EXISTS idx_retention_rule_executions_customer_time
+  ON retention_rule_executions(merchant_id, customer_id, executed_at DESC);
+
+CREATE TABLE IF NOT EXISTS return_bonus_configs (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  enabled BOOLEAN NOT NULL DEFAULT true,
+  type TEXT NOT NULL DEFAULT 'DISCOUNT',
+  value NUMERIC NOT NULL DEFAULT 20,
+  validity_hours INTEGER NOT NULL DEFAULT 72,
+  minimum_purchase_amount NUMERIC NOT NULL DEFAULT 0,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_return_bonus_configs_merchant
+  ON return_bonus_configs(merchant_id);
+
+CREATE TABLE IF NOT EXISTS return_bonuses (
+  id TEXT PRIMARY KEY,
+  merchant_id TEXT NOT NULL REFERENCES merchants(id),
+  customer_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  value NUMERIC NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  issued_at BIGINT NOT NULL,
+  expires_at BIGINT NOT NULL,
+  source_sale_id TEXT,
+  redeemed_at BIGINT,
+  redemption_sale_id TEXT,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  active_slot SMALLINT GENERATED ALWAYS AS (
+    CASE WHEN UPPER(status) = 'ACTIVE' THEN 1 ELSE NULL END
+  ) STORED
+);
+-- Max 1 active bonus per customer per merchant, enforced atomically.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_return_bonuses_one_active_customer
+  ON return_bonuses(merchant_id, customer_id, active_slot);
+-- Max 1 bonus per sale, enforced atomically (idempotent under sync retries).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_return_bonuses_source_sale
+  ON return_bonuses(merchant_id, source_sale_id) WHERE source_sale_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_return_bonuses_merchant_customer
+  ON return_bonuses(merchant_id, customer_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_return_bonuses_merchant_status_expiry
+  ON return_bonuses(merchant_id, status, expires_at);
+
 CREATE TABLE IF NOT EXISTS visit_reports (
   id TEXT PRIMARY KEY,
   merchant_id TEXT NOT NULL REFERENCES merchants(id),

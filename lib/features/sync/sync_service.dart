@@ -71,6 +71,7 @@ const _syncEntities = [
   _SyncEntityConfig(entityType: 'usage_event', cursorField: 'occurred_at'),
   _SyncEntityConfig(entityType: 'app_user', cursorField: 'updated_at'),
   _SyncEntityConfig(entityType: 'sync_tombstone', cursorField: 'deleted_at'),
+  _SyncEntityConfig(entityType: 'return_bonus', cursorField: 'updated_at'),
 ];
 
 const _entitiesRequiringLocalMerchant = {
@@ -643,6 +644,8 @@ class SyncService {
         return Future.value();
       case 'app_user':
         return _applyAppUser(txn, remote);
+      case 'return_bonus':
+        return _applyReturnBonus(txn, remote);
       default:
         return Future.value();
     }
@@ -1246,6 +1249,53 @@ class SyncService {
 
     await txn.update(
       'customer_risk_scores',
+      incoming,
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+    );
+  }
+
+  /// return_bonus is server-authoritative end to end (issued by the
+  /// Retention Engine, redeemed via POST /return-bonuses/:id/redeem): the
+  /// client only ever pulls it down, so remote data always wins.
+  Future<void> _applyReturnBonus(
+    dynamic txn,
+    Map<String, dynamic> remote,
+  ) async {
+    final id = remote['id'] as String?;
+    if (id == null) return;
+
+    final row = await txn.query(
+      'return_bonuses',
+      where: _entityWhereClause('id = ?'),
+      whereArgs: _entityWhereArgs([id]),
+      limit: 1,
+    );
+    final incoming = _filterKeys(_normalizedIncoming(remote), {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'type',
+      'value',
+      'status',
+      'issued_at',
+      'expires_at',
+      'source_sale_id',
+      'redeemed_at',
+      'redemption_sale_id',
+      'created_at',
+      'updated_at',
+      'synced',
+    })
+      ..['synced'] = 1;
+
+    if (row.isEmpty) {
+      await txn.insert('return_bonuses', incoming);
+      return;
+    }
+
+    await txn.update(
+      'return_bonuses',
       incoming,
       where: _entityWhereClause('id = ?'),
       whereArgs: _entityWhereArgs([id]),

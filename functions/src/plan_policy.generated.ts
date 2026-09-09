@@ -20,6 +20,7 @@ export const FEATURE_KEYS = [
   'engage_manage_recovery',
   'engage_manage_visits',
   'engage_manage_surveys',
+  'retention_core',
 ] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
@@ -49,6 +50,7 @@ export const PLANS: Record<PlanCode, PlanPolicy> = {
       'engage_manage_recovery',
       'engage_manage_visits',
       'engage_manage_surveys',
+      'retention_core',
     ],
     whatsappMonthlyLimit: 20000,
   },
@@ -57,6 +59,7 @@ export const PLANS: Record<PlanCode, PlanPolicy> = {
     name: 'Free',
     features: [
       'whatsapp_automation',
+      'retention_core',
     ],
     whatsappMonthlyLimit: 150,
   },
@@ -67,6 +70,7 @@ export const PLANS: Record<PlanCode, PlanPolicy> = {
       'whatsapp_automation',
       'campaigns',
       'analytics',
+      'retention_core',
     ],
     whatsappMonthlyLimit: 1200,
   },
@@ -78,6 +82,7 @@ export const PLANS: Record<PlanCode, PlanPolicy> = {
       'campaigns',
       'analytics',
       'engage_view_risk',
+      'retention_core',
     ],
     whatsappMonthlyLimit: 3000,
   },
@@ -94,6 +99,7 @@ export const PLANS: Record<PlanCode, PlanPolicy> = {
       'engage_manage_recovery',
       'engage_manage_visits',
       'engage_manage_surveys',
+      'retention_core',
     ],
     whatsappMonthlyLimit: 6000,
   },
@@ -110,6 +116,7 @@ export const PLANS: Record<PlanCode, PlanPolicy> = {
       'engage_manage_recovery',
       'engage_manage_visits',
       'engage_manage_surveys',
+      'retention_core',
     ],
     whatsappMonthlyLimit: 6000,
   },

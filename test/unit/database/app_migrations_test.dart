@@ -301,4 +301,59 @@ void main() {
       throwsA(anything),
     );
   });
+
+  test('v29 adds return_bonuses for the Retention Engine (Bónus de Regresso)',
+      () async {
+    final db = await _openDb(version: 28);
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+
+    await AppMigrations.migrate(db, fromVersion: 28, toVersion: 29);
+
+    final cols = await _columns(db, 'return_bonuses');
+    expect(
+      cols,
+      containsAll(<String>[
+        'id',
+        'merchant_id',
+        'customer_id',
+        'type',
+        'value',
+        'status',
+        'issued_at',
+        'expires_at',
+        'source_sale_id',
+        'redeemed_at',
+        'redemption_sale_id',
+        'created_at',
+        'updated_at',
+        'synced',
+      ]),
+    );
+
+    await db.insert('return_bonuses', {
+      'id': 'b1',
+      'merchant_id': 'm1',
+      'customer_id': 'c1',
+      'type': 'DISCOUNT',
+      'value': 20,
+      'status': 'ACTIVE',
+      'issued_at': 1000,
+      'expires_at': 2000,
+      'created_at': 1000,
+      'updated_at': 1000,
+      'synced': 0,
+    });
+    final rows =
+        await db.query('return_bonuses', where: 'id = ?', whereArgs: ['b1']);
+    expect(rows.single['status'], 'ACTIVE');
+  });
 }

@@ -142,6 +142,11 @@ class AppMigrations {
       name: 'customer nfc card cache',
       up: _createV28Schema,
     ),
+    const MigrationStep(
+      version: 29,
+      name: 'retention engine: return bonuses',
+      up: _createV29Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -348,6 +353,22 @@ class _SchemaVerifier {
       'updated_at',
       'synced',
     },
+    'return_bonuses': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'type',
+      'value',
+      'status',
+      'issued_at',
+      'expires_at',
+      'source_sale_id',
+      'redeemed_at',
+      'redemption_sale_id',
+      'created_at',
+      'updated_at',
+      'synced',
+    },
     'customer_risk_scores': {
       'id',
       'merchant_id',
@@ -543,6 +564,7 @@ class _SchemaVerifier {
       await _createV26Schema(txn);
       await _createV27Schema(txn);
       await _createV28Schema(txn);
+      await _createV29Schema(txn);
     });
   }
 
@@ -1605,6 +1627,40 @@ Future<void> _createV28Schema(DatabaseExecutor db) async {
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_nfc_card_uid '
     'ON customers(merchant_id, nfc_card_uid) '
     'WHERE nfc_card_uid IS NOT NULL',
+  );
+}
+
+Future<void> _createV29Schema(DatabaseExecutor db) async {
+  // Retention Engine (F1 Bónus de Regresso): server-issued, server-redeemed.
+  // The client only reads a pulled-down cache for display; expiration and
+  // redemption are always re-validated server-side (never trusted locally).
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS return_bonuses (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      value REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ACTIVE',
+      issued_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      source_sale_id TEXT,
+      redeemed_at INTEGER,
+      redemption_sale_id TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_return_bonuses_merchant_customer ON return_bonuses(merchant_id, customer_id, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_return_bonuses_merchant_status ON return_bonuses(merchant_id, status, expires_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_return_bonuses_synced ON return_bonuses(merchant_id, synced)',
   );
 }
 

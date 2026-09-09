@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -46,6 +47,9 @@ import '../features/rewards/data/reward_dao.dart';
 import '../features/rewards/data/reward_repository.dart';
 import '../features/retention/data/retention_dao.dart';
 import '../features/retention/data/retention_repository.dart';
+import '../features/retention/data/return_bonus_api.dart';
+import '../features/retention/data/return_bonus_dao.dart';
+import '../features/retention/data/return_bonus_repository.dart';
 import '../features/sales/data/sale_dao.dart';
 import '../features/sales/data/sale_item_dao.dart';
 import '../features/sales/data/sale_item_repository.dart';
@@ -554,6 +558,30 @@ final retentionRepositoryProvider = Provider<RetentionRepository>(
   ),
 );
 
+final returnBonusDaoProvider = Provider<ReturnBonusDao>(
+  (ref) => ReturnBonusDao(
+    ref.read(appDatabaseProvider),
+    merchantId: ref.watch(activeMerchantIdProvider),
+  ),
+);
+
+final returnBonusApiProvider = Provider<ReturnBonusApi>(
+  (ref) => ReturnBonusApi(ref.read(cloudFunctionsApiClientProvider)),
+);
+
+final returnBonusRepositoryProvider = Provider<ReturnBonusRepository>(
+  (ref) => ReturnBonusRepository(
+    ref.read(returnBonusDaoProvider),
+    ref.read(returnBonusApiProvider),
+    ref.read(connectivityServiceProvider),
+    resolveBearerToken: () async {
+      final token = await ref.read(secureStorageServiceProvider).getToken();
+      if (token != null && token.isNotEmpty) return token;
+      return ref.read(firebaseAuthInstanceProvider).currentUser?.getIdToken();
+    },
+  ),
+);
+
 final staffManagementRepositoryProvider = Provider<StaffManagementRepository>(
   (ref) => StaffManagementRepository(
     ref.read(appDatabaseProvider),
@@ -601,10 +629,37 @@ final usageTrackerProvider = Provider<UsageTracker>(
   ),
 );
 
+/// QA-only, debug-build controller for the paid-feature-gate bypass toggle
+/// surfaced in Settings. Persists via secure storage so a tester's choice
+/// survives app restarts during a test pass; always resolves to `false`
+/// outside `kDebugMode` regardless of any stored value.
+class DebugBypassPaidFeatureGateController extends AsyncNotifier<bool> {
+  @override
+  Future<bool> build() async {
+    if (!kDebugMode) return false;
+    return ref.read(secureStorageServiceProvider).getDebugBypassPaidFeatureGate();
+  }
+
+  Future<void> setEnabled(bool value) async {
+    if (!kDebugMode) return;
+    state = AsyncData(value);
+    await ref
+        .read(secureStorageServiceProvider)
+        .setDebugBypassPaidFeatureGate(value);
+  }
+}
+
+final debugBypassPaidFeatureGateProvider =
+    AsyncNotifierProvider<DebugBypassPaidFeatureGateController, bool>(
+  DebugBypassPaidFeatureGateController.new,
+);
+
 final featureGateProvider = Provider<FeatureGate>(
   (ref) => FeatureGate(
     ref.read(subscriptionDaoProvider),
     ref.read(usageQuotaEngineProvider),
+    debugBypassEnabled: kDebugMode &&
+        (ref.watch(debugBypassPaidFeatureGateProvider).valueOrNull ?? false),
   ),
 );
 

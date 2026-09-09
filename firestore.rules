@@ -202,7 +202,8 @@ service cloud.firestore {
         'customer_recommendations',
         'usage_balances',
         'usage_events',
-        'notification_queue'
+        'notification_queue',
+        'return_bonuses'
       ];
     }
 

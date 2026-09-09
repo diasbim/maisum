@@ -64,6 +64,7 @@ const merchant_collections_js_1 = require("./merchant_collections.js");
 const admin_audit_js_1 = require("./admin_audit.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
+const retention_engine_js_1 = require("./retention_engine.js");
 const sync_backend_js_1 = require("./sync_backend.js");
 admin.initializeApp();
 const pool = new pg_1.Pool({
@@ -210,6 +211,12 @@ const ENTITY_CONFIG = {
         orderField: 'deleted_at',
         idField: 'id',
         selectSql: 'id, merchant_id, entity_type, entity_id, deleted_at',
+    },
+    return_bonus: {
+        table: 'return_bonuses',
+        orderField: 'updated_at',
+        idField: 'id',
+        selectSql: '*',
     },
 };
 const OWNER_ONLY_SYNC_ENTITIES = new Set([
@@ -1628,6 +1635,136 @@ app.post('/retention/classifications/scan', async (req, res) => {
         return respondCustomerCoreError(res, error);
     }
 });
+app.get('/customers/:customerId/bonuses', async (req, res) => {
+    const merchantId = req.merchantId;
+    const { customerId } = req.params;
+    try {
+        const result = await pool.query(`
+        SELECT * FROM return_bonuses
+        WHERE merchant_id = $1 AND customer_id = $2
+        ORDER BY created_at DESC
+      `, [merchantId, customerId]);
+        return res.json({ success: true, data: result.rows });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.post('/return-bonuses/:id/redeem', async (req, res) => {
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const { id } = req.params;
+    const payload = req.body ?? {};
+    const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+    const redemptionSaleId = pickString(payload, 'redemption_sale_id') ?? pickString(payload, 'redemptionSaleId');
+    try {
+        const bonus = await (0, retention_engine_js_1.redeemReturnBonus)(pool, {
+            merchantId,
+            customerId,
+            bonusId: id,
+            redemptionSaleId,
+            now: Date.now(),
+        });
+        await mirrorReturnBonusToFirestore(merchantId, bonus);
+        return res.json({ success: true, data: bonus });
+    }
+    catch (error) {
+        if (error instanceof retention_engine_js_1.RetentionEngineError) {
+            return res.status(error.status).json({ success: false, code: error.code, message: error.message });
+        }
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/retention/config', async (req, res) => {
+    const merchantId = req.merchantId;
+    try {
+        await (0, retention_engine_js_1.seedDefaultRetentionRules)(pool, merchantId, Date.now());
+        const [config, rules] = await Promise.all([
+            (0, retention_engine_js_1.getReturnBonusConfig)(pool, merchantId),
+            (0, retention_engine_js_1.listRetentionRules)(pool, merchantId),
+        ]);
+        return res.json({
+            success: true,
+            data: {
+                return_bonus: {
+                    enabled: config.enabled,
+                    type: config.type,
+                    value: config.value,
+                    validity_hours: config.validityHours,
+                    minimum_purchase_amount: config.minimumPurchaseAmount,
+                },
+                rules,
+            },
+        });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.put('/retention/config', async (req, res) => {
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    if (!isOwnerOrAdminRequest(authedReq)) {
+        return res.status(403).json({
+            success: false,
+            code: 'retention_config_owner_required',
+            message: 'Only a business owner or admin can change retention settings.',
+        });
+    }
+    const payload = req.body ?? {};
+    const now = Date.now();
+    try {
+        await (0, retention_engine_js_1.seedDefaultRetentionRules)(pool, merchantId, now);
+        const returnBonusPatch = payload.return_bonus;
+        if (returnBonusPatch && typeof returnBonusPatch === 'object') {
+            const patch = {};
+            const enabled = pickBoolean(returnBonusPatch, 'enabled');
+            if (enabled != null)
+                patch.enabled = enabled;
+            const type = pickString(returnBonusPatch, 'type');
+            if (type != null)
+                patch.type = type;
+            const value = pickNumber(returnBonusPatch, 'value');
+            if (value != null)
+                patch.value = value;
+            const validityHours = pickNumber(returnBonusPatch, 'validity_hours');
+            if (validityHours != null)
+                patch.validityHours = validityHours;
+            const minimumPurchaseAmount = pickNumber(returnBonusPatch, 'minimum_purchase_amount');
+            if (minimumPurchaseAmount != null)
+                patch.minimumPurchaseAmount = minimumPurchaseAmount;
+            await (0, retention_engine_js_1.upsertReturnBonusConfig)(pool, merchantId, patch, now);
+        }
+        const rulesPatch = payload.rules;
+        if (rulesPatch && typeof rulesPatch === 'object') {
+            for (const [ruleKey, enabled] of Object.entries(rulesPatch)) {
+                if (typeof enabled !== 'boolean' || !(0, retention_engine_js_1.isRetentionRuleKey)(ruleKey))
+                    continue;
+                await (0, retention_engine_js_1.setRetentionRuleEnabled)(pool, merchantId, ruleKey, enabled, now);
+            }
+        }
+        const [config, rules] = await Promise.all([
+            (0, retention_engine_js_1.getReturnBonusConfig)(pool, merchantId),
+            (0, retention_engine_js_1.listRetentionRules)(pool, merchantId),
+        ]);
+        return res.json({
+            success: true,
+            data: {
+                return_bonus: {
+                    enabled: config.enabled,
+                    type: config.type,
+                    value: config.value,
+                    validity_hours: config.validityHours,
+                    minimum_purchase_amount: config.minimumPurchaseAmount,
+                },
+                rules,
+            },
+        });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
 app.get('/sync/:entityType', async (req, res) => {
     const { entityType } = req.params;
     const config = ENTITY_CONFIG[entityType];
@@ -1929,6 +2066,8 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
                 return res.json({ success: true });
             case 'sync_tombstone':
                 throw new CustomerCoreError(400, 'sync_tombstone_read_only', 'sync_tombstone is server-managed and read-only');
+            case 'return_bonus':
+                throw new CustomerCoreError(400, 'return_bonus_read_only', 'return_bonus is server-managed; use POST /return-bonuses/:id/redeem to redeem it.');
             default:
                 throw new CustomerCoreError(404, 'sync_unknown_entity', 'Unknown entity');
         }
@@ -2699,6 +2838,26 @@ exports.loyaltyLedgerSaleOnSaleWrite = (0, firestore_2.onDocumentWritten)({
             allowLegacyBootstrap: false,
             saleUpdateMode: 'trigger',
         });
+        // Retention Engine SALE_COMPLETED hook (production path: the app
+        // writes sales to Firestore, not the REST /sync/sale endpoint, so this
+        // trigger — not upsertSale in index.ts's Express router — is what
+        // actually fires for real traffic today). Idempotent under retriggers
+        // via the return_bonuses unique (merchant_id, source_sale_id) index,
+        // and must never fail the sale write itself.
+        try {
+            const customerId = maybePayloadString(afterData, 'customer_id', 'customerId');
+            const amount = pickNumber(afterData, 'amount');
+            if (customerId && amount != null && amount > 0) {
+                await triggerSaleCompletedRetentionRules(merchantId, customerId, saleId, amount, Date.now());
+            }
+        }
+        catch (retentionError) {
+            console.error('retention_engine_sale_completed_failed', {
+                merchantId,
+                saleId,
+                error: retentionError,
+            });
+        }
     }
     catch (error) {
         if (error instanceof CustomerCoreError) {
@@ -7314,6 +7473,14 @@ async function upsertSale(merchantId, payload, entityId, req) {
         updatedByAppUserId,
     ]);
     if ((insertResult.rowCount ?? 0) > 0) {
+        // Retention evaluation must never block sale registration or fail the
+        // sync write; log and move on if anything here goes wrong.
+        try {
+            await triggerSaleCompletedRetentionRules(merchantId, customerId, id, amount, updatedAt);
+        }
+        catch (error) {
+            console.error('retention_engine_sale_completed_failed', { merchantId, saleId: id, error });
+        }
         return;
     }
     const existingSaleResult = await pool.query(`
@@ -7347,6 +7514,77 @@ async function upsertSale(merchantId, payload, entityId, req) {
     })) {
         throw new CustomerCoreError(409, 'sale_create_conflict', 'Sale already exists with immutable fields that differ from this create request.', { sale_id: id, merchant_id: merchantId });
     }
+}
+/**
+ * Postgres is the Retention Engine's source of truth (its unique indexes
+ * enforce "max 1 active bonus" / "max 1 bonus per sale" atomically), but the
+ * app currently reads and syncs exclusively through Firestore. Every
+ * Postgres mutation to a bonus is mirrored here so the client's normal
+ * return_bonus sync pull (businesses/{merchantId}/return_bonuses) sees it.
+ */
+async function mirrorReturnBonusToFirestore(merchantId, bonus) {
+    await admin
+        .firestore()
+        .collection('businesses')
+        .doc(merchantId)
+        .collection('return_bonuses')
+        .doc(bonus.id)
+        .set({
+        id: bonus.id,
+        merchant_id: bonus.merchant_id,
+        customer_id: bonus.customer_id,
+        type: bonus.type,
+        value: bonus.value,
+        status: bonus.status,
+        issued_at: bonus.issued_at,
+        expires_at: bonus.expires_at,
+        source_sale_id: bonus.source_sale_id,
+        redeemed_at: bonus.redeemed_at,
+        redemption_sale_id: bonus.redemption_sale_id,
+        created_at: bonus.created_at,
+        updated_at: bonus.updated_at,
+    }, { merge: true });
+}
+/**
+ * SALE_COMPLETED entry point for the Retention Engine (F1 Bónus de Regresso
+ * today; other MVP rules are evaluated against the seeded catalog but have
+ * no dispatcher yet). Mirrors the Firestore notification_queue write used by
+ * maybeQueueNearRewardReminder so both automated paths share one guardrail
+ * surface (priority + per-customer history) once that guardrail lands.
+ */
+async function triggerSaleCompletedRetentionRules(merchantId, customerId, saleId, saleAmount, now) {
+    await (0, retention_engine_js_1.seedDefaultRetentionRules)(pool, merchantId, now);
+    const result = await (0, retention_engine_js_1.evaluateSaleCompletedRetentionRules)(pool, {
+        merchantId,
+        customerId,
+        saleId,
+        saleAmount,
+        now,
+    });
+    if (!result.issued)
+        return;
+    await mirrorReturnBonusToFirestore(merchantId, result.bonus);
+    await admin
+        .firestore()
+        .collection('businesses')
+        .doc(merchantId)
+        .collection('notification_queue')
+        .add({
+        merchant_id: merchantId,
+        channel: 'whatsapp',
+        payload: {
+            type: 'return_bonus_issued',
+            customer_id: customerId,
+            bonus_id: result.bonus.id,
+            bonus_type: result.bonus.type,
+            bonus_value: result.bonus.value,
+            expires_at: result.bonus.expires_at,
+        },
+        priority: 3,
+        scheduled_at: now,
+        status: 'queued',
+        created_at: now,
+    });
 }
 async function upsertMerchantItem(merchantId, payload, entityId) {
     const id = pickString(payload, 'id') ?? entityId;

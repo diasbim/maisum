@@ -50,6 +50,7 @@ class FirestoreSyncService implements SyncTransport {
     'usage_event': 'usage_events',
     'app_user': 'app_users',
     'sync_tombstone': 'sync_tombstones',
+    'return_bonus': 'return_bonuses',
   };
 
   @override

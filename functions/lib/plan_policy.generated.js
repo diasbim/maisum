@@ -22,6 +22,7 @@ exports.FEATURE_KEYS = [
     'engage_manage_recovery',
     'engage_manage_visits',
     'engage_manage_surveys',
+    'retention_core',
 ];
 /** What each plan grants, keyed by the code stored on a business. */
 exports.PLANS = {
@@ -38,6 +39,7 @@ exports.PLANS = {
             'engage_manage_recovery',
             'engage_manage_visits',
             'engage_manage_surveys',
+            'retention_core',
         ],
         whatsappMonthlyLimit: 20000,
     },
@@ -46,6 +48,7 @@ exports.PLANS = {
         name: 'Free',
         features: [
             'whatsapp_automation',
+            'retention_core',
         ],
         whatsappMonthlyLimit: 150,
     },
@@ -56,6 +59,7 @@ exports.PLANS = {
             'whatsapp_automation',
             'campaigns',
             'analytics',
+            'retention_core',
         ],
         whatsappMonthlyLimit: 1200,
     },
@@ -67,6 +71,7 @@ exports.PLANS = {
             'campaigns',
             'analytics',
             'engage_view_risk',
+            'retention_core',
         ],
         whatsappMonthlyLimit: 3000,
     },
@@ -83,6 +88,7 @@ exports.PLANS = {
             'engage_manage_recovery',
             'engage_manage_visits',
             'engage_manage_surveys',
+            'retention_core',
         ],
         whatsappMonthlyLimit: 6000,
     },
@@ -99,6 +105,7 @@ exports.PLANS = {
             'engage_manage_recovery',
             'engage_manage_visits',
             'engage_manage_surveys',
+            'retention_core',
         ],
         whatsappMonthlyLimit: 6000,
     },

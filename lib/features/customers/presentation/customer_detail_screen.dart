@@ -21,6 +21,8 @@ import '../../rewards/presentation/rewards_controller.dart';
 import '../../rewards/domain/reward.dart';
 import '../../rewards/domain/reward_progress.dart';
 import '../../rewards/presentation/reward_progress_provider.dart';
+import '../../retention/providers/return_bonus_providers.dart';
+import '../../retention/widgets/return_bonus_card.dart';
 import '../../appointments/providers/appointments_providers.dart';
 import '../../business_profile/domain/business_profile.dart';
 import '../../engage/domain/engage_models.dart';
@@ -46,6 +48,7 @@ class CustomerDetailScreen extends ConsumerStatefulWidget {
 class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _historyKey = GlobalKey();
+  bool _isRedeemingReturnBonus = false;
 
   void _handleBackPressed() {
     if (context.canPop()) {
@@ -76,6 +79,8 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
     final customerAsync = ref.watch(customerDetailProvider(widget.id));
     final salesAsync = ref.watch(customerSalesProvider(widget.id));
     final rewardProgressAsync = ref.watch(rewardProgressProvider(widget.id));
+    final activeReturnBonusAsync =
+        ref.watch(activeReturnBonusProvider(widget.id));
     final businessProfile =
         ref.watch(activeBusinessProfileProvider).valueOrNull ??
             BusinessProfiles.generic;
@@ -433,6 +438,29 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
                           loading: () => const SizedBox(height: 16),
                           error: (_, __) => const SizedBox.shrink(),
                         ),
+                        activeReturnBonusAsync.when(
+                          data: (bonus) {
+                            if (bonus == null) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: ReturnBonusCard(
+                                bonus: bonus,
+                                isOnline: ref
+                                    .watch(connectivityServiceProvider)
+                                    .isOnline,
+                                isRedeeming: _isRedeemingReturnBonus,
+                                onRedeem: () => _redeemReturnBonus(
+                                  context,
+                                  ref,
+                                  bonus.id,
+                                  customer.id,
+                                ),
+                              ),
+                            );
+                          },
+                          loading: () => const SizedBox.shrink(),
+                          error: (_, __) => const SizedBox.shrink(),
+                        ),
                       ],
                     ),
                   ),
@@ -723,6 +751,37 @@ class _CustomerDetailScreenState extends ConsumerState<CustomerDetailScreen> {
         );
       }
     });
+  }
+
+  Future<void> _redeemReturnBonus(
+    BuildContext context,
+    WidgetRef ref,
+    String bonusId,
+    String customerId,
+  ) async {
+    setState(() => _isRedeemingReturnBonus = true);
+    try {
+      await ref.read(returnBonusRepositoryProvider).redeem(
+            bonusId: bonusId,
+            customerId: customerId,
+          );
+      if (!context.mounted) return;
+      ref.invalidate(activeReturnBonusProvider(widget.id));
+      AppFeedback.showSuccessToast(
+        context,
+        message: 'Bónus resgatado com sucesso',
+      );
+    } catch (error) {
+      AppErrorReporter.report(error, StackTrace.current, hint: 'return_bonus_redeem');
+      if (!context.mounted) return;
+      AppFeedback.showMessage(
+        context,
+        message: 'Não foi possível resgatar o bónus. Tente novamente.',
+        isError: true,
+      );
+    } finally {
+      if (mounted) setState(() => _isRedeemingReturnBonus = false);
+    }
   }
 
   Future<void> _scheduleNextVisit(
