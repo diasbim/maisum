@@ -403,3 +403,310 @@ export function selectStaff(
 
   return paginate(sorted, query);
 }
+
+/* ------------------------------------------------- the rest of the business */
+
+/**
+ * Everything below serves a surface the business could not see.
+ *
+ * The app has synced these subcollections up for a while and the portal read
+ * none of them: a merchant could see who their customers were, but not what
+ * they had bought, what they had redeemed, what the plan had actually
+ * consumed, or which of them the retention engine had flagged. The console
+ * could see some of it. The business it described could not.
+ *
+ * The shapes come from `app_migrations.dart` — snake_case keys, epoch
+ * milliseconds, flags as 0/1 — so each goes through the normalisers above
+ * rather than being trusted as JSON.
+ */
+
+export type SaleListRecord = SaleRecord & {
+  customer_id: string | null;
+};
+
+export function toSaleListItem(id: string, data: SourceRecord): SaleListRecord {
+  return {
+    ...toSale(id, data),
+    customer_id: asString(data, 'customer_id', 'customerId'),
+  };
+}
+
+export type RedemptionRecord = {
+  id: string;
+  customer_id: string | null;
+  reward_id: string | null;
+  points_spent: number | null;
+  redeemed_at: number | null;
+  status: string | null;
+};
+
+export function toRedemption(id: string, data: SourceRecord): RedemptionRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    customer_id: asString(data, 'customer_id', 'customerId'),
+    reward_id: asString(data, 'reward_id', 'rewardId'),
+    points_spent: asNumber(data, 'points_spent', 'pointsSpent'),
+    redeemed_at: asEpoch(data, 'redeemed_at', 'redeemedAt', 'created_at'),
+    status: asString(data, 'status', 'fulfillment_status'),
+  };
+}
+
+export type AppointmentRecord = {
+  id: string;
+  customer_id: string | null;
+  scheduled_date: number | null;
+  status: string | null;
+  source: string | null;
+  reminder_sent: boolean | null;
+  created_at: number | null;
+};
+
+export function toAppointment(
+  id: string,
+  data: SourceRecord,
+): AppointmentRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    customer_id: asString(data, 'customer_id', 'customerId'),
+    scheduled_date: asEpoch(data, 'scheduled_date', 'scheduledDate'),
+    status: asString(data, 'status'),
+    source: asString(data, 'source'),
+    reminder_sent: asBool(data, 'reminder_sent', 'reminderSent'),
+    created_at: asEpoch(data, 'created_at'),
+  };
+}
+
+export type LedgerEntryRecord = {
+  id: string;
+  customer_id: string | null;
+  entry_type: string | null;
+  points_delta: number | null;
+  source_type: string | null;
+  source_id: string | null;
+  balance_after: number | null;
+  occurred_at: number | null;
+};
+
+export function toLedgerEntry(
+  id: string,
+  data: SourceRecord,
+): LedgerEntryRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    customer_id: asString(data, 'customer_id', 'customerId'),
+    entry_type: asString(data, 'entry_type', 'entryType'),
+    points_delta: asNumber(data, 'points_delta', 'pointsDelta'),
+    source_type: asString(data, 'source_type', 'sourceType'),
+    source_id: asString(data, 'source_id', 'sourceId'),
+    balance_after: asNumber(data, 'balance_after', 'balanceAfter'),
+    occurred_at: asEpoch(data, 'occurred_at', 'occurredAt', 'created_at'),
+  };
+}
+
+export type UsageBalanceRecord = {
+  id: string;
+  metric_key: string | null;
+  used: number;
+  limit_value: number | null;
+  soft_limit: boolean | null;
+  window_start: number | null;
+  window_end: number | null;
+  updated_at: number | null;
+};
+
+export function toUsageBalance(
+  id: string,
+  data: SourceRecord,
+): UsageBalanceRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    metric_key: asString(data, 'metric_key', 'metricKey'),
+    used: asNumber(data, 'used') ?? 0,
+    // Null is "no ceiling", which is a different answer from zero.
+    limit_value: asNumber(data, 'limit_value', 'limitValue'),
+    soft_limit: asBool(data, 'soft_limit', 'softLimit'),
+    window_start: asEpoch(data, 'window_start', 'windowStart'),
+    window_end: asEpoch(data, 'window_end', 'windowEnd'),
+    updated_at: asEpoch(data, 'updated_at'),
+  };
+}
+
+export type RiskScoreRecord = {
+  id: string;
+  customer_id: string | null;
+  days_since_visit: number;
+  risk_level: string | null;
+  priority: number;
+  updated_at: number | null;
+};
+
+export function toRiskScore(id: string, data: SourceRecord): RiskScoreRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    customer_id: asString(data, 'customer_id', 'customerId'),
+    days_since_visit: asNumber(data, 'days_since_visit', 'daysSinceVisit') ?? 0,
+    risk_level: asString(data, 'risk_level', 'riskLevel'),
+    priority: asNumber(data, 'priority') ?? 0,
+    updated_at: asEpoch(data, 'updated_at'),
+  };
+}
+
+export type RecoveryTaskRecord = {
+  id: string;
+  customer_id: string | null;
+  priority: string | null;
+  status: string | null;
+  due_at: number | null;
+  notes: string | null;
+  created_at: number | null;
+};
+
+export function toRecoveryTask(
+  id: string,
+  data: SourceRecord,
+): RecoveryTaskRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    customer_id: asString(data, 'customer_id', 'customerId'),
+    priority: asString(data, 'priority'),
+    status: asString(data, 'status'),
+    due_at: asEpoch(data, 'due_at', 'dueAt'),
+    notes: asString(data, 'notes'),
+    created_at: asEpoch(data, 'created_at'),
+  };
+}
+
+export type VisitReportRecord = {
+  id: string;
+  customer_id: string | null;
+  task_id: string | null;
+  result: string | null;
+  notes: string | null;
+  visited_at: number | null;
+};
+
+export function toVisitReport(
+  id: string,
+  data: SourceRecord,
+): VisitReportRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    customer_id: asString(data, 'customer_id', 'customerId'),
+    task_id: asString(data, 'task_id', 'taskId'),
+    result: asString(data, 'result'),
+    notes: asString(data, 'notes'),
+    visited_at: asEpoch(data, 'visited_at', 'visitedAt', 'created_at'),
+  };
+}
+
+export type SurveyRecord = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  is_active: boolean | null;
+  /** Filled in by the collection layer, which counts the responses. */
+  response_count: number;
+  created_at: number | null;
+  updated_at: number | null;
+};
+
+export function toSurvey(id: string, data: SourceRecord): SurveyRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    title: asString(data, 'title'),
+    description: asString(data, 'description'),
+    is_active: asBool(data, 'is_active', 'isActive', 'active'),
+    response_count: 0,
+    created_at: asEpoch(data, 'created_at'),
+    updated_at: asEpoch(data, 'updated_at'),
+  };
+}
+
+export type ReturnBonusRecord = {
+  id: string;
+  customer_id: string | null;
+  type: string | null;
+  value: number | null;
+  status: string | null;
+  issued_at: number | null;
+  expires_at: number | null;
+  redeemed_at: number | null;
+};
+
+export function toReturnBonus(
+  id: string,
+  data: SourceRecord,
+): ReturnBonusRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    customer_id: asString(data, 'customer_id', 'customerId'),
+    type: asString(data, 'type'),
+    value: asNumber(data, 'value'),
+    status: asString(data, 'status'),
+    issued_at: asEpoch(data, 'issued_at', 'issuedAt'),
+    expires_at: asEpoch(data, 'expires_at', 'expiresAt'),
+    redeemed_at: asEpoch(data, 'redeemed_at', 'redeemedAt'),
+  };
+}
+
+/* ---------------------------------------------------- selecting the new ones */
+
+/**
+ * One selector, because these lists differ only in what they sort by.
+ *
+ * `selectCustomers` and the rest above each earned their own function by
+ * having a genuinely different idea of order — most recent visit, the order
+ * the till shows, the owner first. These do not: every one of them is "newest
+ * first", filtered by an exact status and a substring. Writing eight
+ * near-copies would have made the differences between them harder to see, not
+ * easier.
+ */
+export function selectByRecency<T extends { id: string }>(
+  rows: T[],
+  query: RecordQuery,
+  read: {
+    time: (row: T) => number | null;
+    status?: (row: T) => string | null;
+    search?: (row: T) => Array<string | null>;
+  },
+): RecordPage<T> {
+  const search = (query.search ?? '').trim();
+  const status = (query.status ?? '').trim().toUpperCase();
+
+  const filtered = rows.filter((row) => {
+    if (search !== '' && read.search) {
+      if (!matchesSearch(read.search(row), search)) return false;
+    }
+    if (status !== '' && read.status) {
+      if ((read.status(row) ?? '').toUpperCase() !== status) return false;
+    }
+    return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    const byTime = (read.time(b) ?? 0) - (read.time(a) ?? 0);
+    // Ties break on id so that paging is stable: without it two rows written
+    // in the same millisecond could swap between page one and page two.
+    return byTime !== 0 ? byTime : a.id.localeCompare(b.id);
+  });
+
+  return paginate(sorted, query);
+}
+
+/** What a business asks of its own sales: how much, and how often. */
+export type SalesTotals = {
+  count: number;
+  amount: number;
+  points: number;
+};
+
+export function totalSales(rows: SaleListRecord[]): SalesTotals {
+  return rows.reduce<SalesTotals>(
+    (running, row) => ({
+      count: running.count + 1,
+      amount: running.amount + (row.amount ?? 0),
+      points: running.points + (row.points ?? 0),
+    }),
+    { count: 0, amount: 0, points: 0 },
+  );
+}

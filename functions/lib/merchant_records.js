@@ -31,6 +31,18 @@ exports.selectCustomers = selectCustomers;
 exports.selectCatalog = selectCatalog;
 exports.selectRewards = selectRewards;
 exports.selectStaff = selectStaff;
+exports.toSaleListItem = toSaleListItem;
+exports.toRedemption = toRedemption;
+exports.toAppointment = toAppointment;
+exports.toLedgerEntry = toLedgerEntry;
+exports.toUsageBalance = toUsageBalance;
+exports.toRiskScore = toRiskScore;
+exports.toRecoveryTask = toRecoveryTask;
+exports.toVisitReport = toVisitReport;
+exports.toSurvey = toSurvey;
+exports.toReturnBonus = toReturnBonus;
+exports.selectByRecency = selectByRecency;
+exports.totalSales = totalSales;
 /* --------------------------------------------------------------- normalisers */
 function asString(data, ...keys) {
     for (const key of keys) {
@@ -296,4 +308,150 @@ function selectStaff(rows, query) {
             (a.last_login_at ?? a.updated_at ?? 0));
     });
     return paginate(sorted, query);
+}
+function toSaleListItem(id, data) {
+    return {
+        ...toSale(id, data),
+        customer_id: asString(data, 'customer_id', 'customerId'),
+    };
+}
+function toRedemption(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        customer_id: asString(data, 'customer_id', 'customerId'),
+        reward_id: asString(data, 'reward_id', 'rewardId'),
+        points_spent: asNumber(data, 'points_spent', 'pointsSpent'),
+        redeemed_at: asEpoch(data, 'redeemed_at', 'redeemedAt', 'created_at'),
+        status: asString(data, 'status', 'fulfillment_status'),
+    };
+}
+function toAppointment(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        customer_id: asString(data, 'customer_id', 'customerId'),
+        scheduled_date: asEpoch(data, 'scheduled_date', 'scheduledDate'),
+        status: asString(data, 'status'),
+        source: asString(data, 'source'),
+        reminder_sent: asBool(data, 'reminder_sent', 'reminderSent'),
+        created_at: asEpoch(data, 'created_at'),
+    };
+}
+function toLedgerEntry(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        customer_id: asString(data, 'customer_id', 'customerId'),
+        entry_type: asString(data, 'entry_type', 'entryType'),
+        points_delta: asNumber(data, 'points_delta', 'pointsDelta'),
+        source_type: asString(data, 'source_type', 'sourceType'),
+        source_id: asString(data, 'source_id', 'sourceId'),
+        balance_after: asNumber(data, 'balance_after', 'balanceAfter'),
+        occurred_at: asEpoch(data, 'occurred_at', 'occurredAt', 'created_at'),
+    };
+}
+function toUsageBalance(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        metric_key: asString(data, 'metric_key', 'metricKey'),
+        used: asNumber(data, 'used') ?? 0,
+        // Null is "no ceiling", which is a different answer from zero.
+        limit_value: asNumber(data, 'limit_value', 'limitValue'),
+        soft_limit: asBool(data, 'soft_limit', 'softLimit'),
+        window_start: asEpoch(data, 'window_start', 'windowStart'),
+        window_end: asEpoch(data, 'window_end', 'windowEnd'),
+        updated_at: asEpoch(data, 'updated_at'),
+    };
+}
+function toRiskScore(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        customer_id: asString(data, 'customer_id', 'customerId'),
+        days_since_visit: asNumber(data, 'days_since_visit', 'daysSinceVisit') ?? 0,
+        risk_level: asString(data, 'risk_level', 'riskLevel'),
+        priority: asNumber(data, 'priority') ?? 0,
+        updated_at: asEpoch(data, 'updated_at'),
+    };
+}
+function toRecoveryTask(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        customer_id: asString(data, 'customer_id', 'customerId'),
+        priority: asString(data, 'priority'),
+        status: asString(data, 'status'),
+        due_at: asEpoch(data, 'due_at', 'dueAt'),
+        notes: asString(data, 'notes'),
+        created_at: asEpoch(data, 'created_at'),
+    };
+}
+function toVisitReport(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        customer_id: asString(data, 'customer_id', 'customerId'),
+        task_id: asString(data, 'task_id', 'taskId'),
+        result: asString(data, 'result'),
+        notes: asString(data, 'notes'),
+        visited_at: asEpoch(data, 'visited_at', 'visitedAt', 'created_at'),
+    };
+}
+function toSurvey(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        title: asString(data, 'title'),
+        description: asString(data, 'description'),
+        is_active: asBool(data, 'is_active', 'isActive', 'active'),
+        response_count: 0,
+        created_at: asEpoch(data, 'created_at'),
+        updated_at: asEpoch(data, 'updated_at'),
+    };
+}
+function toReturnBonus(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        customer_id: asString(data, 'customer_id', 'customerId'),
+        type: asString(data, 'type'),
+        value: asNumber(data, 'value'),
+        status: asString(data, 'status'),
+        issued_at: asEpoch(data, 'issued_at', 'issuedAt'),
+        expires_at: asEpoch(data, 'expires_at', 'expiresAt'),
+        redeemed_at: asEpoch(data, 'redeemed_at', 'redeemedAt'),
+    };
+}
+/* ---------------------------------------------------- selecting the new ones */
+/**
+ * One selector, because these lists differ only in what they sort by.
+ *
+ * `selectCustomers` and the rest above each earned their own function by
+ * having a genuinely different idea of order — most recent visit, the order
+ * the till shows, the owner first. These do not: every one of them is "newest
+ * first", filtered by an exact status and a substring. Writing eight
+ * near-copies would have made the differences between them harder to see, not
+ * easier.
+ */
+function selectByRecency(rows, query, read) {
+    const search = (query.search ?? '').trim();
+    const status = (query.status ?? '').trim().toUpperCase();
+    const filtered = rows.filter((row) => {
+        if (search !== '' && read.search) {
+            if (!matchesSearch(read.search(row), search))
+                return false;
+        }
+        if (status !== '' && read.status) {
+            if ((read.status(row) ?? '').toUpperCase() !== status)
+                return false;
+        }
+        return true;
+    });
+    const sorted = [...filtered].sort((a, b) => {
+        const byTime = (read.time(b) ?? 0) - (read.time(a) ?? 0);
+        // Ties break on id so that paging is stable: without it two rows written
+        // in the same millisecond could swap between page one and page two.
+        return byTime !== 0 ? byTime : a.id.localeCompare(b.id);
+    });
+    return paginate(sorted, query);
+}
+function totalSales(rows) {
+    return rows.reduce((running, row) => ({
+        count: running.count + 1,
+        amount: running.amount + (row.amount ?? 0),
+        points: running.points + (row.points ?? 0),
+    }), { count: 0, amount: 0, points: 0 });
 }

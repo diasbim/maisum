@@ -1,8 +1,19 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { fetchMyCustomer, type MerchantSale } from '@/lib/merchant-api';
-import { lifecycleLabel, relationshipLabel, retentionLabel } from '@/lib/merchant-labels';
+import {
+  fetchMyCustomer,
+  fetchMyCustomerLedger,
+  type MerchantSale,
+} from '@/lib/merchant-api';
+import { SaleStatus } from '../../links';
+import {
+  ledgerEntryLabel,
+  lifecycleLabel,
+  relationshipLabel,
+  retentionLabel,
+} from '@/lib/merchant-labels';
 import {
   Badge,
   Card,
@@ -11,6 +22,7 @@ import {
   ErrorState,
   PageHeader,
   Panel,
+  TableSkeleton,
   formatAmount,
   formatDateTime,
   load,
@@ -21,29 +33,6 @@ import {
 // and it would put a customer's name in the browser's history and tab title.
 export const metadata = { title: 'Cliente | MaisUm' };
 export const dynamic = 'force-dynamic';
-
-/**
- * A cancelled sale is still a row in the collection.
- *
- * Printing it as an ordinary visit would overstate a customer's history, and
- * hiding it would make the points not add up. So it is shown, marked.
- */
-function saleState(
-  sale: MerchantSale,
-): { label: string; tone: string } | null {
-  const cancelled = (sale.cancellation_status ?? '').toUpperCase();
-  if (cancelled === 'CANCELLED') {
-    return { label: 'Cancelada', tone: 'CANCELLED' };
-  }
-  const confirmation = (sale.confirmation_status ?? '').toUpperCase();
-  if (confirmation === 'PENDING') {
-    return { label: 'Por confirmar', tone: 'PENDING' };
-  }
-  if (confirmation === 'FAILED') {
-    return { label: 'Falhou', tone: 'FAILED' };
-  }
-  return null;
-}
 
 export default async function MerchantCustomerPage({
   params,
@@ -165,18 +154,13 @@ export default async function MerchantCustomerPage({
               </thead>
               <tbody>
                 {visits.map((sale) => {
-                  const state = saleState(sale);
                   return (
                     <tr key={sale.id}>
                       <td>{formatDateTime(sale.created_at)}</td>
                       <td className="num">{formatAmount(sale.amount, 'MZN')}</td>
                       <td className="num">{sale.points ?? '—'}</td>
                       <td>
-                        {state === null ? (
-                          <span className="muted">Concluída</span>
-                        ) : (
-                          <Badge label={state.label} tone={state.tone} />
-                        )}
+                        <SaleStatus sale={sale} />
                       </td>
                     </tr>
                   );
@@ -186,6 +170,74 @@ export default async function MerchantCustomerPage({
           </div>
         )}
       </Panel>
+
+      <Panel title="Livro de pontos">
+        <Suspense fallback={<TableSkeleton rows={4} />}>
+          <LedgerPanel customerId={customerId} />
+        </Suspense>
+      </Panel>
     </>
+  );
+}
+
+/**
+ * Where the points came from and where they went.
+ *
+ * The console has shown a customer's ledger to internal staff for a while;
+ * the business whose points they are could see only a running total and a
+ * list of visits. A total nobody can take apart is a number a merchant cannot
+ * argue with, which is the opposite of what a ledger is for.
+ *
+ * Its own Suspense boundary and its own request: this is a second read, and
+ * the summary above should not wait for it.
+ */
+async function LedgerPanel({ customerId }: { customerId: string }) {
+  const result = await load(() => fetchMyCustomerLedger(customerId));
+  if (result.error !== null) return <ErrorState message={result.error} />;
+
+  const entries = result.data;
+  if (entries.length === 0) {
+    return (
+      <EmptyState message="Ainda não há movimentos de pontos para este cliente." />
+    );
+  }
+
+  return (
+    <div className="card card--flush scroll-x">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Data</th>
+            <th scope="col">Movimento</th>
+            <th className="num" scope="col">
+              Pontos
+            </th>
+            <th className="num" scope="col">
+              Saldo
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry) => (
+            <tr key={entry.id}>
+              <td>{formatDateTime(entry.occurred_at)}</td>
+              <td>{ledgerEntryLabel(entry.entry_type) ?? '—'}</td>
+              <td className="num">
+                {entry.points_delta === null
+                  ? '—'
+                  : // The sign is the point of the column: a redemption that
+                    // read as a plain number would look like an award.
+                    `${entry.points_delta > 0 ? '+' : ''}${entry.points_delta.toLocaleString('pt-PT')}`}
+              </td>
+              <td className="num">
+                {entry.balance_after === null
+                  ? '—'
+                  : entry.balance_after.toLocaleString('pt-PT')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

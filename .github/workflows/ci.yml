@@ -92,3 +92,60 @@ jobs:
       # integration_test/ is excluded: it needs a device, which this runner
       # has none of.
       - run: flutter test
+
+  smoke:
+    name: portal smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      # The emulators are Java, and the functions build is what they serve.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - run: npm ci
+        working-directory: functions
+      - run: npm run build
+        working-directory: functions
+      - run: npm ci
+        working-directory: admin
+
+      - run: npm install -g firebase-tools
+
+      # Everything below runs against emulators on this runner. The seed
+      # script refuses any host that is not loopback, so nothing here can
+      # reach the real project even if a credential leaked into the env.
+      - name: emuladores
+        run: |
+          firebase emulators:start --only auth,functions,firestore \
+            --project loyaltyos-fc4dd > /tmp/emulators.log 2>&1 &
+          npx wait-on -t 120000 tcp:127.0.0.1:9099 tcp:127.0.0.1:8085 tcp:127.0.0.1:5099
+
+      - name: portal
+        working-directory: admin
+        run: |
+          npm run dev > /tmp/next.log 2>&1 &
+          npx wait-on -t 120000 http://127.0.0.1:3000/login
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: demo-emulator-key
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: loyaltyos-fc4dd.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: loyaltyos-fc4dd
+          NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST: http://127.0.0.1:9099
+          FIREBASE_PROJECT_ID: loyaltyos-fc4dd
+          FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+          ADMIN_API_BASE_URL: http://127.0.0.1:5099/loyaltyos-fc4dd/us-central1/api
+
+      - run: npm run smoke
+        working-directory: admin
+
+      - name: logs, se falhou
+        if: failure()
+        run: tail -100 /tmp/next.log /tmp/emulators.log

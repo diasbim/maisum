@@ -15,16 +15,35 @@ const GROUPS = [
   {
     label: 'Operação',
     items: [
+      { href: '/negocio', label: 'Painel' },
+      { href: '/negocio/vendas', label: 'Vendas' },
       { href: '/negocio/clientes', label: 'Clientes' },
-      { href: '/negocio/catalogo', label: 'Catálogo' },
+      { href: '/negocio/marcacoes', label: 'Marcações' },
+    ],
+  },
+  {
+    label: 'Fidelidade',
+    items: [
       { href: '/negocio/recompensas', label: 'Recompensas' },
-      { href: '/negocio/equipa', label: 'Equipa' },
+      { href: '/negocio/resgates', label: 'Resgates' },
+      { href: '/negocio/bonus', label: 'Bónus de retorno' },
+    ],
+  },
+  {
+    label: 'Retenção',
+    items: [
+      { href: '/negocio/retencao', label: 'Clientes em risco' },
+      { href: '/negocio/tarefas', label: 'Tarefas' },
+      { href: '/negocio/visitas', label: 'Relatórios de visita' },
+      { href: '/negocio/inqueritos', label: 'Inquéritos' },
     ],
   },
   {
     label: 'Negócio',
     items: [
-      { href: '/negocio', label: 'Perfil' },
+      { href: '/negocio/catalogo', label: 'Catálogo' },
+      { href: '/negocio/equipa', label: 'Equipa' },
+      { href: '/negocio/perfil', label: 'Perfil' },
       { href: '/negocio/plano', label: 'Plano' },
     ],
   },

@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test \".test-build/*.test.js\""
+    "test": "tsc -p tsconfig.test.json && node --test \".test-build/*.test.js\"",
+    "seed:dev": "node scripts/seed-dev.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "firebase": "^12.4.0",

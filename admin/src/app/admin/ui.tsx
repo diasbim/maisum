@@ -170,12 +170,16 @@ export function Badge({
   const variant =
     tone === 'ACTIVE'
       ? 'badge-green'
-      : tone === 'TRIAL' || tone === 'PENDING'
+      : tone === 'TRIAL' ||
+          tone === 'PENDING' ||
+          tone === 'INVITED' ||
+          tone === 'GRACE'
         ? 'badge-amber'
         : tone === 'PAST_DUE' ||
             tone === 'CANCELLED' ||
             tone === 'CANCELED' ||
-            tone === 'FAILED'
+            tone === 'FAILED' ||
+            tone === 'SUSPENDED'
           ? 'badge-red'
           : 'badge-navy';
 

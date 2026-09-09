@@ -82,6 +82,17 @@ import {
   listCustomers,
   listRewards,
   listTeam,
+  listAppointments,
+  listCustomerLedger,
+  listRecoveryTasks,
+  listRedemptions,
+  listReturnBonuses,
+  listRiskScores,
+  listSales,
+  listSurveys,
+  listUsageBalances,
+  listVisitReports,
+  totalsForSales,
 } from './merchant_collections.js';
 import {
   listAuditEvents as listAuditEventsFromFirestore,
@@ -1601,6 +1612,195 @@ merchantRouter.get('/team', async (req, res) => {
     return merchantPageResponse(res, query, await listTeam(business.id, query));
   } catch (error) {
     return respondAdminServerError(res, 'merchant_team', error);
+  }
+});
+
+/**
+ * The surfaces a business had no way to see.
+ *
+ * Every one resolves its business through `requireBusiness` before reading a
+ * single document, exactly as the routes above do — `merchant_routes.test.ts`
+ * reads this file and fails if one of them stops doing it.
+ */
+
+merchantRouter.get('/sales', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    const [page, totals] = await Promise.all([
+      listSales(business.id, query),
+      totalsForSales(business.id, query),
+    ]);
+    return res.json({
+      success: true,
+      data: page.items,
+      paging: { limit: query.limit, offset: query.offset, has_more: page.hasMore },
+      total: page.total,
+      truncated: page.truncated,
+      // Over every sale, not over the page: a takings figure that changed
+      // when you turned the page would be worse than none.
+      totals,
+    });
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_sales', error);
+  }
+});
+
+merchantRouter.get('/redemptions', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(
+      res,
+      query,
+      await listRedemptions(business.id, query),
+    );
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_redemptions', error);
+  }
+});
+
+merchantRouter.get('/appointments', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(
+      res,
+      query,
+      await listAppointments(business.id, query),
+    );
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_appointments', error);
+  }
+});
+
+merchantRouter.get('/return-bonuses', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(
+      res,
+      query,
+      await listReturnBonuses(business.id, query),
+    );
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_return_bonuses', error);
+  }
+});
+
+merchantRouter.get('/risk-scores', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(
+      res,
+      query,
+      await listRiskScores(business.id, query),
+    );
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_risk_scores', error);
+  }
+});
+
+merchantRouter.get('/recovery-tasks', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(
+      res,
+      query,
+      await listRecoveryTasks(business.id, query),
+    );
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_recovery_tasks', error);
+  }
+});
+
+merchantRouter.get('/visit-reports', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(
+      res,
+      query,
+      await listVisitReports(business.id, query),
+    );
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_visit_reports', error);
+  }
+});
+
+merchantRouter.get('/surveys', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const query = merchantRecordQuery(request);
+    return merchantPageResponse(
+      res,
+      query,
+      await listSurveys(business.id, query),
+    );
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_surveys', error);
+  }
+});
+
+merchantRouter.get('/usage', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    return res.json({
+      success: true,
+      data: await listUsageBalances(business.id),
+    });
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_usage', error);
+  }
+});
+
+merchantRouter.get('/customers/:customerId/ledger', async (req, res) => {
+  const request = req as unknown as AuthedRequest;
+  try {
+    const business = await requireBusiness(request, res);
+    if (!business) return undefined;
+
+    const customerId = String(req.params.customerId ?? '').trim();
+    if (!customerId) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Customer not found' });
+    }
+    return res.json({
+      success: true,
+      data: await listCustomerLedger(business.id, customerId),
+    });
+  } catch (error) {
+    return respondAdminServerError(res, 'merchant_customer_ledger', error);
   }
 });
 
@@ -3234,6 +3434,8 @@ app.post('/engage/survey-response', async (req, res) => {
 app.get('/engage/analytics', async (req, res) => {
   const merchantId = (req as unknown as AuthedRequest).merchantId;
 
+  // Satisfaction is the mean of RATING answers only. Averaging every numeric
+  // answer folds in any other numeric question type and corrupts the score.
   const totalsSql = `
     SELECT
       (SELECT COUNT(*)::int FROM surveys WHERE merchant_id = $1 AND is_active = true) AS active_surveys,
@@ -3241,47 +3443,90 @@ app.get('/engage/analytics', async (req, res) => {
       (
         SELECT AVG(sra.answer_numeric)
         FROM survey_response_answers sra
+        JOIN survey_questions sq ON sq.id = sra.question_id
         WHERE sra.merchant_id = $1
+          AND sq.question_type = 'RATING'
           AND sra.answer_numeric IS NOT NULL
-      ) AS customer_satisfaction
+      ) AS customer_satisfaction,
+      (
+        SELECT COUNT(*)::int
+        FROM survey_response_answers sra
+        JOIN survey_questions sq ON sq.id = sra.question_id
+        WHERE sra.merchant_id = $1
+          AND sq.question_type = 'RATING'
+          AND sra.answer_numeric IS NOT NULL
+      ) AS rated_responses
   `;
 
+  // Choice questions only: their answers come from a fixed option set, so a
+  // frequency count means something. Ranking free text just ranks one
+  // customer's sentence above another's.
   const topSql = `
-    SELECT COALESCE(answer_text, '') AS answer_text, COUNT(*)::int AS total
-    FROM survey_response_answers
-    WHERE merchant_id = $1
-      AND answer_text IS NOT NULL
-      AND answer_text <> ''
-    GROUP BY answer_text
-    ORDER BY total DESC
-    LIMIT 3
+    SELECT sra.answer_text AS label, COUNT(*)::int AS total
+    FROM survey_response_answers sra
+    JOIN survey_questions sq ON sq.id = sra.question_id
+    WHERE sra.merchant_id = $1
+      AND sq.question_type = 'MULTIPLE_CHOICE'
+      AND sra.answer_text IS NOT NULL
+      AND TRIM(sra.answer_text) <> ''
+    GROUP BY sra.answer_text
+    ORDER BY total DESC, label ASC
+    LIMIT 5
+  `;
+
+  const breakdownSql = `
+    SELECT sra.answer_numeric::int AS score, COUNT(*)::int AS total
+    FROM survey_response_answers sra
+    JOIN survey_questions sq ON sq.id = sra.question_id
+    WHERE sra.merchant_id = $1
+      AND sq.question_type = 'RATING'
+      AND sra.answer_numeric IS NOT NULL
+    GROUP BY score
+    ORDER BY score
   `;
 
   try {
-    const [totalsResult, topResult] = await Promise.all([
+    const [totalsResult, topResult, breakdownResult] = await Promise.all([
       pool.query(totalsSql, [merchantId]),
       pool.query(topSql, [merchantId]),
+      pool.query(breakdownSql, [merchantId]),
     ]);
 
     const totals = totalsResult.rows[0] ?? {};
     const activeSurveys = Number(totals.active_surveys ?? 0);
     const responsesTotal = Number(totals.responses_total ?? 0);
     const customerSatisfaction = Number(totals.customer_satisfaction ?? 0);
-    const topTexts = topResult.rows
-      .map((row) => String(row.answer_text ?? '').trim())
-      .filter((value) => value.length > 0);
+    const ratedResponses = Number(totals.rated_responses ?? 0);
 
-    const responseRate = activeSurveys === 0 ? 0 : (responsesTotal / activeSurveys) * 100;
+    const topAnswers = topResult.rows
+      .map((row) => ({
+        label: String(row.label ?? '').trim(),
+        count: Number(row.total ?? 0),
+      }))
+      .filter((entry) => entry.label.length > 0);
+
+    const ratingBreakdown = breakdownResult.rows.map((row) => ({
+      score: Number(row.score ?? 0),
+      count: Number(row.total ?? 0),
+    }));
+
+    // Responses per active survey, not a percentage: nothing records how many
+    // customers were asked, so the old "response rate" printed 500% off five
+    // answers to a single survey.
+    const responsesPerSurvey = activeSurveys === 0 ? 0 : responsesTotal / activeSurveys;
 
     return res.json({
       success: true,
       data: {
-        response_rate: responseRate,
+        responses_per_survey: responsesPerSurvey,
         customer_satisfaction: customerSatisfaction,
         responses_total: responsesTotal,
-        top_churn_reasons: topTexts,
-        top_recovery_incentives: topTexts,
-        staff_ratings: topTexts,
+        rated_responses: ratedResponses,
+        top_answers: topAnswers,
+        rating_breakdown: ratingBreakdown,
+        // Retained so an app build older than this deploy still lists the
+        // answers instead of an empty card.
+        top_churn_reasons: topAnswers.map((entry) => entry.label),
       },
     });
   } catch (error) {

@@ -25,9 +25,17 @@ import { ResultCount, SearchForm, TruncationNotice } from '../records';
 export const metadata = { title: 'Equipa | MaisUm' };
 export const dynamic = 'force-dynamic';
 
+/**
+ * One chip per state the app writes.
+ *
+ * `INVITED` was missing, and the filter is exact, so someone invited who had
+ * not accepted yet matched neither of the other two — the one person an owner
+ * opens this page to chase was the one the page could not isolate.
+ */
 const FILTERS = [
   { value: '', label: 'Todos' },
   { value: 'ACTIVE', label: 'Ativos' },
+  { value: 'INVITED', label: 'Convidados' },
   { value: 'INACTIVE', label: 'Inativos' },
 ];
 
@@ -91,10 +99,17 @@ async function TeamTable({
               <tr key={member.id}>
                 <td>{member.phone ?? member.id}</td>
                 <td>{staffRoleLabel(member.role) ?? '—'}</td>
+                {/*
+                  No `?? 'ACTIVE'`. A member with no stored status was being
+                  drawn as active while the profile card counted them as not
+                  active and the filter above matched them as neither — one
+                  page, three answers. Badge prints its own dash for an absent
+                  value, which is the honest one.
+                */}
                 <td>
                   <Badge
-                    label={staffStatusLabel(member.status ?? 'ACTIVE')}
-                    tone={member.status ?? 'ACTIVE'}
+                    label={staffStatusLabel(member.status)}
+                    tone={member.status}
                   />
                 </td>
                 <td>

@@ -1521,3 +1521,12 @@ a.mobile-nav__account {
   font-weight: 600;
   color: var(--navy);
 }
+
+/* The dashboard's metric groups: three figures side by side, stacking on a
+   phone rather than shrinking to unreadable columns. */
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 18px;
+  margin-bottom: 12px;
+}

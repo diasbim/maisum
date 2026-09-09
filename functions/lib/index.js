@@ -1294,6 +1294,166 @@ merchantRouter.get('/team', async (req, res) => {
         return respondAdminServerError(res, 'merchant_team', error);
     }
 });
+/**
+ * The surfaces a business had no way to see.
+ *
+ * Every one resolves its business through `requireBusiness` before reading a
+ * single document, exactly as the routes above do — `merchant_routes.test.ts`
+ * reads this file and fails if one of them stops doing it.
+ */
+merchantRouter.get('/sales', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        const [page, totals] = await Promise.all([
+            (0, merchant_collections_js_1.listSales)(business.id, query),
+            (0, merchant_collections_js_1.totalsForSales)(business.id, query),
+        ]);
+        return res.json({
+            success: true,
+            data: page.items,
+            paging: { limit: query.limit, offset: query.offset, has_more: page.hasMore },
+            total: page.total,
+            truncated: page.truncated,
+            // Over every sale, not over the page: a takings figure that changed
+            // when you turned the page would be worse than none.
+            totals,
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_sales', error);
+    }
+});
+merchantRouter.get('/redemptions', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listRedemptions)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_redemptions', error);
+    }
+});
+merchantRouter.get('/appointments', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listAppointments)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_appointments', error);
+    }
+});
+merchantRouter.get('/return-bonuses', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listReturnBonuses)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_return_bonuses', error);
+    }
+});
+merchantRouter.get('/risk-scores', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listRiskScores)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_risk_scores', error);
+    }
+});
+merchantRouter.get('/recovery-tasks', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listRecoveryTasks)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_recovery_tasks', error);
+    }
+});
+merchantRouter.get('/visit-reports', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listVisitReports)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_visit_reports', error);
+    }
+});
+merchantRouter.get('/surveys', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listSurveys)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_surveys', error);
+    }
+});
+merchantRouter.get('/usage', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        return res.json({
+            success: true,
+            data: await (0, merchant_collections_js_1.listUsageBalances)(business.id),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_usage', error);
+    }
+});
+merchantRouter.get('/customers/:customerId/ledger', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const customerId = String(req.params.customerId ?? '').trim();
+        if (!customerId) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Customer not found' });
+        }
+        return res.json({
+            success: true,
+            data: await (0, merchant_collections_js_1.listCustomerLedger)(business.id, customerId),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_customer_ledger', error);
+    }
+});
 app.use('/merchant', merchantRouter);
 app.get('/customer/session', async (req, res) => {
     try {

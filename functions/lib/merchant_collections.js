@@ -40,6 +40,17 @@ exports.listCustomerSales = listCustomerSales;
 exports.listCatalog = listCatalog;
 exports.listRewards = listRewards;
 exports.listTeam = listTeam;
+exports.listSales = listSales;
+exports.totalsForSales = totalsForSales;
+exports.listRedemptions = listRedemptions;
+exports.listAppointments = listAppointments;
+exports.listReturnBonuses = listReturnBonuses;
+exports.listRecoveryTasks = listRecoveryTasks;
+exports.listVisitReports = listVisitReports;
+exports.listRiskScores = listRiskScores;
+exports.listCustomerLedger = listCustomerLedger;
+exports.listUsageBalances = listUsageBalances;
+exports.listSurveys = listSurveys;
 const admin = __importStar(require("firebase-admin"));
 const merchant_records_js_1 = require("./merchant_records.js");
 /**
@@ -132,4 +143,159 @@ async function listTeam(merchantId, query) {
     const { docs, truncated } = await readSubcollection(merchantId, 'app_users');
     const rows = docs.map((doc) => (0, merchant_records_js_1.toStaff)(doc.id, doc.data));
     return { ...(0, merchant_records_js_1.selectStaff)(rows, query), truncated };
+}
+/* --------------------------------------------- the surfaces that were absent */
+/**
+ * The subcollections the portal never read.
+ *
+ * Same shape as everything above: one capped read, normalised, filtered in
+ * memory. The cap is what keeps a busy business honest — `truncated` reaches
+ * the screen and the screen says so, rather than serving a short list as if it
+ * were the whole one.
+ */
+async function pagina(merchantId, colecao, para, query, ler) {
+    const { docs, truncated } = await readSubcollection(merchantId, colecao);
+    const rows = docs.map((doc) => para(doc.id, doc.data));
+    return { ...(0, merchant_records_js_1.selectByRecency)(rows, query, ler), truncated };
+}
+function listSales(merchantId, query) {
+    return pagina(merchantId, 'sales', merchant_records_js_1.toSaleListItem, query, {
+        time: (row) => row.created_at,
+        status: (row) => row.confirmation_status,
+        search: (row) => [row.id, row.customer_id],
+    });
+}
+/**
+ * Every sale, for the totals.
+ *
+ * The list is paged, so summing its page would tell a business what it took
+ * in on page one — a number that changes when you click "seguinte", which is
+ * worse than no number. The totals are computed over the whole read.
+ */
+async function totalsForSales(merchantId, query) {
+    const { docs } = await readSubcollection(merchantId, 'sales');
+    const rows = docs.map((doc) => (0, merchant_records_js_1.toSaleListItem)(doc.id, doc.data));
+    const status = (query.status ?? '').trim().toUpperCase();
+    return (0, merchant_records_js_1.totalSales)(status === ''
+        ? rows
+        : rows.filter((row) => (row.confirmation_status ?? '').toUpperCase() === status));
+}
+function listRedemptions(merchantId, query) {
+    return pagina(merchantId, 'redemptions', merchant_records_js_1.toRedemption, query, {
+        time: (row) => row.redeemed_at,
+        status: (row) => row.status,
+        search: (row) => [row.id, row.customer_id, row.reward_id],
+    });
+}
+function listAppointments(merchantId, query) {
+    return pagina(merchantId, 'appointments', merchant_records_js_1.toAppointment, query, {
+        time: (row) => row.scheduled_date,
+        status: (row) => row.status,
+        search: (row) => [row.id, row.customer_id],
+    });
+}
+function listReturnBonuses(merchantId, query) {
+    return pagina(merchantId, 'return_bonuses', merchant_records_js_1.toReturnBonus, query, {
+        time: (row) => row.issued_at,
+        status: (row) => row.status,
+        search: (row) => [row.id, row.customer_id],
+    });
+}
+function listRecoveryTasks(merchantId, query) {
+    return pagina(merchantId, 'recovery_tasks', merchant_records_js_1.toRecoveryTask, query, {
+        time: (row) => row.due_at ?? row.created_at,
+        status: (row) => row.status,
+        search: (row) => [row.id, row.customer_id, row.notes],
+    });
+}
+function listVisitReports(merchantId, query) {
+    return pagina(merchantId, 'visit_reports', merchant_records_js_1.toVisitReport, query, {
+        time: (row) => row.visited_at,
+        status: (row) => row.result,
+        search: (row) => [row.id, row.customer_id, row.notes],
+    });
+}
+/**
+ * The risk board, highest priority first.
+ *
+ * The one list here that is not "newest first": a retention screen exists to
+ * be worked top to bottom, and the newest score is not the most urgent one.
+ */
+async function listRiskScores(merchantId, query) {
+    const { docs, truncated } = await readSubcollection(merchantId, 'customer_risk_scores');
+    const rows = docs.map((doc) => (0, merchant_records_js_1.toRiskScore)(doc.id, doc.data));
+    const status = (query.status ?? '').trim().toUpperCase();
+    const filtered = rows.filter((row) => status === '' || (row.risk_level ?? '').toUpperCase() === status);
+    const sorted = [...filtered].sort((a, b) => {
+        const byPriority = b.priority - a.priority;
+        if (byPriority !== 0)
+            return byPriority;
+        const byDays = b.days_since_visit - a.days_since_visit;
+        return byDays !== 0 ? byDays : a.id.localeCompare(b.id);
+    });
+    return { ...(0, merchant_records_js_1.paginate)(sorted, query), truncated };
+}
+/** One customer's points, as the ledger recorded them. */
+async function listCustomerLedger(merchantId, customerId, limit = 25) {
+    const snapshot = await db()
+        .collection('businesses')
+        .doc(merchantId)
+        .collection('loyalty_ledger')
+        .where('customer_id', '==', customerId)
+        .limit(200)
+        .get();
+    // Ordered here rather than in the query: adding orderBy alongside the
+    // equality would need a composite index, and this is at most 200 rows.
+    return snapshot.docs
+        .map((doc) => (0, merchant_records_js_1.toLedgerEntry)(doc.id, (doc.data() ?? {})))
+        .sort((a, b) => (b.occurred_at ?? 0) - (a.occurred_at ?? 0))
+        .slice(0, limit);
+}
+/** What the plan has actually consumed, against what it allows. */
+async function listUsageBalances(merchantId) {
+    const { docs } = await readSubcollection(merchantId, 'usage_balances');
+    return docs
+        .map((doc) => (0, merchant_records_js_1.toUsageBalance)(doc.id, doc.data))
+        .sort((a, b) => (a.metric_key ?? '').localeCompare(b.metric_key ?? ''));
+}
+/**
+ * The surveys, each with how many people answered.
+ *
+ * The count is the only reason a survey list is worth opening — a survey
+ * nobody answered and a survey answered two hundred times look identical
+ * without it. Responses are one more capped read, joined in memory.
+ */
+async function listSurveys(merchantId, query) {
+    const [surveys, responses] = await Promise.all([
+        readSubcollection(merchantId, 'surveys'),
+        readSubcollection(merchantId, 'survey_responses'),
+    ]);
+    const counts = new Map();
+    for (const doc of responses.docs) {
+        const surveyId = doc.data.survey_id ?? doc.data.surveyId;
+        if (typeof surveyId === 'string') {
+            counts.set(surveyId, (counts.get(surveyId) ?? 0) + 1);
+        }
+    }
+    const rows = surveys.docs.map((doc) => {
+        const survey = (0, merchant_records_js_1.toSurvey)(doc.id, doc.data);
+        return { ...survey, response_count: counts.get(survey.id) ?? 0 };
+    });
+    const search = (query.search ?? '').trim();
+    const status = (query.status ?? '').trim().toUpperCase();
+    const filtered = rows.filter((row) => {
+        if (search !== '' && !(0, merchant_records_js_1.matchesSearch)([row.title, row.description], search)) {
+            return false;
+        }
+        if (status === 'ACTIVE' && row.is_active === false)
+            return false;
+        if (status === 'INACTIVE' && row.is_active !== false)
+            return false;
+        return true;
+    });
+    const sorted = [...filtered].sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+    return {
+        ...(0, merchant_records_js_1.paginate)(sorted, query),
+        truncated: surveys.truncated || responses.truncated,
+    };
 }

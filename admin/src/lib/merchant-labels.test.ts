@@ -9,6 +9,7 @@ import {
   retentionLabel,
   staffRoleLabel,
   staffStatusLabel,
+  subscriptionLabel,
 } from './merchant-labels';
 
 test('the stored states a business sees are in Portuguese', () => {
@@ -49,6 +50,28 @@ const CUSTOMER_DART = readFileSync(
   'utf8',
 );
 
+/**
+ * The staff states, read from where the app decides them.
+ *
+ * These are not modelled in `customer.dart`, and this test used to list them
+ * by hand — which is exactly the thing the comment above warns against. The
+ * hand-written list said `SUSPENDED`, a state nothing writes, and never
+ * mentioned `INVITED`, a state the app writes on every team invitation. So the
+ * table went untranslated and the suite stayed green.
+ */
+const APP_CONSTANTS_DART = readFileSync(
+  path.join(
+    __dirname,
+    '..',
+    '..',
+    'lib',
+    'core',
+    'constants',
+    'app_constants.dart',
+  ),
+  'utf8',
+);
+
 /** The `'VALUE'` literals a storage extension maps its enum onto. */
 function storageValues(extension: string): string[] {
   const block = new RegExp(
@@ -56,6 +79,44 @@ function storageValues(extension: string): string[] {
   ).exec(CUSTOMER_DART);
   assert.ok(block, `${extension} is no longer in customer.dart`);
   return [...block[1].matchAll(/=>\s*'([A-Z_]+)'/g)].map((match) => match[1]);
+}
+
+/** The subscription states, read from the enum that defines them. */
+const SUBSCRIPTION_DART = readFileSync(
+  path.join(
+    __dirname,
+    '..',
+    '..',
+    'lib',
+    'features',
+    'subscription',
+    'domain',
+    'subscription_status.dart',
+  ),
+  'utf8',
+);
+
+/** The `'VALUE'` literals `SubscriptionStatus.code` maps its enum onto. */
+function subscriptionCodes(): string[] {
+  const block = /String get code => switch \(this\) \{([\s\S]*?)\n {6}\};/.exec(
+    SUBSCRIPTION_DART,
+  );
+  assert.ok(block, 'SubscriptionStatus.code is no longer where it was');
+  return [...block[1].matchAll(/=>\s*'([A-Z_]+)'/g)].map((match) => match[1]);
+}
+
+/**
+ * The `'VALUE'` literals of every `AppConstants` field sharing a prefix.
+ *
+ * `[A-Z_]+` is what keeps `appUserRoleKey = 'app_user_role'` — a preferences
+ * key, not a role — out of the role list.
+ */
+function constantValues(prefix: string): string[] {
+  const pattern = new RegExp(
+    `static const String ${prefix}\\w+ = '([A-Z_]+)';`,
+    'g',
+  );
+  return [...APP_CONSTANTS_DART.matchAll(pattern)].map((match) => match[1]);
 }
 
 /** An enum whose storage value is just its name, uppercased. */
@@ -70,19 +131,26 @@ function enumValues(name: string): string[] {
 }
 
 test('every state the app can write has a translation', () => {
-  const cases: Array<[string, (value: string) => string | null, string[]]> = [
-    ['lifecycle stage', lifecycleLabel, storageValues('CustomerLifecycleStageStorage')],
-    ['retention status', retentionLabel, storageValues('CustomerRetentionStatusStorage')],
-    ['relationship status', relationshipLabel, enumValues('BusinessCustomerStatus')],
-    // The app_user role and status are not modelled in customer.dart; these
-    // are the values the seeded documents and the console filters use.
-    ['staff role', staffRoleLabel, ['OWNER', 'MANAGER', 'STAFF']],
-    ['staff status', staffStatusLabel, ['ACTIVE', 'INACTIVE', 'SUSPENDED']],
+  // The last entry is how many values the parse must find. It is per case
+  // because the app writes only two roles, and a blanket minimum would either
+  // fail on that one or go slack on the rest.
+  const cases: Array<
+    [string, (value: string) => string | null, string[], number]
+  > = [
+    ['lifecycle stage', lifecycleLabel, storageValues('CustomerLifecycleStageStorage'), 7],
+    ['retention status', retentionLabel, storageValues('CustomerRetentionStatusStorage'), 4],
+    ['relationship status', relationshipLabel, enumValues('BusinessCustomerStatus'), 3],
+    ['staff role', staffRoleLabel, constantValues('appUserRole'), 2],
+    ['staff status', staffStatusLabel, constantValues('appUserStatus'), 3],
+    ['subscription status', subscriptionLabel, subscriptionCodes(), 6],
   ];
 
-  for (const [what, label, values] of cases) {
+  for (const [what, label, values, least] of cases) {
     // Guards the guard: a parse that found nothing would pass vacuously.
-    assert.ok(values.length >= 3, `${what}: found only ${values.length} values`);
+    assert.ok(
+      values.length >= least,
+      `${what}: found only ${values.length} values`,
+    );
 
     for (const value of values) {
       if (SAME_IN_BOTH.has(value)) {

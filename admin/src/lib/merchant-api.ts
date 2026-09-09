@@ -128,6 +128,20 @@ type Envelope<T> = {
 };
 
 /**
+ * What a business owner reads when a request fails.
+ *
+ * `statusMessage` is the console's wording, and for a 5xx it names "a API de
+ * administração" — a system a bakery owner has never heard of and can do
+ * nothing about. Its other sentences are phrased for anyone, so only that one
+ * is replaced, in the same voice this file already uses when the service is
+ * unreachable.
+ */
+function merchantMessage(status: number): string {
+  if (status >= 500) return 'O serviço falhou. Tente de novo dentro de momentos.';
+  return statusMessage(status);
+}
+
+/**
  * `idToken` is passed explicitly only by the sign-in exchange, which has to ask
  * "is this person a merchant" before there is a cookie to read it from.
  * Everything else reads the session.
@@ -175,14 +189,21 @@ async function call<T>(path: string, idToken?: string): Promise<Envelope<T>> {
 
   if (!response.ok) {
     console.error(`[merchant-api] ${response.status} ${path}`, body?.message);
-    // 403 here means "this account runs no business", which is a state the
-    // portal explains rather than an error the operator can act on.
+    // The API's own `message` is deliberately not shown here, unlike in
+    // `admin-api.ts`. Every string the /merchant/* routes can send is an
+    // internal English one — 'Server error', 'Business not found',
+    // 'Unauthorized' — and this is the Portuguese-only side of the portal, so
+    // a business owner whose page failed was reading "Server error". The line
+    // above still logs it, which is where it was useful in the first place.
+    //
+    // 403 means "this account runs no business", which is a state the portal
+    // explains rather than an error the operator can act on.
     throw new AdminApiError(
       response.status,
       path,
       response.status === 403
         ? 'Esta conta não está associada a nenhum negócio.'
-        : (body?.message ?? statusMessage(response.status)),
+        : merchantMessage(response.status),
     );
   }
 
@@ -269,4 +290,186 @@ export function fetchMyRewards(params: ListQuery = {}) {
 
 export function fetchMyTeam(params: ListQuery = {}) {
   return callList<MerchantStaff>('/merchant/team', params);
+}
+
+/* ------------------------------------------- what the business could not see */
+
+/**
+ * The app has synced all of this up for a while; the portal read none of it.
+ *
+ * A merchant could see who their customers were but not what they had bought,
+ * what they had redeemed, what their plan had actually consumed, or which of
+ * them the retention engine had flagged. Some of it the console could already
+ * see — the points ledger and the retention board both existed there — which
+ * made the asymmetry the sharper half of the problem.
+ */
+
+export type MerchantSaleListItem = MerchantSale & {
+  customer_id: string | null;
+};
+
+export type SalesTotals = {
+  count: number;
+  amount: number;
+  points: number;
+};
+
+export type MerchantRedemption = {
+  id: string;
+  customer_id: string | null;
+  reward_id: string | null;
+  points_spent: number | null;
+  redeemed_at: number | null;
+  status: string | null;
+};
+
+export type MerchantAppointment = {
+  id: string;
+  customer_id: string | null;
+  scheduled_date: number | null;
+  status: string | null;
+  source: string | null;
+  reminder_sent: boolean | null;
+  created_at: number | null;
+};
+
+export type MerchantLedgerEntry = {
+  id: string;
+  customer_id: string | null;
+  entry_type: string | null;
+  points_delta: number | null;
+  source_type: string | null;
+  source_id: string | null;
+  balance_after: number | null;
+  occurred_at: number | null;
+};
+
+export type MerchantUsageBalance = {
+  id: string;
+  metric_key: string | null;
+  used: number;
+  limit_value: number | null;
+  soft_limit: boolean | null;
+  window_start: number | null;
+  window_end: number | null;
+  updated_at: number | null;
+};
+
+export type MerchantRiskScore = {
+  id: string;
+  customer_id: string | null;
+  days_since_visit: number;
+  risk_level: string | null;
+  priority: number;
+  updated_at: number | null;
+};
+
+export type MerchantRecoveryTask = {
+  id: string;
+  customer_id: string | null;
+  priority: string | null;
+  status: string | null;
+  due_at: number | null;
+  notes: string | null;
+  created_at: number | null;
+};
+
+export type MerchantVisitReport = {
+  id: string;
+  customer_id: string | null;
+  task_id: string | null;
+  result: string | null;
+  notes: string | null;
+  visited_at: number | null;
+};
+
+export type MerchantSurvey = {
+  id: string;
+  title: string | null;
+  description: string | null;
+  is_active: boolean | null;
+  response_count: number;
+  created_at: number | null;
+  updated_at: number | null;
+};
+
+export type MerchantReturnBonus = {
+  id: string;
+  customer_id: string | null;
+  type: string | null;
+  value: number | null;
+  status: string | null;
+  issued_at: number | null;
+  expires_at: number | null;
+  redeemed_at: number | null;
+};
+
+/**
+ * The sales list, with takings computed over every sale rather than the page.
+ *
+ * `totals` rides along on the same response because it is read from the same
+ * documents; asking for it separately would be a second full read to answer
+ * the question the screen exists for.
+ */
+export async function fetchMySales(
+  params: ListQuery = {},
+): Promise<MerchantList<MerchantSaleListItem> & { totals: SalesTotals }> {
+  const body = await call<MerchantSaleListItem[]>(
+    `/merchant/sales${buildListQuery(params)}`,
+  );
+  const totals = (body as { totals?: SalesTotals }).totals;
+  return {
+    ...toMerchantList(body),
+    totals: totals ?? { count: 0, amount: 0, points: 0 },
+  };
+}
+
+export function fetchMyRedemptions(params: ListQuery = {}) {
+  return callList<MerchantRedemption>('/merchant/redemptions', params);
+}
+
+export function fetchMyAppointments(params: ListQuery = {}) {
+  return callList<MerchantAppointment>('/merchant/appointments', params);
+}
+
+export function fetchMyReturnBonuses(params: ListQuery = {}) {
+  return callList<MerchantReturnBonus>('/merchant/return-bonuses', params);
+}
+
+export function fetchMyRiskScores(params: ListQuery = {}) {
+  return callList<MerchantRiskScore>('/merchant/risk-scores', params);
+}
+
+export function fetchMyRecoveryTasks(params: ListQuery = {}) {
+  return callList<MerchantRecoveryTask>('/merchant/recovery-tasks', params);
+}
+
+export function fetchMyVisitReports(params: ListQuery = {}) {
+  return callList<MerchantVisitReport>('/merchant/visit-reports', params);
+}
+
+export function fetchMySurveys(params: ListQuery = {}) {
+  return callList<MerchantSurvey>('/merchant/surveys', params);
+}
+
+export async function fetchMyUsage(): Promise<MerchantUsageBalance[]> {
+  const body = await call<MerchantUsageBalance[]>('/merchant/usage');
+  return body.data ?? [];
+}
+
+/** One customer's points, entry by entry. */
+export async function fetchMyCustomerLedger(
+  customerId: string,
+): Promise<MerchantLedgerEntry[]> {
+  try {
+    const body = await call<MerchantLedgerEntry[]>(
+      `/merchant/customers/${encodeURIComponent(customerId)}/ledger`,
+    );
+    return body.data ?? [];
+  } catch (caught) {
+    // A customer with no ledger is not an error the screen should shout
+    // about; it is a customer who has not earned anything yet.
+    if (caught instanceof AdminApiError && caught.status === 404) return [];
+    throw caught;
+  }
 }
