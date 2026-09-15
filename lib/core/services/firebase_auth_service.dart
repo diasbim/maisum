@@ -15,6 +15,30 @@ class FirebaseAuthService {
   bool get isSignedIn => _auth.currentUser != null;
   String? get uid => _auth.currentUser?.uid;
 
+  /// [currentUser] right after process start can briefly read null even
+  /// though a user is persisted: on native platforms the SDK still has to
+  /// restore its saved sign-in state over a platform channel, and the
+  /// getter answers before that finishes — `authStateChanges()` itself can
+  /// also emit a transient null before the real restored user arrives.
+  /// Session restore has to tell "really signed out" apart from "not
+  /// finished restoring yet", so this waits (briefly, bounded) for the
+  /// first non-null event instead of trusting an immediate `currentUser`
+  /// read or the stream's first emission.
+  Future<User?> waitForCurrentUser({
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    final immediate = _auth.currentUser;
+    if (immediate != null) return immediate;
+    try {
+      return await _auth
+          .authStateChanges()
+          .firstWhere((user) => user != null, orElse: () => _auth.currentUser)
+          .timeout(timeout, onTimeout: () => _auth.currentUser);
+    } catch (_) {
+      return _auth.currentUser;
+    }
+  }
+
   Future<void> verifyPhoneNumber({
     required String phoneNumber,
     required void Function(String verificationId) onCodeSent,

@@ -160,12 +160,24 @@ class AuthRepository {
       }
 
       if (storedSession.isValid) {
-        await _ensureLocalIdentity(storedSession);
+        // Local bootstrap (mirroring the merchant/app_user rows into
+        // sqlite) is best-effort, same as the Firestore sync below: a
+        // transient DB error here must not throw away an otherwise-valid
+        // session and force the owner back through phone/OTP login.
+        try {
+          await _ensureLocalIdentity(storedSession);
+        } catch (error, stackTrace) {
+          AppErrorReporter.report(
+            error,
+            stackTrace,
+            hint: 'auth_ensure_local_identity_restore',
+          );
+        }
         return storedSession;
       }
     }
 
-    final firebaseUser = _firebaseAuth.currentUser;
+    final firebaseUser = await _firebaseAuth.waitForCurrentUser();
     if (firebaseUser != null) {
       final storedAppUserId = storedSession?.appUserId;
       final storedMerchantId = storedSession?.merchantId;
@@ -253,7 +265,17 @@ class AuthRepository {
         token: token,
         expiresAt: expiry,
       );
-      await _ensureLocalIdentity(session);
+      // Best-effort, like the branch above: a transient local DB error must
+      // not turn an authenticated Firebase user into a logged-out app.
+      try {
+        await _ensureLocalIdentity(session);
+      } catch (error, stackTrace) {
+        AppErrorReporter.report(
+          error,
+          stackTrace,
+          hint: 'auth_ensure_local_identity_reconstruct',
+        );
+      }
       return session;
     }
 

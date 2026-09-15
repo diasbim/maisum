@@ -79,5 +79,62 @@ void main() {
         isNot(contains('+258840000001')),
       );
     });
+
+    group('waitForCurrentUser', () {
+      test('returns immediately when currentUser is already available',
+          () async {
+        final user = MockUser(uid: 'uid-immediate');
+        final auth = MockFirebaseAuth(mockUser: user, signedIn: true);
+        final svc = FirebaseAuthService(auth);
+
+        final result = await svc.waitForCurrentUser(
+          timeout: const Duration(seconds: 1),
+        );
+
+        expect(result?.uid, 'uid-immediate');
+      });
+
+      test(
+        'waits for the SDK to finish restoring the persisted user instead '
+        'of concluding "logged out" the instant currentUser is still null',
+        () async {
+          // Mirrors the real cold-start race: the native SDK has a signed-in
+          // user, but the Dart-side currentUser getter hasn't caught up yet
+          // when session restore first asks — it arrives a beat later via
+          // authStateChanges().
+          final auth = MockFirebaseAuth();
+          final svc = FirebaseAuthService(auth);
+          expect(svc.currentUser, isNull);
+
+          final user = MockUser(uid: 'uid-delayed');
+          Future<void>.delayed(const Duration(milliseconds: 30), () {
+            auth.mockUser = user;
+            auth.signInWithCredential(null);
+          });
+
+          final result = await svc.waitForCurrentUser(
+            timeout: const Duration(seconds: 2),
+          );
+
+          expect(
+            result?.uid,
+            'uid-delayed',
+            reason: 'a session restore that only checked currentUser once '
+                'would have wrongly treated this as "not signed in"',
+          );
+        },
+      );
+
+      test('gives up and returns null once the timeout elapses', () async {
+        final auth = MockFirebaseAuth();
+        final svc = FirebaseAuthService(auth);
+
+        final result = await svc.waitForCurrentUser(
+          timeout: const Duration(milliseconds: 50),
+        );
+
+        expect(result, isNull);
+      });
+    });
   });
 }

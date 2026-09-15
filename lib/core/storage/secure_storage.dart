@@ -365,6 +365,25 @@ class SecureStorageService {
     return true;
   }
 
+  /// Debug-only toggle used by QA to bypass paid-module gating so that
+  /// premium features can be exercised end-to-end without a live
+  /// subscription. Read and set only from debug builds (see
+  /// `FeatureGate.check` and the Settings screen), but stored the same as
+  /// any other preference so it survives app restarts during a test pass.
+  Future<void> setDebugBypassPaidFeatureGate(bool value) => _storage.write(
+        key: AppConstants.debugBypassPaidFeatureGateKey,
+        value: value ? '1' : '0',
+        aOptions: _androidOptions,
+      );
+
+  Future<bool> getDebugBypassPaidFeatureGate() async {
+    final raw = await _storage.read(
+      key: AppConstants.debugBypassPaidFeatureGateKey,
+      aOptions: _androidOptions,
+    );
+    return raw == '1';
+  }
+
   String _onboardingPlanConfirmedKey({String? merchantId, String? role}) {
     final normalizedMerchantId = _normalizeKeySegment(merchantId);
     final normalizedRole = _normalizeKeySegment(role?.toUpperCase());
