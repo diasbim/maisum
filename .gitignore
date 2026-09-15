@@ -60,3 +60,5 @@ app.*.map.json
 
 # Firebase Functions local environment values
 /functions/.env*
+# ...except the template, which is the only record of what those files hold.
+!/functions/.env.example
