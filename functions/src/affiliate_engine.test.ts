@@ -38,8 +38,8 @@ function code(overrides: Partial<ReferralCodeSnapshot> = {}): ReferralCodeSnapsh
     codeId: 'ac_1',
     merchantId: 'merchant-1',
     affiliateId: 'affiliate-1',
-    enabled: true,
-    validFrom: NOW - DAY,
+    status: 'ACTIVE',
+    startsAt: NOW - DAY,
     expiresAt: NOW + 29 * DAY,
     usageLimit: null,
     usageCount: 0,
@@ -203,8 +203,8 @@ test('a missing code and another business are the same answer', () => {
 
 test('each check has its own reason', () => {
   const cases: Array<[Partial<ReferralCodeSnapshot>, Partial<ReferralContext>, string]> = [
-    [{ enabled: false }, {}, 'CODE_DISABLED'],
-    [{ validFrom: NOW + DAY }, {}, 'CODE_NOT_STARTED'],
+    [{ status: 'DISABLED' }, {}, 'CODE_DISABLED'],
+    [{ startsAt: NOW + DAY }, {}, 'CODE_NOT_STARTED'],
     [{ expiresAt: NOW - 1 }, {}, 'CODE_EXPIRED'],
     [{ usageLimit: 5, usageCount: 5 }, {}, 'CODE_USAGE_LIMIT_REACHED'],
     [{}, { affiliateStatus: 'INACTIVE' }, 'AFFILIATE_INACTIVE'],
@@ -229,7 +229,7 @@ test('the order is the contract, not an implementation detail', () => {
   // the one the merchant can do something about. Reordering these silently
   // changes what a cashier is told to do.
   assert.deepEqual(
-    validateReferral(code({ enabled: false, expiresAt: NOW - 1 }), context()),
+    validateReferral(code({ status: 'DISABLED', expiresAt: NOW - 1 }), context()),
     { ok: false, reason: 'CODE_DISABLED' },
   );
   assert.deepEqual(
@@ -259,7 +259,7 @@ test('a code expires at its instant, not after it', () => {
 });
 
 test('validity starts at its instant', () => {
-  assert.deepEqual(validateReferral(code({ validFrom: NOW }), context()), { ok: true });
+  assert.deepEqual(validateReferral(code({ startsAt: NOW }), context()), { ok: true });
 });
 
 test('an unlimited code is not a code with a zero limit', () => {

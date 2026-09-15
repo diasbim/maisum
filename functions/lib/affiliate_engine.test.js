@@ -14,8 +14,8 @@ function code(overrides = {}) {
         codeId: 'ac_1',
         merchantId: 'merchant-1',
         affiliateId: 'affiliate-1',
-        enabled: true,
-        validFrom: NOW - DAY,
+        status: 'ACTIVE',
+        startsAt: NOW - DAY,
         expiresAt: NOW + 29 * DAY,
         usageLimit: null,
         usageCount: 0,
@@ -137,8 +137,8 @@ function config(overrides = {}) {
 });
 (0, node_test_1.default)('each check has its own reason', () => {
     const cases = [
-        [{ enabled: false }, {}, 'CODE_DISABLED'],
-        [{ validFrom: NOW + DAY }, {}, 'CODE_NOT_STARTED'],
+        [{ status: 'DISABLED' }, {}, 'CODE_DISABLED'],
+        [{ startsAt: NOW + DAY }, {}, 'CODE_NOT_STARTED'],
         [{ expiresAt: NOW - 1 }, {}, 'CODE_EXPIRED'],
         [{ usageLimit: 5, usageCount: 5 }, {}, 'CODE_USAGE_LIMIT_REACHED'],
         [{}, { affiliateStatus: 'INACTIVE' }, 'AFFILIATE_INACTIVE'],
@@ -156,7 +156,7 @@ function config(overrides = {}) {
     // A code that is both disabled and expired must say "desativado": that is
     // the one the merchant can do something about. Reordering these silently
     // changes what a cashier is told to do.
-    strict_1.default.deepEqual((0, affiliate_engine_js_1.validateReferral)(code({ enabled: false, expiresAt: NOW - 1 }), context()), { ok: false, reason: 'CODE_DISABLED' });
+    strict_1.default.deepEqual((0, affiliate_engine_js_1.validateReferral)(code({ status: 'DISABLED', expiresAt: NOW - 1 }), context()), { ok: false, reason: 'CODE_DISABLED' });
     strict_1.default.deepEqual((0, affiliate_engine_js_1.validateReferral)(code({ expiresAt: NOW - 1, usageLimit: 1, usageCount: 9 }), context()), { ok: false, reason: 'CODE_EXPIRED' });
     strict_1.default.deepEqual((0, affiliate_engine_js_1.validateReferral)(code(), context({
         affiliateStatus: 'INACTIVE',
@@ -173,7 +173,7 @@ function config(overrides = {}) {
     });
 });
 (0, node_test_1.default)('validity starts at its instant', () => {
-    strict_1.default.deepEqual((0, affiliate_engine_js_1.validateReferral)(code({ validFrom: NOW }), context()), { ok: true });
+    strict_1.default.deepEqual((0, affiliate_engine_js_1.validateReferral)(code({ startsAt: NOW }), context()), { ok: true });
 });
 (0, node_test_1.default)('an unlimited code is not a code with a zero limit', () => {
     strict_1.default.deepEqual((0, affiliate_engine_js_1.validateReferral)(code({ usageLimit: null, usageCount: 9999 }), context()), { ok: true });

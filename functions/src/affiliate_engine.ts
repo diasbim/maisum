@@ -105,7 +105,7 @@ export function generateCodeSuffix(
 /* --------------------------------------------------------------------- ids */
 
 function digest(parts: string[]): string {
-  return createHash('sha256').update(parts.join('')).digest('hex').slice(0, 40);
+  return createHash('sha256').update(parts.join('\u001f')).digest('hex').slice(0, 40);
 }
 
 /**
@@ -155,8 +155,17 @@ export type ReferralCodeSnapshot = {
   codeId: string;
   merchantId: string;
   affiliateId: string;
-  enabled: boolean;
-  validFrom: number;
+  /**
+   * Mirrors the stored enum rather than collapsing it to a boolean.
+   *
+   * AffiliateCodeStatus in affiliate_code.dart is ACTIVE|DISABLED, and a mapper
+   * writing `enabled = status !== 'DISABLED'` and one writing
+   * `enabled = status === 'ACTIVE'` read identically and disagree the day a
+   * third state exists. Reading the enum has no such polarity to get backwards.
+   */
+  status: 'ACTIVE' | 'DISABLED';
+  /** Named for the stored column, `starts_at`. */
+  startsAt: number;
   expiresAt: number;
   usageLimit: number | null;
   usageCount: number;
@@ -208,8 +217,8 @@ export function validateReferral(
   if (code === null || code.merchantId !== context.merchantId) {
     return fail('CODE_NOT_FOUND');
   }
-  if (!code.enabled) return fail('CODE_DISABLED');
-  if (context.now < code.validFrom) return fail('CODE_NOT_STARTED');
+  if (code.status !== 'ACTIVE') return fail('CODE_DISABLED');
+  if (context.now < code.startsAt) return fail('CODE_NOT_STARTED');
   if (context.now >= code.expiresAt) return fail('CODE_EXPIRED');
   if (code.usageLimit !== null && code.usageCount >= code.usageLimit) {
     return fail('CODE_USAGE_LIMIT_REACHED');

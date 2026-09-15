@@ -102,7 +102,7 @@ function generateCodeSuffix(randomByte, length = exports.CODE_SUFFIX_LENGTH) {
 }
 /* --------------------------------------------------------------------- ids */
 function digest(parts) {
-    return (0, crypto_1.createHash)('sha256').update(parts.join('')).digest('hex').slice(0, 40);
+    return (0, crypto_1.createHash)('sha256').update(parts.join('\u001f')).digest('hex').slice(0, 40);
 }
 /**
  * Deterministic ids, which is how uniqueness is enforced.
@@ -153,9 +153,9 @@ function validateReferral(code, context) {
     if (code === null || code.merchantId !== context.merchantId) {
         return fail('CODE_NOT_FOUND');
     }
-    if (!code.enabled)
+    if (code.status !== 'ACTIVE')
         return fail('CODE_DISABLED');
-    if (context.now < code.validFrom)
+    if (context.now < code.startsAt)
         return fail('CODE_NOT_STARTED');
     if (context.now >= code.expiresAt)
         return fail('CODE_EXPIRED');

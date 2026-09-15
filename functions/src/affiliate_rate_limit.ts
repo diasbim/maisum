@@ -120,7 +120,7 @@ export function rateLimitBucketId(input: {
   const digest = createHash('sha256')
     .update(
       [input.merchantId, input.actorId, input.action, String(input.windowStart)].join(
-        '',
+        '\u001f',
       ),
     )
     .digest('hex')

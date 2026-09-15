@@ -64,7 +64,7 @@ function evaluateRateLimit(existing, policy, now) {
  */
 function rateLimitBucketId(input) {
     const digest = (0, crypto_1.createHash)('sha256')
-        .update([input.merchantId, input.actorId, input.action, String(input.windowStart)].join(''))
+        .update([input.merchantId, input.actorId, input.action, String(input.windowStart)].join('\u001f'))
         .digest('hex')
         .slice(0, 40);
     return `rl_${digest}`;
