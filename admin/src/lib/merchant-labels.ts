@@ -298,6 +298,7 @@ const SURVEY_CHANNEL: Record<string, string> = {
   SMS: 'SMS',
   'IN-APP': 'Na aplicação',
   MANUAL: 'Presencial',
+  LINK: 'Por link',
 };
 
 export const surveyChannelLabel = (value: string | null) =>

@@ -160,9 +160,25 @@ class EngageDashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
+                    title: 'Enviar questionário',
+                    subtitle: access.canManageSurveys
+                        ? 'Um link que o cliente abre e responde sozinho.'
+                        : 'Disponível apenas no plano Business.',
+                    icon: Icons.link_rounded,
+                    enabled: access.canManageSurveys,
+                    onTap: () => access.canManageSurveys
+                        ? context.push('/engage/surveys/send')
+                        : context.push(featureUpsellLocation(
+                            featureKey: FeatureKeys.engageManageSurveys,
+                            featureName: 'Enviar questionário',
+                            reason: 'plan_restricted',
+                          )),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _ActionCard(
                     title: 'Registar resposta',
                     subtitle: access.canManageSurveys
-                        ? 'Anote o que o cliente respondeu, por qualquer via.'
+                        ? 'Anote o que o cliente respondeu no local.'
                         : 'Disponível apenas no plano Business.',
                     icon: Icons.send_outlined,
                     enabled: access.canManageSurveys,

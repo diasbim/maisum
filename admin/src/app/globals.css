@@ -1575,3 +1575,245 @@ a.mobile-nav__account {
   gap: 18px;
   margin-bottom: 12px;
 }
+
+/* ── The public survey page ──────────────────────────────────────────────
+ *
+ * The only screen in the portal that a customer sees, on their own phone, in
+ * the street. It borrows the palette and nothing else: the portal's chrome is
+ * built for a desk, and every control here has to be thumb-sized. Sizes are in
+ * rem so the phone's own text-size setting still works.
+ */
+
+.q-page {
+  min-height: 100dvh;
+  background: var(--navy);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 16px 40px;
+}
+
+.q-card {
+  width: 100%;
+  max-width: 34rem;
+  background: var(--white);
+  border-radius: var(--rL);
+  padding: 24px 20px 28px;
+  box-shadow: var(--shM);
+}
+
+.q-card--quiet {
+  text-align: center;
+  padding-block: 40px;
+}
+
+.q-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--g100);
+}
+
+.q-from {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--g500);
+  margin: 0;
+}
+
+.q-page h1 {
+  font-size: 1.5rem;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--navy);
+  text-wrap: balance;
+}
+
+.q-dek,
+.q-card--quiet p {
+  margin: 0;
+  color: var(--g500);
+  line-height: 1.5;
+}
+
+.q-privacy {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--g500);
+}
+
+.q-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 24px;
+}
+
+.q-field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.q-label {
+  font-weight: 600;
+  color: var(--navy);
+  line-height: 1.35;
+  padding: 0;
+}
+
+.q-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--g500);
+}
+
+.q-field textarea,
+.q-field select {
+  width: 100%;
+  font: inherit;
+  font-size: 1rem; /* Anything under 16px makes iOS zoom on focus. */
+  color: var(--navy);
+  background: var(--white);
+  border: 1.5px solid var(--g300);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  min-height: 3rem;
+}
+
+.q-field textarea {
+  resize: vertical;
+}
+
+.q-field textarea:focus-visible,
+.q-field select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+  border-color: var(--navy);
+}
+
+/* The 1–5 scale and the yes/no pair: real targets, and selection carried by
+ * fill and border together, never by colour alone. */
+.q-scale,
+.q-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.q-score,
+.q-choice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 3.25rem;
+  min-height: 3.25rem;
+  padding: 0 16px;
+  border: 1.5px solid var(--g300);
+  border-radius: var(--r);
+  font-weight: 700;
+  color: var(--g500);
+  cursor: pointer;
+  background: var(--white);
+}
+
+.q-score input,
+.q-choice input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.q-score:has(input:checked),
+.q-choice:has(input:checked),
+.q-score.is-picked {
+  border-color: var(--navy);
+  border-width: 2.5px;
+  background: var(--goldLt);
+  color: var(--navy);
+}
+
+.q-score:has(input:focus-visible),
+.q-choice:has(input:focus-visible) {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.q-send {
+  font: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  min-height: 3.25rem;
+  border: 0;
+  border-radius: var(--r);
+  background: var(--navy);
+  color: var(--white);
+  cursor: pointer;
+}
+
+.q-send:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.q-send:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.q-error {
+  margin: 0;
+  color: var(--red);
+  font-size: 0.85rem;
+}
+
+.q-error--form {
+  font-weight: 600;
+}
+
+.q-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  padding: 32px 0 8px;
+}
+
+.q-done__mark {
+  font-size: 2.5rem;
+  line-height: 1;
+  color: var(--green);
+  margin: 0;
+}
+
+.q-done h2 {
+  margin: 0;
+  color: var(--navy);
+}
+
+.q-done p {
+  margin: 0;
+  color: var(--g500);
+}
+
+.q-foot {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: oklch(100% 0 0 / 0.5);
+}

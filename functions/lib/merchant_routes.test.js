@@ -124,3 +124,35 @@ function mutatingMerchantRoutes() {
         strict_1.default.ok(/business\.id/.test(body), `${route} writes without passing business.id`);
     }
 });
+/**
+ * What sits above the authentication middleware.
+ *
+ * Express runs `app.use` handlers in order, so anything mounted before the
+ * auth middleware is reachable with no token at all. Exactly one thing is
+ * meant to be: the survey links a customer opens, which have no account behind
+ * them and are authorised by their own signature instead.
+ *
+ * A second mount added above that line would be an open door, and it would
+ * look like an ordinary line of setup code. This is the test that notices.
+ */
+(0, node_test_1.default)('only the public survey router sits above authentication', () => {
+    const authAt = SOURCE.indexOf('app.use(async (req, res, next) => {');
+    strict_1.default.ok(authAt > 0, 'the auth middleware is no longer mounted with app.use');
+    const before = SOURCE.slice(0, authAt);
+    const mounts = [...before.matchAll(/app\.use\(([^)]*)/g)].map((m) => m[1].trim());
+    strict_1.default.deepEqual(mounts, ["express.json({ limit: '1mb' }", "'/public', publicRouter"], 'something new is mounted before authentication');
+});
+(0, node_test_1.default)('the public routes read nothing the caller controls but the token', () => {
+    const publicAt = SOURCE.indexOf('const publicRouter = express.Router();');
+    strict_1.default.ok(publicAt > 0, 'publicRouter is gone');
+    const routes = [...SOURCE.matchAll(/publicRouter\.(get|post)\(\s*'([^']+)'/g)];
+    strict_1.default.ok(routes.length >= 2, `found only ${routes.length} public routes`);
+    for (const match of routes) {
+        const start = match.index ?? 0;
+        const body = SOURCE.slice(start, start + 4000);
+        strict_1.default.ok(/verifySurveyLinkToken\(/.test(body), `public route ${match[2]} does not verify a link`);
+        // The business must come out of the signed token. Taken from anywhere else
+        // on an unauthenticated route, it is taken from anyone.
+        strict_1.default.ok(!/req\.query\.merchant_id|req\.body\?\.merchant_id|req\.params\.merchantId/.test(body), `public route ${match[2]} reads a merchant id from the request`);
+    }
+});

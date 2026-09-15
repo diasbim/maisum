@@ -26,6 +26,7 @@ import '../features/engage/presentation/recovery_actions_screen.dart';
 import '../features/engage/presentation/survey_analytics_screen.dart';
 import '../features/engage/presentation/survey_builder_screen.dart';
 import '../features/engage/presentation/survey_response_screen.dart';
+import '../features/engage/presentation/survey_send_screen.dart';
 import '../features/engage/presentation/visit_report_screen.dart';
 import '../features/rewards/presentation/create_reward_screen.dart';
 import '../features/rewards/presentation/rewards_screen.dart';
@@ -553,6 +554,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/engage/surveys/new',
         builder: (_, __) => const SurveyBuilderScreen(),
+      ),
+      GoRoute(
+        path: '/engage/surveys/send',
+        builder: (_, __) => const SurveySendScreen(),
       ),
       GoRoute(
         path: '/engage/surveys/respond',

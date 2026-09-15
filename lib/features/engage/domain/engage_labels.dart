@@ -54,6 +54,7 @@ class EngageLabels {
         SurveyChannel.sms => 'SMS',
         SurveyChannel.inApp => 'Na aplicação',
         SurveyChannel.manual => 'Presencial',
+        SurveyChannel.link => 'Por link',
         _ => channel,
       };
 

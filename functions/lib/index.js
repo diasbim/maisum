@@ -63,6 +63,7 @@ const merchant_firestore_js_1 = require("./merchant_firestore.js");
 const merchant_collections_js_1 = require("./merchant_collections.js");
 const admin_audit_js_1 = require("./admin_audit.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
+const survey_link_js_1 = require("./survey_link.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
 const retention_engine_js_1 = require("./retention_engine.js");
 const sync_backend_js_1 = require("./sync_backend.js");
@@ -256,6 +257,9 @@ const MAX_CUSTOMER_ACTIVITY_ENTRIES = 100;
 // A customer only ever holds a handful of live bonuses; the cap is a
 // guardrail against an unbounded read, not a product limit.
 const MAX_CUSTOMER_RETURN_BONUSES = 20;
+// How a survey answer that arrived through a shared link is recorded. Mirrors
+// SurveyChannel.link in engage_models.dart.
+const SURVEY_CHANNEL_LINK = 'link';
 const MOZAMBIQUE_PHONE_PREFIXES = new Set(['82', '83', '84', '85', '86', '87']);
 const CUSTOMER_SERVER_OWNED_FIELDS = [
     'canonical_customer_id',
@@ -317,6 +321,22 @@ const SALE_SERVER_OWNED_FIELDS = [
 ];
 const app = (0, express_1.default)();
 app.use(express_1.default.json({ limit: '1mb' }));
+/**
+ * The only unauthenticated surface, mounted deliberately above the auth
+ * middleware so that Express never reaches it for these paths.
+ *
+ * A customer answering a survey has no account and no token to present. What
+ * stands in for authentication is the signed link itself: `survey_link.ts`
+ * carries the business, the survey and — when the link was sent to someone in
+ * particular — the customer, so nothing here is read from a parameter the
+ * caller controls.
+ *
+ * Nothing else belongs here. `merchant_routes.test.ts` asserts that this is
+ * the only `app.use` above the auth middleware, because a second one added in
+ * a hurry would be an open door nobody would notice.
+ */
+const publicRouter = express_1.default.Router();
+app.use('/public', publicRouter);
 app.use(async (req, res, next) => {
     const allowDev = process.env.ALLOW_DEV_AUTH === 'true';
     const authHeader = req.headers.authorization;
@@ -2769,6 +2789,314 @@ app.post('/engage/surveys', async (req, res) => {
         client.release();
     }
 });
+/* ------------------------------------------------ answering from a link */
+/**
+ * Where a survey link points.
+ *
+ * The portal serves `/q/<token>`, so this is the portal's own origin. It is
+ * configuration rather than a constant because the portal has no deploy target
+ * yet: until one exists there is no correct value, and inventing one would
+ * mean the app sending customers a link that goes nowhere.
+ */
+function surveyLinkBaseUrl() {
+    const raw = (process.env.SURVEY_LINK_BASE_URL ?? '').trim();
+    if (raw === '')
+        return null;
+    return raw.replace(/\/+$/, '');
+}
+/**
+ * Mints a link for a survey, optionally addressed to one customer.
+ *
+ * A GET because it changes nothing: the token is derived, not stored, so
+ * asking twice yields two equally valid links and neither is a write.
+ */
+app.get('/engage/surveys/:surveyId/link', async (req, res) => {
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const surveyId = (req.params.surveyId ?? '').trim();
+    const customerId = pickQueryString(req.query.customer_id) ?? null;
+    if (surveyId === '') {
+        return res.status(400).json({ success: false, message: 'Missing survey id' });
+    }
+    try {
+        const result = await pool.query(`SELECT id, title, is_active FROM surveys WHERE id = $1 AND merchant_id = $2`, [surveyId, merchantId]);
+        const survey = result.rows[0];
+        if (!survey) {
+            return res.status(404).json({ success: false, message: 'Survey not found' });
+        }
+        if (survey.is_active === false) {
+            // Minting a link for a closed survey would produce one that 404s the
+            // moment the customer opens it.
+            return res.status(409).json({
+                success: false,
+                code: 'survey_closed',
+                message: 'Reactive o questionário antes de o enviar.',
+            });
+        }
+        const now = Date.now();
+        const token = (0, survey_link_js_1.createSurveyLinkToken)({
+            merchantId,
+            surveyId,
+            customerId,
+            issuedAt: now,
+            expiresAt: now + survey_link_js_1.SURVEY_LINK_TTL_MS,
+            secret: surveyLinkSecret(),
+        });
+        const base = surveyLinkBaseUrl();
+        return res.json({
+            success: true,
+            data: {
+                token,
+                // Null rather than a guessed origin: the app says so out loud instead
+                // of sending a customer somewhere that does not exist.
+                url: base === null ? null : `${base}/q/${token}`,
+                expires_at: now + survey_link_js_1.SURVEY_LINK_TTL_MS,
+                survey_title: survey.title ?? null,
+            },
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'engage_survey_link', error);
+    }
+});
+function surveyLinkSecret() {
+    // Domain-separated inside `survey_link.ts` ("survey-link-v1."), so sharing
+    // the customer-core secret cannot produce a token that verifies as the other
+    // kind. One secret to provision and to rotate rather than two.
+    return requireCustomerCoreSecret();
+}
+async function readPublicSurvey(link) {
+    const surveyResult = await pool.query(`SELECT id, title, description, is_active
+       FROM surveys WHERE id = $1 AND merchant_id = $2`, [link.surveyId, link.merchantId]);
+    const survey = surveyResult.rows[0];
+    // An inactive survey reads the same as a missing one: the merchant closed
+    // it, and the person holding the link has no business being told which.
+    if (!survey || survey.is_active === false)
+        return null;
+    const questionResult = await pool.query(`SELECT id, question_text, question_type, options, is_required, sort_order
+       FROM survey_questions
+      WHERE survey_id = $1 AND merchant_id = $2
+      ORDER BY sort_order ASC`, [link.surveyId, link.merchantId]);
+    let businessName = null;
+    try {
+        const business = await businessDocumentRef(link.merchantId).get();
+        businessName = business.exists
+            ? maybePayloadString(snapshotDataRecord(business), 'name', 'business_name')
+            : null;
+    }
+    catch {
+        // A survey without the shop's name is still answerable.
+        businessName = null;
+    }
+    return {
+        survey: {
+            id: String(survey.id),
+            title: String(survey.title ?? ''),
+            description: survey.description == null ? null : String(survey.description),
+        },
+        business_name: businessName,
+        questions: questionResult.rows.map((row) => ({
+            id: String(row.id),
+            question_text: String(row.question_text ?? ''),
+            question_type: String(row.question_type ?? 'SHORT_TEXT'),
+            options: Array.isArray(row.options) ? row.options : [],
+            is_required: row.is_required === true,
+            sort_order: Number(row.sort_order ?? 0),
+        })),
+    };
+}
+publicRouter.get('/surveys/:token', async (req, res) => {
+    const link = (0, survey_link_js_1.verifySurveyLinkToken)({
+        token: (req.params.token ?? '').trim(),
+        secret: surveyLinkSecret(),
+        now: Date.now(),
+    });
+    if (!link) {
+        return res
+            .status(404)
+            .json({ success: false, code: 'invalid_link', message: 'Link inválido ou expirado.' });
+    }
+    try {
+        const survey = await readPublicSurvey(link);
+        if (!survey) {
+            return res
+                .status(404)
+                .json({ success: false, code: 'survey_closed', message: 'Este questionário já não está aberto.' });
+        }
+        return res.json({ success: true, data: { ...survey, named: link.customerId !== null } });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'public_survey_read', error);
+    }
+});
+publicRouter.post('/surveys/:token/responses', async (req, res) => {
+    const now = Date.now();
+    const link = (0, survey_link_js_1.verifySurveyLinkToken)({
+        token: (req.params.token ?? '').trim(),
+        secret: surveyLinkSecret(),
+        now,
+    });
+    if (!link) {
+        return res
+            .status(404)
+            .json({ success: false, code: 'invalid_link', message: 'Link inválido ou expirado.' });
+    }
+    const submitted = Array.isArray(req.body?.answers) ? req.body.answers : [];
+    if (submitted.length === 0) {
+        return res
+            .status(400)
+            .json({ success: false, code: 'no_answers', message: 'Não foi enviada nenhuma resposta.' });
+    }
+    const client = await pool.connect();
+    try {
+        const survey = await readPublicSurvey(link);
+        if (!survey) {
+            return res
+                .status(404)
+                .json({ success: false, code: 'survey_closed', message: 'Este questionário já não está aberto.' });
+        }
+        // Answers are matched against this survey's own questions. The merchant
+        // endpoint trusts the question ids it is given; an open endpoint must not,
+        // or one valid link would write answers onto every survey.
+        const questions = new Map(survey.questions.map((question) => [String(question.id), question]));
+        const answers = [];
+        for (const item of submitted) {
+            const row = (item ?? {});
+            const questionId = pickString(row, 'question_id') ?? pickString(row, 'questionId');
+            if (!questionId || !questions.has(questionId))
+                continue;
+            answers.push({
+                questionId,
+                text: pickString(row, 'answer_text') ?? pickString(row, 'answerText') ?? null,
+                numeric: pickNumber(row, 'answer_numeric') ?? pickNumber(row, 'answerNumeric') ?? null,
+                bool: pickBoolean(row, 'answer_bool') ?? pickBoolean(row, 'answerBool') ?? null,
+            });
+        }
+        const answered = new Set(answers.map((answer) => answer.questionId));
+        const missing = survey.questions.filter((question) => question.is_required === true && !answered.has(String(question.id)));
+        if (missing.length > 0) {
+            return res.status(400).json({
+                success: false,
+                code: 'missing_required',
+                message: 'Faltam respostas obrigatórias.',
+                data: { question_ids: missing.map((question) => String(question.id)) },
+            });
+        }
+        if (answers.length === 0) {
+            return res
+                .status(400)
+                .json({ success: false, code: 'no_answers', message: 'Não foi enviada nenhuma resposta.' });
+        }
+        // A link sent to one person answers once: the id is derived from the pair,
+        // so a second submit revises that answer instead of stuffing the ballot.
+        // A link with no customer has no such pair and gets a fresh id each time,
+        // which is what an open link is for.
+        const responseId = link.customerId === null
+            ? (0, crypto_1.randomUUID)()
+            : deterministicDocumentId('sr', [link.merchantId, link.surveyId, link.customerId]);
+        await client.query('BEGIN');
+        await client.query(`
+      INSERT INTO survey_responses (
+        id, merchant_id, survey_id, customer_id, submitted_at, channel,
+        created_at, updated_at, created_by_app_user_id, updated_by_app_user_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULL,NULL)
+      ON CONFLICT (id) DO UPDATE SET
+        submitted_at = EXCLUDED.submitted_at,
+        updated_at = EXCLUDED.updated_at
+      WHERE survey_responses.merchant_id = EXCLUDED.merchant_id
+      `, [responseId, link.merchantId, link.surveyId, link.customerId, now, SURVEY_CHANNEL_LINK, now, now]);
+        const mirroredAnswers = [];
+        for (const [index, answer] of answers.entries()) {
+            const answerId = deterministicDocumentId('sra', [
+                link.merchantId,
+                responseId,
+                answer.questionId,
+                String(index),
+            ]);
+            await client.query(`
+        INSERT INTO survey_response_answers (
+          id, merchant_id, response_id, question_id,
+          answer_text, answer_numeric, answer_bool,
+          created_at, updated_at, created_by_app_user_id, updated_by_app_user_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,NULL)
+        ON CONFLICT (id) DO UPDATE SET
+          answer_text = EXCLUDED.answer_text,
+          answer_numeric = EXCLUDED.answer_numeric,
+          answer_bool = EXCLUDED.answer_bool,
+          updated_at = EXCLUDED.updated_at
+        WHERE survey_response_answers.merchant_id = EXCLUDED.merchant_id
+        `, [
+                answerId,
+                link.merchantId,
+                responseId,
+                answer.questionId,
+                answer.text,
+                answer.numeric,
+                answer.bool,
+                now,
+                now,
+            ]);
+            mirroredAnswers.push({
+                id: answerId,
+                merchant_id: link.merchantId,
+                response_id: responseId,
+                question_id: answer.questionId,
+                answer_text: answer.text,
+                answer_numeric: answer.numeric,
+                answer_bool: answer.bool,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        await client.query('COMMIT');
+        // The portal reads Firestore, and no phone was involved in this write, so
+        // without the mirror the merchant would never see the answer they asked for.
+        try {
+            await mirrorSurveyResponseToFirestore(link.merchantId, {
+                id: responseId,
+                merchant_id: link.merchantId,
+                survey_id: link.surveyId,
+                customer_id: link.customerId,
+                submitted_at: now,
+                channel: SURVEY_CHANNEL_LINK,
+                created_at: now,
+                updated_at: now,
+            }, mirroredAnswers);
+        }
+        catch (error) {
+            console.error('public_survey_mirror_failed', { response_id: responseId, error });
+        }
+        try {
+            await runSurveyCompletedAutomation(link.merchantId, link.surveyId, link.customerId, mirroredAnswers, responseId, now);
+        }
+        catch (error) {
+            console.error('public_survey_automation_failed', { response_id: responseId, error });
+        }
+        return res.json({ success: true, data: { response_id: responseId } });
+    }
+    catch (error) {
+        try {
+            await client.query('ROLLBACK');
+        }
+        catch {
+            // The connection is already gone; the transaction died with it.
+        }
+        return respondAdminServerError(res, 'public_survey_response', error);
+    }
+    finally {
+        client.release();
+    }
+});
+/** Mirrors a link-answered survey response into the portal's read model. */
+async function mirrorSurveyResponseToFirestore(merchantId, response, answers) {
+    const businessRef = businessDocumentRef(merchantId);
+    const batch = admin.firestore().batch();
+    batch.set(businessRef.collection('survey_responses').doc(String(response.id)), response, { merge: true });
+    for (const answer of answers) {
+        batch.set(businessRef.collection('survey_response_answers').doc(String(answer.id)), answer, { merge: true });
+    }
+    await batch.commit();
+}
 app.post('/engage/survey-response', async (req, res) => {
     const authedReq = req;
     const merchantId = authedReq.merchantId;
