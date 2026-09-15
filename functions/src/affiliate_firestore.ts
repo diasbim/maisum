@@ -1,3 +1,5 @@
+import { randomBytes } from 'crypto';
+
 import * as admin from 'firebase-admin';
 
 import {
@@ -124,8 +126,7 @@ export async function allocateAffiliateCode(input: {
   attempts?: number;
 }): Promise<CodeAllocation> {
   const attempts = input.attempts ?? CODE_ALLOCATION_ATTEMPTS;
-  const randomByte =
-    input.randomByte ?? (() => admin.firestore.Timestamp.now().nanoseconds & 0xff);
+  const randomByte = input.randomByte ?? (() => randomBytes(1).readUInt8(0));
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const candidate = buildAffiliateCode(input.name, generateCodeSuffix(randomByte));
@@ -173,7 +174,14 @@ export async function claimAffiliateCode(input: {
     });
     transaction.set(
       affiliateRefs.code(input.merchantId, input.codeId),
-      { ...input.codeFields, code: allocation.code, updated_at: now },
+      {
+        ...input.codeFields,
+        code: allocation.code,
+        // Stored beside the printed code because every lookup is done on the
+        // normalised form, and the Dart model reads the same two fields.
+        normalized_code: normalizeAffiliateCode(allocation.code),
+        updated_at: now,
+      },
       { merge: true },
     );
 

@@ -20,6 +20,17 @@ export type AffiliateStatus = (typeof AFFILIATE_STATUS)[number];
 export const AFFILIATE_LINK_STATUS = ['ACTIVE', 'INACTIVE'] as const;
 export type AffiliateLinkStatus = (typeof AFFILIATE_LINK_STATUS)[number];
 
+/**
+ * A code is on or off, and nothing else.
+ *
+ * `ReferralCodeSnapshot.status` in the engine already reads this enum rather
+ * than a boolean; naming it here is what lets the API validate an incoming
+ * status against the stored vocabulary instead of against a literal typed out
+ * at the route.
+ */
+export const AFFILIATE_CODE_STATUS = ['ACTIVE', 'DISABLED'] as const;
+export type AffiliateCodeStatus = (typeof AFFILIATE_CODE_STATUS)[number];
+
 export const ATTRIBUTION_STATUS = ['CONFIRMED', 'REJECTED', 'CANCELLED'] as const;
 export type AttributionStatus = (typeof ATTRIBUTION_STATUS)[number];
 

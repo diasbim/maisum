@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 
 import {
@@ -7,6 +9,11 @@ import {
   CODE_ALLOCATION_ATTEMPTS,
 } from './affiliate_firestore.js';
 import { CODE_ALPHABET } from './affiliate_engine.js';
+
+const SOURCE = readFileSync(
+  path.join(__dirname, '..', 'src', 'affiliate_firestore.ts'),
+  'utf8',
+);
 
 /**
  * The claim path, tested through the seam that matters.
@@ -29,6 +36,11 @@ test('a free code is taken on the first attempt', async () => {
     name: 'João',
     isTaken: async () => false,
     randomByte: byteSource(),
+  });
+
+  test('production suffixes use cryptographic randomness, never the clock', () => {
+    assert.match(SOURCE, /randomBytes\(1\)\.readUInt8\(0\)/);
+    assert.doesNotMatch(SOURCE, /Timestamp\.now\(\)\.nanoseconds/);
   });
 
   assert.equal(allocation.attempts, 1);

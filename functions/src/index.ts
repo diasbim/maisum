@@ -101,6 +101,7 @@ import {
   type AuditActor,
 } from './admin_audit.js';
 import { resolveAuthenticatedRequestScope } from './customer_request_auth.js';
+import { registerAffiliateRoutes } from './affiliate_routes.js';
 import {
   createSurveyLinkToken,
   SURVEY_LINK_TTL_MS,
@@ -1895,6 +1896,28 @@ merchantRouter.get('/customers/:customerId/ledger', async (req, res) => {
   } catch (error) {
     return respondAdminServerError(res, 'merchant_customer_ledger', error);
   }
+});
+
+/**
+ * The referral feature's own routes, on both routers.
+ *
+ * Declared in `affiliate_routes.ts` because this file is long enough, and
+ * mounted with every authority it needs handed to it explicitly: the business
+ * resolver above, the owner predicate, the audit actor, the phone normaliser
+ * and the identity derivation that needs the customer-core secret. Nothing
+ * over there can reach for a merchant id on the request or decide on its own
+ * who an owner is — `merchant_routes.test.ts` reads that file alongside this
+ * one and holds it to the same rules as every handler written above.
+ */
+registerAffiliateRoutes({
+  merchantRouter,
+  adminRouter,
+  requireBusiness,
+  isOwnerOrAdminRequest,
+  auditActorFrom,
+  respondServerError: respondAdminServerError,
+  normalizePhone: tryNormalizeMozambiquePhoneToE164,
+  affiliateIdForPhone: buildAffiliateIdentityId,
 });
 
 app.use('/merchant', merchantRouter);
@@ -4586,6 +4609,25 @@ function buildCanonicalCustomerId(phoneE164: string): string {
   return createHmac('sha256', secret)
     .update(`moz-phone-e164-v1:${phoneE164}`)
     .digest('hex');
+}
+
+/**
+ * The global affiliate identity, derived rather than looked up.
+ *
+ * Same construction as the canonical customer id and the same secret, with a
+ * different label so the two namespaces cannot collide. Deriving it is what
+ * makes "one affiliate per phone" safe under concurrency: two businesses
+ * adding the same person at the same instant address the same document, and
+ * the transaction — not a query that ran a moment ago — decides who created
+ * it. The phone never survives the call: what is stored, logged and audited is
+ * this digest.
+ */
+function buildAffiliateIdentityId(phoneE164: string): string {
+  const secret = requireCustomerCoreSecret();
+  return `af_${createHmac('sha256', secret)
+    .update(`moz-affiliate-phone-v1:${phoneE164}`)
+    .digest('hex')
+    .slice(0, 40)}`;
 }
 
 function serializeCanonicalCustomerIdentity(

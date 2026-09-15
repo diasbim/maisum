@@ -63,6 +63,7 @@ const merchant_firestore_js_1 = require("./merchant_firestore.js");
 const merchant_collections_js_1 = require("./merchant_collections.js");
 const admin_audit_js_1 = require("./admin_audit.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
+const affiliate_routes_js_1 = require("./affiliate_routes.js");
 const survey_link_js_1 = require("./survey_link.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
 const retention_engine_js_1 = require("./retention_engine.js");
@@ -1530,6 +1531,27 @@ merchantRouter.get('/customers/:customerId/ledger', async (req, res) => {
     catch (error) {
         return respondAdminServerError(res, 'merchant_customer_ledger', error);
     }
+});
+/**
+ * The referral feature's own routes, on both routers.
+ *
+ * Declared in `affiliate_routes.ts` because this file is long enough, and
+ * mounted with every authority it needs handed to it explicitly: the business
+ * resolver above, the owner predicate, the audit actor, the phone normaliser
+ * and the identity derivation that needs the customer-core secret. Nothing
+ * over there can reach for a merchant id on the request or decide on its own
+ * who an owner is — `merchant_routes.test.ts` reads that file alongside this
+ * one and holds it to the same rules as every handler written above.
+ */
+(0, affiliate_routes_js_1.registerAffiliateRoutes)({
+    merchantRouter,
+    adminRouter,
+    requireBusiness,
+    isOwnerOrAdminRequest,
+    auditActorFrom,
+    respondServerError: respondAdminServerError,
+    normalizePhone: tryNormalizeMozambiquePhoneToE164,
+    affiliateIdForPhone: buildAffiliateIdentityId,
 });
 app.use('/merchant', merchantRouter);
 app.get('/customer/session', async (req, res) => {
@@ -3791,6 +3813,24 @@ function buildCanonicalCustomerId(phoneE164) {
     return (0, crypto_1.createHmac)('sha256', secret)
         .update(`moz-phone-e164-v1:${phoneE164}`)
         .digest('hex');
+}
+/**
+ * The global affiliate identity, derived rather than looked up.
+ *
+ * Same construction as the canonical customer id and the same secret, with a
+ * different label so the two namespaces cannot collide. Deriving it is what
+ * makes "one affiliate per phone" safe under concurrency: two businesses
+ * adding the same person at the same instant address the same document, and
+ * the transaction — not a query that ran a moment ago — decides who created
+ * it. The phone never survives the call: what is stored, logged and audited is
+ * this digest.
+ */
+function buildAffiliateIdentityId(phoneE164) {
+    const secret = requireCustomerCoreSecret();
+    return `af_${(0, crypto_1.createHmac)('sha256', secret)
+        .update(`moz-affiliate-phone-v1:${phoneE164}`)
+        .digest('hex')
+        .slice(0, 40)}`;
 }
 function serializeCanonicalCustomerIdentity(identity) {
     return {

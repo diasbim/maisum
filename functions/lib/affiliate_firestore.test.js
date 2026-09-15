@@ -4,9 +4,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const strict_1 = __importDefault(require("node:assert/strict"));
+const node_fs_1 = require("node:fs");
+const node_path_1 = __importDefault(require("node:path"));
 const node_test_1 = __importDefault(require("node:test"));
 const affiliate_firestore_js_1 = require("./affiliate_firestore.js");
 const affiliate_engine_js_1 = require("./affiliate_engine.js");
+const SOURCE = (0, node_fs_1.readFileSync)(node_path_1.default.join(__dirname, '..', 'src', 'affiliate_firestore.ts'), 'utf8');
 /**
  * The claim path, tested through the seam that matters.
  *
@@ -26,6 +29,10 @@ function byteSource() {
         name: 'João',
         isTaken: async () => false,
         randomByte: byteSource(),
+    });
+    (0, node_test_1.default)('production suffixes use cryptographic randomness, never the clock', () => {
+        strict_1.default.match(SOURCE, /randomBytes\(1\)\.readUInt8\(0\)/);
+        strict_1.default.doesNotMatch(SOURCE, /Timestamp\.now\(\)\.nanoseconds/);
     });
     strict_1.default.equal(allocation.attempts, 1);
     strict_1.default.match(allocation.code, /^AFI-JOAO-[A-Z0-9]{4}$/);

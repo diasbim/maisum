@@ -16,12 +16,17 @@ import test from 'node:test';
  *
  * So this reads index.ts and asserts the shape holds. It is a lint with a
  * reason, and it fails loudly the day someone adds route number six.
+ *
+ * `affiliate_routes.ts` is read alongside it. Those handlers are registered on
+ * the same `merchantRouter`, with `requireBusiness` passed in rather than
+ * imported, and moving them to another file must not move them out of this
+ * test's reach — that would be exactly the silent bypass it exists to stop.
  */
 
-const SOURCE = readFileSync(
-  path.join(__dirname, '..', 'src', 'index.ts'),
-  'utf8',
-);
+const SOURCE = [
+  readFileSync(path.join(__dirname, '..', 'src', 'index.ts'), 'utf8'),
+  readFileSync(path.join(__dirname, '..', 'src', 'affiliate_routes.ts'), 'utf8'),
+].join('\n');
 
 /** The body of every `merchantRouter.<verb>('<path>', ...)` handler. */
 function merchantRoutes(): Array<{ route: string; body: string }> {
@@ -132,8 +137,34 @@ test('the request bypasses cannot reach merchant data', () => {
  * where it is recorded. Adding a route here should be a deliberate act with a
  * reason, not something that arrives with a feature — so a new write fails
  * this test until someone writes it down.
+ *
+ * The affiliate writes below are the second deliberate act. Managing who
+ * refers customers is desk work, not till work: it happens before anyone is
+ * standing at the counter, and the person doing it — the owner — is the only
+ * one allowed to. Each one is guarded by `requireOwnerOrAdmin` in addition to
+ * `requireBusiness`, which `affiliate_routes.test.ts` checks handler by
+ * handler.
+ *
+ * `/referrals/validate-code` is the exception among the exceptions: it is a
+ * POST because it carries a customer's phone in a body rather than in a URL,
+ * and it is open to any member of the business because validating a code is
+ * part of serving a customer. It writes only an append-only event and a rate
+ * limit counter — never an affiliate, a code or a reward.
  */
-const ESCRITAS_PERMITIDAS = new Set(['/recovery-tasks/:taskId/complete']);
+const ESCRITAS_PERMITIDAS = new Set([
+  '/recovery-tasks/:taskId/complete',
+  '/affiliates',
+  '/affiliates/:affiliateId',
+  '/affiliates/:affiliateId/activate',
+  '/affiliates/:affiliateId/deactivate',
+  '/affiliate-codes',
+  '/affiliate-codes/:codeId',
+  '/affiliate-codes/:codeId/enable',
+  '/affiliate-codes/:codeId/disable',
+  '/referrals/validate-code',
+  '/affiliate-rewards/:rewardId/approve',
+  '/affiliate-rewards/:rewardId/cancel',
+]);
 
 function mutatingMerchantRoutes(): string[] {
   const pattern = /merchantRouter\.(post|put|patch|delete)\(\s*'([^']+)'/g;

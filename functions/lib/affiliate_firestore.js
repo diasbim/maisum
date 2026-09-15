@@ -37,6 +37,7 @@ exports.CODE_ALLOCATION_ATTEMPTS = exports.AffiliateCodeExhaustedError = exports
 exports.allocateAffiliateCode = allocateAffiliateCode;
 exports.claimAffiliateCode = claimAffiliateCode;
 exports.resolveCodeLookup = resolveCodeLookup;
+const crypto_1 = require("crypto");
 const admin = __importStar(require("firebase-admin"));
 const affiliate_engine_js_1 = require("./affiliate_engine.js");
 /**
@@ -123,7 +124,7 @@ exports.CODE_ALLOCATION_ATTEMPTS = 8;
  */
 async function allocateAffiliateCode(input) {
     const attempts = input.attempts ?? exports.CODE_ALLOCATION_ATTEMPTS;
-    const randomByte = input.randomByte ?? (() => admin.firestore.Timestamp.now().nanoseconds & 0xff);
+    const randomByte = input.randomByte ?? (() => (0, crypto_1.randomBytes)(1).readUInt8(0));
     for (let attempt = 1; attempt <= attempts; attempt++) {
         const candidate = (0, affiliate_engine_js_1.buildAffiliateCode)(input.name, (0, affiliate_engine_js_1.generateCodeSuffix)(randomByte));
         if (!(await input.isTaken(candidate))) {
@@ -158,7 +159,14 @@ async function claimAffiliateCode(input) {
             code_id: input.codeId,
             created_at: now,
         });
-        transaction.set(exports.affiliateRefs.code(input.merchantId, input.codeId), { ...input.codeFields, code: allocation.code, updated_at: now }, { merge: true });
+        transaction.set(exports.affiliateRefs.code(input.merchantId, input.codeId), {
+            ...input.codeFields,
+            code: allocation.code,
+            // Stored beside the printed code because every lookup is done on the
+            // normalised form, and the Dart model reads the same two fields.
+            normalized_code: (0, affiliate_engine_js_1.normalizeAffiliateCode)(allocation.code),
+            updated_at: now,
+        }, { merge: true });
         return allocation;
     });
 }

@@ -13,10 +13,19 @@
  * quietly.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_CODE_VALIDITY_DAYS = exports.PERCENTAGE_RANGE = exports.DEFAULT_AFFILIATE_CONFIG = exports.FRAUD_SEVERITY = exports.FRAUD_SIGNAL = exports.POST_COMMIT_EVENTS = exports.AFFILIATE_EVENT = exports.REFERRAL_REASON_MESSAGE = exports.REFERRAL_REASON = exports.BENEFIT_TYPE = exports.REWARD_VALUE_TYPE = exports.REWARD_TYPE = exports.REWARD_STATUS = exports.ATTRIBUTION_STATUS = exports.AFFILIATE_LINK_STATUS = exports.AFFILIATE_STATUS = void 0;
+exports.DEFAULT_CODE_VALIDITY_DAYS = exports.PERCENTAGE_RANGE = exports.DEFAULT_AFFILIATE_CONFIG = exports.FRAUD_SEVERITY = exports.FRAUD_SIGNAL = exports.POST_COMMIT_EVENTS = exports.AFFILIATE_EVENT = exports.REFERRAL_REASON_MESSAGE = exports.REFERRAL_REASON = exports.BENEFIT_TYPE = exports.REWARD_VALUE_TYPE = exports.REWARD_TYPE = exports.REWARD_STATUS = exports.ATTRIBUTION_STATUS = exports.AFFILIATE_CODE_STATUS = exports.AFFILIATE_LINK_STATUS = exports.AFFILIATE_STATUS = void 0;
 /* ------------------------------------------------------------------ status */
 exports.AFFILIATE_STATUS = ['ACTIVE', 'INACTIVE', 'SUSPENDED'];
 exports.AFFILIATE_LINK_STATUS = ['ACTIVE', 'INACTIVE'];
+/**
+ * A code is on or off, and nothing else.
+ *
+ * `ReferralCodeSnapshot.status` in the engine already reads this enum rather
+ * than a boolean; naming it here is what lets the API validate an incoming
+ * status against the stored vocabulary instead of against a literal typed out
+ * at the route.
+ */
+exports.AFFILIATE_CODE_STATUS = ['ACTIVE', 'DISABLED'];
 exports.ATTRIBUTION_STATUS = ['CONFIRMED', 'REJECTED', 'CANCELLED'];
 exports.REWARD_STATUS = ['PENDING', 'APPROVED', 'PAID', 'CANCELLED'];
 exports.REWARD_TYPE = ['FIRST_QUALIFYING_SALE', 'CUSTOMER_RETURN'];
