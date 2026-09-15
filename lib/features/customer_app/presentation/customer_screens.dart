@@ -702,6 +702,7 @@ class CustomerBusinessDetailScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+              ..._businessBonusSection(context, business),
               const SizedBox(height: AppSpacing.xxl),
               const CustomerSectionHeader(
                 title: 'Como ganhar pontos',
@@ -2024,6 +2025,14 @@ Widget _customerHomeContent(
     ..sort((a, b) => a.pointsRemaining.compareTo(b.pointsRemaining));
   final availableReward = readyRewards.isEmpty ? null : readyRewards.first;
   final nextReward = pendingRewards.isEmpty ? null : pendingRewards.first;
+  // Above the rewards on purpose: a bonus expires, a reward does not, so it is
+  // the one thing on this screen with a deadline attached.
+  final now = DateTime.now();
+  final liveBonuses = businesses
+      .expand((business) => business.returnBonuses)
+      .where((bonus) => bonus.isLive(now))
+      .toList()
+    ..sort((a, b) => a.expiresAt.compareTo(b.expiresAt));
   return ListView(
     padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
     children: [
@@ -2036,6 +2045,26 @@ Widget _customerHomeContent(
         onRewards: () => context.go('/customer/rewards'),
         onQr: qrEnabled ? () => context.push('/customer/qr') : null,
       ),
+      if (liveBonuses.isNotEmpty) ...[
+        const SizedBox(height: AppSpacing.xxl),
+        CustomerSectionHeader(
+          title: liveBonuses.length == 1
+              ? 'Tem um bónus à espera'
+              : 'Tem ${liveBonuses.length} bónus à espera',
+          subtitle: 'Ganhos por ter voltado. Use antes de expirarem.',
+        ),
+        const SizedBox(height: AppSpacing.md),
+        ...liveBonuses.take(3).map(
+              (bonus) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: CustomerReturnBonusCard(
+                  bonus: bonus,
+                  businessName: _businessNameById(businesses, bonus.businessId),
+                  now: now,
+                ),
+              ),
+            ),
+      ],
       if (availableReward != null) ...[
         const SizedBox(height: AppSpacing.xxl),
         const CustomerSectionHeader(title: 'Você já pode resgatar 🎁'),
@@ -2099,6 +2128,42 @@ Widget _customerHomeContent(
             ),
     ],
   );
+}
+
+/// The live bonuses for one business, or nothing at all. An empty state here
+/// would be a section explaining an absence the customer never expected.
+List<Widget> _businessBonusSection(
+  BuildContext context,
+  CustomerBusiness business,
+) {
+  final now = DateTime.now();
+  final bonuses = business.returnBonuses
+      .where((bonus) => bonus.isLive(now))
+      .toList()
+    ..sort((a, b) => a.expiresAt.compareTo(b.expiresAt));
+  if (bonuses.isEmpty) return const [];
+
+  return [
+    const SizedBox(height: AppSpacing.xxl),
+    const _SectionLabel(
+      title: 'Bónus de regresso',
+      subtitle: 'Ganhos por ter voltado. O negócio aplica na próxima compra.',
+    ),
+    const SizedBox(height: AppSpacing.md),
+    ...bonuses.map(
+      (bonus) => Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+        child: CustomerReturnBonusCard(bonus: bonus, now: now),
+      ),
+    ),
+  ];
+}
+
+String? _businessNameById(List<CustomerBusiness> businesses, String id) {
+  for (final business in businesses) {
+    if (business.id == id) return business.name;
+  }
+  return null;
 }
 
 String? _businessNameForReward(

@@ -253,6 +253,9 @@ const customerIdentityHmacSecret = (0, params_1.defineSecret)(CUSTOMER_CORE_SECR
 const CUSTOMER_QR_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CUSTOMER_REDEMPTION_CODE_TTL_MS = 15 * 60 * 1000;
 const MAX_CUSTOMER_ACTIVITY_ENTRIES = 100;
+// A customer only ever holds a handful of live bonuses; the cap is a
+// guardrail against an unbounded read, not a product limit.
+const MAX_CUSTOMER_RETURN_BONUSES = 20;
 const MOZAMBIQUE_PHONE_PREFIXES = new Set(['82', '83', '84', '85', '86', '87']);
 const CUSTOMER_SERVER_OWNED_FIELDS = [
     'canonical_customer_id',
@@ -1416,6 +1419,19 @@ merchantRouter.get('/surveys', async (req, res) => {
     }
     catch (error) {
         return respondAdminServerError(res, 'merchant_surveys', error);
+    }
+});
+merchantRouter.get('/survey-responses', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listSurveyResponses)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_survey_responses', error);
     }
 });
 merchantRouter.get('/usage', async (req, res) => {
@@ -3950,6 +3966,32 @@ function serializeCustomerBusiness(relationship) {
         last_visit_at: pickNumber(customer, 'last_visit_at'),
     };
 }
+/**
+ * A Bónus de Regresso as the customer needs to see it: what it is worth, and
+ * until when. Everything else on the record — the sale that triggered it, the
+ * sale that consumed it, the merchant scoping — is the merchant's business.
+ *
+ * Only ACTIVE and unexpired bonuses are worth showing: the whole point of
+ * surfacing these is that a bonus nobody knows about brings nobody back, and a
+ * spent or lapsed one is not a reason to return.
+ */
+function serializeCustomerReturnBonus(bonusId, bonusData, now) {
+    const status = (maybePayloadString(bonusData, 'status') ?? '').toUpperCase();
+    const expiresAt = pickNumber(bonusData, 'expires_at') ?? pickNumber(bonusData, 'expiresAt');
+    const value = pickNumber(bonusData, 'value');
+    const type = maybePayloadString(bonusData, 'type');
+    if (status !== 'ACTIVE' || type == null || value == null)
+        return null;
+    if (expiresAt == null || expiresAt <= now)
+        return null;
+    return {
+        bonus_id: bonusId,
+        type,
+        value,
+        issued_at: pickNumber(bonusData, 'issued_at') ?? pickNumber(bonusData, 'issuedAt') ?? null,
+        expires_at: expiresAt,
+    };
+}
 function serializeCustomerReward(rewardId, rewardData, confirmedPoints) {
     const pointsRequired = pickNumber(rewardData, 'points_required') ?? pickNumber(rewardData, 'pointsRequired');
     if ((pickBoolean(rewardData, 'active') ?? true) !== true ||
@@ -3983,10 +4025,23 @@ async function readCustomerBusiness(account, merchantId) {
     const nextReward = activeRewards.find((reward) => reward.points_required > confirmedPoints) ??
         activeRewards.find((reward) => reward.eligible === true) ??
         null;
+    const now = Date.now();
+    // Bounded like the rewards read above: a customer with an unbounded bonus
+    // history must not turn one home-screen request into an unbounded read.
+    const bonusSnapshot = await businessReturnBonusesCollectionRef(merchantId)
+        .where('customer_id', '==', relationship.customerId)
+        .where('status', '==', 'ACTIVE')
+        .limit(MAX_CUSTOMER_RETURN_BONUSES)
+        .get();
+    const returnBonuses = bonusSnapshot.docs
+        .map((document) => serializeCustomerReturnBonus(document.id, snapshotDataRecord(document), now))
+        .filter((bonus) => bonus != null)
+        .sort((left, right) => left.expires_at - right.expires_at);
     return {
         ...serializeCustomerBusiness(relationship),
         rewards,
         next_reward: nextReward,
+        return_bonuses: returnBonuses,
     };
 }
 async function readCustomerActivity(account, maximumEntries) {
@@ -5511,6 +5566,9 @@ function businessRewardsCollectionRef(merchantId) {
 }
 function businessRedemptionsCollectionRef(merchantId) {
     return businessDocumentRef(merchantId).collection('redemptions');
+}
+function businessReturnBonusesCollectionRef(merchantId) {
+    return businessDocumentRef(merchantId).collection('return_bonuses');
 }
 function businessSyncTombstonesCollectionRef(merchantId) {
     return businessDocumentRef(merchantId).collection(SYNC_TOMBSTONE_COLLECTION);

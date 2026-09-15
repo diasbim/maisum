@@ -85,6 +85,56 @@ class CustomerReward {
       );
 }
 
+/// A Bónus de Regresso the customer is holding right now.
+///
+/// Issued by the server after a sale and redeemed by the merchant in the shop;
+/// the customer never acts on it here. It is shown because a bonus nobody
+/// knows about brings nobody back — which is the entire point of issuing one.
+class CustomerReturnBonus {
+  const CustomerReturnBonus({
+    required this.id,
+    required this.businessId,
+    required this.type,
+    required this.value,
+    required this.expiresAt,
+    this.issuedAt,
+  });
+
+  final String id;
+  final String businessId;
+  final String type;
+  final double value;
+  final DateTime expiresAt;
+  final DateTime? issuedAt;
+
+  /// Only ever counted in whole days, and never below zero: "expira em 0 dias"
+  /// on something still valid today would read as already lost.
+  int daysUntilExpiry(DateTime now) {
+    final remaining = expiresAt.difference(now).inMinutes;
+    if (remaining <= 0) return 0;
+    return (remaining / (60 * 24)).ceil();
+  }
+
+  bool isLive(DateTime now) => expiresAt.isAfter(now);
+
+  static CustomerReturnBonus? tryFromJson(Map<String, dynamic> json) {
+    final id = json['bonus_id'] as String?;
+    final expiresAt = _optionalDateTime(json['expires_at']);
+    final type = json['type'] as String?;
+    final value = (json['value'] as num?)?.toDouble();
+    if (id == null || id.isEmpty || expiresAt == null) return null;
+    if (type == null || type.isEmpty || value == null) return null;
+    return CustomerReturnBonus(
+      id: id,
+      businessId: json['business_id'] as String? ?? '',
+      type: type,
+      value: value,
+      expiresAt: expiresAt,
+      issuedAt: _optionalDateTime(json['issued_at']),
+    );
+  }
+}
+
 class CustomerBusiness {
   const CustomerBusiness({
     required this.id,
@@ -96,6 +146,7 @@ class CustomerBusiness {
     this.logoUrl,
     this.lastVisitAt,
     this.nextReward,
+    this.returnBonuses = const [],
   });
 
   final String id;
@@ -107,6 +158,7 @@ class CustomerBusiness {
   final String? logoUrl;
   final DateTime? lastVisitAt;
   final CustomerReward? nextReward;
+  final List<CustomerReturnBonus> returnBonuses;
 
   factory CustomerBusiness.fromJson(Map<String, dynamic> json) =>
       CustomerBusiness(
@@ -130,6 +182,14 @@ class CustomerBusiness {
                 'business_id': json['business_id'],
               })
             : null,
+        returnBonuses: ((json['return_bonuses'] as List?) ?? const [])
+            .whereType<Map>()
+            .map((item) => CustomerReturnBonus.tryFromJson({
+                  ...item.cast<String, dynamic>(),
+                  'business_id': json['business_id'],
+                }))
+            .whereType<CustomerReturnBonus>()
+            .toList(),
       );
 }
 
