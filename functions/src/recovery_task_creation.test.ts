@@ -4,7 +4,9 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 
 import {
+  COMPLETE_RECOVERY_TASK_SQL,
   CREATE_OPEN_RECOVERY_TASK_SQL,
+  completeRecoveryTask,
   createOrGetOpenRecoveryTask,
   type RecoveryTaskRow,
 } from './recovery_task_creation.js';
@@ -121,4 +123,85 @@ test('queued task collision reconciles to the canonical remote task', async () =
   assert.equal(result.task.id, 'task-canonical');
   assert.equal(values[0], 'task-provisional');
   assert.equal(values[6], 1500);
+});
+
+/* -------------------------------------------------------------- completion */
+
+test('completion is scoped to the business that owns the task', async () => {
+  const calls: unknown[][] = [];
+  const db = {
+    async query(_sql: string, values: unknown[]) {
+      calls.push(values);
+      return { rows: [{ id: 'task-1', status: 'completed' } as RecoveryTaskRow] };
+    },
+  };
+
+  const task = await completeRecoveryTask(db, {
+    merchantId: 'merchant-1',
+    taskId: 'task-1',
+    actorAppUserId: 'user-1',
+    now: 456,
+  });
+
+  assert.equal(task?.id, 'task-1');
+  // The merchant id is a predicate, never a value the caller can omit: without
+  // it, any task id would close any business's task.
+  assert.deepEqual(calls[0], ['task-1', 'merchant-1', 456, 'user-1']);
+  assert.match(COMPLETE_RECOVERY_TASK_SQL, /AND merchant_id = \$2/);
+});
+
+test('a task that is already completed is left exactly as it was', async () => {
+  // The WHERE clause, not the caller, is what makes a second click harmless:
+  // without it a double submit would rewrite updated_at and the actor.
+  assert.match(COMPLETE_RECOVERY_TASK_SQL, /LOWER\(status\) <> 'completed'/);
+
+  const db = {
+    async query() {
+      return { rows: [] as RecoveryTaskRow[] };
+    },
+  };
+
+  assert.equal(
+    await completeRecoveryTask(db, {
+      merchantId: 'merchant-1',
+      taskId: 'task-1',
+      actorAppUserId: null,
+      now: 456,
+    }),
+    null,
+  );
+});
+
+test('an unknown task and a foreign one are indistinguishable', async () => {
+  // Both return no row, which is what lets the route answer 404 for either
+  // without confirming that another business's task id exists.
+  const db = {
+    async query() {
+      return { rows: [] as RecoveryTaskRow[] };
+    },
+  };
+
+  for (const taskId of ['does-not-exist', 'belongs-to-someone-else']) {
+    assert.equal(
+      await completeRecoveryTask(db, {
+        merchantId: 'merchant-1',
+        taskId,
+        actorAppUserId: null,
+        now: 1,
+      }),
+      null,
+    );
+  }
+});
+
+test('the status written is the one the app reads back', async () => {
+  // `RecoveryTaskStatus.completed` in engage_models.dart is 'completed'. A
+  // mismatch here would leave the task open on every phone.
+  const dart = readFileSync(
+    resolve(__dirname, '..', '..', 'lib', 'features', 'engage', 'domain', 'engage_models.dart'),
+    'utf8',
+  );
+  const match = /static const String completed = '([a-z]+)';/.exec(dart);
+  assert.ok(match, 'RecoveryTaskStatus.completed is no longer in engage_models.dart');
+  assert.match(COMPLETE_RECOVERY_TASK_SQL, new RegExp(`status = '${match[1]}'`));
 });

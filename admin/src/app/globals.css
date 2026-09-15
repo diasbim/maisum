@@ -354,6 +354,24 @@ th.num {
 }
 
 /*
+ * An action belonging to one table row.
+ *
+ * The error sits under the button rather than at the foot of the page: with
+ * twenty rows, a message anywhere else does not say which one failed.
+ */
+.row-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.row-action__error {
+  color: var(--red);
+  max-width: 16rem;
+}
+
+/*
  * A survey response: each question with what was answered under it.
  *
  * A table cell holding five answers needs the question attached to each one —

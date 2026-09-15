@@ -119,3 +119,53 @@ test('the request bypasses cannot reach merchant data', () => {
     'merchantIdentityFrom no longer refuses a request with no verified uid',
   );
 });
+
+/**
+ * Which merchant routes may change anything.
+ *
+ * The business side of the portal is a reading surface: a sale, a redemption
+ * and a visit report all happen with the customer standing there, and belong
+ * to the app. Closing a recovery task is bookkeeping about work already done,
+ * which is why it is the exception.
+ *
+ * "The portal writes when it needs to" is a real decision, and this list is
+ * where it is recorded. Adding a route here should be a deliberate act with a
+ * reason, not something that arrives with a feature — so a new write fails
+ * this test until someone writes it down.
+ */
+const ESCRITAS_PERMITIDAS = new Set(['/recovery-tasks/:taskId/complete']);
+
+function mutatingMerchantRoutes(): string[] {
+  const pattern = /merchantRouter\.(post|put|patch|delete)\(\s*'([^']+)'/g;
+  return [...SOURCE.matchAll(pattern)].map((match) => match[2]);
+}
+
+test('the only merchant writes are the ones we decided on', () => {
+  for (const route of mutatingMerchantRoutes()) {
+    assert.ok(
+      ESCRITAS_PERMITIDAS.has(route),
+      `${route} changes business data. Add it to ESCRITAS_PERMITIDAS with a reason, or make it a GET.`,
+    );
+  }
+});
+
+test('every allowed write is actually still there', () => {
+  // Guards the guard the other way: a route removed or renamed leaves a stale
+  // entry above, and the next reader would trust a list that describes nothing.
+  const found = new Set(mutatingMerchantRoutes());
+  for (const route of ESCRITAS_PERMITIDAS) {
+    assert.ok(found.has(route), `${route} is in the allow-list but no longer exists`);
+  }
+});
+
+test('a write scopes itself by the resolved business, not by its own path', () => {
+  // A read that forgets the scope shows the wrong data; a write that forgets it
+  // changes someone else's.
+  for (const { route, body } of merchantRoutes()) {
+    if (!/merchantRouter\.(post|put|patch|delete)/.test(body)) continue;
+    assert.ok(
+      /business\.id/.test(body),
+      `${route} writes without passing business.id`,
+    );
+  }
+});

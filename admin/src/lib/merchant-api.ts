@@ -218,6 +218,83 @@ async function call<T>(path: string, idToken?: string): Promise<Envelope<T>> {
   return body;
 }
 
+/**
+ * The write path, kept deliberately separate from `call`.
+ *
+ * `call` is GET-only and stays that way: every read on these screens goes
+ * through it, and a shared helper that could also POST would make "does this
+ * page change anything?" a question you answer by reading the call site.
+ *
+ * A 404 here is not "missing page" — the API answers it for a task that is
+ * unknown, belongs to another business, or is already closed, on purpose, so
+ * that probing an id tells you nothing. The message says the only one of those
+ * a business owner can act on.
+ */
+async function callWrite<T>(path: string): Promise<T | null> {
+  const session = await getPortalSession();
+  const token = session?.idToken;
+  if (!token) {
+    throw new AdminApiError(
+      401,
+      path,
+      'A sessão expirou. Entre novamente para continuar.',
+    );
+  }
+
+  const config = serverConfig();
+
+  let response: Response;
+  try {
+    response = await fetch(`${config.adminApiBaseUrl}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    });
+  } catch {
+    console.error(`[merchant-api] unreachable: ${config.adminApiBaseUrl}${path}`);
+    throw new AdminApiError(
+      503,
+      path,
+      'O serviço não respondeu. Verifique a ligação e tente de novo.',
+    );
+  }
+
+  let body: Envelope<T> | null = null;
+  try {
+    body = (await response.json()) as Envelope<T>;
+  } catch {
+    body = null;
+  }
+
+  if (!response.ok) {
+    console.error(`[merchant-api] ${response.status} ${path}`, body?.message);
+    throw new AdminApiError(
+      response.status,
+      path,
+      response.status === 404
+        ? 'Esta tarefa já não está pendente. Atualize a página.'
+        : merchantMessage(response.status),
+    );
+  }
+
+  return body?.data ?? null;
+}
+
+/**
+ * Closes one recovery task.
+ *
+ * The only write the business side of the portal performs. See the route in
+ * functions/src/index.ts for why this one and not the others.
+ */
+export function completeMyRecoveryTask(taskId: string) {
+  return callWrite<MerchantRecoveryTask>(
+    `/merchant/recovery-tasks/${encodeURIComponent(taskId)}/complete`,
+  );
+}
+
 /** Every business this account may act as. Empty means "not a merchant". */
 export async function fetchMyBusinesses(
   idToken?: string,

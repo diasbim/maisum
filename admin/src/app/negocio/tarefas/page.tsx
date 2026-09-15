@@ -2,6 +2,7 @@ import { fetchMyRecoveryTasks } from '@/lib/merchant-api';
 import { taskPriorityLabel, taskStatusLabel } from '@/lib/merchant-labels';
 import { Badge, formatDateTime } from '../../admin/ui';
 import { RecordScreen } from '../RecordScreen';
+import { CompleteTask } from '../CompleteTask';
 import { CustomerLink } from '../links';
 
 export const metadata = { title: 'Tarefas de recuperação | MaisUm' };
@@ -64,8 +65,15 @@ export default async function TarefasPage({
           header: 'Nota',
           cell: (row) => row.notes ?? <span className="muted">—</span>,
         },
+        {
+          header: '',
+          cell: (row) =>
+            (row.status ?? '').toUpperCase() === 'COMPLETED' ? null : (
+              <CompleteTask taskId={row.id} customerName={row.customer_name} />
+            ),
+        },
       ]}
-      footnote="Concluir uma tarefa continua a fazer-se na aplicação."
+      footnote="Concluir uma tarefa é a única coisa que se altera aqui. Registar o contacto — a chamada, a mensagem, a visita — continua a fazer-se na aplicação."
       searchParams={searchParams}
     />
   );

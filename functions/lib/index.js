@@ -1421,6 +1421,47 @@ merchantRouter.get('/surveys', async (req, res) => {
         return respondAdminServerError(res, 'merchant_surveys', error);
     }
 });
+/**
+ * The portal's one write, for now.
+ *
+ * Everything else a business does — a sale, a redemption, a visit report —
+ * happens with the customer standing there, and belongs to the app. Closing a
+ * recovery task is the exception: it is bookkeeping about work already done,
+ * and the person doing it is as likely to be at a desk as at the till.
+ */
+merchantRouter.post('/recovery-tasks/:taskId/complete', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const taskId = (req.params.taskId ?? '').trim();
+        if (taskId === '') {
+            return res
+                .status(400)
+                .json({ success: false, message: 'Missing task id' });
+        }
+        const task = await (0, recovery_task_creation_js_1.completeRecoveryTask)(pool, {
+            merchantId: business.id,
+            taskId,
+            actorAppUserId: request.auth?.uid ?? null,
+            now: Date.now(),
+        });
+        if (!task) {
+            // Unknown, someone else's, or already closed. All three are "nothing to
+            // do", and telling them apart would confirm that another business's id
+            // exists.
+            return res
+                .status(404)
+                .json({ success: false, message: 'Task not found or already closed' });
+        }
+        await mirrorCompletedRecoveryTaskToFirestore(business.id, task);
+        return res.json({ success: true, data: task });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_complete_task', error);
+    }
+});
 merchantRouter.get('/survey-responses', async (req, res) => {
     const request = req;
     try {
@@ -7782,6 +7823,41 @@ async function upsertSale(merchantId, payload, entityId, req) {
  * Postgres mutation to a bonus is mirrored here so the client's normal
  * return_bonus sync pull (businesses/{merchantId}/return_bonuses) sees it.
  */
+/**
+ * Mirrors a closed recovery task into Firestore, and releases its open slot.
+ *
+ * Every other recovery-task write reaches Firestore from the phone, through
+ * `_processRecoveryTask` in `firestore_sync_service.dart`. The portal has no
+ * phone behind it, so the same transaction has to happen here — and the part
+ * that matters is the slot, not the task document.
+ *
+ * `recovery_task_open_slots/{customerId}` is what enforces one open task per
+ * customer: task creation refuses while a slot exists. Closing a task without
+ * deleting its slot would leave that customer unable to receive another task,
+ * permanently and silently. The slot is deleted only when it still points at
+ * this task, so a newer task's slot is never taken out from under it.
+ */
+async function mirrorCompletedRecoveryTaskToFirestore(merchantId, task) {
+    const taskId = pickString(task, 'id');
+    const customerId = pickString(task, 'customer_id');
+    if (!taskId)
+        return;
+    const businessRef = businessDocumentRef(merchantId);
+    const taskRef = businessRef.collection('recovery_tasks').doc(taskId);
+    const slotRef = customerId === undefined || customerId === null || customerId === ''
+        ? null
+        : businessRef.collection('recovery_task_open_slots').doc(customerId);
+    await admin.firestore().runTransaction(async (transaction) => {
+        // Firestore requires every read before any write in a transaction.
+        const slot = slotRef === null ? null : await transaction.get(slotRef);
+        transaction.set(taskRef, task, { merge: true });
+        if (slot !== null && slotRef !== null) {
+            const holder = (slot.data() ?? {}).task_id;
+            if (holder === taskId)
+                transaction.delete(slotRef);
+        }
+    });
+}
 async function mirrorReturnBonusToFirestore(merchantId, bonus) {
     await admin
         .firestore()
