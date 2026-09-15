@@ -46,16 +46,33 @@ export function SaleStatus({
 }
 
 /**
- * A customer id, as a way to get to the customer.
+ * A customer, by the name their owner knows them by.
  *
- * These rows carry an id and no name — sales, appointments and risk scores
- * are all written against the id — and an id on its own is not something an
- * owner recognises. Linking it at least makes it one click from the name.
+ * The rows behind these screens are written against the customer id, because
+ * that is what the app stores. Printing the id was a real cost: the retention
+ * board exists to say who to call and it said `c3`. The API now joins the name
+ * on the way out, so the name is what shows and the id stays as the link.
+ *
+ * A row whose customer was deleted, or whose name was never filled in, still
+ * has to lead somewhere — so the id remains the fallback, set in monospace to
+ * say plainly that it is an identifier and not somebody's name.
  */
-export function CustomerLink({ id }: { id: string | null }) {
+export function CustomerLink({
+  id,
+  name = null,
+}: {
+  id: string | null;
+  name?: string | null;
+}) {
   if (!id) return <span className="muted">—</span>;
+
+  const href = `/negocio/clientes/${encodeURIComponent(id)}`;
+  if (name !== null && name.trim() !== '') {
+    return <Link href={href}>{name}</Link>;
+  }
+
   return (
-    <Link href={`/negocio/clientes/${encodeURIComponent(id)}`}>
+    <Link href={href}>
       <code>{id.length > 12 ? `${id.slice(0, 12)}…` : id}</code>
     </Link>
   );

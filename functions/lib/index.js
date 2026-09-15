@@ -2844,6 +2844,8 @@ app.post('/engage/survey-response', async (req, res) => {
 });
 app.get('/engage/analytics', async (req, res) => {
     const merchantId = req.merchantId;
+    // Satisfaction is the mean of RATING answers only. Averaging every numeric
+    // answer folds in any other numeric question type and corrupts the score.
     const totalsSql = `
     SELECT
       (SELECT COUNT(*)::int FROM surveys WHERE merchant_id = $1 AND is_active = true) AS active_surveys,
@@ -2851,42 +2853,82 @@ app.get('/engage/analytics', async (req, res) => {
       (
         SELECT AVG(sra.answer_numeric)
         FROM survey_response_answers sra
+        JOIN survey_questions sq ON sq.id = sra.question_id
         WHERE sra.merchant_id = $1
+          AND sq.question_type = 'RATING'
           AND sra.answer_numeric IS NOT NULL
-      ) AS customer_satisfaction
+      ) AS customer_satisfaction,
+      (
+        SELECT COUNT(*)::int
+        FROM survey_response_answers sra
+        JOIN survey_questions sq ON sq.id = sra.question_id
+        WHERE sra.merchant_id = $1
+          AND sq.question_type = 'RATING'
+          AND sra.answer_numeric IS NOT NULL
+      ) AS rated_responses
   `;
+    // Choice questions only: their answers come from a fixed option set, so a
+    // frequency count means something. Ranking free text just ranks one
+    // customer's sentence above another's.
     const topSql = `
-    SELECT COALESCE(answer_text, '') AS answer_text, COUNT(*)::int AS total
-    FROM survey_response_answers
-    WHERE merchant_id = $1
-      AND answer_text IS NOT NULL
-      AND answer_text <> ''
-    GROUP BY answer_text
-    ORDER BY total DESC
-    LIMIT 3
+    SELECT sra.answer_text AS label, COUNT(*)::int AS total
+    FROM survey_response_answers sra
+    JOIN survey_questions sq ON sq.id = sra.question_id
+    WHERE sra.merchant_id = $1
+      AND sq.question_type = 'MULTIPLE_CHOICE'
+      AND sra.answer_text IS NOT NULL
+      AND TRIM(sra.answer_text) <> ''
+    GROUP BY sra.answer_text
+    ORDER BY total DESC, label ASC
+    LIMIT 5
+  `;
+    const breakdownSql = `
+    SELECT sra.answer_numeric::int AS score, COUNT(*)::int AS total
+    FROM survey_response_answers sra
+    JOIN survey_questions sq ON sq.id = sra.question_id
+    WHERE sra.merchant_id = $1
+      AND sq.question_type = 'RATING'
+      AND sra.answer_numeric IS NOT NULL
+    GROUP BY score
+    ORDER BY score
   `;
     try {
-        const [totalsResult, topResult] = await Promise.all([
+        const [totalsResult, topResult, breakdownResult] = await Promise.all([
             pool.query(totalsSql, [merchantId]),
             pool.query(topSql, [merchantId]),
+            pool.query(breakdownSql, [merchantId]),
         ]);
         const totals = totalsResult.rows[0] ?? {};
         const activeSurveys = Number(totals.active_surveys ?? 0);
         const responsesTotal = Number(totals.responses_total ?? 0);
         const customerSatisfaction = Number(totals.customer_satisfaction ?? 0);
-        const topTexts = topResult.rows
-            .map((row) => String(row.answer_text ?? '').trim())
-            .filter((value) => value.length > 0);
-        const responseRate = activeSurveys === 0 ? 0 : (responsesTotal / activeSurveys) * 100;
+        const ratedResponses = Number(totals.rated_responses ?? 0);
+        const topAnswers = topResult.rows
+            .map((row) => ({
+            label: String(row.label ?? '').trim(),
+            count: Number(row.total ?? 0),
+        }))
+            .filter((entry) => entry.label.length > 0);
+        const ratingBreakdown = breakdownResult.rows.map((row) => ({
+            score: Number(row.score ?? 0),
+            count: Number(row.total ?? 0),
+        }));
+        // Responses per active survey, not a percentage: nothing records how many
+        // customers were asked, so the old "response rate" printed 500% off five
+        // answers to a single survey.
+        const responsesPerSurvey = activeSurveys === 0 ? 0 : responsesTotal / activeSurveys;
         return res.json({
             success: true,
             data: {
-                response_rate: responseRate,
+                responses_per_survey: responsesPerSurvey,
                 customer_satisfaction: customerSatisfaction,
                 responses_total: responsesTotal,
-                top_churn_reasons: topTexts,
-                top_recovery_incentives: topTexts,
-                staff_ratings: topTexts,
+                rated_responses: ratedResponses,
+                top_answers: topAnswers,
+                rating_breakdown: ratingBreakdown,
+                // Retained so an app build older than this deploy still lists the
+                // answers instead of an empty card.
+                top_churn_reasons: topAnswers.map((entry) => entry.label),
             },
         });
     }

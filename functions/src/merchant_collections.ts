@@ -188,15 +188,48 @@ export async function listTeam(
  * were the whole one.
  */
 
-async function pagina<T extends { id: string }>(
+/** A row that names a customer by id, and the name once it has been found. */
+export type ComCliente = { customer_id?: string | null; customer_name?: string | null };
+
+/**
+ * Customer ids to the names an owner recognises.
+ *
+ * Every list below stores the customer as an id, because that is how the app
+ * writes them. On screen that read as `c3` — including on the retention board,
+ * whose entire job is to say who to call. The names live one subcollection
+ * away, so this is one more capped read joined in memory, the same shape as
+ * the response counts on `listSurveys`.
+ */
+async function nomesDeClientes(merchantId: string): Promise<Map<string, string>> {
+  const { docs } = await readSubcollection(merchantId, 'customers');
+  const nomes = new Map<string, string>();
+  for (const doc of docs) {
+    const nome = toCustomer(doc.id, doc.data).name;
+    if (nome !== null && nome.trim() !== '') nomes.set(doc.id, nome);
+  }
+  return nomes;
+}
+
+/** The name for a row's customer, or null when there is nothing to show. */
+function comNome<T extends ComCliente>(row: T, nomes: Map<string, string>): T {
+  const id = row.customer_id ?? null;
+  return { ...row, customer_name: id === null ? null : nomes.get(id) ?? null };
+}
+
+async function pagina<T extends { id: string } & ComCliente>(
   merchantId: string,
   colecao: string,
   para: (id: string, data: Record<string, unknown>) => T,
   query: RecordQuery,
   ler: Parameters<typeof selectByRecency<T>>[2],
 ): Promise<MerchantPage<T>> {
-  const { docs, truncated } = await readSubcollection(merchantId, colecao);
-  const rows = docs.map((doc) => para(doc.id, doc.data));
+  const [{ docs, truncated }, nomes] = await Promise.all([
+    readSubcollection(merchantId, colecao),
+    nomesDeClientes(merchantId),
+  ]);
+  // Named before filtering, so that searching a list by "Ana" finds her rows
+  // rather than only matching the id nobody knows.
+  const rows = docs.map((doc) => comNome(para(doc.id, doc.data), nomes));
   return { ...selectByRecency(rows, query, ler), truncated };
 }
 
@@ -204,7 +237,7 @@ export function listSales(merchantId: string, query: RecordQuery) {
   return pagina(merchantId, 'sales', toSaleListItem, query, {
     time: (row) => row.created_at,
     status: (row) => row.confirmation_status,
-    search: (row) => [row.id, row.customer_id],
+    search: (row) => [row.id, row.customer_id, row.customer_name],
   });
 }
 
@@ -231,19 +264,68 @@ export async function totalsForSales(
   );
 }
 
-export function listRedemptions(merchantId: string, query: RecordQuery) {
-  return pagina(merchantId, 'redemptions', toRedemption, query, {
-    time: (row) => row.redeemed_at,
-    status: (row) => row.status,
-    search: (row) => [row.id, row.customer_id, row.reward_id],
+/**
+ * Redemptions, with both names filled in.
+ *
+ * This list is the one that names two things by id — the customer and the
+ * reward they spent points on — so it joins twice. "Ana Matola trocou um Café
+ * grátis" is the sentence; `c1` and `r1` are not.
+ */
+export async function listRedemptions(
+  merchantId: string,
+  query: RecordQuery,
+): Promise<MerchantPage<RedemptionRecord>> {
+  const [{ docs, truncated }, nomes, recompensas] = await Promise.all([
+    readSubcollection(merchantId, 'redemptions'),
+    nomesDeClientes(merchantId),
+    nomesDeRecompensas(merchantId),
+  ]);
+
+  // Both names attached before the search runs, so that typing "Ana" or
+  // "Café" finds the row either way.
+  const rows = docs.map((doc) => {
+    const row = comNome(toRedemption(doc.id, doc.data), nomes);
+    return {
+      ...row,
+      reward_name:
+        row.reward_id === null ? null : recompensas.get(row.reward_id) ?? null,
+    };
   });
+
+  return {
+    ...selectByRecency(rows, query, {
+      time: (row) => row.redeemed_at,
+      status: (row) => row.status,
+      search: (row) => [
+        row.id,
+        row.customer_id,
+        row.customer_name,
+        row.reward_id,
+        row.reward_name,
+      ],
+    }),
+    truncated,
+  };
+}
+
+/** Reward ids to their names, for the list that stores only the id. */
+async function nomesDeRecompensas(
+  merchantId: string,
+): Promise<Map<string, string>> {
+  const { docs } = await readSubcollection(merchantId, 'rewards');
+  const nomes = new Map<string, string>();
+  for (const doc of docs) {
+    const nome = toReward(doc.id, doc.data).name;
+    if (nome !== null && nome.trim() !== '') nomes.set(doc.id, nome);
+  }
+  return nomes;
 }
 
 export function listAppointments(merchantId: string, query: RecordQuery) {
   return pagina(merchantId, 'appointments', toAppointment, query, {
     time: (row) => row.scheduled_date,
     status: (row) => row.status,
-    search: (row) => [row.id, row.customer_id],
+    search: (row) => [row.id, row.customer_id, row.customer_name],
   });
 }
 
@@ -251,7 +333,7 @@ export function listReturnBonuses(merchantId: string, query: RecordQuery) {
   return pagina(merchantId, 'return_bonuses', toReturnBonus, query, {
     time: (row) => row.issued_at,
     status: (row) => row.status,
-    search: (row) => [row.id, row.customer_id],
+    search: (row) => [row.id, row.customer_id, row.customer_name],
   });
 }
 
@@ -259,7 +341,7 @@ export function listRecoveryTasks(merchantId: string, query: RecordQuery) {
   return pagina(merchantId, 'recovery_tasks', toRecoveryTask, query, {
     time: (row) => row.due_at ?? row.created_at,
     status: (row) => row.status,
-    search: (row) => [row.id, row.customer_id, row.notes],
+    search: (row) => [row.id, row.customer_id, row.customer_name, row.notes],
   });
 }
 
@@ -267,7 +349,7 @@ export function listVisitReports(merchantId: string, query: RecordQuery) {
   return pagina(merchantId, 'visit_reports', toVisitReport, query, {
     time: (row) => row.visited_at,
     status: (row) => row.result,
-    search: (row) => [row.id, row.customer_id, row.notes],
+    search: (row) => [row.id, row.customer_id, row.customer_name, row.notes],
   });
 }
 
@@ -281,11 +363,11 @@ export async function listRiskScores(
   merchantId: string,
   query: RecordQuery,
 ): Promise<MerchantPage<RiskScoreRecord>> {
-  const { docs, truncated } = await readSubcollection(
-    merchantId,
-    'customer_risk_scores',
-  );
-  const rows = docs.map((doc) => toRiskScore(doc.id, doc.data));
+  const [{ docs, truncated }, nomes] = await Promise.all([
+    readSubcollection(merchantId, 'customer_risk_scores'),
+    nomesDeClientes(merchantId),
+  ]);
+  const rows = docs.map((doc) => comNome(toRiskScore(doc.id, doc.data), nomes));
 
   const status = (query.status ?? '').trim().toUpperCase();
   const filtered = rows.filter(
@@ -323,14 +405,58 @@ export async function listCustomerLedger(
     .slice(0, limit);
 }
 
-/** What the plan has actually consumed, against what it allows. */
+/**
+ * What the plan has actually consumed this period, against what it allows.
+ *
+ * One document per metric per calendar month, and nothing deletes a window
+ * once it closes — the backend writes `merchant_id || '_' || metric_key || '_'
+ * || window_start` and lets them accumulate. Returning all of them showed the
+ * same measure several times over with contradicting numbers, and let a period
+ * that ended fill the dashboard's three slots at 100%.
+ *
+ * So: the current window per metric, which is the one the question "how much
+ * have I used?" is actually about. A window that has not started yet is not it
+ * either, hence the comparison against now rather than simply the latest.
+ */
 export async function listUsageBalances(
   merchantId: string,
+  agora: number = Date.now(),
 ): Promise<UsageBalanceRecord[]> {
   const { docs } = await readSubcollection(merchantId, 'usage_balances');
-  return docs
-    .map((doc) => toUsageBalance(doc.id, doc.data))
-    .sort((a, b) => (a.metric_key ?? '').localeCompare(b.metric_key ?? ''));
+  const rows = docs.map((doc) => toUsageBalance(doc.id, doc.data));
+
+  const corrente = new Map<string, UsageBalanceRecord>();
+  for (const row of rows) {
+    const chave = row.metric_key ?? row.id;
+    const anterior = corrente.get(chave);
+    if (anterior === undefined || melhorJanela(row, anterior, agora)) {
+      corrente.set(chave, row);
+    }
+  }
+
+  return [...corrente.values()].sort((a, b) =>
+    (a.metric_key ?? '').localeCompare(b.metric_key ?? ''),
+  );
+}
+
+/** Whether `candidato` describes the period in force better than `atual`. */
+function melhorJanela(
+  candidato: UsageBalanceRecord,
+  atual: UsageBalanceRecord,
+  agora: number,
+): boolean {
+  const aberta = (row: UsageBalanceRecord) =>
+    (row.window_start ?? 0) <= agora &&
+    (row.window_end === null || row.window_end >= agora);
+
+  // A window containing today always wins over one that does not, however
+  // recent the other is.
+  if (aberta(candidato) !== aberta(atual)) return aberta(candidato);
+
+  // Otherwise the later window, so a business between periods sees the one
+  // that just closed rather than one from a year ago.
+  const por = (row: UsageBalanceRecord) => row.window_start ?? row.updated_at ?? 0;
+  return por(candidato) > por(atual);
 }
 
 /**

@@ -73,7 +73,7 @@ export default async function VendasPage({
       }
       columns={[
         { header: 'Data', cell: (sale) => formatDateTime(sale.created_at) },
-        { header: 'Cliente', cell: (sale) => <CustomerLink id={sale.customer_id} /> },
+        { header: 'Cliente', cell: (sale) => <CustomerLink id={sale.customer_id} name={sale.customer_name} /> },
         { header: 'Valor', numeric: true, cell: (sale) => formatAmount(sale.amount, 'MZN') },
         {
           header: 'Pontos',

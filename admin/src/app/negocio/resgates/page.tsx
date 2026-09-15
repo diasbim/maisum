@@ -1,4 +1,5 @@
 import { fetchMyRedemptions } from '@/lib/merchant-api';
+import { redemptionStatusLabel } from '@/lib/merchant-labels';
 import { Badge, formatDateTime } from '../../admin/ui';
 import { RecordScreen } from '../RecordScreen';
 import { CustomerLink } from '../links';
@@ -25,11 +26,19 @@ export default async function ResgatesPage({
       fetchPage={fetchMyRedemptions}
       columns={[
         { header: 'Data', cell: (row) => formatDateTime(row.redeemed_at) },
-        { header: 'Cliente', cell: (row) => <CustomerLink id={row.customer_id} /> },
+        { header: 'Cliente', cell: (row) => <CustomerLink id={row.customer_id} name={row.customer_name} /> },
         {
           header: 'Recompensa',
+          // Same reasoning as the customer column: the name if the join found
+          // one, the id in monospace if it did not, a dash if there is neither.
           cell: (row) =>
-            row.reward_id ? <code>{row.reward_id}</code> : <span className="muted">—</span>,
+            row.reward_name ? (
+              row.reward_name
+            ) : row.reward_id ? (
+              <code>{row.reward_id}</code>
+            ) : (
+              <span className="muted">—</span>
+            ),
         },
         {
           header: 'Pontos gastos',
@@ -39,9 +48,12 @@ export default async function ResgatesPage({
         },
         {
           header: 'Estado',
-          // No translation table: the app writes no fixed vocabulary here yet,
-          // and inventing one would be guessing at values that do not exist.
-          cell: (row) => <Badge label={row.status} tone={row.status} />,
+          // The vocabulary is PENDING / CONSUMED / EXPIRED, declared in
+          // `functions/src/customer_api_contracts.ts`. The tone keeps the
+          // stored value so the badge colours by state, not by translation.
+          cell: (row) => (
+            <Badge label={redemptionStatusLabel(row.status)} tone={row.status} />
+          ),
         },
       ]}
       searchParams={searchParams}

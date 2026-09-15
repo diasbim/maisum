@@ -106,8 +106,19 @@ export function LoginForm() {
     }
   }
 
+  // Signing in happens in the browser, so this action is never reached while
+  // the page works. It exists for when it does not: a form with no method
+  // submits as a GET and puts the password in the query string, where it
+  // reaches the address bar, the history and every log along the way.
+  const semJavascript = (() => {
+    const next = params.get('next');
+    return next !== null && next.startsWith('/')
+      ? `/login/sem-javascript?next=${encodeURIComponent(next)}`
+      : '/login/sem-javascript';
+  })();
+
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} method="post" action={semJavascript}>
       {error ? (
         <p className="error" role="alert" style={{ marginBottom: 16 }}>
           {error}

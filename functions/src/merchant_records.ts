@@ -422,19 +422,27 @@ export function selectStaff(
 
 export type SaleListRecord = SaleRecord & {
   customer_id: string | null;
+  /** Joined from the customers subcollection; null when unmatched. */
+  customer_name: string | null;
 };
 
 export function toSaleListItem(id: string, data: SourceRecord): SaleListRecord {
   return {
     ...toSale(id, data),
     customer_id: asString(data, 'customer_id', 'customerId'),
+    // Filled in by the join, not stored on the row.
+    customer_name: null,
   };
 }
 
 export type RedemptionRecord = {
   id: string;
   customer_id: string | null;
+  /** Joined from the customers subcollection; null when unmatched. */
+  customer_name: string | null;
   reward_id: string | null;
+  /** Joined from the rewards subcollection; null when unmatched. */
+  reward_name: string | null;
   points_spent: number | null;
   redeemed_at: number | null;
   status: string | null;
@@ -444,7 +452,10 @@ export function toRedemption(id: string, data: SourceRecord): RedemptionRecord {
   return {
     id: asString(data, 'id') ?? id,
     customer_id: asString(data, 'customer_id', 'customerId'),
+    // Filled in by the join, not stored on the row.
+    customer_name: null,
     reward_id: asString(data, 'reward_id', 'rewardId'),
+    reward_name: null,
     points_spent: asNumber(data, 'points_spent', 'pointsSpent'),
     redeemed_at: asEpoch(data, 'redeemed_at', 'redeemedAt', 'created_at'),
     status: asString(data, 'status', 'fulfillment_status'),
@@ -454,6 +465,8 @@ export function toRedemption(id: string, data: SourceRecord): RedemptionRecord {
 export type AppointmentRecord = {
   id: string;
   customer_id: string | null;
+  /** Joined from the customers subcollection; null when unmatched. */
+  customer_name: string | null;
   scheduled_date: number | null;
   status: string | null;
   source: string | null;
@@ -468,6 +481,8 @@ export function toAppointment(
   return {
     id: asString(data, 'id') ?? id,
     customer_id: asString(data, 'customer_id', 'customerId'),
+    // Filled in by the join, not stored on the row.
+    customer_name: null,
     scheduled_date: asEpoch(data, 'scheduled_date', 'scheduledDate'),
     status: asString(data, 'status'),
     source: asString(data, 'source'),
@@ -534,6 +549,8 @@ export function toUsageBalance(
 export type RiskScoreRecord = {
   id: string;
   customer_id: string | null;
+  /** Joined from the customers subcollection; null when unmatched. */
+  customer_name: string | null;
   days_since_visit: number;
   risk_level: string | null;
   priority: number;
@@ -544,6 +561,8 @@ export function toRiskScore(id: string, data: SourceRecord): RiskScoreRecord {
   return {
     id: asString(data, 'id') ?? id,
     customer_id: asString(data, 'customer_id', 'customerId'),
+    // Filled in by the join, not stored on the row.
+    customer_name: null,
     days_since_visit: asNumber(data, 'days_since_visit', 'daysSinceVisit') ?? 0,
     risk_level: asString(data, 'risk_level', 'riskLevel'),
     priority: asNumber(data, 'priority') ?? 0,
@@ -554,6 +573,8 @@ export function toRiskScore(id: string, data: SourceRecord): RiskScoreRecord {
 export type RecoveryTaskRecord = {
   id: string;
   customer_id: string | null;
+  /** Joined from the customers subcollection; null when unmatched. */
+  customer_name: string | null;
   priority: string | null;
   status: string | null;
   due_at: number | null;
@@ -568,6 +589,8 @@ export function toRecoveryTask(
   return {
     id: asString(data, 'id') ?? id,
     customer_id: asString(data, 'customer_id', 'customerId'),
+    // Filled in by the join, not stored on the row.
+    customer_name: null,
     priority: asString(data, 'priority'),
     status: asString(data, 'status'),
     due_at: asEpoch(data, 'due_at', 'dueAt'),
@@ -579,6 +602,8 @@ export function toRecoveryTask(
 export type VisitReportRecord = {
   id: string;
   customer_id: string | null;
+  /** Joined from the customers subcollection; null when unmatched. */
+  customer_name: string | null;
   task_id: string | null;
   result: string | null;
   notes: string | null;
@@ -592,6 +617,8 @@ export function toVisitReport(
   return {
     id: asString(data, 'id') ?? id,
     customer_id: asString(data, 'customer_id', 'customerId'),
+    // Filled in by the join, not stored on the row.
+    customer_name: null,
     task_id: asString(data, 'task_id', 'taskId'),
     result: asString(data, 'result'),
     notes: asString(data, 'notes'),
@@ -625,6 +652,8 @@ export function toSurvey(id: string, data: SourceRecord): SurveyRecord {
 export type ReturnBonusRecord = {
   id: string;
   customer_id: string | null;
+  /** Joined from the customers subcollection; null when unmatched. */
+  customer_name: string | null;
   type: string | null;
   value: number | null;
   status: string | null;
@@ -640,6 +669,8 @@ export function toReturnBonus(
   return {
     id: asString(data, 'id') ?? id,
     customer_id: asString(data, 'customer_id', 'customerId'),
+    // Filled in by the join, not stored on the row.
+    customer_name: null,
     type: asString(data, 'type'),
     value: asNumber(data, 'value'),
     status: asString(data, 'status'),

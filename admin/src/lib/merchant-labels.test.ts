@@ -4,7 +4,9 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  featureLabel,
   lifecycleLabel,
+  redemptionStatusLabel,
   relationshipLabel,
   retentionLabel,
   staffRoleLabel,
@@ -177,4 +179,97 @@ test('the stored casing and stray spacing do not matter', () => {
 test('absent is absent, so the screen can print its own dash', () => {
   assert.equal(relationshipLabel(null), null);
   assert.equal(lifecycleLabel(''), null);
+});
+
+/**
+ * The features a plan can switch on, read from the app's own list.
+ *
+ * `FeatureKeys` is the canonical set — the Functions provision exactly these —
+ * so a feature added there without a Portuguese name should fail here rather
+ * than reach a business as `engage_manage_recovery`.
+ */
+const FEATURE_KEYS_DART = readFileSync(
+  path.join(
+    __dirname,
+    '..',
+    '..',
+    'lib',
+    'features',
+    'subscription',
+    'domain',
+    'feature_keys.dart',
+  ),
+  'utf8',
+);
+
+function featureKeys(): string[] {
+  return [
+    ...FEATURE_KEYS_DART.matchAll(
+      /static const String \w+ = '([a-z_]+)';/g,
+    ),
+  ].map((match) => match[1]);
+}
+
+/**
+ * What `featureLabel` and `metricLabel` produce for a key they do not know.
+ *
+ * Both fall through to a tidied version of the key rather than hiding it, so
+ * "is it translated?" cannot be asked as "did it change?" — `analytics`
+ * becomes `Analytics` either way. This is the string a real translation has to
+ * beat.
+ */
+function semTraducao(value: string): string {
+  const words = value.replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+test('every feature a plan can grant has a name of its own', () => {
+  const keys = featureKeys();
+  assert.ok(keys.length >= 10, `found only ${keys.length} feature keys`);
+
+  for (const key of keys) {
+    assert.notEqual(
+      featureLabel(key),
+      semTraducao(key),
+      `${key} reaches the business untranslated`,
+    );
+  }
+});
+
+/**
+ * The redemption states, read from the contract that declares them.
+ *
+ * The portal used to print these raw, on the stated grounds that the app wrote
+ * no fixed vocabulary for redemptions. It does, and this is where it is
+ * written down.
+ */
+const REDEMPTION_CONTRACT_TS = readFileSync(
+  path.join(
+    __dirname,
+    '..',
+    '..',
+    'functions',
+    'src',
+    'customer_api_contracts.ts',
+  ),
+  'utf8',
+);
+
+function redemptionStatuses(): string[] {
+  const line = /redemption_status:\s*([^;]+);/.exec(REDEMPTION_CONTRACT_TS);
+  assert.ok(line, 'redemption_status is no longer in customer_api_contracts.ts');
+  return [...line[1].matchAll(/'([A-Z_]+)'/g)].map((match) => match[1]);
+}
+
+test('every redemption state has a translation', () => {
+  const states = redemptionStatuses();
+  assert.ok(states.length >= 3, `found only ${states.length} states`);
+
+  for (const state of states) {
+    assert.notEqual(
+      redemptionStatusLabel(state),
+      state,
+      `${state} reaches the business untranslated`,
+    );
+  }
 });

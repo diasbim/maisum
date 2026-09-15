@@ -37,7 +37,7 @@ export default async function MarcacoesPage({
       fetchPage={fetchMyAppointments}
       columns={[
         { header: 'Quando', cell: (row) => formatDateTime(row.scheduled_date) },
-        { header: 'Cliente', cell: (row) => <CustomerLink id={row.customer_id} /> },
+        { header: 'Cliente', cell: (row) => <CustomerLink id={row.customer_id} name={row.customer_name} /> },
         {
           header: 'Estado',
           cell: (row) => (

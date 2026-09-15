@@ -233,8 +233,39 @@ r = await pedir('/negocio/plano');
 check('abre', r.status === 200);
 check('traduz PAST_DUE', r.texto.includes('Pagamento em atraso') && !/PAST_DUE/.test(r.texto));
 check('e pinta-o de vermelho', /badge-red">Pagamento em atraso/.test(r.html));
-check('sem flag guardada desenha um traço, não "Inativo"', /sem_flag_guardada<\/td><td><span class="muted">/.test(r.html));
+check('sem flag guardada desenha um traço, não "Inativo"', /Cópia de segurança na nuvem<\/td><td><span class="muted">/.test(r.html));
 check('estados em caixa de frase', !/>ATIVO</.test(r.html));
+check(
+  'nenhuma chave de funcionalidade chega em bruto',
+  !/engage_manage_recovery|cloud_backup|whatsapp_automation|retention_core/.test(r.texto),
+);
+// The entitlements the plans actually use carry no ceiling, so the column
+// stood at "Sem limite" on every row of every plan.
+check(
+  'a coluna Limite some quando nada a preenche',
+  !/<th scope="col">Limite<\/th>/.test(r.html),
+);
+// One window per metric. The fixture seeds a closed month at 5/5 alongside
+// the open one at 3/5; listing both showed the same measure twice and let a
+// period that ended fill the dashboard.
+// The fixture seeds two windows for Campanhas: the open month at 3 of 5, and
+// the month before it, full, at 5 of 5. Only the first may reach the screen.
+//
+// Matched by proximity rather than by slicing the page between its two
+// headings: both panels stream, so the headings land in the HTML and the rows
+// arrive afterwards in the flight payload, and anything between the headings
+// is just the headings. "Campanhas" also names a feature in the table below,
+// so the row is identified by the numbers beside it, not by the word.
+check(
+  'mostra a janela corrente do consumo',
+  /Campanhas[^0-9]{0,4}3[^0-9]{0,6}60/.test(r.tudo),
+  '3 de 5, 60%',
+);
+check(
+  'e não a que já fechou',
+  !/Campanhas[^0-9]{0,4}5[^0-9]{0,6}100/.test(r.tudo),
+  'a janela fechada ainda aparece',
+);
 
 grupo('vendas');
 r = await pedir('/negocio/vendas');
@@ -244,12 +275,20 @@ check('soma o total sobre todas, não sobre a página', /1\s?350|1350/.test(r.tu
 check('marca a venda por confirmar', r.tudo.includes('Por confirmar'));
 r = await pedir('/negocio/vendas?status=CONFIRMED');
 check('filtra por estado', r.linhas === 2, 'linhas=' + r.linhas);
+r = await pedir('/negocio/vendas');
+check('nomeia o cliente de cada venda', r.tudo.includes('Ana Matola'));
+r = await pedir('/negocio/vendas?search=Ana');
+check('e procura pelo nome, não só pelo id', r.linhas === 2, 'linhas=' + r.linhas);
 
 grupo('resgates');
 r = await pedir('/negocio/resgates');
 check('abre', r.status === 200);
 check('lista os 2', r.linhas === 2, 'linhas=' + r.linhas);
 check('mostra os pontos gastos', r.tudo.includes('100'));
+check('nomeia a recompensa, não o id', r.tudo.includes('Cafe gratis') && !/>r1</.test(r.html));
+check('traduz o estado do resgate', r.tudo.includes('Levantado') && !/CONSUMED/.test(r.texto));
+r = await pedir('/negocio/resgates?search=Cafe');
+check('e procura por nome da recompensa', r.linhas === 2, 'linhas=' + r.linhas);
 
 grupo('marcações');
 r = await pedir('/negocio/marcacoes');
@@ -269,6 +308,9 @@ check('desconto sai em meticais, pontos não', /50\s?MZN/.test(r.tudo) && /100 p
 grupo('clientes em risco');
 r = await pedir('/negocio/retencao');
 check('abre', r.status === 200);
+// The board exists to say who to call. It used to say `c3`.
+check('nomeia quem contactar', r.tudo.includes('Ana Matola'));
+check('e não o id do cliente', !/<code>c[0-9]+<\/code>/.test(r.html));
 check('lista os 4', r.linhas === 4, 'linhas=' + r.linhas);
 check('traduz a cor guardada para o que significa', r.tudo.includes('Crítico') && !/\bred\b/.test(r.texto));
 check('o mais urgente vem primeiro', r.tudo.indexOf('Crítico') < r.tudo.indexOf('Saudável'));
@@ -307,7 +349,7 @@ check('mostra o saldo depois de cada movimento', r.tudo.includes('275'));
 grupo('consumo do plano');
 r = await pedir('/negocio/plano');
 check('tem um painel de consumo', r.tudo.includes('Consumo'));
-check('traduz a medida', r.tudo.includes('Mensagens WhatsApp'));
+check('traduz a medida', r.tudo.includes('Respostas a inquéritos'));
 check('mostra a percentagem usada', /84%/.test(r.tudo), '42 de 50');
 check('sem limite não vira percentagem', /Sem limite/.test(r.tudo));
 

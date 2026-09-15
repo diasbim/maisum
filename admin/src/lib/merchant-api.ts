@@ -306,6 +306,8 @@ export function fetchMyTeam(params: ListQuery = {}) {
 
 export type MerchantSaleListItem = MerchantSale & {
   customer_id: string | null;
+  /** Joined by the API from the customers subcollection. */
+  customer_name: string | null;
 };
 
 export type SalesTotals = {
@@ -317,7 +319,11 @@ export type SalesTotals = {
 export type MerchantRedemption = {
   id: string;
   customer_id: string | null;
+  /** Joined by the API from the customers subcollection. */
+  customer_name: string | null;
   reward_id: string | null;
+  /** Joined by the API from the rewards subcollection. */
+  reward_name: string | null;
   points_spent: number | null;
   redeemed_at: number | null;
   status: string | null;
@@ -326,6 +332,8 @@ export type MerchantRedemption = {
 export type MerchantAppointment = {
   id: string;
   customer_id: string | null;
+  /** Joined by the API from the customers subcollection. */
+  customer_name: string | null;
   scheduled_date: number | null;
   status: string | null;
   source: string | null;
@@ -358,6 +366,8 @@ export type MerchantUsageBalance = {
 export type MerchantRiskScore = {
   id: string;
   customer_id: string | null;
+  /** Joined by the API from the customers subcollection. */
+  customer_name: string | null;
   days_since_visit: number;
   risk_level: string | null;
   priority: number;
@@ -367,6 +377,8 @@ export type MerchantRiskScore = {
 export type MerchantRecoveryTask = {
   id: string;
   customer_id: string | null;
+  /** Joined by the API from the customers subcollection. */
+  customer_name: string | null;
   priority: string | null;
   status: string | null;
   due_at: number | null;
@@ -377,6 +389,8 @@ export type MerchantRecoveryTask = {
 export type MerchantVisitReport = {
   id: string;
   customer_id: string | null;
+  /** Joined by the API from the customers subcollection. */
+  customer_name: string | null;
   task_id: string | null;
   result: string | null;
   notes: string | null;
@@ -396,6 +410,8 @@ export type MerchantSurvey = {
 export type MerchantReturnBonus = {
   id: string;
   customer_id: string | null;
+  /** Joined by the API from the customers subcollection. */
+  customer_name: string | null;
   type: string | null;
   value: number | null;
   status: string | null;

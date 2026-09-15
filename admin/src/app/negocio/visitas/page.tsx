@@ -44,7 +44,7 @@ export default async function VisitasPage({
       fetchPage={fetchMyVisitReports}
       columns={[
         { header: 'Quando', cell: (row) => formatDateTime(row.visited_at) },
-        { header: 'Cliente', cell: (row) => <CustomerLink id={row.customer_id} /> },
+        { header: 'Cliente', cell: (row) => <CustomerLink id={row.customer_id} name={row.customer_name} /> },
         {
           header: 'Resultado',
           cell: (row) => (

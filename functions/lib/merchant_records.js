@@ -313,13 +313,18 @@ function toSaleListItem(id, data) {
     return {
         ...toSale(id, data),
         customer_id: asString(data, 'customer_id', 'customerId'),
+        // Filled in by the join, not stored on the row.
+        customer_name: null,
     };
 }
 function toRedemption(id, data) {
     return {
         id: asString(data, 'id') ?? id,
         customer_id: asString(data, 'customer_id', 'customerId'),
+        // Filled in by the join, not stored on the row.
+        customer_name: null,
         reward_id: asString(data, 'reward_id', 'rewardId'),
+        reward_name: null,
         points_spent: asNumber(data, 'points_spent', 'pointsSpent'),
         redeemed_at: asEpoch(data, 'redeemed_at', 'redeemedAt', 'created_at'),
         status: asString(data, 'status', 'fulfillment_status'),
@@ -329,6 +334,8 @@ function toAppointment(id, data) {
     return {
         id: asString(data, 'id') ?? id,
         customer_id: asString(data, 'customer_id', 'customerId'),
+        // Filled in by the join, not stored on the row.
+        customer_name: null,
         scheduled_date: asEpoch(data, 'scheduled_date', 'scheduledDate'),
         status: asString(data, 'status'),
         source: asString(data, 'source'),
@@ -365,6 +372,8 @@ function toRiskScore(id, data) {
     return {
         id: asString(data, 'id') ?? id,
         customer_id: asString(data, 'customer_id', 'customerId'),
+        // Filled in by the join, not stored on the row.
+        customer_name: null,
         days_since_visit: asNumber(data, 'days_since_visit', 'daysSinceVisit') ?? 0,
         risk_level: asString(data, 'risk_level', 'riskLevel'),
         priority: asNumber(data, 'priority') ?? 0,
@@ -375,6 +384,8 @@ function toRecoveryTask(id, data) {
     return {
         id: asString(data, 'id') ?? id,
         customer_id: asString(data, 'customer_id', 'customerId'),
+        // Filled in by the join, not stored on the row.
+        customer_name: null,
         priority: asString(data, 'priority'),
         status: asString(data, 'status'),
         due_at: asEpoch(data, 'due_at', 'dueAt'),
@@ -386,6 +397,8 @@ function toVisitReport(id, data) {
     return {
         id: asString(data, 'id') ?? id,
         customer_id: asString(data, 'customer_id', 'customerId'),
+        // Filled in by the join, not stored on the row.
+        customer_name: null,
         task_id: asString(data, 'task_id', 'taskId'),
         result: asString(data, 'result'),
         notes: asString(data, 'notes'),
@@ -407,6 +420,8 @@ function toReturnBonus(id, data) {
     return {
         id: asString(data, 'id') ?? id,
         customer_id: asString(data, 'customer_id', 'customerId'),
+        // Filled in by the join, not stored on the row.
+        customer_name: null,
         type: asString(data, 'type'),
         value: asNumber(data, 'value'),
         status: asString(data, 'status'),

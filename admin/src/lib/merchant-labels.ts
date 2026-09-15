@@ -230,3 +230,58 @@ export function metricLabel(value: string | null): string | null {
   const words = value.trim().replace(/_/g, ' ');
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+/**
+ * Feature keys, which the plan page used to print as they are stored.
+ *
+ * An owner reading their own plan was shown `engage_manage_recovery` and
+ * `cloud_backup`. The canonical list is the app's own `FeatureKeys`
+ * (`lib/features/subscription/domain/feature_keys.dart`), and the test beside
+ * this file reads that file so a feature added there without a name here
+ * fails rather than reaching a business untranslated.
+ *
+ * Named for what the feature does for the business, not for the module it
+ * lives in: an owner has never heard of "Engage".
+ */
+const FEATURE: Record<string, string> = {
+  WHATSAPP_AUTOMATION: 'Mensagens automáticas por WhatsApp',
+  CAMPAIGNS: 'Campanhas',
+  ANALYTICS: 'Relatórios e análises',
+  MULTI_DEVICE: 'Vários dispositivos',
+  CLOUD_BACKUP: 'Cópia de segurança na nuvem',
+  ENGAGE_VIEW_RISK: 'Ver clientes em risco',
+  ENGAGE_MANAGE_RECOVERY: 'Gerir tarefas de recuperação',
+  ENGAGE_MANAGE_VISITS: 'Registar relatórios de visita',
+  ENGAGE_MANAGE_SURVEYS: 'Criar e gerir inquéritos',
+  RETENTION_CORE: 'Automações de retenção',
+};
+
+/**
+ * An unknown key falls through to a readable version of itself, like the
+ * metrics above: a feature the backend has and this table has not is still
+ * better shown than hidden.
+ */
+export function featureLabel(value: string | null): string | null {
+  if (!value) return null;
+  const known = FEATURE[value.trim().toUpperCase()];
+  if (known) return known;
+  const words = value.trim().replace(/_/g, ' ');
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * What happened to a redemption.
+ *
+ * The portal used to print these untranslated, on the grounds that the app
+ * wrote no fixed vocabulary here. It does: `redemption_status` in
+ * `functions/src/customer_api_contracts.ts` is exactly these three, and the
+ * app writes `PENDING` the moment a customer asks for a reward.
+ */
+const REDEMPTION_STATUS: Record<string, string> = {
+  PENDING: 'Por levantar',
+  CONSUMED: 'Levantado',
+  EXPIRED: 'Expirado',
+};
+
+export const redemptionStatusLabel = (value: string | null) =>
+  translate(REDEMPTION_STATUS, value);

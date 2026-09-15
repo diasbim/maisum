@@ -5,7 +5,7 @@ import {
   fetchMyProfile,
   fetchMyUsage,
 } from '@/lib/merchant-api';
-import { metricLabel, subscriptionLabel } from '@/lib/merchant-labels';
+import { featureLabel, metricLabel, subscriptionLabel } from '@/lib/merchant-labels';
 import {
   Badge,
   Card,
@@ -71,6 +71,13 @@ async function EntitlementsPanel() {
     );
   }
 
+  // A ceiling on an entitlement is the exception, not the rule: the plans in
+  // use put their limits on the measures above, so this column stood at "Sem
+  // limite" for every row on every plan. Shown only when something fills it.
+  const temLimite = entitlements.some(
+    (entitlement) => entitlement.limit_value != null,
+  );
+
   return (
     <div className="card card--flush scroll-x">
       <table>
@@ -78,14 +85,14 @@ async function EntitlementsPanel() {
           <tr>
             <th scope="col">Funcionalidade</th>
             <th scope="col">Estado</th>
-            <th scope="col">Limite</th>
+            {temLimite ? <th scope="col">Limite</th> : null}
             <th scope="col">Atualizado</th>
           </tr>
         </thead>
         <tbody>
           {entitlements.map((entitlement, index) => (
             <tr key={entitlement.id ?? entitlement.feature_key ?? index}>
-              <td>{entitlement.feature_key ?? '—'}</td>
+              <td>{featureLabel(entitlement.feature_key) ?? '—'}</td>
               {/*
                 Three states, not two. `is_enabled` is nullable on purpose —
                 `asBool` in the Functions keeps "not stored" apart from
@@ -108,11 +115,13 @@ async function EntitlementsPanel() {
                   tone={entitlement.is_enabled ? 'ACTIVE' : 'INACTIVE'}
                 />
               </td>
-              <td>
-                {entitlement.limit_value == null
-                  ? 'Sem limite'
-                  : `${entitlement.limit_value}${entitlement.unit ? ` ${entitlement.unit}` : ''}`}
-              </td>
+              {temLimite ? (
+                <td>
+                  {entitlement.limit_value == null
+                    ? 'Sem limite'
+                    : `${entitlement.limit_value}${entitlement.unit ? ` ${entitlement.unit}` : ''}`}
+                </td>
+              ) : null}
               <td>{formatDateTime(entitlement.updated_at)}</td>
             </tr>
           ))}

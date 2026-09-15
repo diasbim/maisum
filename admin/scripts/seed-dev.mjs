@@ -230,17 +230,28 @@ export async function seed({ quiet = false } = {}) {
 
   // No `is_enabled`: the plan page used to read "not stored" as "switched off"
   // and tell a business a feature they pay for was disabled.
-  await biz.collection('entitlements').doc('zz_sem_flag').set({
-    feature_key: 'sem_flag_guardada',
+  //
+  // Written over a feature the server really provisions, under the server's own
+  // id, because that is the shape the bug takes in production — a stored
+  // entitlement that lost its flag. An invented key under an invented id read
+  // as a twelfth feature instead, which is not a thing that can happen.
+  await biz.collection('entitlements').doc(`${uid}_cloud_backup`).set({
+    id: `${uid}_cloud_backup`,
+    merchant_id: uid,
+    feature_key: 'cloud_backup',
     limit_value: null,
     updated_at: agora,
   });
 
   /* -------------------------------------- the surfaces the portal now shows */
 
+  // The status vocabulary is the server's own: PENDING, CONSUMED, EXPIRED
+  // (`functions/src/customer_api_contracts.ts`). Leaving it out, as this
+  // fixture used to, drew every row as a dash and hid the fact that the portal
+  // never translated these at all.
   for (const resgate of [
-    { id: 'g1', customer_id: 'c1', reward_id: 'r1', points_spent: 100, dias: 5 },
-    { id: 'g2', customer_id: 'c2', reward_id: 'r1', points_spent: 100, dias: 20 },
+    { id: 'g1', customer_id: 'c1', reward_id: 'r1', points_spent: 100, dias: 5, status: 'CONSUMED' },
+    { id: 'g2', customer_id: 'c2', reward_id: 'r1', points_spent: 100, dias: 20, status: 'PENDING' },
   ]) {
     const { id, dias, ...resto } = resgate;
     await biz.collection('redemptions').doc(id).set({
@@ -248,6 +259,7 @@ export async function seed({ quiet = false } = {}) {
       redeemed_at: agora - dias * DIA,
       created_at: agora - dias * DIA,
     });
+
   }
 
   // Lowercase, as the app writes them; the filter upper-cases both sides.
@@ -284,22 +296,68 @@ export async function seed({ quiet = false } = {}) {
 
   // One with a ceiling and one without: the panel must not draw "no limit" as
   // a share that is permanently full.
-  const inicio = agora - 15 * DIA;
-  const fim = agora + 15 * DIA;
+  //
+  // The window is the calendar month and the id is
+  // `{merchant}_{metric}_{windowStart}`, which is what the server writes
+  // (`date_trunc('month', …)`, `ON CONFLICT (merchant_id, metric_key,
+  // window_start, window_end)`). Inventing ids here wrote a second row for a
+  // metric the server already owned, and the plan page showed the same measure
+  // twice with contradicting numbers.
+  //
+  // `whatsapp_messages` is left alone for the same reason: the merchant
+  // bootstrap provisions that one metric itself, seconds after this runs, and
+  // a fixture that fights it is a fixture that flakes.
+  const inicioMes = Date.UTC(
+    new Date(agora).getUTCFullYear(),
+    new Date(agora).getUTCMonth(),
+    1,
+  );
+  const fimMes =
+    Date.UTC(
+      new Date(agora).getUTCFullYear(),
+      new Date(agora).getUTCMonth() + 1,
+      1,
+    ) - 1;
   for (const consumo of [
-    { id: 'u1', metric_key: 'whatsapp_messages', used: 42, limit_value: 50 },
-    { id: 'u2', metric_key: 'campaigns', used: 3, limit_value: 5 },
-    { id: 'u3', metric_key: 'sales', used: 128, limit_value: null },
+    { metric_key: 'survey_responses', used: 42, limit_value: 50 },
+    { metric_key: 'campaigns', used: 3, limit_value: 5 },
+    { metric_key: 'sales', used: 128, limit_value: null },
   ]) {
-    const { id, ...resto } = consumo;
+    const id = `${uid}_${consumo.metric_key}_${inicioMes}`;
     await biz.collection('usage_balances').doc(id).set({
-      ...resto,
-      window_start: inicio,
-      window_end: fim,
+      ...consumo,
+      id,
+      merchant_id: uid,
+      window_start: inicioMes,
+      window_end: fimMes,
       soft_limit: 1,
       updated_at: agora,
     });
   }
+
+  // Last month's campaigns, kept on purpose.
+  //
+  // Nothing deletes a closed window, so a real business accumulates one row per
+  // metric per month. This one is full, and the plan page and the dashboard
+  // must both ignore it in favour of the current window above — otherwise a
+  // period that ended tells the owner they are out of campaigns.
+  const inicioMesAnterior = Date.UTC(
+    new Date(agora).getUTCFullYear(),
+    new Date(agora).getUTCMonth() - 1,
+    1,
+  );
+  const idAnterior = `${uid}_campaigns_${inicioMesAnterior}`;
+  await biz.collection('usage_balances').doc(idAnterior).set({
+    id: idAnterior,
+    merchant_id: uid,
+    metric_key: 'campaigns',
+    used: 5,
+    limit_value: 5,
+    window_start: inicioMesAnterior,
+    window_end: inicioMes - 1,
+    soft_limit: 1,
+    updated_at: inicioMes - 1,
+  });
 
   // Risk levels are stored as colour names.
   for (const risco of [

@@ -57,7 +57,7 @@ export default async function RetencaoPage({
       rowKey={(row) => row.id}
       fetchPage={fetchMyRiskScores}
       columns={[
-        { header: 'Cliente', cell: (row) => <CustomerLink id={row.customer_id} /> },
+        { header: 'Cliente', cell: (row) => <CustomerLink id={row.customer_id} name={row.customer_name} /> },
         {
           header: 'Risco',
           cell: (row) => (
