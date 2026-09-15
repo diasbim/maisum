@@ -122,6 +122,69 @@ void main() {
     expect(decision.allowed, isFalse);
     expect(decision.reason, 'flag_disabled');
   });
+
+  group('debug bypass', () {
+    Future<void> seedWorstCaseBlockingState() async {
+      final now = DateTime.now();
+      // Suspended subscription on the FREE plan blocks every paid feature
+      // for a different reason at every stage of FeatureGate.check: the
+      // subscription check, the disabled flag, and the disabled entitlement.
+      await dao.upsertSubscriptionState(_state(
+        plan: Plan.free,
+        status: 'SUSPENDED',
+        trialEndsAt: null,
+      ));
+      for (final featureKey in FeatureKeys.all) {
+        await dao.upsertFeatureFlag(FeatureFlag(
+          id: 'merchant-1_$featureKey',
+          merchantId: 'merchant-1',
+          flagKey: featureKey,
+          isEnabled: false,
+          updatedAt: now,
+        ));
+        await dao.upsertEntitlement(Entitlement(
+          id: 'merchant-1_$featureKey',
+          merchantId: 'merchant-1',
+          featureKey: featureKey,
+          isEnabled: false,
+          updatedAt: now,
+        ));
+      }
+    }
+
+    test('bypass disabled still blocks every feature (regression)', () async {
+      await seedWorstCaseBlockingState();
+      final blockedGate = FeatureGate(dao, UsageQuotaEngine(dao));
+
+      for (final featureKey in FeatureKeys.all) {
+        final decision = await blockedGate.check(featureKey: featureKey);
+        expect(
+          decision.allowed,
+          isFalse,
+          reason: '$featureKey should still be gated without the bypass',
+        );
+      }
+    });
+
+    test('bypass enabled allows every paid feature regardless of state',
+        () async {
+      await seedWorstCaseBlockingState();
+      final bypassGate = FeatureGate(
+        dao,
+        UsageQuotaEngine(dao),
+        debugBypassEnabled: true,
+      );
+
+      for (final featureKey in FeatureKeys.all) {
+        final decision = await bypassGate.check(featureKey: featureKey);
+        expect(
+          decision.allowed,
+          isTrue,
+          reason: '$featureKey should be unlocked by the debug bypass',
+        );
+      }
+    });
+  });
 }
 
 Future<void> _seedMerchant(Database db) async {
