@@ -406,6 +406,58 @@ service cloud.firestore {
         allow read: if canAccessBusiness(merchantId);
         allow write: if false;
       }
+
+      // ── Affiliates ──────────────────────────────────────────────────────
+      //
+      // Every one of these is server-owned. The app and the portal reach them
+      // through the Cloud Functions API, which runs with the Admin SDK and so
+      // bypasses these rules entirely; no client reads or writes here, ever.
+      //
+      // The reason is not tidiness. A code's usageCount, an attribution and a
+      // reward are the record of who earned what — a till that could edit them
+      // could award itself money. And the uniqueness the feature depends on
+      // ("one live attribution per customer") is enforced by a transaction on
+      // the server; a direct client write would step around it.
+      //
+      match /affiliate_merchants/{affiliateId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_codes/{codeId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_attributions/{attributionId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_rewards/{rewardId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_events/{eventId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_fraud_signals/{signalId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_rate_limits/{bucketId} {
+        allow read, write: if false;
+      }
+    }
+
+    // The global affiliate identity and the code lookup that guarantees one
+    // code per string across every business. Both are server-owned: the lookup
+    // in particular is how a collision is detected inside a transaction, so a
+    // client that could write it could claim another affiliate's code.
+    match /affiliates/{affiliateId} {
+      allow read, write: if false;
+    }
+
+    match /affiliate_code_lookup/{normalizedCode} {
+      allow read, write: if false;
     }
 
     match /customer_identities/{docId} {
