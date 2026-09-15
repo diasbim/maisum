@@ -285,3 +285,20 @@ const REDEMPTION_STATUS: Record<string, string> = {
 
 export const redemptionStatusLabel = (value: string | null) =>
   translate(REDEMPTION_STATUS, value);
+
+/**
+ * How a survey answer reached the merchant.
+ *
+ * `SurveyChannel` in `engage_models.dart` stores these lower-case, which
+ * `translate` folds before looking up. The app says the same words in
+ * `engage_labels.dart`, and the test beside this file keeps the two in step.
+ */
+const SURVEY_CHANNEL: Record<string, string> = {
+  WHATSAPP: 'WhatsApp',
+  SMS: 'SMS',
+  'IN-APP': 'Na aplicação',
+  MANUAL: 'Presencial',
+};
+
+export const surveyChannelLabel = (value: string | null) =>
+  translate(SURVEY_CHANNEL, value);

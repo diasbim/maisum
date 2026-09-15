@@ -7,6 +7,7 @@ import {
   featureLabel,
   lifecycleLabel,
   redemptionStatusLabel,
+  surveyChannelLabel,
   relationshipLabel,
   retentionLabel,
   staffRoleLabel,
@@ -270,6 +271,83 @@ test('every redemption state has a translation', () => {
       redemptionStatusLabel(state),
       state,
       `${state} reaches the business untranslated`,
+    );
+  }
+});
+
+/**
+ * The channels a survey answer can arrive through, read from the app's model.
+ *
+ * `SurveyChannel` is the closed set the app writes, and `engage_labels.dart`
+ * already names each one on the phone. A merchant who reads "Presencial" in
+ * the app and `manual` in the portal is looking at two products.
+ */
+const ENGAGE_MODELS_DART = readFileSync(
+  path.join(
+    __dirname,
+    '..',
+    '..',
+    'lib',
+    'features',
+    'engage',
+    'domain',
+    'engage_models.dart',
+  ),
+  'utf8',
+);
+
+const ENGAGE_LABELS_DART = readFileSync(
+  path.join(
+    __dirname,
+    '..',
+    '..',
+    'lib',
+    'features',
+    'engage',
+    'domain',
+    'engage_labels.dart',
+  ),
+  'utf8',
+);
+
+function surveyChannels(): string[] {
+  const block = /class SurveyChannel \{([\s\S]*?)\n\}/.exec(ENGAGE_MODELS_DART);
+  assert.ok(block, 'SurveyChannel is no longer in engage_models.dart');
+  return [
+    ...block[1].matchAll(/static const String \w+ = '([a-z-]+)';/g),
+  ].map((match) => match[1]);
+}
+
+test('every survey channel has a translation', () => {
+  const channels = surveyChannels();
+  assert.ok(channels.length >= 4, `found only ${channels.length} channels`);
+
+  for (const channel of channels) {
+    assert.notEqual(
+      surveyChannelLabel(channel),
+      channel,
+      `${channel} reaches the business untranslated`,
+    );
+  }
+});
+
+test('the portal says what the app says about a channel', () => {
+  // Pulled out of the switch in engage_labels.dart: SurveyChannel.sms => 'SMS'.
+  const block = /static String surveyChannel\([\s\S]*?\n      \};/.exec(
+    ENGAGE_LABELS_DART,
+  );
+  assert.ok(block, 'surveyChannel is no longer in engage_labels.dart');
+
+  const pairs = [
+    ...block[0].matchAll(/SurveyChannel\.(\w+) => '([^']+)'/g),
+  ].map((match) => match[2]);
+  assert.ok(pairs.length >= 4, `found only ${pairs.length} app labels`);
+
+  for (const channel of surveyChannels()) {
+    const label = surveyChannelLabel(channel);
+    assert.ok(
+      pairs.includes(label as string),
+      `the portal says "${label}" for ${channel}; the app says none of that`,
     );
   }
 });

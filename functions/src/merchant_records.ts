@@ -649,6 +649,90 @@ export function toSurvey(id: string, data: SourceRecord): SurveyRecord {
   };
 }
 
+/**
+ * One answer, already paired with the question it answers.
+ *
+ * The stored row holds a question id and one of three value columns; which
+ * column is filled depends on the question type. Resolving that here means the
+ * screen renders an answer without having to know the storage shape.
+ */
+export type SurveyAnswerRecord = {
+  question_id: string | null;
+  question_text: string | null;
+  question_type: string | null;
+  sort_order: number;
+  /** The answer as a person would read it, whatever column it was stored in. */
+  answer: string | null;
+};
+
+/** One filled-in survey: who, when, through which channel, and what they said. */
+export type SurveyResponseRecord = {
+  id: string;
+  survey_id: string | null;
+  survey_title: string | null;
+  customer_id: string | null;
+  /** Joined from the customers subcollection; null when anonymous. */
+  customer_name: string | null;
+  channel: string | null;
+  submitted_at: number | null;
+  answers: SurveyAnswerRecord[];
+};
+
+export function toSurveyResponse(
+  id: string,
+  data: SourceRecord,
+): SurveyResponseRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    survey_id: asString(data, 'survey_id', 'surveyId'),
+    // Both filled in by the joins, not stored on the row.
+    survey_title: null,
+    customer_id: asString(data, 'customer_id', 'customerId'),
+    customer_name: null,
+    channel: asString(data, 'channel'),
+    submitted_at: asEpoch(data, 'submitted_at', 'submittedAt', 'created_at'),
+    answers: [],
+  };
+}
+
+export type SurveyQuestionRecord = {
+  id: string;
+  survey_id: string | null;
+  question_text: string | null;
+  question_type: string | null;
+  sort_order: number;
+};
+
+export function toSurveyQuestion(
+  id: string,
+  data: SourceRecord,
+): SurveyQuestionRecord {
+  return {
+    id: asString(data, 'id') ?? id,
+    survey_id: asString(data, 'survey_id', 'surveyId'),
+    question_text: asString(data, 'question_text', 'questionText'),
+    question_type: asString(data, 'question_type', 'questionType'),
+    sort_order: asNumber(data, 'sort_order', 'sortOrder') ?? 0,
+  };
+}
+
+/**
+ * Renders a stored answer as text.
+ *
+ * Exactly one of the three value columns carries the answer, so the first
+ * non-empty one wins. A boolean is the only value that cannot speak for
+ * itself — `true` is not an answer anybody gave, "Sim" is.
+ */
+export function renderSurveyAnswer(data: SourceRecord): string | null {
+  const text = asString(data, 'answer_text', 'answerText');
+  if (text != null && text.trim() !== '') return text.trim();
+  const numeric = asNumber(data, 'answer_numeric', 'answerNumeric');
+  if (numeric != null) return String(numeric);
+  const bool = asBool(data, 'answer_bool', 'answerBool');
+  if (bool != null) return bool ? 'Sim' : 'Não';
+  return null;
+}
+
 export type ReturnBonusRecord = {
   id: string;
   customer_id: string | null;

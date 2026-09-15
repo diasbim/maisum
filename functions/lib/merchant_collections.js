@@ -51,6 +51,7 @@ exports.listRiskScores = listRiskScores;
 exports.listCustomerLedger = listCustomerLedger;
 exports.listUsageBalances = listUsageBalances;
 exports.listSurveys = listSurveys;
+exports.listSurveyResponses = listSurveyResponses;
 const admin = __importStar(require("firebase-admin"));
 const merchant_records_js_1 = require("./merchant_records.js");
 /**
@@ -393,5 +394,80 @@ async function listSurveys(merchantId, query) {
     return {
         ...(0, merchant_records_js_1.paginate)(sorted, query),
         truncated: surveys.truncated || responses.truncated,
+    };
+}
+/**
+ * What customers actually answered — not how many of them answered.
+ *
+ * The surveys list carries a response count, which tells a business that
+ * people replied and nothing about what they said. A survey exists to be read,
+ * so this joins each response back to its survey, its customer and its
+ * answers, and hands over rows a screen can print without knowing that an
+ * answer lives in one of three value columns.
+ *
+ * `query.status` filters by survey id rather than by a state: "which survey"
+ * is the only filter this list has any use for.
+ */
+async function listSurveyResponses(merchantId, query) {
+    const [responses, answers, questions, surveys, nomes] = await Promise.all([
+        readSubcollection(merchantId, 'survey_responses'),
+        readSubcollection(merchantId, 'survey_response_answers'),
+        readSubcollection(merchantId, 'survey_questions'),
+        readSubcollection(merchantId, 'surveys'),
+        nomesDeClientes(merchantId),
+    ]);
+    const titles = new Map();
+    for (const doc of surveys.docs) {
+        const survey = (0, merchant_records_js_1.toSurvey)(doc.id, doc.data);
+        if (survey.title != null)
+            titles.set(survey.id, survey.title);
+    }
+    const questionById = new Map();
+    for (const doc of questions.docs) {
+        const question = (0, merchant_records_js_1.toSurveyQuestion)(doc.id, doc.data);
+        questionById.set(question.id, question);
+    }
+    const answersByResponse = new Map();
+    for (const doc of answers.docs) {
+        const responseId = (0, merchant_records_js_1.asString)(doc.data, 'response_id', 'responseId') ??
+            (0, merchant_records_js_1.asString)(doc.data, 'survey_response_id', 'surveyResponseId');
+        if (responseId == null)
+            continue;
+        const questionId = (0, merchant_records_js_1.asString)(doc.data, 'question_id', 'questionId');
+        const question = questionId == null ? null : questionById.get(questionId);
+        const bucket = answersByResponse.get(responseId) ?? [];
+        bucket.push({
+            question_id: questionId,
+            question_text: question?.question_text ?? null,
+            question_type: question?.question_type ?? null,
+            sort_order: question?.sort_order ?? 0,
+            answer: (0, merchant_records_js_1.renderSurveyAnswer)(doc.data),
+        });
+        answersByResponse.set(responseId, bucket);
+    }
+    const rows = responses.docs.map((doc) => {
+        const response = comNome((0, merchant_records_js_1.toSurveyResponse)(doc.id, doc.data), nomes);
+        const own = (answersByResponse.get(response.id) ?? []).sort((a, b) => a.sort_order - b.sort_order);
+        return {
+            ...response,
+            survey_title: response.survey_id == null ? null : titles.get(response.survey_id) ?? null,
+            answers: own,
+        };
+    });
+    return {
+        ...(0, merchant_records_js_1.selectByRecency)(rows, query, {
+            time: (row) => row.submitted_at,
+            // Not a state: the only filter worth having here is which survey.
+            status: (row) => row.survey_id,
+            search: (row) => [
+                row.customer_name,
+                row.survey_title,
+                ...row.answers.map((answer) => answer.answer),
+            ],
+        }),
+        truncated: responses.truncated ||
+            answers.truncated ||
+            questions.truncated ||
+            surveys.truncated,
     };
 }

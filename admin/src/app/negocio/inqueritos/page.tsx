@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { fetchMySurveys } from '@/lib/merchant-api';
 import { Badge, formatDateTime } from '../../admin/ui';
 import { RecordScreen } from '../RecordScreen';
@@ -46,10 +48,21 @@ export default async function InqueritosPage({
         },
         {
           // The only reason to open this list: a survey nobody answered and
-          // one answered two hundred times look identical without it.
+          // one answered two hundred times look identical without it. The
+          // count is a link, because knowing that forty people replied is the
+          // moment you want to know what they said.
           header: 'Respostas',
           numeric: true,
-          cell: (row) => row.response_count.toLocaleString('pt-PT'),
+          cell: (row) =>
+            row.response_count === 0 ? (
+              <span className="muted">0</span>
+            ) : (
+              <Link
+                href={`/negocio/inqueritos/respostas?status=${encodeURIComponent(row.id)}`}
+              >
+                {row.response_count.toLocaleString('pt-PT')}
+              </Link>
+            ),
         },
         {
           header: 'Estado',

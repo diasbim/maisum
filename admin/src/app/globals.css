@@ -353,6 +353,33 @@ th.num {
   color: var(--g500);
 }
 
+/*
+ * A survey response: each question with what was answered under it.
+ *
+ * A table cell holding five answers needs the question attached to each one —
+ * a bare list of "Preço / 4 / Sim" is not readable, and one column per
+ * question does not survive surveys of different shapes.
+ */
+.answers {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+  min-width: 14rem;
+}
+
+.answers div + div {
+  border-top: 1px solid var(--g100);
+  padding-top: 0.5rem;
+}
+
+.answers dt {
+  margin: 0 0 0.1rem;
+}
+
+.answers dd {
+  margin: 0;
+}
+
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 
 .btn {

@@ -407,6 +407,26 @@ export type MerchantSurvey = {
   updated_at: number | null;
 };
 
+/** One answer, already paired with the question it answers. */
+export type MerchantSurveyAnswer = {
+  question_id: string | null;
+  question_text: string | null;
+  question_type: string | null;
+  sort_order: number;
+  answer: string | null;
+};
+
+export type MerchantSurveyResponse = {
+  id: string;
+  survey_id: string | null;
+  survey_title: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
+  channel: string | null;
+  submitted_at: number | null;
+  answers: MerchantSurveyAnswer[];
+};
+
 export type MerchantReturnBonus = {
   id: string;
   customer_id: string | null;
@@ -466,6 +486,11 @@ export function fetchMyVisitReports(params: ListQuery = {}) {
 
 export function fetchMySurveys(params: ListQuery = {}) {
   return callList<MerchantSurvey>('/merchant/surveys', params);
+}
+
+/** `status` here filters by survey id, not by a state. */
+export function fetchMySurveyResponses(params: ListQuery = {}) {
+  return callList<MerchantSurveyResponse>('/merchant/survey-responses', params);
 }
 
 export async function fetchMyUsage(): Promise<MerchantUsageBalance[]> {

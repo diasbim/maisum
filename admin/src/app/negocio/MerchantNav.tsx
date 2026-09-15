@@ -36,6 +36,7 @@ const GROUPS = [
       { href: '/negocio/tarefas', label: 'Tarefas' },
       { href: '/negocio/visitas', label: 'Relatórios de visita' },
       { href: '/negocio/inqueritos', label: 'Inquéritos' },
+      { href: '/negocio/inqueritos/respostas', label: 'Respostas' },
     ],
   },
   {
@@ -49,9 +50,26 @@ const GROUPS = [
   },
 ] as const;
 
+/** Every href in the map, longest first. */
+const HREFS = GROUPS.flatMap((group) => group.items.map((item) => item.href))
+  .slice()
+  .sort((a, b) => b.length - a.length);
+
+/**
+ * Which entry the current path belongs to.
+ *
+ * A prefix match alone lights up two entries once one item sits under another
+ * — `/negocio/inqueritos/respostas` is a prefix match for Inquéritos as well
+ * as an exact match for Respostas — and a menu that says you are in two places
+ * says nothing. The longest matching href wins, which is always the most
+ * specific one.
+ */
 function isCurrent(href: string, pathname: string): boolean {
   if (href === '/negocio') return pathname === '/negocio';
-  return pathname === href || pathname.startsWith(`${href}/`);
+  const matches = (candidate: string) =>
+    candidate !== '/negocio' &&
+    (pathname === candidate || pathname.startsWith(`${candidate}/`));
+  return HREFS.find(matches) === href;
 }
 
 /**

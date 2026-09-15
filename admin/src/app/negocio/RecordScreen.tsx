@@ -47,6 +47,12 @@ export type RecordScreenProps<T> = {
   /** Omitted entirely on screens with nothing worth searching. */
   searchable?: boolean;
   filters?: Array<{ value: string; label: string }>;
+  /**
+   * Stored states are upper-case enums, so the filter is folded to match them.
+   * A screen whose filter is an identifier rather than a state must opt out:
+   * folding a survey id would match nothing at all.
+   */
+  uppercaseStatus?: boolean;
   columns: Array<Column<T>>;
   rowKey: (row: T) => string;
   fetchPage: (query: ListQuery) => Promise<MerchantList<T>>;
@@ -155,7 +161,9 @@ async function RecordTable<T>({
 export async function RecordScreen<T>(props: RecordScreenProps<T>) {
   const params = await props.searchParams;
   const search = parseSearch(params.search);
-  const status = parseSearch(params.status).toUpperCase();
+  const rawStatus = parseSearch(params.status);
+  const status =
+    props.uppercaseStatus === false ? rawStatus : rawStatus.toUpperCase();
   const offset = parseOffset(params.offset);
   const searchable = props.searchable !== false;
 

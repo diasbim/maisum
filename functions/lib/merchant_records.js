@@ -40,6 +40,9 @@ exports.toRiskScore = toRiskScore;
 exports.toRecoveryTask = toRecoveryTask;
 exports.toVisitReport = toVisitReport;
 exports.toSurvey = toSurvey;
+exports.toSurveyResponse = toSurveyResponse;
+exports.toSurveyQuestion = toSurveyQuestion;
+exports.renderSurveyAnswer = renderSurveyAnswer;
 exports.toReturnBonus = toReturnBonus;
 exports.selectByRecency = selectByRecency;
 exports.totalSales = totalSales;
@@ -415,6 +418,47 @@ function toSurvey(id, data) {
         created_at: asEpoch(data, 'created_at'),
         updated_at: asEpoch(data, 'updated_at'),
     };
+}
+function toSurveyResponse(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        survey_id: asString(data, 'survey_id', 'surveyId'),
+        // Both filled in by the joins, not stored on the row.
+        survey_title: null,
+        customer_id: asString(data, 'customer_id', 'customerId'),
+        customer_name: null,
+        channel: asString(data, 'channel'),
+        submitted_at: asEpoch(data, 'submitted_at', 'submittedAt', 'created_at'),
+        answers: [],
+    };
+}
+function toSurveyQuestion(id, data) {
+    return {
+        id: asString(data, 'id') ?? id,
+        survey_id: asString(data, 'survey_id', 'surveyId'),
+        question_text: asString(data, 'question_text', 'questionText'),
+        question_type: asString(data, 'question_type', 'questionType'),
+        sort_order: asNumber(data, 'sort_order', 'sortOrder') ?? 0,
+    };
+}
+/**
+ * Renders a stored answer as text.
+ *
+ * Exactly one of the three value columns carries the answer, so the first
+ * non-empty one wins. A boolean is the only value that cannot speak for
+ * itself — `true` is not an answer anybody gave, "Sim" is.
+ */
+function renderSurveyAnswer(data) {
+    const text = asString(data, 'answer_text', 'answerText');
+    if (text != null && text.trim() !== '')
+        return text.trim();
+    const numeric = asNumber(data, 'answer_numeric', 'answerNumeric');
+    if (numeric != null)
+        return String(numeric);
+    const bool = asBool(data, 'answer_bool', 'answerBool');
+    if (bool != null)
+        return bool ? 'Sim' : 'Não';
+    return null;
 }
 function toReturnBonus(id, data) {
     return {

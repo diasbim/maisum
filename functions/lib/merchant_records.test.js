@@ -198,3 +198,59 @@ const staff = [
 (0, node_test_1.default)('team status filter is exact', () => {
     strict_1.default.deepEqual((0, merchant_records_1.selectStaff)(staff, { ...PAGE, status: 'INACTIVE' }).items.map((r) => r.id), ['u-3']);
 });
+/* ------------------------------------------------- survey responses */
+(0, node_test_1.default)('an answer is rendered from whichever column carries it', () => {
+    strict_1.default.equal((0, merchant_records_1.renderSurveyAnswer)({ answer_text: 'Preço' }), 'Preço');
+    strict_1.default.equal((0, merchant_records_1.renderSurveyAnswer)({ answer_numeric: 4 }), '4');
+    strict_1.default.equal((0, merchant_records_1.renderSurveyAnswer)({ answer_bool: true }), 'Sim');
+    strict_1.default.equal((0, merchant_records_1.renderSurveyAnswer)({ answer_bool: false }), 'Não');
+});
+(0, node_test_1.default)('a boolean answer is never printed as true or false', () => {
+    // "true" is not an answer anybody gave.
+    for (const value of [true, false, 1, 0]) {
+        const rendered = (0, merchant_records_1.renderSurveyAnswer)({ answer_bool: value });
+        strict_1.default.ok(rendered === 'Sim' || rendered === 'Não', `got ${rendered}`);
+    }
+});
+(0, node_test_1.default)('a rating of zero is an answer, not an absent one', () => {
+    strict_1.default.equal((0, merchant_records_1.renderSurveyAnswer)({ answer_numeric: 0 }), '0');
+});
+(0, node_test_1.default)('an empty text answer falls through rather than printing blank', () => {
+    strict_1.default.equal((0, merchant_records_1.renderSurveyAnswer)({ answer_text: '   ', answer_numeric: 3 }), '3');
+    strict_1.default.equal((0, merchant_records_1.renderSurveyAnswer)({}), null);
+});
+(0, node_test_1.default)('a response keeps its document id and leaves the joins to the caller', () => {
+    const response = (0, merchant_records_1.toSurveyResponse)('resp-1', {
+        survey_id: 'survey-1',
+        customer_id: 'cust-1',
+        channel: 'whatsapp',
+        created_at: 1788307006310,
+    });
+    strict_1.default.equal(response.id, 'resp-1');
+    strict_1.default.equal(response.survey_id, 'survey-1');
+    strict_1.default.equal(response.channel, 'whatsapp');
+    strict_1.default.equal(response.submitted_at, 1788307006310);
+    // Both are joined in the collection layer, never stored on the row.
+    strict_1.default.equal(response.customer_name, null);
+    strict_1.default.equal(response.survey_title, null);
+    strict_1.default.deepEqual(response.answers, []);
+});
+(0, node_test_1.default)('an anonymous response has no customer, which is not an error', () => {
+    const response = (0, merchant_records_1.toSurveyResponse)('resp-1', { survey_id: 'survey-1' });
+    strict_1.default.equal(response.customer_id, null);
+    strict_1.default.equal(response.customer_name, null);
+});
+(0, node_test_1.default)('a question carries the order the merchant put it in', () => {
+    const question = (0, merchant_records_1.toSurveyQuestion)('q-1', {
+        survey_id: 'survey-1',
+        question_text: 'Porque não voltou?',
+        question_type: 'MULTIPLE_CHOICE',
+        sort_order: 2,
+    });
+    strict_1.default.equal(question.question_text, 'Porque não voltou?');
+    strict_1.default.equal(question.question_type, 'MULTIPLE_CHOICE');
+    strict_1.default.equal(question.sort_order, 2);
+});
+(0, node_test_1.default)('a question with no stored order sorts first rather than crashing', () => {
+    strict_1.default.equal((0, merchant_records_1.toSurveyQuestion)('q-1', {}).sort_order, 0);
+});

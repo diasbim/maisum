@@ -18,7 +18,10 @@ import {
   toCatalogItem,
   toCustomer,
   toReward,
+  renderSurveyAnswer,
   toStaff,
+  toSurveyQuestion,
+  toSurveyResponse,
   type CatalogItemRecord,
   type CustomerRecord,
   type RewardRecord,
@@ -285,4 +288,71 @@ test('team status filter is exact', () => {
     selectStaff(staff, { ...PAGE, status: 'INACTIVE' }).items.map((r) => r.id),
     ['u-3'],
   );
+});
+
+/* ------------------------------------------------- survey responses */
+
+test('an answer is rendered from whichever column carries it', () => {
+  assert.equal(renderSurveyAnswer({ answer_text: 'Preço' }), 'Preço');
+  assert.equal(renderSurveyAnswer({ answer_numeric: 4 }), '4');
+  assert.equal(renderSurveyAnswer({ answer_bool: true }), 'Sim');
+  assert.equal(renderSurveyAnswer({ answer_bool: false }), 'Não');
+});
+
+test('a boolean answer is never printed as true or false', () => {
+  // "true" is not an answer anybody gave.
+  for (const value of [true, false, 1, 0]) {
+    const rendered = renderSurveyAnswer({ answer_bool: value });
+    assert.ok(rendered === 'Sim' || rendered === 'Não', `got ${rendered}`);
+  }
+});
+
+test('a rating of zero is an answer, not an absent one', () => {
+  assert.equal(renderSurveyAnswer({ answer_numeric: 0 }), '0');
+});
+
+test('an empty text answer falls through rather than printing blank', () => {
+  assert.equal(renderSurveyAnswer({ answer_text: '   ', answer_numeric: 3 }), '3');
+  assert.equal(renderSurveyAnswer({}), null);
+});
+
+test('a response keeps its document id and leaves the joins to the caller', () => {
+  const response = toSurveyResponse('resp-1', {
+    survey_id: 'survey-1',
+    customer_id: 'cust-1',
+    channel: 'whatsapp',
+    created_at: 1788307006310,
+  });
+
+  assert.equal(response.id, 'resp-1');
+  assert.equal(response.survey_id, 'survey-1');
+  assert.equal(response.channel, 'whatsapp');
+  assert.equal(response.submitted_at, 1788307006310);
+  // Both are joined in the collection layer, never stored on the row.
+  assert.equal(response.customer_name, null);
+  assert.equal(response.survey_title, null);
+  assert.deepEqual(response.answers, []);
+});
+
+test('an anonymous response has no customer, which is not an error', () => {
+  const response = toSurveyResponse('resp-1', { survey_id: 'survey-1' });
+  assert.equal(response.customer_id, null);
+  assert.equal(response.customer_name, null);
+});
+
+test('a question carries the order the merchant put it in', () => {
+  const question = toSurveyQuestion('q-1', {
+    survey_id: 'survey-1',
+    question_text: 'Porque não voltou?',
+    question_type: 'MULTIPLE_CHOICE',
+    sort_order: 2,
+  });
+
+  assert.equal(question.question_text, 'Porque não voltou?');
+  assert.equal(question.question_type, 'MULTIPLE_CHOICE');
+  assert.equal(question.sort_order, 2);
+});
+
+test('a question with no stored order sorts first rather than crashing', () => {
+  assert.equal(toSurveyQuestion('q-1', {}).sort_order, 0);
 });
