@@ -1255,12 +1255,12 @@ class _PointsPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.star_rounded, size: 14, color: AppColors.green),
+          const Icon(Icons.star_rounded, size: 14, color: AppColors.greenDark),
           const SizedBox(width: 4),
           Text(
             '$points ${AppStrings.pontosAbrev}',
             style: const TextStyle(
-              color: AppColors.green,
+              color: AppColors.greenDark,
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -1332,7 +1332,7 @@ class _SummaryCard extends StatelessWidget {
                       '$points ${AppStrings.pontosAbrev}',
                       style:
                           Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                color: AppColors.green,
+                                color: AppColors.greenDark,
                                 fontWeight: FontWeight.w800,
                               ),
                     ),
@@ -1351,7 +1351,7 @@ class _SummaryCard extends StatelessWidget {
                 child: Text(
                   '$pointsPerBaseLabel ${AppStrings.por} $pointsBaseMzn ${AppStrings.moedaMzn}',
                   style: const TextStyle(
-                    color: AppColors.green,
+                    color: AppColors.greenDark,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -1400,7 +1400,7 @@ class _SaleCompletionHint extends StatelessWidget {
         children: [
           const Icon(
             Icons.celebration_rounded,
-            color: AppColors.success,
+            color: AppColors.greenDark,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1417,7 +1417,7 @@ class _SaleCompletionHint extends StatelessWidget {
                 Text(
                   '+$points ${AppStrings.pontosAtribuidos}',
                   style: const TextStyle(
-                    color: AppColors.success,
+                    color: AppColors.greenDark,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),

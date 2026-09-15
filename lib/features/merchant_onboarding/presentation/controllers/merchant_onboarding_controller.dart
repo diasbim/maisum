@@ -76,13 +76,13 @@ class MerchantOnboardingState {
           return 'O nome deve ter pelo menos 3 caracteres.';
         }
         if ((draft.city ?? '').trim().isEmpty) {
-          return 'Informe a cidade.';
+          return 'Indique a cidade.';
         }
         if ((draft.district ?? '').trim().isEmpty) {
-          return 'Informe o bairro ou distrito.';
+          return 'Indique o bairro ou distrito.';
         }
         if ((draft.phone ?? '').trim().isEmpty) {
-          return 'Telemóvel verificado obrigatório.';
+          return 'Falta o telemóvel verificado. Volte atrás e confirme o número.';
         }
         return null;
       case MerchantOnboardingStep.location:

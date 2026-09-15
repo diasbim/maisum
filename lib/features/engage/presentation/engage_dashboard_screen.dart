@@ -9,6 +9,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../design_system/components/maisum_app_bar.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
+import '../domain/engage_labels.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -159,9 +160,9 @@ class EngageDashboardScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.md),
                   _ActionCard(
-                    title: 'Submeter resposta ao questionário',
+                    title: 'Registar resposta',
                     subtitle: access.canManageSurveys
-                        ? 'Envio manual para o fluxo de recuperação e acompanhamento.'
+                        ? 'Anote o que o cliente respondeu, por qualquer via.'
                         : 'Disponível apenas no plano Business.',
                     icon: Icons.send_outlined,
                     enabled: access.canManageSurveys,
@@ -169,7 +170,7 @@ class EngageDashboardScreen extends ConsumerWidget {
                         ? context.push('/engage/surveys/respond')
                         : context.push(featureUpsellLocation(
                             featureKey: FeatureKeys.engageManageSurveys,
-                            featureName: 'Submeter resposta ao questionário',
+                            featureName: 'Registar resposta',
                             reason: 'plan_restricted',
                           )),
                   ),
@@ -226,7 +227,8 @@ class EngageDashboardScreen extends ConsumerWidget {
                     const EmptyState(
                       title: 'Sem clientes em risco agora',
                       subtitle:
-                          'Quando houver risco amarelo/laranja/vermelho eles aparecem aqui.',
+                          'Quando alguém começar a demorar a voltar, aparece '
+                          'aqui por ordem de urgência.',
                     )
                   else
                     ...overview.queue.take(8).map(
@@ -303,7 +305,7 @@ Future<void> _createRecoveryTask(
                       ),
                       title: Text(item.customerName),
                       subtitle: Text(
-                        'Risco ${item.riskLevel.toUpperCase()} • Prioridade ${_taskPriorityLabel(item.recommendedPriority)}',
+                        'Risco ${EngageLabels.riskLevel(item.riskLevel)} • Prioridade ${EngageLabels.taskPriority(item.recommendedPriority)}',
                       ),
                       onTap: () => setDialogState(() => choice = item),
                     ),
@@ -334,7 +336,7 @@ Future<void> _createRecoveryTask(
     builder: (dialogContext) => AlertDialog(
       title: const Text('Confirmar nova tarefa'),
       content: Text(
-        'Criar uma tarefa de prioridade ${_taskPriorityLabel(selected.recommendedPriority)} para ${selected.customerName}?',
+        'Criar uma tarefa de prioridade ${EngageLabels.taskPriority(selected.recommendedPriority)} para ${selected.customerName}?',
       ),
       actions: [
         TextButton(
@@ -389,12 +391,6 @@ Future<void> _createRecoveryTask(
   }
 }
 
-String _taskPriorityLabel(String priority) => switch (priority) {
-      RecoveryTaskPriority.high => 'alta',
-      RecoveryTaskPriority.low => 'baixa',
-      _ => 'média',
-    };
-
 class _PendingTaskTile extends StatelessWidget {
   const _PendingTaskTile({
     required this.item,
@@ -414,7 +410,7 @@ class _PendingTaskTile extends StatelessWidget {
         onTap: enabled ? onTap : null,
         title: Text(item.customerName),
         subtitle: Text(
-          'Prioridade ${_taskPriorityLabel(item.task.priority)} • Pendente',
+          'Prioridade ${EngageLabels.taskPriority(item.task.priority)} • ${EngageLabels.taskStatus(item.task.status)}',
         ),
         trailing: Icon(
           enabled ? Icons.chevron_right : Icons.lock_outline,
@@ -440,7 +436,7 @@ class _RecoveryQueueTile extends StatelessWidget {
       child: ListTile(
         title: Text(item.customerName),
         subtitle: Text(
-          'Risco ${item.riskLevel.toUpperCase()} • ${item.daysSinceVisit} dias • ${_formatMoney(item.totalSpent)}',
+          'Risco ${EngageLabels.riskLevel(item.riskLevel)} • ${item.daysSinceVisit} dias sem voltar • ${_formatMoney(item.totalSpent)}',
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -472,10 +468,12 @@ class _ReadOnlyBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final background = isSuccess
-        ? AppColors.secondary.withValues(alpha: 0.15)
-        : Colors.orange.withValues(alpha: 0.14);
-    final iconColor = isSuccess ? AppColors.secondary : Colors.orange.shade800;
+    // Tokens, not raw Material colours: the amber pair is the one checked for
+    // contrast against this text, and it stays in step with the rest of the app.
+    final background =
+        isSuccess ? AppColors.greenLight : AppColors.amberLight;
+    final iconColor =
+        isSuccess ? AppColors.greenDark : AppColors.secondaryForeground;
 
     return Container(
       decoration: BoxDecoration(
@@ -486,10 +484,18 @@ class _ReadOnlyBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.verified_user_outlined, color: iconColor),
+          Icon(
+            isSuccess ? Icons.verified_user_outlined : Icons.visibility_outlined,
+            color: iconColor,
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text(text, style: Theme.of(context).textTheme.bodyMedium),
+            child: Text(
+              text,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.onSurface,
+                  ),
+            ),
           ),
         ],
       ),

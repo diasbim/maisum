@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:maisum/core/database/app_database.dart';
+import 'package:maisum/features/customers/domain/customer.dart';
+import 'package:maisum/features/customers/presentation/customers_controller.dart';
 import 'package:maisum/features/engage/data/engage_dao.dart';
 import 'package:maisum/features/engage/data/engage_repository.dart';
 import 'package:maisum/features/engage/domain/engage_models.dart';
@@ -43,6 +45,31 @@ class _SaveRepositoryStub extends EngageRepository {
   }
 
   @override
+  Future<EngageDashboardData> loadDashboard({
+    bool refreshRiskScores = true,
+  }) async =>
+      const EngageDashboardData(
+        customersActive: 0,
+        customersAtRisk: 0,
+        criticalCustomers: 0,
+        revenueAtRisk: 0,
+        recoveredCustomers: 0,
+      );
+
+  @override
+  Future<List<RecoveryQueueItem>> getRecoveryQueue({
+    int limit = 20,
+    bool refreshRiskScores = false,
+  }) async =>
+      const [];
+
+  @override
+  Future<List<RecoveryTaskQueueItem>> getOpenRecoveryTasks({
+    int limit = 50,
+  }) async =>
+      const [];
+
+  @override
   Future<EngageSaveResult<String>> submitSurveyResponseWithResult(
     SurveySubmissionInput submission,
   ) =>
@@ -69,9 +96,25 @@ Widget _wrap(
       engageRepositoryProvider.overrideWithValue(repository),
       if (surveys != null)
         engageSurveysProvider.overrideWith(() => _SurveyController(surveys)),
+      customerSearchProvider.overrideWith((ref, query) async => [_customer]),
     ],
     child: MaterialApp(home: child),
   );
+}
+
+final _customer = Customer(
+  id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+  name: 'Amélia Cossa',
+  phone: '840000001',
+  createdAt: DateTime(2026, 1, 1),
+);
+
+/// Walks the picker the way a merchant does: open it, tap a name.
+Future<void> _pickCustomer(WidgetTester tester) async {
+  await tester.tap(find.text('Escolher o cliente visitado'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(_customer.name));
+  await tester.pumpAndSettle();
 }
 
 EngageSurvey _survey() {
@@ -110,8 +153,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).at(0), 'customer-1');
-    await tester.enterText(find.byType(TextField).at(2), 'Notas da visita');
+    await _pickCustomer(tester);
+    await tester.enterText(find.byType(TextField).first, 'Notas da visita');
     await tester.tap(find.text('Guardar relatório'));
     await tester.pump();
 
@@ -123,7 +166,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(SnackBarAction), findsOneWidget);
-    expect(find.text('customer-1'), findsOneWidget);
+    expect(find.text(_customer.name), findsOneWidget);
     expect(find.text('Notas da visita'), findsOneWidget);
   });
 
@@ -138,7 +181,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).at(0), 'customer-1');
+    await _pickCustomer(tester);
     await tester.tap(find.text('Guardar relatório'));
     await tester.pump();
     await tester.tap(find.text('A gravar...'));

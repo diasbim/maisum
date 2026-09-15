@@ -963,7 +963,7 @@ void main() {
       );
       await _tapVisibleText(tester, 'Continuar');
 
-      expect(find.text('Informe o bairro ou distrito.'), findsOneWidget);
+      expect(find.text('Indique o bairro ou distrito.'), findsOneWidget);
       expect(find.text('Dados do negócio'), findsOneWidget);
     });
 
