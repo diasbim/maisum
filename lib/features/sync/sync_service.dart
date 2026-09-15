@@ -2169,6 +2169,24 @@ class SyncService {
       'loyalty_policy_version',
       'loyaltyPolicyVersion',
     );
+    _copyIfAbsent(normalized, 'gross_amount', 'grossAmount');
+    _copyIfAbsent(
+      normalized,
+      'referral_benefit_type',
+      'referralBenefitType',
+    );
+    _copyIfAbsent(
+      normalized,
+      'referral_benefit_value',
+      'referralBenefitValue',
+    );
+    _copyIfAbsent(
+      normalized,
+      'referral_benefit_amount',
+      'referralBenefitAmount',
+    );
+    _copyIfAbsent(normalized, 'affiliate_code_id', 'affiliateCodeId');
+    _copyIfAbsent(normalized, 'referral_status', 'referralStatus');
     _copyIfAbsent(
       normalized,
       'created_by_app_user_id',
@@ -2367,6 +2385,12 @@ class SyncService {
     'confirmed_at',
     'confirmation_error_code',
     'loyalty_policy_version',
+    'gross_amount',
+    'referral_benefit_type',
+    'referral_benefit_value',
+    'referral_benefit_amount',
+    'affiliate_code_id',
+    'referral_status',
     'synced',
     'device_id',
     'created_by_app_user_id',
@@ -2385,6 +2409,12 @@ class SyncService {
     'confirmed_at',
     'confirmation_error_code',
     'loyalty_policy_version',
+    'gross_amount',
+    'referral_benefit_type',
+    'referral_benefit_value',
+    'referral_benefit_amount',
+    'affiliate_code_id',
+    'referral_status',
   };
 
   static const Set<String> _saleCancellationFields = <String>{

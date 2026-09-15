@@ -703,6 +703,12 @@ void main() {
           'confirmed_points': 2,
           'confirmed_at': 2000,
           'loyalty_policy_version': 1,
+          'grossAmount': 250,
+          'referralBenefitType': 'FIXED_AMOUNT',
+          'referralBenefitValue': 50,
+          'referralBenefitAmount': 50,
+          'affiliateCodeId': 'affiliate-code-1',
+          'referralStatus': 'ATTRIBUTED',
         },
       ],
       'loyalty_ledger': <Map<String, dynamic>>[
@@ -739,6 +745,12 @@ void main() {
     expect(sale['points'], 2);
     expect(sale['confirmation_status'], 'CONFIRMED');
     expect(sale['confirmed_points'], 2);
+    expect(sale['gross_amount'], 250);
+    expect(sale['referral_benefit_type'], 'FIXED_AMOUNT');
+    expect(sale['referral_benefit_value'], 50);
+    expect(sale['referral_benefit_amount'], 50);
+    expect(sale['affiliate_code_id'], 'affiliate-code-1');
+    expect(sale['referral_status'], 'ATTRIBUTED');
     expect(
       await db.query(
         'loyalty_ledger',

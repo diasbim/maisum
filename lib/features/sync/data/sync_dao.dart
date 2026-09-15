@@ -27,9 +27,12 @@ class SyncDao {
     final db = await _db.database;
     await db.insert('sync_queue', {
       ...item.toDbMap(),
+      'local_id': item.entityId,
+      'idempotency_key': item.id,
       'merchant_id': merchantId,
       'device_id': deviceId,
       'last_error': null,
+      'last_sync_error': null,
     });
   }
 
@@ -53,7 +56,12 @@ class SyncDao {
     final db = await _db.database;
     await db.update(
       'sync_queue',
-      {'status': 'synced', 'next_attempt_at': 0, 'last_error': null},
+      {
+        'status': 'synced',
+        'next_attempt_at': 0,
+        'last_error': null,
+        'last_sync_error': null,
+      },
       where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
       whereArgs: merchantId == null ? [id] : [merchantId, id],
     );
@@ -67,6 +75,7 @@ class SyncDao {
         'status': 'failed',
         'next_attempt_at': 0,
         'last_error': lastError,
+        'last_sync_error': lastError,
       },
       where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
       whereArgs: merchantId == null ? [id] : [merchantId, id],
@@ -77,9 +86,11 @@ class SyncDao {
     final db = await _db.database;
     await db.rawUpdate(
       merchantId == null
-          ? 'UPDATE sync_queue SET retry_count = retry_count + 1, last_error = ? WHERE id = ?'
-          : 'UPDATE sync_queue SET retry_count = retry_count + 1, last_error = ? WHERE merchant_id = ? AND id = ?',
-      merchantId == null ? [lastError, id] : [lastError, merchantId, id],
+          ? 'UPDATE sync_queue SET retry_count = retry_count + 1, last_error = ?, last_sync_error = ? WHERE id = ?'
+          : 'UPDATE sync_queue SET retry_count = retry_count + 1, last_error = ?, last_sync_error = ? WHERE merchant_id = ? AND id = ?',
+      merchantId == null
+          ? [lastError, lastError, id]
+          : [lastError, lastError, merchantId, id],
     );
   }
 
@@ -94,6 +105,7 @@ class SyncDao {
       {
         'next_attempt_at': nextAttempt.millisecondsSinceEpoch,
         'last_error': lastError,
+        'last_sync_error': lastError,
       },
       where: merchantId == null ? 'id = ?' : 'merchant_id = ? AND id = ?',
       whereArgs: merchantId == null ? [id] : [merchantId, id],
@@ -224,6 +236,7 @@ class SyncDao {
         'retry_count': 0,
         'next_attempt_at': nowMs,
         'last_error': null,
+        'last_sync_error': null,
       },
       where: where,
       whereArgs: whereArgs,
