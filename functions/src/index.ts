@@ -103,6 +103,10 @@ import {
 import { resolveAuthenticatedRequestScope } from './customer_request_auth.js';
 import { registerAffiliateRoutes } from './affiliate_routes.js';
 import {
+  recordReferredCustomerReturnInFirestore,
+  reverseReferralSaleInFirestore,
+} from './affiliate_sale_firestore.js';
+import {
   createSurveyLinkToken,
   SURVEY_LINK_TTL_MS,
   verifySurveyLinkToken,
@@ -4166,6 +4170,36 @@ export const loyaltyLedgerSaleOnSaleWrite = onDocumentWritten(
           error: retentionError,
         });
       }
+
+      // A referred customer coming back is recorded on the same hook, so an
+      // ordinary sale synced from the till counts as a return — the second
+      // visit almost never carries a code. Deterministic ids make a retrigger
+      // record one return and owe one reward; a failure here must never fail
+      // the sale, so it is logged like the retention hook above.
+      try {
+        const customerId = maybePayloadString(afterData, 'customer_id', 'customerId');
+        const amount = pickNumber(afterData, 'amount');
+        const cancellation = (maybePayloadString(
+          afterData,
+          'cancellation_status',
+          'cancellationStatus',
+        ) ?? '').toUpperCase();
+        if (customerId && amount != null && amount > 0 && cancellation !== 'CANCELLED') {
+          await recordReferredCustomerReturnInFirestore({
+            merchantId,
+            saleId,
+            customerId,
+            amount,
+            occurredAt: pickNumber(afterData, 'created_at') ?? Date.now(),
+          });
+        }
+      } catch (referralError) {
+        console.error('affiliate_customer_return_failed', {
+          merchantId,
+          saleId,
+          error: referralError,
+        });
+      }
     } catch (error) {
       if (error instanceof CustomerCoreError) {
         if (error.code.startsWith('retention_')) {
@@ -8061,14 +8095,18 @@ function loyaltyLedgerEntryFromData(
       ? 'SALE_REVERSAL'
       : entryTypeRaw === 'REDEMPTION'
         ? 'REDEMPTION'
-        : 'SALE';
+        : entryTypeRaw === 'REFERRAL_BONUS'
+          ? 'REFERRAL_BONUS'
+          : 'SALE';
   const sourceTypeRaw = maybePayloadString(data, 'source_type')?.trim().toLowerCase();
   const sourceType: SharedLoyaltyLedgerSourceType =
     sourceTypeRaw === 'sale_cancellation'
       ? 'sale_cancellation'
       : sourceTypeRaw === 'redemption'
         ? 'redemption'
-        : 'sale';
+        : sourceTypeRaw === 'referral'
+          ? 'referral'
+          : 'sale';
   return {
     id: maybePayloadString(data, 'id') ?? '',
     merchant_id: maybePayloadString(data, 'merchant_id') ?? '',
@@ -12926,6 +12964,24 @@ async function cancelSaleViaSync(
     });
   }
 
+  // A cancelled referred sale takes its acquisition and any unpaid reward with
+  // it. This runs after the cancellation has committed and is idempotent by
+  // status — a replay of the same cancel moves nothing a second time — so a
+  // failure here is logged and reported rather than failing a cancellation the
+  // till has already been told about. `usage_count` is never given back.
+  let affiliateReversal: Record<string, unknown> = { status: 'not_referred' };
+  try {
+    affiliateReversal = await reverseReferralSaleInFirestore({
+      merchantId,
+      saleId,
+      cancelledAt: cancellationRequest.cancelledAt,
+      actorId: actorAppUserId,
+    }) as unknown as Record<string, unknown>;
+  } catch (error) {
+    console.error('affiliate_sale_reversal_failed', { merchantId, saleId, error });
+    affiliateReversal = { status: 'FAILED' };
+  }
+
   return {
     merchant_id: merchantId,
     sale_id: saleId,
@@ -12945,6 +13001,7 @@ async function cancelSaleViaSync(
     already_cancelled: loyaltyResult.status === 'ALREADY_CANCELLED',
     replacement_sale_link_persisted:
       loyaltyResult.replacement_sale_link_persisted === true,
+    affiliate_reversal: affiliateReversal,
     loyalty: loyaltyResult,
   };
 }

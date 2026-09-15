@@ -13,6 +13,7 @@ exports.parseValidityPair = parseValidityPair;
 exports.parseCodeText = parseCodeText;
 exports.parseOptionalSaleAmount = parseOptionalSaleAmount;
 exports.parseIdParam = parseIdParam;
+exports.parseReferralSaleCommit = parseReferralSaleCommit;
 exports.parseBodyObject = parseBodyObject;
 exports.parseAffiliateStatus = parseAffiliateStatus;
 exports.canTransitionReward = canTransitionReward;
@@ -75,6 +76,13 @@ exports.AFFILIATE_API_MESSAGE = {
     forbidden_role: 'Só o responsável do negócio pode fazer esta alteração.',
     rate_limited: 'Demasiadas tentativas. Tente daqui a pouco.',
     identity_unavailable: 'Não foi possível criar a identidade do afiliado.',
+    invalid_sale_amount: 'Indique o valor da venda.',
+    invalid_sale_reference: 'Referência da venda inválida.',
+    invalid_sale_items: 'Os artigos da venda são inválidos.',
+    invalid_customer: 'Indique o cliente da venda.',
+    customer_not_found: 'Cliente não encontrado neste negócio.',
+    referral_rejected: 'Não foi possível aplicar este código a esta venda.',
+    sale_conflict: 'Esta venda já foi registada com dados diferentes.',
 };
 function affiliateApiError(status, code) {
     return new AffiliateApiError({
@@ -263,6 +271,97 @@ function parseIdParam(raw, code) {
     if (trimmed === '' || trimmed.length > 200)
         throw affiliateApiError(404, code);
     return trimmed;
+}
+const MAX_SALE_AMOUNT = 10000000;
+const MAX_SALE_ITEMS = 100;
+function parseReference(raw) {
+    if (typeof raw !== 'string')
+        throw affiliateApiError(400, 'invalid_sale_reference');
+    const trimmed = raw.trim();
+    if (trimmed === '' || trimmed.length > 120) {
+        throw affiliateApiError(400, 'invalid_sale_reference');
+    }
+    return trimmed;
+}
+function parseGrossAmount(raw) {
+    if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
+        throw affiliateApiError(400, 'invalid_sale_amount');
+    }
+    if (raw > MAX_SALE_AMOUNT)
+        throw affiliateApiError(400, 'invalid_sale_amount');
+    // Money has two decimal places. Anything finer is a rounding argument with
+    // the client that the server would lose silently.
+    if (Math.round(raw * 100) !== Number((raw * 100).toFixed(6))) {
+        throw affiliateApiError(400, 'invalid_sale_amount');
+    }
+    return raw;
+}
+function parseSaleItems(raw) {
+    if (raw === undefined || raw === null)
+        return [];
+    if (!Array.isArray(raw) || raw.length > MAX_SALE_ITEMS) {
+        throw affiliateApiError(400, 'invalid_sale_items');
+    }
+    return raw.map((entry) => {
+        if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+            throw affiliateApiError(400, 'invalid_sale_items');
+        }
+        const item = entry;
+        const text = (value, max) => {
+            if (typeof value !== 'string')
+                throw affiliateApiError(400, 'invalid_sale_items');
+            const trimmed = value.trim();
+            if (trimmed === '' || trimmed.length > max) {
+                throw affiliateApiError(400, 'invalid_sale_items');
+            }
+            return trimmed;
+        };
+        const money = (value) => {
+            if (value === undefined || value === null)
+                return null;
+            if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+                throw affiliateApiError(400, 'invalid_sale_items');
+            }
+            return value;
+        };
+        const quantity = item.quantity;
+        if (typeof quantity !== 'number' ||
+            !Number.isInteger(quantity) ||
+            quantity < 1 ||
+            quantity > 999) {
+            throw affiliateApiError(400, 'invalid_sale_items');
+        }
+        // The item's own id becomes a document id. A slash in it would write to a
+        // path the caller chose rather than the one this endpoint owns.
+        const id = text(item.id, 120);
+        if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+            throw affiliateApiError(400, 'invalid_sale_items');
+        }
+        return {
+            id,
+            merchantItemId: text(item.merchant_item_id, 120),
+            nameSnapshot: text(item.name_snapshot, 200),
+            typeSnapshot: text(item.type_snapshot, 40),
+            quantity,
+            unitPrice: money(item.unit_price),
+            subtotal: money(item.subtotal),
+        };
+    });
+}
+function parseReferralSaleCommit(payload, normalize) {
+    const customerId = payload.customer_id;
+    if (typeof customerId !== 'string' || customerId.trim() === '' || customerId.length > 200) {
+        throw affiliateApiError(400, 'invalid_customer');
+    }
+    return {
+        deviceId: parseReference(payload.device_id),
+        localSaleId: parseReference(payload.local_sale_id),
+        customerId: customerId.trim(),
+        customerPhoneE164: parsePhone(payload.customer_phone, normalize),
+        grossAmount: parseGrossAmount(payload.gross_amount),
+        rawCode: parseCodeText(payload.code),
+        items: parseSaleItems(payload.items),
+    };
 }
 function parseBodyObject(raw) {
     if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {

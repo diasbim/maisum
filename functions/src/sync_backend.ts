@@ -56,9 +56,25 @@ export type CustomerDeleteDependencyCheck = {
   sql: string;
 };
 
-export type SharedLoyaltyLedgerEntryType = 'SALE' | 'SALE_REVERSAL' | 'REDEMPTION';
+export type SharedLoyaltyLedgerEntryType =
+  | 'SALE'
+  | 'SALE_REVERSAL'
+  | 'REDEMPTION'
+  /**
+   * The extra points a referral code's POINTS benefit gives the customer.
+   *
+   * A separate entry rather than a larger `SALE` one: the sale earned what the
+   * sale earned, and folding a promotion into it would make the receipt and
+   * the ledger disagree. It is not a visit either, which is why the projection
+   * counts visits from `SALE` entries only.
+   */
+  | 'REFERRAL_BONUS';
 
-export type SharedLoyaltyLedgerSourceType = 'sale' | 'sale_cancellation' | 'redemption';
+export type SharedLoyaltyLedgerSourceType =
+  | 'sale'
+  | 'sale_cancellation'
+  | 'redemption'
+  | 'referral';
 
 export type SharedLoyaltyLedgerEntryRecord = {
   id: string;

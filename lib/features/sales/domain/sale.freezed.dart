@@ -38,6 +38,26 @@ mixin _$Sale {
   String? get cancelledByAppUserId => throw _privateConstructorUsedError;
   String? get cancellationReason => throw _privateConstructorUsedError;
   String? get replacementSaleId => throw _privateConstructorUsedError;
+
+  /// What the sale was before a referral discount, and what the code did.
+  ///
+  /// All nullable and all absent on an ordinary sale, which is the point: a
+  /// sale with no code reads and writes exactly as it did before these
+  /// existed, in JSON and in SQLite alike. Every one of them is written by
+  /// the server — `firestore.rules` refuses a client that tries — so they
+  /// arrive by projection and are never sent back up.
+  @JsonKey(
+      fromJson: _referralBenefitTypeFromJson,
+      toJson: _referralBenefitTypeToJson)
+  ReferralBenefitType? get referralBenefitType =>
+      throw _privateConstructorUsedError;
+  double? get grossAmount => throw _privateConstructorUsedError;
+  double? get referralBenefitValue => throw _privateConstructorUsedError;
+  double? get referralBenefitAmount => throw _privateConstructorUsedError;
+  String? get affiliateCodeId => throw _privateConstructorUsedError;
+  @JsonKey(
+      fromJson: _referralSaleStatusFromJson, toJson: _referralSaleStatusToJson)
+  ReferralSaleStatus? get referralStatus => throw _privateConstructorUsedError;
   List<SaleItem> get items => throw _privateConstructorUsedError;
   bool get synced => throw _privateConstructorUsedError;
 
@@ -72,6 +92,18 @@ abstract class $SaleCopyWith<$Res> {
       String? cancelledByAppUserId,
       String? cancellationReason,
       String? replacementSaleId,
+      @JsonKey(
+          fromJson: _referralBenefitTypeFromJson,
+          toJson: _referralBenefitTypeToJson)
+      ReferralBenefitType? referralBenefitType,
+      double? grossAmount,
+      double? referralBenefitValue,
+      double? referralBenefitAmount,
+      String? affiliateCodeId,
+      @JsonKey(
+          fromJson: _referralSaleStatusFromJson,
+          toJson: _referralSaleStatusToJson)
+      ReferralSaleStatus? referralStatus,
       List<SaleItem> items,
       bool synced});
 }
@@ -107,6 +139,12 @@ class _$SaleCopyWithImpl<$Res, $Val extends Sale>
     Object? cancelledByAppUserId = freezed,
     Object? cancellationReason = freezed,
     Object? replacementSaleId = freezed,
+    Object? referralBenefitType = freezed,
+    Object? grossAmount = freezed,
+    Object? referralBenefitValue = freezed,
+    Object? referralBenefitAmount = freezed,
+    Object? affiliateCodeId = freezed,
+    Object? referralStatus = freezed,
     Object? items = null,
     Object? synced = null,
   }) {
@@ -175,6 +213,30 @@ class _$SaleCopyWithImpl<$Res, $Val extends Sale>
           ? _value.replacementSaleId
           : replacementSaleId // ignore: cast_nullable_to_non_nullable
               as String?,
+      referralBenefitType: freezed == referralBenefitType
+          ? _value.referralBenefitType
+          : referralBenefitType // ignore: cast_nullable_to_non_nullable
+              as ReferralBenefitType?,
+      grossAmount: freezed == grossAmount
+          ? _value.grossAmount
+          : grossAmount // ignore: cast_nullable_to_non_nullable
+              as double?,
+      referralBenefitValue: freezed == referralBenefitValue
+          ? _value.referralBenefitValue
+          : referralBenefitValue // ignore: cast_nullable_to_non_nullable
+              as double?,
+      referralBenefitAmount: freezed == referralBenefitAmount
+          ? _value.referralBenefitAmount
+          : referralBenefitAmount // ignore: cast_nullable_to_non_nullable
+              as double?,
+      affiliateCodeId: freezed == affiliateCodeId
+          ? _value.affiliateCodeId
+          : affiliateCodeId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      referralStatus: freezed == referralStatus
+          ? _value.referralStatus
+          : referralStatus // ignore: cast_nullable_to_non_nullable
+              as ReferralSaleStatus?,
       items: null == items
           ? _value.items
           : items // ignore: cast_nullable_to_non_nullable
@@ -211,6 +273,18 @@ abstract class _$$SaleImplCopyWith<$Res> implements $SaleCopyWith<$Res> {
       String? cancelledByAppUserId,
       String? cancellationReason,
       String? replacementSaleId,
+      @JsonKey(
+          fromJson: _referralBenefitTypeFromJson,
+          toJson: _referralBenefitTypeToJson)
+      ReferralBenefitType? referralBenefitType,
+      double? grossAmount,
+      double? referralBenefitValue,
+      double? referralBenefitAmount,
+      String? affiliateCodeId,
+      @JsonKey(
+          fromJson: _referralSaleStatusFromJson,
+          toJson: _referralSaleStatusToJson)
+      ReferralSaleStatus? referralStatus,
       List<SaleItem> items,
       bool synced});
 }
@@ -243,6 +317,12 @@ class __$$SaleImplCopyWithImpl<$Res>
     Object? cancelledByAppUserId = freezed,
     Object? cancellationReason = freezed,
     Object? replacementSaleId = freezed,
+    Object? referralBenefitType = freezed,
+    Object? grossAmount = freezed,
+    Object? referralBenefitValue = freezed,
+    Object? referralBenefitAmount = freezed,
+    Object? affiliateCodeId = freezed,
+    Object? referralStatus = freezed,
     Object? items = null,
     Object? synced = null,
   }) {
@@ -311,6 +391,30 @@ class __$$SaleImplCopyWithImpl<$Res>
           ? _value.replacementSaleId
           : replacementSaleId // ignore: cast_nullable_to_non_nullable
               as String?,
+      referralBenefitType: freezed == referralBenefitType
+          ? _value.referralBenefitType
+          : referralBenefitType // ignore: cast_nullable_to_non_nullable
+              as ReferralBenefitType?,
+      grossAmount: freezed == grossAmount
+          ? _value.grossAmount
+          : grossAmount // ignore: cast_nullable_to_non_nullable
+              as double?,
+      referralBenefitValue: freezed == referralBenefitValue
+          ? _value.referralBenefitValue
+          : referralBenefitValue // ignore: cast_nullable_to_non_nullable
+              as double?,
+      referralBenefitAmount: freezed == referralBenefitAmount
+          ? _value.referralBenefitAmount
+          : referralBenefitAmount // ignore: cast_nullable_to_non_nullable
+              as double?,
+      affiliateCodeId: freezed == affiliateCodeId
+          ? _value.affiliateCodeId
+          : affiliateCodeId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      referralStatus: freezed == referralStatus
+          ? _value.referralStatus
+          : referralStatus // ignore: cast_nullable_to_non_nullable
+              as ReferralSaleStatus?,
       items: null == items
           ? _value._items
           : items // ignore: cast_nullable_to_non_nullable
@@ -343,6 +447,18 @@ class _$SaleImpl extends _Sale {
       this.cancelledByAppUserId,
       this.cancellationReason,
       this.replacementSaleId,
+      @JsonKey(
+          fromJson: _referralBenefitTypeFromJson,
+          toJson: _referralBenefitTypeToJson)
+      this.referralBenefitType,
+      this.grossAmount,
+      this.referralBenefitValue,
+      this.referralBenefitAmount,
+      this.affiliateCodeId,
+      @JsonKey(
+          fromJson: _referralSaleStatusFromJson,
+          toJson: _referralSaleStatusToJson)
+      this.referralStatus,
       final List<SaleItem> items = const <SaleItem>[],
       this.synced = false})
       : _items = items,
@@ -385,6 +501,31 @@ class _$SaleImpl extends _Sale {
   final String? cancellationReason;
   @override
   final String? replacementSaleId;
+
+  /// What the sale was before a referral discount, and what the code did.
+  ///
+  /// All nullable and all absent on an ordinary sale, which is the point: a
+  /// sale with no code reads and writes exactly as it did before these
+  /// existed, in JSON and in SQLite alike. Every one of them is written by
+  /// the server — `firestore.rules` refuses a client that tries — so they
+  /// arrive by projection and are never sent back up.
+  @override
+  @JsonKey(
+      fromJson: _referralBenefitTypeFromJson,
+      toJson: _referralBenefitTypeToJson)
+  final ReferralBenefitType? referralBenefitType;
+  @override
+  final double? grossAmount;
+  @override
+  final double? referralBenefitValue;
+  @override
+  final double? referralBenefitAmount;
+  @override
+  final String? affiliateCodeId;
+  @override
+  @JsonKey(
+      fromJson: _referralSaleStatusFromJson, toJson: _referralSaleStatusToJson)
+  final ReferralSaleStatus? referralStatus;
   final List<SaleItem> _items;
   @override
   @JsonKey()
@@ -400,7 +541,7 @@ class _$SaleImpl extends _Sale {
 
   @override
   String toString() {
-    return 'Sale(id: $id, customerId: $customerId, amount: $amount, points: $points, createdAt: $createdAt, updatedAt: $updatedAt, confirmationStatus: $confirmationStatus, confirmedPoints: $confirmedPoints, confirmedAt: $confirmedAt, confirmationErrorCode: $confirmationErrorCode, loyaltyPolicyVersion: $loyaltyPolicyVersion, cancellationStatus: $cancellationStatus, cancelledAt: $cancelledAt, cancelledByAppUserId: $cancelledByAppUserId, cancellationReason: $cancellationReason, replacementSaleId: $replacementSaleId, items: $items, synced: $synced)';
+    return 'Sale(id: $id, customerId: $customerId, amount: $amount, points: $points, createdAt: $createdAt, updatedAt: $updatedAt, confirmationStatus: $confirmationStatus, confirmedPoints: $confirmedPoints, confirmedAt: $confirmedAt, confirmationErrorCode: $confirmationErrorCode, loyaltyPolicyVersion: $loyaltyPolicyVersion, cancellationStatus: $cancellationStatus, cancelledAt: $cancelledAt, cancelledByAppUserId: $cancelledByAppUserId, cancellationReason: $cancellationReason, replacementSaleId: $replacementSaleId, referralBenefitType: $referralBenefitType, grossAmount: $grossAmount, referralBenefitValue: $referralBenefitValue, referralBenefitAmount: $referralBenefitAmount, affiliateCodeId: $affiliateCodeId, referralStatus: $referralStatus, items: $items, synced: $synced)';
   }
 
   @override
@@ -437,32 +578,51 @@ class _$SaleImpl extends _Sale {
                 other.cancellationReason == cancellationReason) &&
             (identical(other.replacementSaleId, replacementSaleId) ||
                 other.replacementSaleId == replacementSaleId) &&
+            (identical(other.referralBenefitType, referralBenefitType) ||
+                other.referralBenefitType == referralBenefitType) &&
+            (identical(other.grossAmount, grossAmount) ||
+                other.grossAmount == grossAmount) &&
+            (identical(other.referralBenefitValue, referralBenefitValue) ||
+                other.referralBenefitValue == referralBenefitValue) &&
+            (identical(other.referralBenefitAmount, referralBenefitAmount) ||
+                other.referralBenefitAmount == referralBenefitAmount) &&
+            (identical(other.affiliateCodeId, affiliateCodeId) ||
+                other.affiliateCodeId == affiliateCodeId) &&
+            (identical(other.referralStatus, referralStatus) ||
+                other.referralStatus == referralStatus) &&
             const DeepCollectionEquality().equals(other._items, _items) &&
             (identical(other.synced, synced) || other.synced == synced));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      customerId,
-      amount,
-      points,
-      createdAt,
-      updatedAt,
-      confirmationStatus,
-      confirmedPoints,
-      confirmedAt,
-      confirmationErrorCode,
-      loyaltyPolicyVersion,
-      cancellationStatus,
-      cancelledAt,
-      cancelledByAppUserId,
-      cancellationReason,
-      replacementSaleId,
-      const DeepCollectionEquality().hash(_items),
-      synced);
+  int get hashCode => Object.hashAll([
+        runtimeType,
+        id,
+        customerId,
+        amount,
+        points,
+        createdAt,
+        updatedAt,
+        confirmationStatus,
+        confirmedPoints,
+        confirmedAt,
+        confirmationErrorCode,
+        loyaltyPolicyVersion,
+        cancellationStatus,
+        cancelledAt,
+        cancelledByAppUserId,
+        cancellationReason,
+        replacementSaleId,
+        referralBenefitType,
+        grossAmount,
+        referralBenefitValue,
+        referralBenefitAmount,
+        affiliateCodeId,
+        referralStatus,
+        const DeepCollectionEquality().hash(_items),
+        synced
+      ]);
 
   /// Create a copy of Sale
   /// with the given fields replaced by the non-null parameter values.
@@ -498,6 +658,18 @@ abstract class _Sale extends Sale {
       final String? cancelledByAppUserId,
       final String? cancellationReason,
       final String? replacementSaleId,
+      @JsonKey(
+          fromJson: _referralBenefitTypeFromJson,
+          toJson: _referralBenefitTypeToJson)
+      final ReferralBenefitType? referralBenefitType,
+      final double? grossAmount,
+      final double? referralBenefitValue,
+      final double? referralBenefitAmount,
+      final String? affiliateCodeId,
+      @JsonKey(
+          fromJson: _referralSaleStatusFromJson,
+          toJson: _referralSaleStatusToJson)
+      final ReferralSaleStatus? referralStatus,
       final List<SaleItem> items,
       final bool synced}) = _$SaleImpl;
   const _Sale._() : super._();
@@ -536,6 +708,31 @@ abstract class _Sale extends Sale {
   String? get cancellationReason;
   @override
   String? get replacementSaleId;
+
+  /// What the sale was before a referral discount, and what the code did.
+  ///
+  /// All nullable and all absent on an ordinary sale, which is the point: a
+  /// sale with no code reads and writes exactly as it did before these
+  /// existed, in JSON and in SQLite alike. Every one of them is written by
+  /// the server — `firestore.rules` refuses a client that tries — so they
+  /// arrive by projection and are never sent back up.
+  @override
+  @JsonKey(
+      fromJson: _referralBenefitTypeFromJson,
+      toJson: _referralBenefitTypeToJson)
+  ReferralBenefitType? get referralBenefitType;
+  @override
+  double? get grossAmount;
+  @override
+  double? get referralBenefitValue;
+  @override
+  double? get referralBenefitAmount;
+  @override
+  String? get affiliateCodeId;
+  @override
+  @JsonKey(
+      fromJson: _referralSaleStatusFromJson, toJson: _referralSaleStatusToJson)
+  ReferralSaleStatus? get referralStatus;
   @override
   List<SaleItem> get items;
   @override

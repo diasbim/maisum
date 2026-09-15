@@ -15,6 +15,7 @@ import {
   parseIdParam,
   parseOptionalSaleAmount,
   parsePhone,
+  parseReferralSaleCommit,
   parseUsageLimit,
   parseValidity,
   parseValidityPair,
@@ -24,6 +25,7 @@ import {
 } from './affiliate_api_contracts.js';
 import { DEFAULT_CODE_VALIDITY_DAYS } from './affiliate_contracts.js';
 import { VALIDATE_CODE_POLICY } from './affiliate_rate_limit.js';
+import { commitReferralSaleToFirestore } from './affiliate_sale_firestore.js';
 import {
   affiliateMetrics,
   appendAffiliateEvent,
@@ -958,6 +960,78 @@ export function registerAffiliateRoutes(deps: AffiliateRouteDeps): void {
       return res.json({ success: true, data: body });
     } catch (error) {
       return respond(deps, res, 'merchant_validate_code', error);
+    }
+  });
+
+  /**
+   * The authoritative referred sale: one command, one transaction.
+   *
+   * Open to any authenticated member of the business, like validating a code
+   * and for the same reason — this is the till confirming a sale with a
+   * customer standing there, not an owner managing affiliates. What it may
+   * change is fixed by `parseReferralSaleCommit`, which reads the sale's local
+   * identity, the customer, the gross amount and the code, and nothing else.
+   * The benefit, the loyalty points, the reward and the affiliate all come off
+   * stored records inside the transaction.
+   *
+   * The preview the till was shown is advisory and is not trusted here: every
+   * check runs again against what Firestore holds now and against the real
+   * amount, so a code that expired between the preview and the confirmation is
+   * refused with a reason the cashier can act on — and the sale is simply made
+   * without a code instead.
+   */
+  merchantRouter.post('/referral-sales/commit', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const payload = parseBodyObject(req.body);
+      const parsed = parseReferralSaleCommit(payload, deps.normalizePhone);
+
+      const outcome = await commitReferralSaleToFirestore({
+        merchantId: business.id,
+        deviceId: parsed.deviceId,
+        localSaleId: parsed.localSaleId,
+        customerId: parsed.customerId,
+        customerPhoneE164: parsed.customerPhoneE164,
+        grossAmount: parsed.grossAmount,
+        rawCode: parsed.rawCode,
+        items: parsed.items,
+        appUserId: actorIdOf(request),
+        now: clock(deps),
+      });
+
+      switch (outcome.status) {
+        case 'committed':
+        case 'replayed':
+          // A replay answers exactly what the first call answered, apart from
+          // saying so: a till that retried after a dropped response must not
+          // be able to tell the difference and sell twice.
+          return res.json({
+            success: true,
+            data: { outcome: outcome.status, ...outcome.result },
+          });
+        case 'rejected':
+          // Not an error: the request was well formed and the answer is that
+          // this code cannot be used for this sale. The till is told why, in
+          // the same shape `validate-code` uses, and sells without a code.
+          return res.json({
+            success: true,
+            data: {
+              outcome: 'rejected',
+              code: 'referral_rejected',
+              reason: outcome.reason,
+              message: outcome.message,
+            },
+          });
+        case 'conflict':
+          throw affiliateApiError(409, 'sale_conflict');
+        default:
+          throw affiliateApiError(404, 'customer_not_found');
+      }
+    } catch (error) {
+      return respond(deps, res, 'merchant_commit_referral_sale', error);
     }
   });
 

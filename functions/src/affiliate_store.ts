@@ -99,6 +99,14 @@ type Row = Record<string, unknown>;
 
 export type MerchantPage<T> = RecordPage<T> & { truncated: boolean };
 
+function rowString(row: Row, ...keys: string[]): string | null {
+  for (const key of keys) {
+    const value = row[key];
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+  }
+  return null;
+}
+
 /* ------------------------------------------------------------------ config */
 
 /** Per-business affiliate settings, defaulted the way the plan fixes them. */
@@ -1216,7 +1224,9 @@ export async function validateReferralCode(input: {
     affiliateStatus: affiliateSnapshot.exists ? affiliate.status : 'INACTIVE',
     linkStatus:
       linkData === null ? 'INACTIVE' : linkStatusOf(linkData),
-    affiliatePhoneHash: phoneFingerprint(affiliate.phone),
+    affiliatePhoneHash: phoneFingerprint(
+      rowString(affiliateData, 'phone_e164', 'phone'),
+    ),
     customerPhoneHash: customerFingerprint,
     customerIsNew: history.isNew,
     existingAttributionStatus: history.attributionStatus,

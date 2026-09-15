@@ -137,6 +137,34 @@ export const affiliateIds = {
 
   /** The global lookup key, which is the normalised code itself. */
   lookup: (code: string) => normalizeAffiliateCode(code),
+
+  /**
+   * The sale a till commits, derived from the till and the sale's local id.
+   *
+   * The same pair that makes `saleIdempotencyKey` makes the document, so a
+   * replay resolves to the sale already written instead of creating a second
+   * one under a fresh uuid. The till keeps its own local id; the canonical id
+   * comes back in the response.
+   */
+  sale: (deviceId: string, localSaleId: string) =>
+    `sale_${digest([deviceId, localSaleId])}`,
+
+  /**
+   * One event per fact, so a retry appends nothing.
+   *
+   * `sourceKey` is whatever makes the fact unique — a sale id for an
+   * attribution, an idempotency key for a refusal. Never a phone number.
+   */
+  event: (merchantId: string, eventType: string, sourceKey: string) =>
+    `ae_${digest([merchantId, eventType, sourceKey])}`,
+
+  /** One queued message per fact, for the worker Phase 5 will add. */
+  outbox: (merchantId: string, template: string, sourceKey: string) =>
+    `ao_${digest([merchantId, template, sourceKey])}`,
+
+  /** One signal per fact a person has to look at. */
+  fraudSignal: (merchantId: string, signalType: string, sourceKey: string) =>
+    `afs_${digest([merchantId, signalType, sourceKey])}`,
 };
 
 /**
@@ -147,6 +175,59 @@ export const affiliateIds = {
  */
 export function saleIdempotencyKey(deviceId: string, localSaleId: string): string {
   return `sale:${deviceId}:${localSaleId}`;
+}
+
+/**
+ * What a replay has to match to be the same request.
+ *
+ * A till that retries after a dropped response sends the same sale again and
+ * must get the same answer. A till that reuses the same local id for a
+ * *different* sale — a bug, or a tampered request — must not silently take
+ * over the committed one, so everything immutable about the request is folded
+ * into one value and stored beside the sale.
+ *
+ * Money is compared in centavos: 100 and 100.00 are the same sale, and
+ * comparing floats as text would say otherwise.
+ */
+export function referralRequestFingerprint(input: {
+  merchantId: string;
+  customerId: string;
+  grossAmount: number;
+  normalizedCode: string;
+  items: Array<{
+    id: string;
+    merchantItemId: string;
+    nameSnapshot: string;
+    typeSnapshot: string;
+    quantity: number;
+    unitPrice: number | null;
+    subtotal: number | null;
+  }>;
+}): string {
+  const items = [...input.items]
+    .map((item) =>
+      digest([
+        item.id,
+        item.merchantItemId,
+        item.nameSnapshot,
+        item.typeSnapshot,
+        String(item.quantity),
+        item.unitPrice === null
+          ? 'null'
+          : String(Math.round(item.unitPrice * 100)),
+        item.subtotal === null
+          ? 'null'
+          : String(Math.round(item.subtotal * 100)),
+      ]),
+    )
+    .sort();
+  return digest([
+    input.merchantId,
+    input.customerId,
+    String(Math.round(input.grossAmount * 100)),
+    input.normalizedCode,
+    items.join(','),
+  ]);
 }
 
 /* -------------------------------------------------------------- validation */

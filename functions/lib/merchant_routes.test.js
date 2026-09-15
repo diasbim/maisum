@@ -117,6 +117,14 @@ function merchantRoutes() {
  * and it is open to any member of the business because validating a code is
  * part of serving a customer. It writes only an append-only event and a rate
  * limit counter — never an affiliate, a code or a reward.
+ *
+ * `/referral-sales/commit` is the other one, and for the same reason: it is
+ * the till confirming a sale with the customer standing there. It writes a
+ * great deal — a sale, an attribution, a reward, a usage count — but every one
+ * of those values is decided on the server from the code and the business's
+ * own settings. The request carries the sale's local identity, the customer,
+ * the gross amount and the typed code, and nothing that says what anything is
+ * worth.
  */
 const ESCRITAS_PERMITIDAS = new Set([
     '/recovery-tasks/:taskId/complete',
@@ -129,6 +137,7 @@ const ESCRITAS_PERMITIDAS = new Set([
     '/affiliate-codes/:codeId/enable',
     '/affiliate-codes/:codeId/disable',
     '/referrals/validate-code',
+    '/referral-sales/commit',
     '/affiliate-rewards/:rewardId/approve',
     '/affiliate-rewards/:rewardId/cancel',
 ]);

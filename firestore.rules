@@ -318,8 +318,45 @@ service cloud.firestore {
           request.resource.data.updated_at is number);
     }
 
+    // What a referred sale carries, and why a client may not write any of it.
+    //
+    // A referral's benefit, its gross amount and the code behind it are decided
+    // by the commit transaction in the Cloud Functions, which also writes the
+    // attribution, the affiliate's reward and the code's usage count in the
+    // same breath. A till that could set these fields directly could hand
+    // itself a discount and claim an acquisition that never happened, without
+    // any of the other records existing to contradict it.
+    //
+    // `saleClientWritableFields` already excludes them, so this is the same
+    // refusal said out loud: it names the fields, and a future edit that adds
+    // one to the writable list fails here rather than silently opening a door.
+    function saleServerOwnedReferralFields() {
+      return [
+        'gross_amount',
+        'referral_benefit_type',
+        'referral_benefit_value',
+        'referral_benefit_amount',
+        'affiliate_code_id',
+        'affiliate_id',
+        'referral_status',
+        'referral_idempotency_key',
+        'referral_request_hash'
+      ];
+    }
+
+    function saleCarriesNoReferralClaim() {
+      return !request.resource.data.keys().hasAny(saleServerOwnedReferralFields());
+    }
+
+    function saleReferralFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasAny(saleServerOwnedReferralFields());
+    }
+
     function saleCreateIsValid(merchantId, docId) {
       return request.resource.data.keys().hasOnly(saleClientWritableFields()) &&
+        saleCarriesNoReferralClaim() &&
         saleMerchantIdMatchesPath(merchantId) &&
         saleIdMatchesPath(docId) &&
         saleHasRequiredShape();
@@ -329,6 +366,7 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data)
         .affectedKeys()
         .hasOnly(saleClientWritableFields()) &&
+        saleReferralFieldsUnchanged() &&
         saleMerchantIdMatchesPath(merchantId) &&
         saleIdMatchesPath(docId) &&
         (!resource.data.keys().hasAny(['merchant_id']) ||
@@ -436,6 +474,14 @@ service cloud.firestore {
       }
 
       match /affiliate_events/{eventId} {
+        allow read, write: if false;
+      }
+
+      // The messages Phase 5 will send about a referral, written inside the
+      // sale transaction and delivered afterwards by a server worker. A client
+      // that could write one could make the product send WhatsApp messages in
+      // the business's name.
+      match /affiliate_outbox/{outboxId} {
         allow read, write: if false;
       }
 

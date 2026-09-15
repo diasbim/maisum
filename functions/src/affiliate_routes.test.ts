@@ -176,6 +176,7 @@ const MERCHANT_ROUTES: Array<[string, string]> = [
   ['post', '/affiliate-codes/:codeId/enable'],
   ['post', '/affiliate-codes/:codeId/disable'],
   ['post', '/referrals/validate-code'],
+  ['post', '/referral-sales/commit'],
   ['get', '/referrals'],
   ['get', '/referrals/:attributionId'],
   ['get', '/affiliate-rewards'],
@@ -285,7 +286,16 @@ test('every mutating merchant route is owner-only, except validating a code', as
     .map((entry) => `${entry.method} ${entry.route}`)
     .sort();
   const guarded = OWNER_ONLY.map(([method, route]) => `${method} ${route}`).sort();
-  assert.deepEqual(mutating, [...guarded, 'post /referrals/validate-code'].sort());
+  assert.deepEqual(
+    mutating,
+    [
+      ...guarded,
+      // Both belong to serving a customer at the till, not to managing
+      // affiliates: a cashier validates the code and confirms the sale.
+      'post /referrals/validate-code',
+      'post /referral-sales/commit',
+    ].sort(),
+  );
 });
 
 test('reading is open to any member of the business', async () => {
@@ -380,8 +390,104 @@ test('validate-code refuses a missing or implausible code', async () => {
   }
 });
 
-/* ------------------------------------------------------------- rate limiting */
+/* ------------------------------------------------- committing a referred sale */
 
+test('committing a sale refuses each bad field with its own stable code', async () => {
+  const valid = {
+    device_id: 'till-1',
+    local_sale_id: 'sale-local-1',
+    customer_id: 'cust-1',
+    customer_phone: '841234567',
+    gross_amount: 500,
+    code: 'AFI-ANA-7K2P',
+  };
+  const cases: Array<[Record<string, unknown>, string]> = [
+    [{}, 'invalid_customer'],
+    [{ ...valid, device_id: 42 }, 'invalid_sale_reference'],
+    [{ ...valid, local_sale_id: '' }, 'invalid_sale_reference'],
+    [{ ...valid, customer_id: '' }, 'invalid_customer'],
+    [{ ...valid, customer_phone: '12345' }, 'invalid_phone'],
+    [{ ...valid, gross_amount: 0 }, 'invalid_sale_amount'],
+    [{ ...valid, gross_amount: -10 }, 'invalid_sale_amount'],
+    [{ ...valid, gross_amount: '500' }, 'invalid_sale_amount'],
+    [{ ...valid, gross_amount: 12.345 }, 'invalid_sale_amount'],
+    [{ ...valid, code: 'ab' }, 'invalid_code'],
+    [{ ...valid, items: [{ id: 'i1' }] }, 'invalid_sale_items'],
+    [
+      { ...valid, items: [{ id: 'a/b', merchant_item_id: 'm1', name_snapshot: 'Café', type_snapshot: 'product', quantity: 1 }] },
+      'invalid_sale_items',
+    ],
+    [
+      { ...valid, items: [{ id: 'i1', merchant_item_id: 'm1', name_snapshot: 'Café', type_snapshot: 'product', quantity: 0 }] },
+      'invalid_sale_items',
+    ],
+  ];
+
+  for (const [payload, code] of cases) {
+    const { merchant, captured, call } = harness();
+    await call(merchant, 'post', '/referral-sales/commit', { body: payload });
+    assert.equal(captured.status, 400, `${JSON.stringify(payload)} was not refused`);
+    assert.equal(body(captured).code, code);
+    // Refused before the transaction, so no Firestore was needed to say no.
+    assert.deepEqual(captured.serverErrors, []);
+  }
+});
+
+test('committing a sale is open to any member of the business', async () => {
+  const { merchant, captured, call } = harness({ isOwnerOrAdminRequest: () => false });
+  await call(merchant, 'post', '/referral-sales/commit', { body: {} });
+  // A cashier gets as far as the field validation, not a 403.
+  assert.notEqual(captured.status, 403);
+  assert.equal(body(captured).code, 'invalid_customer');
+});
+
+test('the commit reads nothing that would let a till price its own discount', () => {
+  const handler = handlerSource('merchantRouter', 'post', '/referral-sales/commit');
+  for (const forbidden of [
+    'benefit_type',
+    'benefit_value',
+    'discount',
+    'points',
+    'reward',
+    'affiliate_id',
+    'merchant_id',
+  ]) {
+    assert.ok(
+      !handler.includes(`payload.${forbidden}`),
+      `the commit reads ${forbidden} from the request`,
+    );
+  }
+  assert.ok(handler.includes('parseReferralSaleCommit('));
+  assert.ok(
+    handler.includes('merchantId: business.id'),
+    'the commit takes its business from somewhere other than the session',
+  );
+});
+
+test('a refused code answers with the reason, so the till can sell without one', () => {
+  const handler = handlerSource('merchantRouter', 'post', '/referral-sales/commit');
+  // A refusal is an answer, not an error: the same shape `validate-code` uses,
+  // so the till reads a reason it can act on instead of a thrown 409.
+  assert.ok(handler.includes("outcome: 'rejected'"));
+  assert.ok(handler.includes("code: 'referral_rejected'"));
+  assert.ok(handler.includes('reason: outcome.reason'));
+  assert.ok(handler.includes("affiliateApiError(409, 'sale_conflict')"));
+  assert.ok(handler.includes("affiliateApiError(404, 'customer_not_found')"));
+});
+
+test('a replay answers exactly what the first call answered', () => {
+  const handler = handlerSource('merchantRouter', 'post', '/referral-sales/commit');
+  const committed = handler.indexOf("case 'committed':");
+  const replayed = handler.indexOf("case 'replayed':");
+  assert.ok(committed > 0 && replayed > committed);
+  // They fall through to one response: a retry must not be distinguishable.
+  assert.ok(
+    /case 'committed':\s*\n\s*case 'replayed':/.test(handler),
+    'a replay is answered differently from the commit it repeats',
+  );
+});
+
+/* ------------------------------------------------------------- rate limiting */
 test('the validate-code budget refuses once the window is spent', () => {
   const now = 1_800_000_000_000;
   let bucket = evaluateRateLimit(null, VALIDATE_CODE_POLICY, now).bucket;

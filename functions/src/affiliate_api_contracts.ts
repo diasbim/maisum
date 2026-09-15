@@ -96,6 +96,13 @@ export const AFFILIATE_API_MESSAGE = {
   forbidden_role: 'Só o responsável do negócio pode fazer esta alteração.',
   rate_limited: 'Demasiadas tentativas. Tente daqui a pouco.',
   identity_unavailable: 'Não foi possível criar a identidade do afiliado.',
+  invalid_sale_amount: 'Indique o valor da venda.',
+  invalid_sale_reference: 'Referência da venda inválida.',
+  invalid_sale_items: 'Os artigos da venda são inválidos.',
+  invalid_customer: 'Indique o cliente da venda.',
+  customer_not_found: 'Cliente não encontrado neste negócio.',
+  referral_rejected: 'Não foi possível aplicar este código a esta venda.',
+  sale_conflict: 'Esta venda já foi registada com dados diferentes.',
 } as const;
 
 export type AffiliateApiMessageKey = keyof typeof AFFILIATE_API_MESSAGE;
@@ -329,6 +336,143 @@ export function parseIdParam(raw: unknown, code: AffiliateApiMessageKey): string
   const trimmed = raw.trim();
   if (trimmed === '' || trimmed.length > 200) throw affiliateApiError(404, code);
   return trimmed;
+}
+
+/* ------------------------------------------------------- committing a sale */
+
+/**
+ * What a till may say about a referred sale, and nothing more.
+ *
+ * The list of fields this reads is the whole security argument for the commit
+ * endpoint. It takes the sale's local identity, who it was for, what it was
+ * worth before any discount, and the code that was typed. It does not take the
+ * benefit, the discount, the points, the reward, the affiliate or the business
+ * — every one of those is decided on the server, from the code and the
+ * business's own settings, because a request that could state them could award
+ * itself money.
+ *
+ * `gross_amount` is read rather than a net: the server applies the discount,
+ * so a till that sent an already-discounted amount would have the discount
+ * taken twice, and one that sent the wrong net would decide its own price.
+ */
+export type ParsedReferralSaleItem = {
+  id: string;
+  merchantItemId: string;
+  nameSnapshot: string;
+  typeSnapshot: string;
+  quantity: number;
+  unitPrice: number | null;
+  subtotal: number | null;
+};
+
+export type ParsedReferralSaleCommit = {
+  deviceId: string;
+  localSaleId: string;
+  customerId: string;
+  customerPhoneE164: string;
+  grossAmount: number;
+  rawCode: string;
+  items: ParsedReferralSaleItem[];
+};
+
+const MAX_SALE_AMOUNT = 10_000_000;
+const MAX_SALE_ITEMS = 100;
+
+function parseReference(raw: unknown): string {
+  if (typeof raw !== 'string') throw affiliateApiError(400, 'invalid_sale_reference');
+  const trimmed = raw.trim();
+  if (trimmed === '' || trimmed.length > 120) {
+    throw affiliateApiError(400, 'invalid_sale_reference');
+  }
+  return trimmed;
+}
+
+function parseGrossAmount(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
+    throw affiliateApiError(400, 'invalid_sale_amount');
+  }
+  if (raw > MAX_SALE_AMOUNT) throw affiliateApiError(400, 'invalid_sale_amount');
+  // Money has two decimal places. Anything finer is a rounding argument with
+  // the client that the server would lose silently.
+  if (Math.round(raw * 100) !== Number((raw * 100).toFixed(6))) {
+    throw affiliateApiError(400, 'invalid_sale_amount');
+  }
+  return raw;
+}
+
+function parseSaleItems(raw: unknown): ParsedReferralSaleItem[] {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_SALE_ITEMS) {
+    throw affiliateApiError(400, 'invalid_sale_items');
+  }
+
+  return raw.map((entry) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw affiliateApiError(400, 'invalid_sale_items');
+    }
+    const item = entry as Record<string, unknown>;
+    const text = (value: unknown, max: number): string => {
+      if (typeof value !== 'string') throw affiliateApiError(400, 'invalid_sale_items');
+      const trimmed = value.trim();
+      if (trimmed === '' || trimmed.length > max) {
+        throw affiliateApiError(400, 'invalid_sale_items');
+      }
+      return trimmed;
+    };
+    const money = (value: unknown): number | null => {
+      if (value === undefined || value === null) return null;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        throw affiliateApiError(400, 'invalid_sale_items');
+      }
+      return value;
+    };
+    const quantity = item.quantity;
+    if (
+      typeof quantity !== 'number' ||
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > 999
+    ) {
+      throw affiliateApiError(400, 'invalid_sale_items');
+    }
+
+    // The item's own id becomes a document id. A slash in it would write to a
+    // path the caller chose rather than the one this endpoint owns.
+    const id = text(item.id, 120);
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      throw affiliateApiError(400, 'invalid_sale_items');
+    }
+
+    return {
+      id,
+      merchantItemId: text(item.merchant_item_id, 120),
+      nameSnapshot: text(item.name_snapshot, 200),
+      typeSnapshot: text(item.type_snapshot, 40),
+      quantity,
+      unitPrice: money(item.unit_price),
+      subtotal: money(item.subtotal),
+    };
+  });
+}
+
+export function parseReferralSaleCommit(
+  payload: Record<string, unknown>,
+  normalize: (value: unknown) => string | null,
+): ParsedReferralSaleCommit {
+  const customerId = payload.customer_id;
+  if (typeof customerId !== 'string' || customerId.trim() === '' || customerId.length > 200) {
+    throw affiliateApiError(400, 'invalid_customer');
+  }
+
+  return {
+    deviceId: parseReference(payload.device_id),
+    localSaleId: parseReference(payload.local_sale_id),
+    customerId: customerId.trim(),
+    customerPhoneE164: parsePhone(payload.customer_phone, normalize),
+    grossAmount: parseGrossAmount(payload.gross_amount),
+    rawCode: parseCodeText(payload.code),
+    items: parseSaleItems(payload.items),
+  };
 }
 
 export function parseBodyObject(raw: unknown): Record<string, unknown> {
