@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:maisum/app/providers.dart';
+import 'package:maisum/features/affiliates/data/affiliate_dao.dart';
+import 'package:maisum/features/affiliates/data/affiliate_local_repository.dart';
 import 'package:maisum/features/affiliates/data/affiliate_repository.dart';
 import 'package:maisum/features/affiliates/domain/affiliate.dart';
 import 'package:maisum/features/affiliates/domain/affiliate_code.dart';
 import 'package:maisum/features/affiliates/domain/affiliate_reward.dart';
 import 'package:maisum/features/affiliates/domain/merchant_affiliate_dtos.dart';
+import 'package:maisum/features/affiliates/domain/offline_referral.dart';
 import 'package:maisum/features/affiliates/providers/affiliate_providers.dart';
 import 'package:maisum/features/auth/domain/auth_session.dart';
 import 'package:maisum/features/auth/presentation/auth_controller.dart';
+import 'package:maisum/features/sales/domain/sale_item.dart';
 
 /// A backend the affiliate screens can be pointed at.
 ///
@@ -162,19 +166,114 @@ class FakeAuthController extends AuthController {
       );
 }
 
+/// An offline path a test can state the answers of.
+///
+/// Records what it was asked so a test can assert that a screen went local
+/// instead of reaching for the API, and hands back whatever the test staged.
+class FakeAffiliateOfflineGateway implements AffiliateOfflineGateway {
+  FakeAffiliateOfflineGateway({
+    this.decision,
+    this.saleResult,
+    this.provisional,
+    this.createError,
+    this.provisionalList = const <ProvisionalAffiliate>[],
+  });
+
+  OfflineReferralDecision? decision;
+  OfflineReferralSaleResult? saleResult;
+  ProvisionalAffiliate? provisional;
+  Object? createError;
+  List<ProvisionalAffiliate> provisionalList;
+
+  final List<AffiliateDraft> drafts = <AffiliateDraft>[];
+  final List<String> previewedCodes = <String>[];
+  final List<String> recordedCodes = <String>[];
+
+  @override
+  Future<OfflineReferralDecision> previewOfflineReferral({
+    required String code,
+    required double grossAmount,
+    required bool customerIsNew,
+    String? customerPhoneE164,
+  }) async {
+    previewedCodes.add(code);
+    return decision ?? OfflineReferralDecision(normalizedCode: code);
+  }
+
+  @override
+  Future<OfflineReferralSaleResult> recordOfflineReferralSale({
+    required String customerId,
+    required String customerPhone,
+    required double grossAmount,
+    required String code,
+    required String localSaleId,
+    List<SaleItemInput> items = const <SaleItemInput>[],
+    OfflineReferralDecision? decision,
+  }) async {
+    recordedCodes.add(code);
+    final result = saleResult;
+    if (result == null) {
+      throw StateError('FakeAffiliateOfflineGateway has no sale configured');
+    }
+    return result;
+  }
+
+  @override
+  Future<ProvisionalAffiliate> createAffiliateOffline(
+      AffiliateDraft draft) async {
+    drafts.add(draft);
+    final error = createError;
+    if (error != null) throw error;
+    final answer = provisional;
+    if (answer == null) {
+      throw StateError('FakeAffiliateOfflineGateway has no affiliate staged');
+    }
+    return answer;
+  }
+
+  @override
+  Future<List<ProvisionalAffiliate>> provisionalAffiliates() async =>
+      provisionalList;
+}
+
 List<Override> affiliateOverrides({
   required FakeAffiliateGateway gateway,
   bool isOwner = true,
   bool online = true,
   bool withSession = true,
+  AffiliateOfflineGateway? offlineGateway,
 }) {
   return <Override>[
     affiliateGatewayProvider.overrideWithValue(gateway),
     isOwnerUserProvider.overrideWith((ref) async => isOwner),
     isOnlineProvider.overrideWith((ref) => Stream<bool>.value(online)),
+    // Null unless a test asks for one: the default widget test has no SQLite,
+    // and a screen that reached for it would fail for the wrong reason.
+    affiliateOfflineGatewayProvider.overrideWithValue(offlineGateway),
     if (withSession)
       authControllerProvider.overrideWith(FakeAuthController.new),
   ];
+}
+
+/// A provisional affiliate as the local repository would return one.
+ProvisionalAffiliate sampleProvisionalAffiliate({
+  String localId = 'local-1',
+  String displayName = 'Ana Silva',
+  String provisionalCode = 'LOCAL-ANA-4F2A91',
+  AffiliateSyncStatus syncStatus = AffiliateSyncStatus.pending,
+  String? lastSyncError,
+}) {
+  return ProvisionalAffiliate(
+    affiliateId: 'local_$localId',
+    localId: localId,
+    displayName: displayName,
+    firstName: displayName.split(' ').first,
+    phone: '+258841234567',
+    provisionalCode: provisionalCode,
+    syncStatus: syncStatus,
+    createdAt: DateTime(2025, 3, 4, 10, 30),
+    lastSyncError: lastSyncError,
+  );
 }
 
 Widget wrapScreen(Widget child, List<Override> overrides) {

@@ -152,6 +152,11 @@ class AppMigrations {
       name: 'affiliates foundation',
       up: _createV30Schema,
     ),
+    const MigrationStep(
+      version: 31,
+      name: 'affiliates offline queue projection',
+      up: _createV31Schema,
+    ),
   ];
 
   static Future<void> migrate(
@@ -296,6 +301,12 @@ class _SchemaVerifier {
       'referral_benefit_amount',
       'affiliate_code_id',
       'referral_status',
+      'referral_code_input',
+      'affiliate_id',
+      'referral_rejection_code',
+      'referral_status_message',
+      'referral_local_benefit_applied',
+      'referral_idempotency_key',
     },
     'rewards': {
       'id',
@@ -345,6 +356,10 @@ class _SchemaVerifier {
       'created_at',
       'updated_at',
       'synced',
+      'provisional',
+      'local_id',
+      'sync_status',
+      'last_sync_error',
     },
     'affiliate_merchants': {
       'id',
@@ -355,6 +370,10 @@ class _SchemaVerifier {
       'created_at',
       'updated_at',
       'synced',
+      'provisional',
+      'local_id',
+      'sync_status',
+      'last_sync_error',
     },
     'affiliate_codes': {
       'id',
@@ -373,6 +392,10 @@ class _SchemaVerifier {
       'created_at',
       'updated_at',
       'synced',
+      'provisional',
+      'local_id',
+      'sync_status',
+      'last_sync_error',
     },
     'affiliate_code_lookup_cache': {
       'normalized_code',
@@ -390,6 +413,11 @@ class _SchemaVerifier {
       'first_visit_only',
       'cached_at',
       'updated_at',
+      'affiliate_display_name',
+      'affiliate_first_name',
+      'affiliate_status',
+      'link_status',
+      'refreshed_at',
     },
     'affiliate_attributions': {
       'id',
@@ -405,6 +433,8 @@ class _SchemaVerifier {
       'created_at',
       'updated_at',
       'synced',
+      'idempotency_key',
+      'sync_status',
     },
     'affiliate_rewards': {
       'id',
@@ -427,6 +457,7 @@ class _SchemaVerifier {
       'created_at',
       'updated_at',
       'synced',
+      'idempotency_key',
     },
     'affiliate_events': {
       'id',
@@ -2143,6 +2174,121 @@ Future<void> _createV30Schema(DatabaseExecutor db) async {
     'ON sync_queue(merchant_id, idempotency_key) '
     'WHERE idempotency_key IS NOT NULL',
   );
+}
+
+/// Offline referrals: what a till has decided on its own and not yet had
+/// confirmed.
+///
+/// Purely additive over v30, which shipped and is not touched again. Every
+/// column here answers one question the offline path asks and v30 cannot:
+/// whether a row is a local guess awaiting the server (`provisional`,
+/// `sync_status`, `last_sync_error`), who a cached code belongs to in words a
+/// cashier can read (`affiliate_display_name` and the two statuses), and what
+/// code a sale carried when the cache could not price it
+/// (`referral_code_input`).
+///
+/// `referral_local_benefit_applied` is the one the server needs most: a
+/// rejected code whose discount was already given to a customer standing at the
+/// counter keeps that discount, and the only way to know a discount was given
+/// is to have written down that it was.
+Future<void> _createV31Schema(DatabaseExecutor db) async {
+  // A provisional affiliate is one this device invented while offline. It is
+  // real enough to appear in the list and be worked with, and never real
+  // enough to share: the code it carries is local and the server has not
+  // agreed to it yet.
+  for (final table in <String>[
+    'affiliates',
+    'affiliate_merchants',
+    'affiliate_codes',
+  ]) {
+    await _addColumnIfMissing(
+      db,
+      table,
+      'provisional INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(db, table, 'local_id TEXT');
+    await _addColumnIfMissing(db, table, 'sync_status TEXT');
+    await _addColumnIfMissing(db, table, 'last_sync_error TEXT');
+  }
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliates_provisional '
+    'ON affiliates(provisional, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_codes_provisional '
+    'ON affiliate_codes(merchant_id, provisional, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_merchants_provisional '
+    'ON affiliate_merchants(merchant_id, provisional, updated_at)',
+  );
+
+  // The cache the till prices an offline sale from. v30 stores the code's own
+  // terms; these add the affiliate the cashier reads out and the two statuses
+  // that make a code unusable even when the code itself is ACTIVE.
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    'affiliate_display_name TEXT',
+  );
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    'affiliate_first_name TEXT',
+  );
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    "affiliate_status TEXT NOT NULL DEFAULT 'ACTIVE'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    "link_status TEXT NOT NULL DEFAULT 'ACTIVE'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    'refreshed_at INTEGER',
+  );
+  await db.execute(
+    'UPDATE affiliate_code_lookup_cache SET refreshed_at = cached_at '
+    'WHERE refreshed_at IS NULL',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_code_lookup_cache_refreshed '
+    'ON affiliate_code_lookup_cache(merchant_id, refreshed_at)',
+  );
+
+  // What a sale carried, as opposed to what it was worth. `affiliate_code_id`
+  // is only filled when the cache could resolve the code; a code typed with no
+  // cache entry is still kept, verbatim and normalised, because the server can
+  // still attribute it and a discarded code is an affiliate never paid.
+  await _addColumnIfMissing(db, 'sales', 'referral_code_input TEXT');
+  await _addColumnIfMissing(db, 'sales', 'affiliate_id TEXT');
+  await _addColumnIfMissing(db, 'sales', 'referral_rejection_code TEXT');
+  await _addColumnIfMissing(db, 'sales', 'referral_status_message TEXT');
+  await _addColumnIfMissing(
+    db,
+    'sales',
+    'referral_local_benefit_applied INTEGER NOT NULL DEFAULT 0',
+  );
+  await _addColumnIfMissing(db, 'sales', 'referral_idempotency_key TEXT');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sales_referral_code_input '
+    'ON sales(merchant_id, referral_code_input, created_at)',
+  );
+
+  // The keys the prompt fixes, stored beside the rows they identify so a
+  // replay of the same fact converges on the same record instead of a second
+  // one. Derived values only: a phone reaches these columns already hashed.
+  await _addColumnIfMissing(
+    db,
+    'affiliate_attributions',
+    'idempotency_key TEXT',
+  );
+  await _addColumnIfMissing(db, 'affiliate_rewards', 'idempotency_key TEXT');
+  await _addColumnIfMissing(db, 'affiliate_attributions', 'sync_status TEXT');
 }
 
 Future<void> _addColumnIfMissing(

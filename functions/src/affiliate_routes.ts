@@ -3,6 +3,7 @@ import type express from 'express';
 
 import { recordAuditEvent, type AuditActor } from './admin_audit.js';
 import {
+  AFFILIATE_API_MESSAGE,
   AffiliateApiError,
   affiliateApiError,
   ownerOnlyError,
@@ -13,6 +14,8 @@ import {
   parseCodeText,
   parseFirstVisitOnly,
   parseIdParam,
+  parseOfflineAffiliateCreate,
+  parseOfflineReferralSale,
   parseOptionalSaleAmount,
   parsePhone,
   parseReferralSaleCommit,
@@ -24,8 +27,12 @@ import {
   type AffiliateApiMessageKey,
 } from './affiliate_api_contracts.js';
 import { DEFAULT_CODE_VALIDITY_DAYS } from './affiliate_contracts.js';
+import { CLOCK_SKEW_SIGNAL_MS } from './affiliate_engine.js';
 import { VALIDATE_CODE_POLICY } from './affiliate_rate_limit.js';
-import { commitReferralSaleToFirestore } from './affiliate_sale_firestore.js';
+import {
+  commitOfflineReferralSaleToFirestore,
+  commitReferralSaleToFirestore,
+} from './affiliate_sale_firestore.js';
 import {
   affiliateMetrics,
   appendAffiliateEvent,
@@ -1074,6 +1081,211 @@ export function registerAffiliateRoutes(deps: AffiliateRouteDeps): void {
       }
     } catch (error) {
       return respond(deps, res, 'merchant_commit_referral_sale', error);
+    }
+  });
+
+  /**
+   * The queued offline sale, reconciled.
+   *
+   * Reached only by the sync queue, which sends it once per sale and retries it
+   * with the same `local_sale_id` until it is answered. Every answer is a 200
+   * with an outcome the client can act on, because a sale that has already been
+   * paid for has no failure mode left that a status code could describe:
+   *
+   *   `committed` / `replayed` — the acquisition and reward exist, or existed;
+   *   `rejected` — the code was refused, the sale and any discount stand, and
+   *   the refusal is recorded with its reason and a fraud signal;
+   *   `deferred` — the customer has not synced yet, so try again shortly;
+   *   `conflict` — the same local id was reused for a different sale, which is
+   *   a caller bug and is refused with a 409 rather than retried forever.
+   *
+   * Open to any authenticated member of the business, like the online commit
+   * and for the same reason: it is a till reporting a sale it made.
+   */
+  merchantRouter.post('/referral-sales/sync', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const body = parseBodyObject(req.body);
+      const payload = parseBodyObject(body.payload ?? body);
+      const now = clock(deps);
+      const parsed = parseOfflineReferralSale(payload, deps.normalizePhone, now);
+
+      const outcome = await commitOfflineReferralSaleToFirestore({
+        merchantId: business.id,
+        deviceId: parsed.deviceId,
+        localSaleId: parsed.localSaleId,
+        customerId: parsed.customerId,
+        customerPhoneE164: parsed.customerPhoneE164,
+        grossAmount: parsed.grossAmount,
+        rawCode: parsed.rawCode,
+        items: parsed.items,
+        appUserId: actorIdOf(request),
+        now,
+        offlineBenefitApplied: parsed.offlineBenefitApplied,
+        appliedBenefit: parsed.appliedBenefit,
+        localCreatedAt: parsed.localCreatedAt,
+      });
+
+      switch (outcome.status) {
+        case 'committed':
+        case 'replayed':
+          if (outcome.result.clock_skew_ms > CLOCK_SKEW_SIGNAL_MS) {
+            // Recorded, never used to refuse: a device whose clock is a day out
+            // still made a real sale to a real customer.
+            console.warn('affiliate_offline_clock_skew', {
+              merchant_id: business.id,
+              device_id: parsed.deviceId,
+              clock_skew_ms: outcome.result.clock_skew_ms,
+            });
+          }
+          return res.json({
+            success: true,
+            data: { outcome: outcome.status, ...outcome.result },
+          });
+        case 'rejected':
+          if (outcome.result.clock_skew_ms > CLOCK_SKEW_SIGNAL_MS) {
+            console.warn('affiliate_offline_clock_skew', {
+              merchant_id: business.id,
+              device_id: parsed.deviceId,
+              clock_skew_ms: outcome.result.clock_skew_ms,
+            });
+          }
+          // Still a success: the operation is complete and must not be sent
+          // again. What was refused is the code, not the request.
+          return res.json({
+            success: true,
+            data: {
+              outcome: 'rejected',
+              code: 'referral_rejected',
+              reason: outcome.reason,
+              message: outcome.message,
+              ...outcome.result,
+            },
+          });
+        case 'deferred':
+          return res.json({
+            success: true,
+            data: {
+              outcome: 'deferred',
+              reason: 'customer_not_found',
+              message: AFFILIATE_API_MESSAGE.customer_not_found,
+            },
+          });
+        default:
+          throw affiliateApiError(409, 'sale_conflict');
+      }
+    } catch (error) {
+      return respond(deps, res, 'merchant_sync_referral_sale', error);
+    }
+  });
+
+  /**
+   * An affiliate added offline, registered for real.
+   *
+   * Owner-only, exactly like the online create — an offline queue is not a way
+   * around RBAC, and the device's own check is a courtesy that this repeats
+   * because it is the only one that counts.
+   *
+   * Idempotent by construction: the identity is derived from the phone, so a
+   * replay finds the link already made and answers with the affiliate that
+   * exists rather than refusing. The `local_affiliate_id` comes back untouched
+   * so the device can replace the right provisional row.
+   */
+  merchantRouter.post('/affiliates/sync', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const body = parseBodyObject(req.body);
+      const payload = parseBodyObject(body.payload ?? body);
+      const now = clock(deps);
+      const queued = parseOfflineAffiliateCreate(payload, now);
+      const name = parseAffiliateName(payload.name);
+      const phoneE164 = parsePhone(payload.phone, deps.normalizePhone);
+      const affiliateId = affiliateIdFor(deps, phoneE164);
+
+      let created: Awaited<ReturnType<typeof createAffiliateForMerchant>> | null =
+        null;
+      try {
+        created = await createAffiliateForMerchant({
+          merchantId: business.id,
+          affiliateId,
+          phoneE164,
+          name,
+          defaults: parseCodeDefaults(payload, queued.createdAt),
+          now: queued.createdAt,
+        });
+      } catch (error) {
+        // The one refusal a replay is expected to hit. Anything else — a
+        // suspended affiliate, a bad benefit — is a real refusal and is
+        // reported as one.
+        if (
+          !(error instanceof AffiliateApiError) ||
+          error.code !== 'affiliate_already_linked'
+        ) {
+          throw error;
+        }
+      }
+
+      if (created !== null) {
+        await appendAffiliateEvent(business.id, {
+          eventType: 'AFFILIATE_CREATED',
+          affiliateId: created.affiliate.id,
+          dedupeKey: queued.idempotencyKey,
+          metadata: {
+            identity_created: created.identityCreated,
+            source: 'OFFLINE',
+          },
+        });
+        await appendAffiliateEvent(business.id, {
+          eventType: 'AFFILIATE_CODE_CREATED',
+          affiliateId: created.affiliate.id,
+          dedupeKey: queued.idempotencyKey,
+          metadata: { code_id: created.code.id, code: created.code.code },
+        });
+        await recordAuditEvent(deps.auditActorFrom(request), {
+          action: 'affiliate.create',
+          targetType: 'affiliate',
+          targetId: created.affiliate.id,
+          merchantId: business.id,
+          details: {
+            phone_masked: maskPhone(phoneE164),
+            identity_created: created.identityCreated,
+            code_id: created.code.id,
+            source: 'offline_sync',
+            device_id: queued.deviceId,
+          },
+        });
+      }
+
+      const affiliate =
+        created !== null
+          ? {
+              ...created.affiliate,
+              merchant_id: business.id,
+              link_status: created.link.status,
+              linked_at: created.link.linkedAt,
+              code: created.code,
+            }
+          : await getMerchantAffiliate(business.id, affiliateId);
+      if (!affiliate) throw notFound('affiliate_not_found');
+
+      return res.json({
+        success: true,
+        data: {
+          outcome: created === null ? 'replayed' : 'committed',
+          local_id: queued.localId,
+          local_affiliate_id: queued.localAffiliateId,
+          affiliate,
+        },
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_sync_affiliate', error);
     }
   });
 

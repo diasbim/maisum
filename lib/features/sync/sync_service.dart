@@ -13,6 +13,7 @@ import '../../core/services/connectivity_service.dart';
 import '../../core/sync/sync_retry_policy.dart';
 import '../../core/utils/app_logger.dart';
 import 'data/sync_dao.dart';
+import 'data/sync_projection.dart';
 import 'data/sync_transport.dart';
 import 'domain/sync_item.dart';
 
@@ -164,8 +165,10 @@ class SyncService {
     this._connectivity, {
     AnalyticsService? analytics,
     SyncRetryPolicy? retryPolicy,
+    List<SyncProjection> projections = const <SyncProjection>[],
   })  : _retryPolicy = retryPolicy ?? const SyncRetryPolicy(),
-        _analytics = analytics;
+        _analytics = analytics,
+        _projections = projections;
 
   final AppDatabase _database;
 
@@ -174,6 +177,13 @@ class SyncService {
   final ConnectivityService _connectivity;
   final SyncRetryPolicy _retryPolicy;
   final AnalyticsService? _analytics;
+
+  /// Feature-owned writers for the answers this queue brings back.
+  ///
+  /// Registered rather than imported so the queue keeps one processor and no
+  /// knowledge of any feature's tables. Each is consulted for the item it owns,
+  /// in the same pass that sent it.
+  final List<SyncProjection> _projections;
 
   final _statusController = StreamController<SyncStatus>.broadcast();
   Stream<SyncStatus> get statusStream => _statusController.stream;
@@ -340,6 +350,28 @@ class SyncService {
     } catch (e, st) {
       Log.e(_tag, '✗ ${item.entityType}/${item.entityId}', e, st);
       final errorReason = _formatSyncError(e);
+      if (e is SyncProjectionException) {
+        AppErrorReporter.report(
+          e.cause,
+          st,
+          hint: 'sync_projection:${item.entityType}',
+        );
+        await _syncDao.incrementRetry(item.id, lastError: errorReason);
+        final retryCount = item.retryCount + 1;
+        if (retryCount >= AppConstants.maxSyncRetries) {
+          // The server already committed this idempotent operation. Keep the
+          // local domain state pending for manual retry; applying a terminal
+          // failure would overwrite a canonical success with a rejection.
+          await _syncDao.markFailed(item.id, lastError: errorReason);
+        } else {
+          await _syncDao.scheduleRetry(
+            item.id,
+            _retryPolicy.nextAttempt(retryCount: retryCount),
+            lastError: errorReason,
+          );
+        }
+        return errorReason;
+      }
       final transportError = e is SyncTransportException ? e : null;
       final isPermanent = transportError != null &&
           (transportError.code == 'failed-precondition' ||
@@ -356,6 +388,7 @@ class SyncService {
 
       if (isPermanent) {
         await _syncDao.markFailed(item.id, lastError: errorReason);
+        await _projectFailure(item, errorReason);
         Log.w(_tag, 'Item ${item.id} marked failed (non-retryable)');
         return errorReason;
       }
@@ -380,6 +413,7 @@ class SyncService {
       final retryCount = item.retryCount + 1;
       if (retryCount >= AppConstants.maxSyncRetries) {
         await _syncDao.markFailed(item.id, lastError: errorReason);
+        await _projectFailure(item, errorReason);
         Log.w(
           _tag,
           'Item ${item.id} marked failed after $retryCount attempt(s)',
@@ -404,6 +438,18 @@ class SyncService {
     SyncItem item,
     Map<String, dynamic>? canonical,
   ) async {
+    for (final projection in _projections) {
+      if (!projection.entityTypes.contains(item.entityType)) continue;
+      if (canonical == null) return null;
+      try {
+        return await projection.applyCanonical(item, canonical);
+      } catch (e, st) {
+        Log.e(_tag, 'Projection failed for ${item.entityType}', e, st);
+        // Affiliate commands are server-idempotent. Retrying is safer than
+        // dropping the canonical answer and marking an unprojected row synced.
+        throw SyncProjectionException(item.entityType, e);
+      }
+    }
     if (item.entityType != 'recovery_task' || canonical == null) return null;
     final canonicalId = canonical['id'] as String?;
     if (canonicalId == null || canonicalId.isEmpty) return null;
@@ -498,6 +544,18 @@ class SyncService {
     return canonicalId;
   }
 
+  Future<void> _projectFailure(SyncItem item, String reason) async {
+    for (final projection in _projections) {
+      if (!projection.entityTypes.contains(item.entityType)) continue;
+      try {
+        await projection.applyFailure(item, reason: reason);
+      } catch (e, st) {
+        Log.e(_tag, 'Projection failure hook failed', e, st);
+      }
+      return;
+    }
+  }
+
   Future<void> _pullRemoteChanges() async {
     if (_transport == null) {
       return;
@@ -506,6 +564,18 @@ class SyncService {
     final db = await _database.database;
     for (final entity in _syncEntities) {
       await _pullEntityChanges(db, entity);
+    }
+
+    // Read caches last, and never fatally. A stale affiliate code cache costs
+    // one discount that has to be confirmed online; a pull that threw here
+    // would cost every queued sale behind it.
+    for (final projection in _projections) {
+      try {
+        await projection.refreshReadCaches();
+      } catch (e, st) {
+        Log.w(_tag, 'Read cache refresh failed: $e');
+        AppErrorReporter.report(e, st, hint: 'sync_read_cache_refresh');
+      }
     }
   }
 

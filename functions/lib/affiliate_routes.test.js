@@ -136,6 +136,8 @@ const MERCHANT_ROUTES = [
     ['post', '/affiliate-codes/:codeId/disable'],
     ['post', '/referrals/validate-code'],
     ['post', '/referral-sales/commit'],
+    ['post', '/referral-sales/sync'],
+    ['post', '/affiliates/sync'],
     ['get', '/referrals'],
     ['get', '/referrals/:attributionId'],
     ['get', '/affiliate-rewards'],
@@ -201,6 +203,7 @@ const ADMIN_ROUTES = [
 /* --------------------------------------------------------------------- RBAC */
 const OWNER_ONLY = [
     ['post', '/affiliates'],
+    ['post', '/affiliates/sync'],
     ['patch', '/affiliates/:affiliateId'],
     ['post', '/affiliates/:affiliateId/activate'],
     ['post', '/affiliates/:affiliateId/deactivate'],
@@ -239,6 +242,9 @@ const OWNER_ONLY = [
         // affiliates: a cashier validates the code and confirms the sale.
         'post /referrals/validate-code',
         'post /referral-sales/commit',
+        // And reconciles one they made while the connection was down, which is
+        // the same act reported late.
+        'post /referral-sales/sync',
     ].sort());
 });
 (0, node_test_1.default)('reading is open to any member of the business', async () => {

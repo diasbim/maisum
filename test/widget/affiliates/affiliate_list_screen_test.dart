@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:maisum/design_system/design_system.dart';
+import 'package:maisum/features/affiliates/data/affiliate_dao.dart';
 import 'package:maisum/features/affiliates/domain/affiliate.dart';
 import 'package:maisum/features/affiliates/domain/merchant_affiliate_dtos.dart';
+import 'package:maisum/features/affiliates/domain/offline_referral.dart';
 import 'package:maisum/features/affiliates/presentation/affiliate_list_screen.dart';
 
 import 'affiliate_test_support.dart';
@@ -244,7 +246,8 @@ void main() {
     expect(find.byKey(const Key('affiliate-truncated-banner')), findsOneWidget);
   });
 
-  testWidgets('explains what offline takes away', (tester) async {
+  testWidgets('offline keeps the add button, with an honest warning',
+      (tester) async {
     final gateway = FakeAffiliateGateway(
       listView: AffiliateListView(
         items: <AffiliateListItem>[
@@ -262,10 +265,108 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('affiliate-offline-notice')), findsOneWidget);
+    expect(find.textContaining('código provisório'), findsOneWidget);
+    // Adding offline writes a provisional record and queues the real one, so
+    // the button stays usable: telling an owner to come back later would lose
+    // the affiliate they have in front of them.
+    final button = tester.widget<MaisUmButton>(
+      find.byKey(const Key('affiliate-add-button')),
+    );
+    expect(button.onPressed, isNotNull);
+  });
+
+  testWidgets('a cashier still cannot add an affiliate offline',
+      (tester) async {
+    final gateway = FakeAffiliateGateway(
+      listView: AffiliateListView(
+        items: <AffiliateListItem>[
+          AffiliateListItem(affiliate: sampleAffiliate()),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      wrapScreen(
+        const AffiliateListScreen(),
+        affiliateOverrides(gateway: gateway, online: false, isOwner: false),
+      ),
+    );
+    await tester.pumpAndSettle();
+
     final button = tester.widget<MaisUmButton>(
       find.byKey(const Key('affiliate-add-button')),
     );
     expect(button.onPressed, isNull);
+  });
+
+  testWidgets('a provisional affiliate says it is not confirmed yet',
+      (tester) async {
+    final gateway = FakeAffiliateGateway(
+      listView: AffiliateListView(
+        items: <AffiliateListItem>[
+          AffiliateListItem(affiliate: sampleAffiliate()),
+        ],
+      ),
+    );
+    final offline = FakeAffiliateOfflineGateway(
+      provisionalList: <ProvisionalAffiliate>[
+        sampleProvisionalAffiliate(displayName: 'Beatriz Cossa'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      wrapScreen(
+        const AffiliateListScreen(),
+        affiliateOverrides(
+          gateway: gateway,
+          online: false,
+          offlineGateway: offline,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('affiliate-provisional-section')),
+      findsOneWidget,
+    );
+    expect(find.text('Beatriz Cossa'), findsOneWidget);
+    expect(find.text('Por confirmar'), findsOneWidget);
+    expect(find.textContaining('LOCAL-ANA-4F2A91'), findsOneWidget);
+  });
+
+  testWidgets('a refused offline affiliate keeps its row and says why',
+      (tester) async {
+    final gateway = FakeAffiliateGateway(
+      listView: AffiliateListView(
+        items: <AffiliateListItem>[
+          AffiliateListItem(affiliate: sampleAffiliate()),
+        ],
+      ),
+    );
+    final offline = FakeAffiliateOfflineGateway(
+      provisionalList: <ProvisionalAffiliate>[
+        sampleProvisionalAffiliate(
+          displayName: 'Beatriz Cossa',
+          syncStatus: AffiliateSyncStatus.rejected,
+          lastSyncError: 'Este afiliado já está ligado a este negócio.',
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      wrapScreen(
+        const AffiliateListScreen(),
+        affiliateOverrides(gateway: gateway, offlineGateway: offline),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recusado'), findsOneWidget);
+    expect(
+      find.text('Este afiliado já está ligado a este negócio.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('an inactive affiliate is told apart by more than colour',

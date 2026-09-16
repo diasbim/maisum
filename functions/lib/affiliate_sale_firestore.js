@@ -35,10 +35,12 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.firestoreReferralSaleGateway = void 0;
 exports.commitReferralSaleToFirestore = commitReferralSaleToFirestore;
+exports.commitOfflineReferralSaleToFirestore = commitOfflineReferralSaleToFirestore;
 exports.reverseReferralSaleInFirestore = reverseReferralSaleInFirestore;
 exports.recordReferredCustomerReturnInFirestore = recordReferredCustomerReturnInFirestore;
 const admin = __importStar(require("firebase-admin"));
 const affiliate_store_js_1 = require("./affiliate_store.js");
+const affiliate_offline_sale_js_1 = require("./affiliate_offline_sale.js");
 const affiliate_sale_commit_js_1 = require("./affiliate_sale_commit.js");
 /**
  * The referral sale commands, bound to Firestore.
@@ -87,6 +89,17 @@ exports.firestoreReferralSaleGateway = {
 /** The authoritative commit, as a route may call it. */
 async function commitReferralSaleToFirestore(input) {
     return (0, affiliate_sale_commit_js_1.commitReferralSale)(exports.firestoreReferralSaleGateway, input, (business) => (0, affiliate_store_js_1.affiliateConfigFrom)((business ?? {})));
+}
+/**
+ * The reconciliation of a sale a till already made offline.
+ *
+ * Shares the gateway, the facts and the validation with the online commit on
+ * purpose: the only thing that differs is what may still be changed about a
+ * sale that has already been paid for, and that difference lives in
+ * `affiliate_offline_sale.ts` rather than in a second Firestore adapter.
+ */
+async function commitOfflineReferralSaleToFirestore(input) {
+    return (0, affiliate_offline_sale_js_1.commitOfflineReferralSale)(exports.firestoreReferralSaleGateway, input, (business) => (0, affiliate_store_js_1.affiliateConfigFrom)((business ?? {})));
 }
 /** The reversal the sale-cancellation path calls once a sale is cancelled. */
 async function reverseReferralSaleInFirestore(input) {

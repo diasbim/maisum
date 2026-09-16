@@ -166,23 +166,73 @@ void main() {
     expect(submit.onPressed, isNull);
   });
 
-  testWidgets('offline says the code cannot be minted', (tester) async {
+  testWidgets('offline creates a provisional code that cannot be shared',
+      (tester) async {
     usePhoneSurface(tester);
     final gateway = FakeAffiliateGateway(created: sampleAffiliate());
+    final offline = FakeAffiliateOfflineGateway(
+      provisional: sampleProvisionalAffiliate(),
+    );
 
     await tester.pumpWidget(
       wrapScreen(
         const AffiliateCreateScreen(),
-        affiliateOverrides(gateway: gateway, online: false),
+        affiliateOverrides(
+          gateway: gateway,
+          online: false,
+          offlineGateway: offline,
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('só pode ser criado online'), findsOneWidget);
+    expect(
+      find.byKey(const Key('affiliate-create-offline-notice')),
+      findsOneWidget,
+    );
     final submit = tester.widget<MaisUmButton>(
       find.byKey(const Key('affiliate-create-submit')),
     );
-    expect(submit.onPressed, isNull);
+    // Offline is no longer a reason to refuse: the record is written here and
+    // the server is asked when there is a server to ask.
+    expect(submit.onPressed, isNotNull);
+
+    await tester.enterText(
+      find.byKey(const Key('affiliate-name-field')),
+      'Ana Silva',
+    );
+    await tester.enterText(
+      find.byKey(const Key('affiliate-phone-field')),
+      '841234567',
+    );
+    await tapControl(tester, find.byKey(const Key('affiliate-create-submit')));
+    await tester.pumpAndSettle();
+
+    // Nothing reached the API; the draft went to the local path instead.
+    expect(gateway.lastDraft, isNull);
+    expect(offline.drafts, hasLength(1));
+    expect(offline.drafts.single.name, 'Ana Silva');
+
+    expect(
+      find.byKey(const Key('affiliate-provisional-panel')),
+      findsOneWidget,
+    );
+    final code = tester
+        .widget<SelectableText>(
+          find.byKey(const Key('affiliate-provisional-code')),
+        )
+        .data!;
+    // A provisional code is never in the AFI- namespace the server owns, so it
+    // cannot be mistaken for one that works at a counter.
+    expect(code, startsWith('LOCAL-'));
+    expect(code, isNot(startsWith('AFI-')));
+
+    final share = tester.widget<MaisUmButton>(
+      find.byKey(const Key('affiliate-share-button-disabled')),
+    );
+    expect(share.onPressed, isNull);
+    expect(find.byKey(const Key('affiliate-share-button')), findsNothing);
+    expect(find.textContaining('não pode ser partilhado'), findsOneWidget);
   });
 
   testWidgets('keeps the form when the server refuses', (tester) async {

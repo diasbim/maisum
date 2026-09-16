@@ -12,6 +12,7 @@ import '../../../core/widgets/app_feedback.dart';
 import '../../../core/errors/app_error_mapper.dart';
 import '../../../design_system/design_system.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../data/affiliate_dao.dart';
 import '../data/affiliate_repository.dart';
 import '../domain/affiliate_code.dart';
 import '../domain/merchant_affiliate_dtos.dart';
@@ -47,6 +48,7 @@ class _AffiliateCreateScreenState extends ConsumerState<AffiliateCreateScreen> {
 
   bool _submitting = false;
   MerchantAffiliate? _created;
+  ProvisionalAffiliate? _queued;
 
   @override
   void dispose() {
@@ -65,22 +67,27 @@ class _AffiliateCreateScreenState extends ConsumerState<AffiliateCreateScreen> {
     if (value == null) return;
     final rawLimit = _limitCtrl.text.trim();
     final limit = rawLimit.isEmpty ? null : int.tryParse(rawLimit);
+    final draft = AffiliateDraft(
+      name: _nameCtrl.text.trim(),
+      phone: MozPhoneUtils.normalizeToE164(_phoneCtrl.text.trim()),
+      benefitType: _benefitType.storageValue,
+      benefitValue: value,
+      usageLimit: limit,
+      firstVisitOnly: _firstVisitOnly,
+      expiresAt: DateTime.now().add(Duration(days: _expiryDays)),
+    );
+
+    final online = ref.read(isOnlineProvider).valueOrNull ?? true;
+    if (!online) {
+      await _submitOffline(draft);
+      return;
+    }
 
     setState(() => _submitting = true);
     try {
       final created = await ref
           .read(affiliateAdminControllerProvider.notifier)
-          .createAffiliate(
-            AffiliateDraft(
-              name: _nameCtrl.text.trim(),
-              phone: MozPhoneUtils.normalizeToE164(_phoneCtrl.text.trim()),
-              benefitType: _benefitType.storageValue,
-              benefitValue: value,
-              usageLimit: limit,
-              firstVisitOnly: _firstVisitOnly,
-              expiresAt: DateTime.now().add(Duration(days: _expiryDays)),
-            ),
-          );
+          .createAffiliate(draft);
       if (!mounted) return;
       setState(() => _created = created);
       AppFeedback.showSuccessToast(
@@ -100,11 +107,52 @@ class _AffiliateCreateScreenState extends ConsumerState<AffiliateCreateScreen> {
     }
   }
 
+  /// Adds the affiliate here and asks the server later.
+  ///
+  /// The owner gets a usable record and an honest one: the code on screen is
+  /// this device's own, marked as such, and sharing is not offered at all. A
+  /// provisional code handed to somebody would be typed at a counter and
+  /// refused, with the affiliate standing there.
+  Future<void> _submitOffline(AffiliateDraft draft) async {
+    final repository = ref.read(affiliateOfflineGatewayProvider);
+    if (repository == null) {
+      AppFeedback.showMessage(
+        context,
+        message: 'Este dispositivo ainda não está identificado. '
+            'Ligue-o ao negócio para adicionar afiliados.',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      final queued = await repository.createAffiliateOffline(draft);
+      if (!mounted) return;
+      setState(() => _queued = queued);
+      AppFeedback.showMessage(
+        context,
+        message: 'Afiliado guardado. O código definitivo chega quando '
+            'houver ligação.',
+      );
+    } catch (error) {
+      if (!mounted) return;
+      AppFeedback.showMessage(
+        context,
+        message: AppErrorMapper.describe(error).message,
+        isError: true,
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isOwner = ref.watch(isOwnerUserProvider).valueOrNull ?? false;
     final online = ref.watch(isOnlineProvider).valueOrNull ?? true;
     final created = _created;
+    final queued = _queued;
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -116,7 +164,9 @@ class _AffiliateCreateScreenState extends ConsumerState<AffiliateCreateScreen> {
             constraints: const BoxConstraints(maxWidth: AppLayout.formMaxWidth),
             child: created != null
                 ? _CreatedPanel(affiliate: created)
-                : _buildForm(isOwner: isOwner, online: online),
+                : queued != null
+                    ? _ProvisionalPanel(affiliate: queued)
+                    : _buildForm(isOwner: isOwner, online: online),
           ),
         ),
       ),
@@ -131,8 +181,10 @@ class _AffiliateCreateScreenState extends ConsumerState<AffiliateCreateScreen> {
         children: [
           if (!online) ...[
             const AffiliateOfflineNotice(
-              message: 'Sem ligação. Um afiliado só pode ser criado online, '
-                  'porque o código tem de ser único no sistema.',
+              key: Key('affiliate-create-offline-notice'),
+              message: 'Sem ligação. O afiliado fica guardado neste aparelho '
+                  'com um código provisório, que não pode ser partilhado até '
+                  'o sistema confirmar o código definitivo.',
             ),
             const SizedBox(height: AppSpacing.md),
           ],
@@ -231,7 +283,7 @@ class _AffiliateCreateScreenState extends ConsumerState<AffiliateCreateScreen> {
             label: 'Adicionar afiliado',
             loadingLabel: 'A adicionar…',
             isLoading: _submitting,
-            onPressed: isOwner && online && !_submitting ? _submit : null,
+            onPressed: isOwner && !_submitting ? _submit : null,
             animationDuration: Duration.zero,
           ),
         ],
@@ -378,6 +430,92 @@ class _ExpirySelector extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// The confirmation for an affiliate that exists only on this device.
+///
+/// Says the code is provisional, shows it so the owner recognises the row in
+/// the list, and offers no way to share it. The contrast with [_CreatedPanel]
+/// is the point: one of these codes works at a counter and the other does not.
+class _ProvisionalPanel extends StatelessWidget {
+  const _ProvisionalPanel({required this.affiliate});
+
+  final ProvisionalAffiliate affiliate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        MaisUmSurface(
+          key: const Key('affiliate-provisional-panel'),
+          variant: MaisUmSurfaceVariant.warning,
+          radius: AppRadius.lg,
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          animationDuration: Duration.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.schedule_rounded, color: AppColors.warning),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      '${affiliate.displayName} guardado neste aparelho',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const Text(
+                'Código provisório',
+                style: TextStyle(color: AppColors.onSurfaceVariant),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              SelectableText(
+                affiliate.provisionalCode,
+                key: const Key('affiliate-provisional-code'),
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        const AffiliateOfflineNotice(
+          key: Key('affiliate-provisional-share-blocked'),
+          message: 'Este código ainda não está confirmado pelo sistema, por '
+              'isso não pode ser partilhado. Quando houver ligação, o código '
+              'definitivo substitui este e fica pronto a partilhar.',
+        ),
+        const SizedBox(height: AppSpacing.md),
+        const MaisUmButton(
+          key: Key('affiliate-share-button-disabled'),
+          label: 'Partilhar código',
+          leadingIcon: Icons.share_rounded,
+          onPressed: null,
+          animationDuration: Duration.zero,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        MaisUmButton(
+          label: 'Ver afiliados',
+          variant: MaisUmButtonVariant.outlined,
+          foregroundColor: AppColors.primary,
+          onPressed: () => context.pushReplacement('/affiliates'),
+          animationDuration: Duration.zero,
         ),
       ],
     );

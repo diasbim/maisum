@@ -340,7 +340,14 @@ service cloud.firestore {
         'affiliate_id',
         'referral_status',
         'referral_idempotency_key',
-        'referral_request_hash'
+        'referral_request_hash',
+        // Written only by the offline reconciliation, and for the same reason
+        // as the rest: `referral_offline_benefit_applied` is what stops the
+        // server taking back a discount a customer has already been given, so a
+        // till that could set it could keep any discount it liked.
+        'referral_source',
+        'referral_offline_benefit_applied',
+        'referral_rejection_reason'
       ];
     }
 

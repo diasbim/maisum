@@ -178,6 +178,50 @@ export function saleIdempotencyKey(deviceId: string, localSaleId: string): strin
 }
 
 /**
+ * The one-way derivation of a phone, shared by every caller that needs one.
+ *
+ * Compared, never printed, never stored beside the number it came from. The
+ * Flutter client computes the identical value, which is what lets a key derived
+ * on a phone and a key derived here name the same acquisition.
+ */
+export function referralPhoneHash(phoneE164: string | null | undefined): string {
+  const phone = (phoneE164 ?? '').trim();
+  if (phone === '') return '';
+  return createHash('sha256').update(`affiliate-phone-v1:${phone}`).digest('hex');
+}
+
+/**
+ * The idempotency keys the plan fixes, in the plan's own spelling.
+ *
+ * Distinct from [affiliateIds], which are document ids: an id is where a fact
+ * is stored, a key is what makes two requests the same request. They are stored
+ * side by side so a replay arriving by a different route — the offline queue
+ * rather than the till — still resolves to the record already written.
+ *
+ * `attribution` takes a hash, never a number. A key is read by people who have
+ * no business learning a customer's phone from a log line.
+ */
+export const referralIdempotencyKeys = {
+  sale: saleIdempotencyKey,
+
+  attribution: (merchantId: string, customerPhoneHash: string) =>
+    `affiliate-attribution:${merchantId}:${customerPhoneHash}`,
+
+  reward: (attributionId: string, rewardType: string) =>
+    `affiliate-reward:${attributionId}:${rewardType}`,
+};
+
+/**
+ * How far a device's clock may be out before it is worth writing down.
+ *
+ * A sale queued on a phone whose clock is a day wrong still commits — refusing
+ * it would lose a real purchase over a setting the cashier cannot see — but the
+ * skew is recorded, because a run of them is how a till that is being used to
+ * back-date sales looks from here.
+ */
+export const CLOCK_SKEW_SIGNAL_MS = 24 * 60 * 60 * 1000;
+
+/**
  * What a replay has to match to be the same request.
  *
  * A till that retries after a dropped response sends the same sale again and

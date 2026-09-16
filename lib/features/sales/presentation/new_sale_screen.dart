@@ -304,12 +304,16 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       return;
     }
 
-    // Phase 6 has no offline referral path. A code typed with no connection is
-    // kept on screen and said out loud rather than silently applied: the sale
-    // itself still goes through, unchanged, because losing it would be worse
-    // than losing the code.
-    final deferredCode = referral != null && referral.hasCode && !online;
-    await _confirmOrdinarySale(notifyReferralDeferred: deferredCode);
+    // Offline, the code is still honoured as far as this device can honour it:
+    // one sale, one queued authoritative operation, and a benefit only when the
+    // cache could price the code. The sale is never split into an ordinary sale
+    // plus a separate referral record — that would be two purchases.
+    if (referral != null && referral.hasCode && !online) {
+      await _confirmOfflineReferredSale(referral);
+      return;
+    }
+
+    await _confirmOrdinarySale();
   }
 
   /// The authoritative path.
@@ -349,11 +353,71 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
           _offerSaleWithoutCode(message);
         case ReferredSaleDeviceUnavailable(:final message):
           _offerSaleWithoutCode(message);
+        case ReferredSaleQueuedOffline():
+          // The online path never queues: it either commits or is refused.
+          break;
       }
     } catch (e) {
       if (!mounted) return;
       final info = AppErrorMapper.describe(e);
       _offerReferralRetry(info.message, referral);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  /// The offline path.
+  ///
+  /// Terminal for this tap too: the sale is written here and the referral is
+  /// left to the queue. A failure to write locally is the only thing that can
+  /// still send the cashier back to the form.
+  Future<void> _confirmOfflineReferredSale(ReferralCodeEntry referral) async {
+    final customer = _selectedCustomer!;
+    final localSaleId = _pendingLocalSaleId ??=
+        ref.read(referredSaleControllerProvider.notifier).newLocalSaleId();
+
+    setState(() => _isSubmitting = true);
+    try {
+      final outcome =
+          await ref.read(referredSaleControllerProvider.notifier).commitOffline(
+                customerId: customer.id,
+                customerPhone: customer.phone,
+                grossAmount: _amount,
+                code: referral.code,
+                localSaleId: localSaleId,
+                items: _selectedSaleItems,
+              );
+
+      if (!mounted) return;
+
+      switch (outcome) {
+        case ReferredSaleQueuedOffline(:final result, :final benefitApplied):
+          AppFeedback.showMessage(
+            context,
+            message: benefitApplied
+                ? 'Benefício aplicado. Indicação pendente de confirmação.'
+                : 'Código guardado. Sem ligação não foi possível aplicar '
+                    'benefício; a indicação fica pendente de confirmação.',
+          );
+          setState(() {
+            _showCompletedStepper = true;
+            _completedPoints = result.sale.points;
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 1000));
+          if (!mounted) return;
+          context.go('/sale-success', extra: SaleSuccessArgs(result: result));
+        case ReferredSaleDeviceUnavailable(:final message):
+          _offerSaleWithoutCode(message);
+        case ReferredSaleAccepted():
+        case ReferredSaleRejected():
+          break;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final info = AppErrorMapper.describe(e);
+      AppFeedback.showMessage(context, message: info.message, isError: true);
     } finally {
       if (mounted) {
         setState(() => _isSubmitting = false);
@@ -411,9 +475,7 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
     );
   }
 
-  Future<void> _confirmOrdinarySale({
-    bool notifyReferralDeferred = false,
-  }) async {
+  Future<void> _confirmOrdinarySale() async {
     if (_isSubmitting) return;
     final saleCtrl = ref.read(saleControllerProvider.notifier);
     final customer = _selectedCustomer!;
@@ -427,13 +489,6 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       );
 
       if (!mounted) return;
-      if (notifyReferralDeferred) {
-        AppFeedback.showMessage(
-          context,
-          message: 'Venda registada sem código: sem ligação, o código não '
-              'pôde ser confirmado.',
-        );
-      }
       setState(() {
         _showCompletedStepper = true;
         _completedPoints = result.sale.points;
@@ -711,6 +766,9 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                               customerPhone: _selectedCustomer!.phone,
                               grossAmount: _amount,
                               enabled: !isBusy,
+                              customerIsNew: isReferralEligibleCustomer(
+                                _selectedCustomer!,
+                              ),
                               onChanged: (entry) {
                                 _invalidateReferralAction();
                                 _referralEntry = entry;

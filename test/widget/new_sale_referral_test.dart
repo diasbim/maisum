@@ -9,6 +9,7 @@ import 'package:maisum/core/database/app_database.dart';
 import 'package:maisum/design_system/design_system.dart';
 import 'package:maisum/features/affiliates/data/affiliate_sale_api.dart';
 import 'package:maisum/features/affiliates/domain/affiliate_code.dart';
+import 'package:maisum/features/affiliates/domain/offline_referral.dart';
 import 'package:maisum/features/affiliates/domain/referral_sale_commit.dart';
 import 'package:maisum/features/affiliates/domain/referral_validation.dart';
 import 'package:maisum/features/affiliates/presentation/referred_sale_controller.dart';
@@ -60,12 +61,15 @@ class _RecordingSaleController extends SaleController {
 }
 
 class _FakeReferredSaleController extends ReferredSaleController {
-  _FakeReferredSaleController(this._outcomes);
+  _FakeReferredSaleController(this._outcomes, this._offlineOutcomes);
 
   final List<Object> _outcomes;
+  final List<Object> _offlineOutcomes;
   final List<String> localSaleIds = <String>[];
+  final List<String> offlineLocalSaleIds = <String>[];
   final List<String> codes = <String>[];
   int _next = 0;
+  int _offlineNext = 0;
   int _minted = 0;
 
   @override
@@ -78,6 +82,25 @@ class _FakeReferredSaleController extends ReferredSaleController {
   }
 
   int get mintedIds => _minted;
+
+  @override
+  Future<ReferredSaleOutcome> commitOffline({
+    required String customerId,
+    required String customerPhone,
+    required double grossAmount,
+    required String code,
+    required String localSaleId,
+    List<SaleItemInput> items = const <SaleItemInput>[],
+  }) async {
+    offlineLocalSaleIds.add(localSaleId);
+    codes.add(code);
+    final outcome =
+        _offlineOutcomes[_offlineNext.clamp(0, _offlineOutcomes.length - 1)];
+    _offlineNext += 1;
+    if (outcome is Error) throw outcome;
+    if (outcome is Exception) throw outcome;
+    return outcome as ReferredSaleOutcome;
+  }
 
   @override
   Future<ReferredSaleOutcome> commit({
@@ -237,6 +260,7 @@ class _Harness {
     this.additionalCustomers = const <Customer>[],
     this.onlineStream,
     List<Object>? outcomes,
+    List<Object>? offlineOutcomes,
     ReferralValidationResult? preview,
     Object? previewError,
   })  : saleController = _RecordingSaleController(),
@@ -244,6 +268,25 @@ class _Harness {
           outcomes ??
               <ReferredSaleOutcome>[
                 const ReferredSaleRejected('Código expirado.'),
+              ],
+          offlineOutcomes ??
+              <ReferredSaleOutcome>[
+                ReferredSaleQueuedOffline(
+                  SaleResult(
+                    sale: Sale(
+                      id: 'sale-offline-1',
+                      customerId: customer.id,
+                      amount: 300,
+                      points: 3,
+                      createdAt: DateTime(2025, 1, 1),
+                      referralStatus: ReferralSaleStatus.pendingSync,
+                    ),
+                    customer: customer,
+                  ),
+                  const OfflineReferralDecision(
+                    normalizedCode: 'AFI-ANA-7K2P',
+                  ),
+                ),
               ],
         ),
         gateway = _FakeAffiliateSaleGateway(
@@ -288,6 +331,10 @@ class _Harness {
         saleControllerProvider.overrideWith(() => saleController),
         referredSaleControllerProvider.overrideWith(() => referredController),
         affiliateSaleApiProvider.overrideWithValue(gateway),
+        // No local projection in these tests: the offline preview then falls
+        // through to the "this device has never heard of this code" branch,
+        // which is the honest answer for a till with an empty cache.
+        affiliateOfflineGatewayProvider.overrideWithValue(null),
         affiliateFeatureEnabledProvider.overrideWithValue(affiliatesEnabled),
         isOnlineProvider.overrideWith(
           (ref) => onlineStream ?? Stream<bool>.value(online),
@@ -845,7 +892,8 @@ void main() {
     expect(find.text('Concluir sem código'), findsOneWidget);
   });
 
-  testWidgets('offline keeps the code visible and registers the sale honestly',
+  testWidgets(
+      'offline prices from the cache it has, and says nothing is confirmed',
       (tester) async {
     tester.view.physicalSize = const Size(420, 1600);
     tester.view.devicePixelRatio = 1.0;
@@ -866,17 +914,26 @@ void main() {
       'AFI-ANA-7K2P',
     );
     await _settle(tester);
+    await _tap(tester, find.byKey(const Key('referral-validate-button')));
+    await _settle(tester);
 
-    expect(find.byKey(const Key('referral-offline-notice')), findsOneWidget);
-    expect(find.textContaining('Nenhum benefício é aplicado agora'),
-        findsOneWidget);
+    // Nothing is in this till's cache, so nothing is promised — and the code is
+    // still kept for the server to judge.
+    expect(
+      find.byKey(const Key('referral-offline-unknown-notice')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('fica pelo valor total'), findsOneWidget);
 
     await tester.tap(find.text('Confirmar Venda'));
     await _settle(tester);
 
-    // No referral commit was attempted, and the sale itself still happened.
+    // One sale, one authoritative operation: the ordinary sale path is never
+    // used for a sale that carried a code.
+    expect(harness.referredController.offlineLocalSaleIds, hasLength(1));
     expect(harness.referredController.localSaleIds, isEmpty);
-    expect(harness.saleController.createCalls, 1);
+    expect(harness.saleController.createCalls, 0);
+    expect(harness.referredController.codes.single, 'AFI-ANA-7K2P');
   });
 
   testWidgets('the invitation survives a 200% text scale', (tester) async {

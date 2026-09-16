@@ -2,7 +2,10 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../app/providers.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../business_profile/domain/business_profile.dart';
 import '../data/affiliate_api.dart';
+import '../data/affiliate_dao.dart';
+import '../data/affiliate_local_repository.dart';
 import '../data/affiliate_repository.dart';
 import '../data/affiliate_sale_api.dart';
 import '../data/affiliate_sale_repository.dart';
@@ -11,8 +14,8 @@ import '../domain/merchant_affiliate_dtos.dart';
 /// The per-business affiliate switch, as the backend stores it.
 ///
 /// Only [enabled] changes what the app offers; the rest is read so the screens
-/// can explain what will happen — whether a reward needs approving, whether a
-/// return is worth anything — instead of guessing defaults that the server may
+/// can explain what will happen â€” whether a reward needs approving, whether a
+/// return is worth anything â€” instead of guessing defaults that the server may
 /// not share.
 class AffiliateFeatureConfig {
   const AffiliateFeatureConfig({
@@ -153,6 +156,54 @@ final affiliateSaleRepositoryProvider =
   );
 });
 
+/// The local projection of the affiliate tables, or null when this device has
+/// no business to project them for.
+final affiliateDaoProvider = Provider<AffiliateDao?>((ref) {
+  final merchantId = ref.watch(activeMerchantIdProvider);
+  if (merchantId == null || merchantId.isEmpty) return null;
+  return AffiliateDao(ref.watch(appDatabaseProvider), merchantId: merchantId);
+});
+
+/// Everything the app does about affiliates without a server.
+///
+/// Requires both ids for the same reason the online commit does: the device id
+/// is half of every idempotency key this writes, and a placeholder would let
+/// two tills share a key and resolve to each other's sale.
+final affiliateLocalRepositoryProvider =
+    Provider<AffiliateLocalRepository?>((ref) {
+  final merchantId = ref.watch(activeMerchantIdProvider);
+  final deviceId = ref.watch(activeDeviceIdProvider);
+  final dao = ref.watch(affiliateDaoProvider);
+  if (merchantId == null || merchantId.isEmpty) return null;
+  if (deviceId == null || deviceId.isEmpty) return null;
+  if (dao == null) return null;
+  return AffiliateLocalRepository(
+    ref.watch(appDatabaseProvider),
+    dao,
+    merchantId: merchantId,
+    deviceId: deviceId,
+    appUserId: ref.watch(activeAppUserIdProvider),
+    gateway: ref.watch(affiliateGatewayProvider),
+    pointsPerMzn: ref
+            .watch(activeBusinessProfileProvider)
+            .valueOrNull
+            ?.loyalty
+            .pointsPerMzn ??
+        BusinessProfiles.generic.loyalty.pointsPerMzn,
+  );
+});
+
+/// The narrow view of the offline path the screens use.
+///
+/// Separate from [affiliateLocalRepositoryProvider], which the sync queue needs
+/// in full: a screen only ever previews, records and lists, and depending on
+/// the interface is what lets a widget test state what this till knows without
+/// standing up SQLite inside a pump.
+final affiliateOfflineGatewayProvider =
+    Provider<AffiliateOfflineGateway?>((ref) {
+  return ref.watch(affiliateLocalRepositoryProvider);
+});
+
 /// The affiliates of this business, filtered by status.
 final affiliateListProvider = FutureProvider.autoDispose
     .family<AffiliateListView, AffiliateListFilter>((ref, filter) {
@@ -160,7 +211,6 @@ final affiliateListProvider = FutureProvider.autoDispose
       .watch(affiliateGatewayProvider)
       .loadAffiliateList(status: filter.wireValue);
 });
-
 final affiliateDetailProvider =
     FutureProvider.autoDispose.family<AffiliateDetailSnapshot, String>(
   (ref, affiliateId) {
@@ -181,6 +231,18 @@ final affiliateRewardsProvider = FutureProvider.autoDispose
 final affiliateMetricsProvider =
     FutureProvider.autoDispose<AffiliateMetricsSummary>((ref) {
   return ref.watch(affiliateGatewayProvider).merchantMetrics();
+});
+
+/// The affiliates this device added without a connection.
+///
+/// Read from SQLite rather than from the API on purpose: these are exactly the
+/// people the API has never heard of, and a list that only showed confirmed
+/// affiliates would make an offline create look like it did nothing.
+final provisionalAffiliatesProvider =
+    FutureProvider.autoDispose<List<ProvisionalAffiliate>>((ref) async {
+  final repository = ref.watch(affiliateOfflineGatewayProvider);
+  if (repository == null) return const <ProvisionalAffiliate>[];
+  return repository.provisionalAffiliates();
 });
 
 /// The mutations, all of which the server refuses for a non-owner.

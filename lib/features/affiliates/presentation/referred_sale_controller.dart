@@ -5,6 +5,7 @@ import '../../../app/providers.dart';
 import '../../customers/presentation/customers_controller.dart';
 import '../../sales/domain/sale_item.dart';
 import '../../sales/presentation/sale_controller.dart';
+import '../domain/offline_referral.dart';
 import '../domain/referral_sale_commit.dart';
 import '../providers/affiliate_providers.dart';
 import '../services/referral_copy.dart';
@@ -44,6 +45,25 @@ class ReferredSaleDeviceUnavailable extends ReferredSaleOutcome {
   final String message;
 }
 
+/// The sale was written here and the referral queued for the server to judge.
+///
+/// [benefitApplied] says whether money actually came off the bill. When it did,
+/// it came off from a cached code and the discount is already the customer's;
+/// when it did not, the sale was charged in full and the typed code is carried
+/// up as an intention. Either way nothing is confirmed, which is why the screen
+/// that shows this has to say "pendente de confirmação" rather than name an
+/// affiliate as credited.
+class ReferredSaleQueuedOffline extends ReferredSaleOutcome {
+  const ReferredSaleQueuedOffline(this.result, this.decision);
+
+  final SaleResult result;
+  final OfflineReferralDecision decision;
+
+  bool get benefitApplied => decision.appliesBenefit;
+
+  bool get codeWasKnown => decision.isKnownCode;
+}
+
 /// Commits a sale that carries a referral code.
 ///
 /// Deliberately separate from `SaleController`: a sale without a code still
@@ -62,6 +82,55 @@ class ReferredSaleController extends AsyncNotifier<void> {
   /// attempt invented a new id after a dropped response, the server would write
   /// the same sale twice and pay the affiliate twice for it.
   String newLocalSaleId() => _uuid.v4();
+
+  /// Writes a referred sale with no server in reach.
+  ///
+  /// The sale is final locally and the referral is not: one row, one queued
+  /// authoritative operation, and a benefit applied only when the code was in
+  /// this device's cache and passed every check the device can make. Nothing
+  /// here claims the affiliate has been credited, because nothing here can
+  /// know that.
+  Future<ReferredSaleOutcome> commitOffline({
+    required String customerId,
+    required String customerPhone,
+    required double grossAmount,
+    required String code,
+    required String localSaleId,
+    List<SaleItemInput> items = const <SaleItemInput>[],
+  }) async {
+    final repository = ref.read(affiliateOfflineGatewayProvider);
+    if (repository == null) {
+      return const ReferredSaleDeviceUnavailable(
+        'Este dispositivo ainda não está identificado. '
+        'Ligue-o ao negócio para registar vendas com código.',
+      );
+    }
+
+    state = const AsyncLoading();
+    try {
+      final result = await repository.recordOfflineReferralSale(
+        customerId: customerId,
+        customerPhone: customerPhone,
+        grossAmount: grossAmount,
+        code: normalizeReferralCodeInput(code),
+        localSaleId: localSaleId,
+        items: items,
+      );
+
+      ref.invalidate(customerDetailProvider(customerId));
+      ref.invalidate(customerSalesProvider(customerId));
+      ref.invalidate(allSalesWithCustomerProvider);
+
+      state = const AsyncData(null);
+      return ReferredSaleQueuedOffline(
+        SaleResult(sale: result.sale, customer: result.customer),
+        result.decision,
+      );
+    } catch (error, stackTrace) {
+      state = AsyncError(error, stackTrace);
+      rethrow;
+    }
+  }
 
   Future<ReferredSaleOutcome> commit({
     required String customerId,

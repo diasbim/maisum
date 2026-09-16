@@ -189,6 +189,8 @@ const MERCHANT_ROUTES: Array<[string, string]> = [
   ['post', '/affiliate-codes/:codeId/disable'],
   ['post', '/referrals/validate-code'],
   ['post', '/referral-sales/commit'],
+  ['post', '/referral-sales/sync'],
+  ['post', '/affiliates/sync'],
   ['get', '/referrals'],
   ['get', '/referrals/:attributionId'],
   ['get', '/affiliate-rewards'],
@@ -265,6 +267,7 @@ test('the business is resolved before the owner check, never after', async () =>
 
 const OWNER_ONLY: Array<[string, string]> = [
   ['post', '/affiliates'],
+  ['post', '/affiliates/sync'],
   ['patch', '/affiliates/:affiliateId'],
   ['post', '/affiliates/:affiliateId/activate'],
   ['post', '/affiliates/:affiliateId/deactivate'],
@@ -307,6 +310,9 @@ test('every mutating merchant route is owner-only, except validating a code', as
       // affiliates: a cashier validates the code and confirms the sale.
       'post /referrals/validate-code',
       'post /referral-sales/commit',
+      // And reconciles one they made while the connection was down, which is
+      // the same act reported late.
+      'post /referral-sales/sync',
     ].sort(),
   );
 });

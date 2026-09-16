@@ -28,6 +28,15 @@ enum ReferralValidationErrorCode {
 
 enum ReferralSaleStatus {
   pending('PENDING'),
+
+  /// A referral this till decided on its own and the server has not judged yet.
+  ///
+  /// Distinct from [pending], which is the server's own word for a sale that
+  /// carried a valid code but acquired nobody. This one means the opposite: the
+  /// server has not been asked. Anything shown to a cashier for a sale in this
+  /// state has to say "pendente de confirmação" rather than imply the affiliate
+  /// has been credited.
+  pendingSync('PENDING_SYNC'),
   attributed('ATTRIBUTED'),
   rejected('REJECTED');
 

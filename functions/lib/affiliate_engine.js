@@ -1,11 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.affiliateIds = exports.CODE_NAME_MAX = exports.CODE_SUFFIX_LENGTH = exports.CODE_ALPHABET = void 0;
+exports.CLOCK_SKEW_SIGNAL_MS = exports.referralIdempotencyKeys = exports.affiliateIds = exports.CODE_NAME_MAX = exports.CODE_SUFFIX_LENGTH = exports.CODE_ALPHABET = void 0;
 exports.normalizeAffiliateCode = normalizeAffiliateCode;
 exports.foldCodeName = foldCodeName;
 exports.buildAffiliateCode = buildAffiliateCode;
 exports.generateCodeSuffix = generateCodeSuffix;
 exports.saleIdempotencyKey = saleIdempotencyKey;
+exports.referralPhoneHash = referralPhoneHash;
 exports.referralRequestFingerprint = referralRequestFingerprint;
 exports.validateReferral = validateReferral;
 exports.isBenefitValid = isBenefitValid;
@@ -156,6 +157,44 @@ exports.affiliateIds = {
 function saleIdempotencyKey(deviceId, localSaleId) {
     return `sale:${deviceId}:${localSaleId}`;
 }
+/**
+ * The one-way derivation of a phone, shared by every caller that needs one.
+ *
+ * Compared, never printed, never stored beside the number it came from. The
+ * Flutter client computes the identical value, which is what lets a key derived
+ * on a phone and a key derived here name the same acquisition.
+ */
+function referralPhoneHash(phoneE164) {
+    const phone = (phoneE164 ?? '').trim();
+    if (phone === '')
+        return '';
+    return (0, crypto_1.createHash)('sha256').update(`affiliate-phone-v1:${phone}`).digest('hex');
+}
+/**
+ * The idempotency keys the plan fixes, in the plan's own spelling.
+ *
+ * Distinct from [affiliateIds], which are document ids: an id is where a fact
+ * is stored, a key is what makes two requests the same request. They are stored
+ * side by side so a replay arriving by a different route — the offline queue
+ * rather than the till — still resolves to the record already written.
+ *
+ * `attribution` takes a hash, never a number. A key is read by people who have
+ * no business learning a customer's phone from a log line.
+ */
+exports.referralIdempotencyKeys = {
+    sale: saleIdempotencyKey,
+    attribution: (merchantId, customerPhoneHash) => `affiliate-attribution:${merchantId}:${customerPhoneHash}`,
+    reward: (attributionId, rewardType) => `affiliate-reward:${attributionId}:${rewardType}`,
+};
+/**
+ * How far a device's clock may be out before it is worth writing down.
+ *
+ * A sale queued on a phone whose clock is a day wrong still commits — refusing
+ * it would lose a real purchase over a setting the cashier cannot see — but the
+ * skew is recorded, because a run of them is how a till that is being used to
+ * back-date sales looks from here.
+ */
+exports.CLOCK_SKEW_SIGNAL_MS = 24 * 60 * 60 * 1000;
 /**
  * What a replay has to match to be the same request.
  *

@@ -475,8 +475,129 @@ export function parseReferralSaleCommit(
   };
 }
 
-export function parseBodyObject(raw: unknown): Record<string, unknown> {
+/* ------------------------------------------------------- offline reconcile */
+
+export type ParsedOfflineBenefit = {
+  type: BenefitType;
+  value: number;
+  discountAmount: number;
+  pointsAwarded: number;
+};
+
+export type ParsedOfflineReferralSale = ParsedReferralSaleCommit & {
+  offlineBenefitApplied: boolean;
+  appliedBenefit: ParsedOfflineBenefit | null;
+  localCreatedAt: number;
+};
+
+function parseAppliedBenefit(raw: unknown): ParsedOfflineBenefit {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw affiliateApiError(400, 'invalid_benefit_value');
+  }
+  const benefit = raw as Record<string, unknown>;
+  const type = typeof benefit.type === 'string' ? benefit.type.trim().toUpperCase() : '';
+  if (!(BENEFIT_TYPE as readonly string[]).includes(type)) {
+    throw affiliateApiError(400, 'invalid_benefit_type');
+  }
+  const money = (value: unknown): number => {
+    if (value === undefined || value === null) return 0;
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+      throw affiliateApiError(400, 'invalid_benefit_value');
+    }
+    return value;
+  };
+  const points = money(benefit.points_awarded);
+  if (!Number.isInteger(points)) throw affiliateApiError(400, 'invalid_benefit_value');
+  return {
+    type: type as BenefitType,
+    value: money(benefit.value),
+    discountAmount: money(benefit.discount_amount),
+    pointsAwarded: points,
+  };
+}
+
+/**
+ * A queued offline sale, read strictly.
+ *
+ * Everything the online commit reads, plus the one fact only the till knows:
+ * whether it already took money off the bill. That flag decides whether the
+ * server is reconciling a discount it has to honour or judging a code that has
+ * so far cost nobody anything, so it is read as a boolean and never inferred
+ * from the presence of a benefit object.
+ *
+ * `local_created_at` is the device's clock and is treated as information, not
+ * as truth: it is stored on the sale and measured against the server's own
+ * clock, and a wild value is recorded rather than used to refuse a real sale.
+ */
+export function parseOfflineReferralSale(
+  payload: Record<string, unknown>,
+  normalize: (value: unknown) => string | null,
+  now: number,
+): ParsedOfflineReferralSale {
+  const base = parseReferralSaleCommit(payload, normalize);
+  const offlineBenefitApplied = payload.offline_benefit_applied === true;
+  const appliedBenefit = offlineBenefitApplied
+    ? parseAppliedBenefit(payload.applied_benefit)
+    : null;
+  if (appliedBenefit !== null && appliedBenefit.discountAmount > base.grossAmount) {
+    throw affiliateApiError(400, 'invalid_benefit_value');
+  }
+  const rawCreatedAt = payload.created_at ?? payload.local_created_at;
+  const localCreatedAt =
+    typeof rawCreatedAt === 'number' && Number.isFinite(rawCreatedAt) && rawCreatedAt > 0
+      ? Math.floor(rawCreatedAt)
+      : now;
+
+  return {
+    ...base,
+    offlineBenefitApplied,
+    appliedBenefit,
+    localCreatedAt,
+  };
+}
+
+/**
+ * An affiliate an owner added with no connection.
+ *
+ * The same fields the online create takes, plus the queue's own identifiers so
+ * the answer can be matched back to the row the device is holding. The local id
+ * is carried, never trusted: the affiliate's real identity is still derived
+ * from the phone, server-side, exactly as it is online.
+ */
+export type ParsedOfflineAffiliateCreate = {
+  localId: string;
+  localAffiliateId: string;
+  deviceId: string;
+  idempotencyKey: string;
+  createdAt: number;
+};
+
+export function parseOfflineAffiliateCreate(
+  payload: Record<string, unknown>,
+  now: number,
+): ParsedOfflineAffiliateCreate {
+  const text = (value: unknown, max: number): string => {
+    if (typeof value !== 'string') throw affiliateApiError(400, 'invalid_sale_reference');
+    const trimmed = value.trim();
+    if (trimmed === '' || trimmed.length > max) {
+      throw affiliateApiError(400, 'invalid_sale_reference');
+    }
+    return trimmed;
+  };
+  const rawCreatedAt = payload.created_at;
+  return {
+    localId: text(payload.local_id, 120),
+    localAffiliateId: text(payload.local_affiliate_id, 200),
+    deviceId: text(payload.device_id, 120),
+    idempotencyKey: text(payload.idempotency_key, 200),
+    createdAt:
+      typeof rawCreatedAt === 'number' && Number.isFinite(rawCreatedAt) && rawCreatedAt > 0
+        ? Math.floor(rawCreatedAt)
+        : now,
+  };
+}
+
+export function parseBodyObject(raw: unknown): Record<string, unknown> {  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     throw affiliateApiError(400, 'invalid_body');
   }
   return raw as Record<string, unknown>;

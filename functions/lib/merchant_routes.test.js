@@ -125,10 +125,22 @@ function merchantRoutes() {
  * own settings. The request carries the sale's local identity, the customer,
  * the gross amount and the typed code, and nothing that says what anything is
  * worth.
+ *
+ * `/referral-sales/sync` is the same route for a sale the till already made
+ * without a connection, and is open to the same callers for the same reason.
+ * It carries one extra fact — whether a discount was already given — and that
+ * fact does not price anything: it only tells the server which money it is no
+ * longer allowed to take back. Everything the affiliate is owed is still
+ * decided here, from the stored code.
+ *
+ * `/affiliates/sync` is the offline queue's copy of `/affiliates`, and is
+ * owner-only exactly like it. A queue is not a way around RBAC: the device's
+ * own check is a courtesy and this one is the check.
  */
 const ESCRITAS_PERMITIDAS = new Set([
     '/recovery-tasks/:taskId/complete',
     '/affiliates',
+    '/affiliates/sync',
     '/affiliates/:affiliateId',
     '/affiliates/:affiliateId/activate',
     '/affiliates/:affiliateId/deactivate',
@@ -138,6 +150,7 @@ const ESCRITAS_PERMITIDAS = new Set([
     '/affiliate-codes/:codeId/disable',
     '/referrals/validate-code',
     '/referral-sales/commit',
+    '/referral-sales/sync',
     '/affiliate-rewards/:rewardId/approve',
     '/affiliate-rewards/:rewardId/cancel',
 ]);

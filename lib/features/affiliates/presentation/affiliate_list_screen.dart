@@ -8,6 +8,7 @@ import '../../../core/theme/app_layout.dart';
 import '../../../core/utils/pt_date_format.dart';
 import '../../../design_system/design_system.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../data/affiliate_dao.dart';
 import '../data/affiliate_repository.dart';
 import '../domain/affiliate.dart';
 import '../domain/merchant_affiliate_dtos.dart';
@@ -68,8 +69,11 @@ class _AffiliateListScreenState extends ConsumerState<AffiliateListScreen> {
           // Only the owner may create one, and the server enforces it. The
           // button stays visible so a staff member can see the feature exists
           // and ask, rather than wondering why the screen looks broken.
-          onPressed:
-              isOwner && online ? () => context.push('/affiliates/new') : null,
+          //
+          // Connectivity is no longer part of the condition: an offline create
+          // writes a provisional record and queues the real one, which is a
+          // better answer than telling an owner to come back later.
+          onPressed: isOwner ? () => context.push('/affiliates/new') : null,
           animationDuration: Duration.zero,
         ),
       ),
@@ -85,11 +89,17 @@ class _AffiliateListScreenState extends ConsumerState<AffiliateListScreen> {
           children: [
             if (!online) ...[
               const AffiliateOfflineNotice(
-                message: 'Sem ligação. Vê os dados já carregados, mas não é '
-                    'possível adicionar nem alterar afiliados.',
+                message: 'Sem ligação. Vê os dados já carregados. Pode '
+                    'adicionar um afiliado: fica guardado com código '
+                    'provisório até o sistema confirmar.',
               ),
               const SizedBox(height: AppSpacing.md),
             ],
+            _ProvisionalAffiliateSection(
+              affiliates:
+                  ref.watch(provisionalAffiliatesProvider).valueOrNull ??
+                      const <ProvisionalAffiliate>[],
+            ),
             _FilterRow(
               selected: _filter,
               onChanged: (filter) => setState(() => _filter = filter),
@@ -145,9 +155,93 @@ class _AffiliateListScreenState extends ConsumerState<AffiliateListScreen> {
   }
 }
 
+/// The affiliates this device is still waiting to have registered.
+///
+/// Shown above the real list rather than mixed into it: these people cannot be
+/// shared, cannot be edited and may yet be refused, and a card that looked like
+/// the others would invite all three.
+class _ProvisionalAffiliateSection extends StatelessWidget {
+  const _ProvisionalAffiliateSection({required this.affiliates});
+
+  final List<ProvisionalAffiliate> affiliates;
+
+  @override
+  Widget build(BuildContext context) {
+    if (affiliates.isEmpty) return const SizedBox.shrink();
+    return Column(
+      key: const Key('affiliate-provisional-section'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final affiliate in affiliates)
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            child: MaisUmSurface(
+              variant: affiliate.isRejected
+                  ? MaisUmSurfaceVariant.error
+                  : MaisUmSurfaceVariant.warning,
+              radius: AppRadius.lg,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              animationDuration: Duration.zero,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        affiliate.isRejected
+                            ? Icons.error_outline_rounded
+                            : Icons.schedule_rounded,
+                        size: 18,
+                        color: affiliate.isRejected
+                            ? AppColors.error
+                            : AppColors.warning,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          affiliate.displayName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        affiliate.isRejected ? 'Recusado' : 'Por confirmar',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: affiliate.isRejected
+                              ? AppColors.error
+                              : AppColors.warning,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    affiliate.isRejected
+                        ? affiliate.lastSyncError ??
+                            'O sistema não aceitou este afiliado. '
+                                'Adicione-o outra vez com ligação.'
+                        : 'Código provisório ${affiliate.provisionalCode}. '
+                            'Não pode ser partilhado até ser confirmado.',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _FilterRow extends StatelessWidget {
   const _FilterRow({required this.selected, required this.onChanged});
-
   final AffiliateListFilter selected;
   final ValueChanged<AffiliateListFilter> onChanged;
 

@@ -14,6 +14,8 @@ exports.parseCodeText = parseCodeText;
 exports.parseOptionalSaleAmount = parseOptionalSaleAmount;
 exports.parseIdParam = parseIdParam;
 exports.parseReferralSaleCommit = parseReferralSaleCommit;
+exports.parseOfflineReferralSale = parseOfflineReferralSale;
+exports.parseOfflineAffiliateCreate = parseOfflineAffiliateCreate;
 exports.parseBodyObject = parseBodyObject;
 exports.parseAffiliateStatus = parseAffiliateStatus;
 exports.canTransitionReward = canTransitionReward;
@@ -361,6 +363,87 @@ function parseReferralSaleCommit(payload, normalize) {
         grossAmount: parseGrossAmount(payload.gross_amount),
         rawCode: parseCodeText(payload.code),
         items: parseSaleItems(payload.items),
+    };
+}
+function parseAppliedBenefit(raw) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+        throw affiliateApiError(400, 'invalid_benefit_value');
+    }
+    const benefit = raw;
+    const type = typeof benefit.type === 'string' ? benefit.type.trim().toUpperCase() : '';
+    if (!affiliate_contracts_js_1.BENEFIT_TYPE.includes(type)) {
+        throw affiliateApiError(400, 'invalid_benefit_type');
+    }
+    const money = (value) => {
+        if (value === undefined || value === null)
+            return 0;
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+            throw affiliateApiError(400, 'invalid_benefit_value');
+        }
+        return value;
+    };
+    const points = money(benefit.points_awarded);
+    if (!Number.isInteger(points))
+        throw affiliateApiError(400, 'invalid_benefit_value');
+    return {
+        type: type,
+        value: money(benefit.value),
+        discountAmount: money(benefit.discount_amount),
+        pointsAwarded: points,
+    };
+}
+/**
+ * A queued offline sale, read strictly.
+ *
+ * Everything the online commit reads, plus the one fact only the till knows:
+ * whether it already took money off the bill. That flag decides whether the
+ * server is reconciling a discount it has to honour or judging a code that has
+ * so far cost nobody anything, so it is read as a boolean and never inferred
+ * from the presence of a benefit object.
+ *
+ * `local_created_at` is the device's clock and is treated as information, not
+ * as truth: it is stored on the sale and measured against the server's own
+ * clock, and a wild value is recorded rather than used to refuse a real sale.
+ */
+function parseOfflineReferralSale(payload, normalize, now) {
+    const base = parseReferralSaleCommit(payload, normalize);
+    const offlineBenefitApplied = payload.offline_benefit_applied === true;
+    const appliedBenefit = offlineBenefitApplied
+        ? parseAppliedBenefit(payload.applied_benefit)
+        : null;
+    if (appliedBenefit !== null && appliedBenefit.discountAmount > base.grossAmount) {
+        throw affiliateApiError(400, 'invalid_benefit_value');
+    }
+    const rawCreatedAt = payload.created_at ?? payload.local_created_at;
+    const localCreatedAt = typeof rawCreatedAt === 'number' && Number.isFinite(rawCreatedAt) && rawCreatedAt > 0
+        ? Math.floor(rawCreatedAt)
+        : now;
+    return {
+        ...base,
+        offlineBenefitApplied,
+        appliedBenefit,
+        localCreatedAt,
+    };
+}
+function parseOfflineAffiliateCreate(payload, now) {
+    const text = (value, max) => {
+        if (typeof value !== 'string')
+            throw affiliateApiError(400, 'invalid_sale_reference');
+        const trimmed = value.trim();
+        if (trimmed === '' || trimmed.length > max) {
+            throw affiliateApiError(400, 'invalid_sale_reference');
+        }
+        return trimmed;
+    };
+    const rawCreatedAt = payload.created_at;
+    return {
+        localId: text(payload.local_id, 120),
+        localAffiliateId: text(payload.local_affiliate_id, 200),
+        deviceId: text(payload.device_id, 120),
+        idempotencyKey: text(payload.idempotency_key, 200),
+        createdAt: typeof rawCreatedAt === 'number' && Number.isFinite(rawCreatedAt) && rawCreatedAt > 0
+            ? Math.floor(rawCreatedAt)
+            : now,
     };
 }
 function parseBodyObject(raw) {

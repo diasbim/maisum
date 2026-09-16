@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_layout.dart';
 import '../../../../app/providers.dart';
 import '../../../../design_system/design_system.dart';
+import '../../domain/offline_referral.dart';
 import '../../domain/referral_validation.dart';
 import '../../providers/affiliate_providers.dart';
 import '../../services/referral_copy.dart';
@@ -21,6 +22,7 @@ class ReferralCodeEntry {
     required this.code,
     this.validation,
     this.offline = false,
+    this.offlineDecision,
   });
 
   final String code;
@@ -29,6 +31,13 @@ class ReferralCodeEntry {
   /// Connectivity snapshot used only for immediate presentation. The sale
   /// screen resolves current connectivity again when the cashier confirms.
   final bool offline;
+
+  /// What the local cache said about this code, when the preview ran offline.
+  ///
+  /// Advisory, exactly like [validation]: the commit path re-reads the cache
+  /// inside the transaction that writes the sale, so a decision taken here can
+  /// never be the one that prices the bill.
+  final OfflineReferralDecision? offlineDecision;
 
   bool get hasCode => code.isNotEmpty;
 
@@ -51,6 +60,7 @@ class ReferralCodeSection extends ConsumerStatefulWidget {
     required this.grossAmount,
     required this.onChanged,
     this.enabled = true,
+    this.customerIsNew = true,
   });
 
   final String customerPhone;
@@ -58,12 +68,29 @@ class ReferralCodeSection extends ConsumerStatefulWidget {
   final ValueChanged<ReferralCodeEntry?> onChanged;
   final bool enabled;
 
+  /// What this device knows about the customer, passed down so the offline
+  /// preview can run the `firstVisitOnly` check the server would run. It is a
+  /// local opinion and is treated as one: the server decides the acquisition.
+  final bool customerIsNew;
+
   @override
   ConsumerState<ReferralCodeSection> createState() =>
       _ReferralCodeSectionState();
 }
 
-enum _ReferralPhase { idle, validating, valid, invalid, unavailable }
+enum _ReferralPhase {
+  idle,
+  validating,
+  valid,
+  invalid,
+  unavailable,
+
+  /// Priced from this device's cache, with nothing confirmed.
+  offlineCached,
+
+  /// Typed with no cache entry: kept, worth nothing until the server sees it.
+  offlineUnknown,
+}
 
 class _ReferralCodeSectionState extends ConsumerState<ReferralCodeSection> {
   final _codeCtrl = TextEditingController();
@@ -72,6 +99,7 @@ class _ReferralCodeSectionState extends ConsumerState<ReferralCodeSection> {
   bool _expanded = false;
   _ReferralPhase _phase = _ReferralPhase.idle;
   ReferralValidationResult? _result;
+  OfflineReferralDecision? _offlineDecision;
   String? _validatedCode;
   double? _validatedAmount;
   String? _failureMessage;
@@ -94,6 +122,7 @@ class _ReferralCodeSectionState extends ConsumerState<ReferralCodeSection> {
         _codeCtrl.clear();
         _phase = _ReferralPhase.idle;
         _result = null;
+        _offlineDecision = null;
         _validatedCode = null;
         _validatedAmount = null;
         _failureMessage = null;
@@ -114,6 +143,7 @@ class _ReferralCodeSectionState extends ConsumerState<ReferralCodeSection> {
       code: code,
       validation: _validatedCode == code ? _result : null,
       offline: !_isOnline,
+      offlineDecision: _validatedCode == code ? _offlineDecision : null,
     );
   }
 
@@ -138,12 +168,7 @@ class _ReferralCodeSectionState extends ConsumerState<ReferralCodeSection> {
       return;
     }
     if (!_isOnline) {
-      setState(() {
-        _phase = _ReferralPhase.unavailable;
-        _failureMessage = 'Sem ligação. O código não pode ser confirmado '
-            'agora e a venda será registada sem ele.';
-      });
-      _notify();
+      await _previewFromCache(code);
       return;
     }
 
@@ -161,6 +186,7 @@ class _ReferralCodeSectionState extends ConsumerState<ReferralCodeSection> {
       if (!mounted) return;
       setState(() {
         _result = result;
+        _offlineDecision = null;
         _validatedCode = code;
         _validatedAmount = widget.grossAmount;
         _phase = result.isValid ? _ReferralPhase.valid : _ReferralPhase.invalid;
@@ -177,6 +203,54 @@ class _ReferralCodeSectionState extends ConsumerState<ReferralCodeSection> {
             'Pode continuar a venda.';
       });
     }
+    _notify();
+  }
+
+  /// The offline preview, read from the codes this device was told about.
+  ///
+  /// A cached code shows the benefit it will apply and says plainly that the
+  /// indication is not confirmed. An uncached one shows no benefit at all —
+  /// inventing a discount for a code nobody has seen is how a business gives
+  /// away money to a code that does not exist — and the typed code is still
+  /// carried to the sale so the server can judge it later.
+  Future<void> _previewFromCache(String code) async {
+    final repository = ref.read(affiliateOfflineGatewayProvider);
+    if (repository == null) {
+      setState(() {
+        _phase = _ReferralPhase.offlineUnknown;
+        _offlineDecision = null;
+        _validatedCode = code;
+        _validatedAmount = widget.grossAmount;
+        _failureMessage = null;
+      });
+      _notify();
+      return;
+    }
+
+    setState(() {
+      _phase = _ReferralPhase.validating;
+      _failureMessage = null;
+    });
+
+    final decision = await repository.previewOfflineReferral(
+      code: code,
+      grossAmount: widget.grossAmount,
+      customerIsNew: widget.customerIsNew,
+      customerPhoneE164: widget.customerPhone,
+    );
+    if (!mounted) return;
+    setState(() {
+      _result = null;
+      _offlineDecision = decision;
+      _validatedCode = code;
+      _validatedAmount = widget.grossAmount;
+      _phase = decision.appliesBenefit
+          ? _ReferralPhase.offlineCached
+          : _ReferralPhase.offlineUnknown;
+      _failureMessage = decision.errorCode == null
+          ? null
+          : referralErrorMessage(decision.errorCode);
+    });
     _notify();
   }
 
@@ -241,6 +315,7 @@ class _ReferralCodeSectionState extends ConsumerState<ReferralCodeSection> {
             _ReferralStatusPanel(
               phase: _phase,
               result: _result,
+              offlineDecision: _offlineDecision,
               failureMessage: _failureMessage,
               online: online,
               amountChanged: _validatedAmount != null &&
@@ -321,6 +396,7 @@ class _ReferralStatusPanel extends StatelessWidget {
   const _ReferralStatusPanel({
     required this.phase,
     required this.result,
+    required this.offlineDecision,
     required this.failureMessage,
     required this.online,
     required this.amountChanged,
@@ -328,21 +404,26 @@ class _ReferralStatusPanel extends StatelessWidget {
 
   final _ReferralPhase phase;
   final ReferralValidationResult? result;
+  final OfflineReferralDecision? offlineDecision;
   final String? failureMessage;
   final bool online;
   final bool amountChanged;
 
   @override
   Widget build(BuildContext context) {
-    if (!online && phase != _ReferralPhase.valid) {
+    if (!online &&
+        phase != _ReferralPhase.valid &&
+        phase != _ReferralPhase.offlineCached &&
+        phase != _ReferralPhase.offlineUnknown &&
+        phase != _ReferralPhase.validating) {
       return const _ReferralNotice(
         key: Key('referral-offline-notice'),
         icon: Icons.wifi_off_rounded,
         variant: MaisUmSurfaceVariant.warning,
         color: AppColors.warning,
         title: 'Sem ligação',
-        message: 'O código fica guardado, mas só pode ser confirmado online. '
-            'Nenhum benefício é aplicado agora.',
+        message: 'Escreva o código e toque em Validar para ver se este '
+            'aparelho já o conhece.',
       );
     }
 
@@ -375,6 +456,40 @@ class _ReferralStatusPanel extends StatelessWidget {
           title: 'Código não aplicado',
           message: '${failureMessage ?? 'Não foi possível usar este código.'} '
               'Pode concluir a venda normalmente.',
+        );
+      case _ReferralPhase.offlineCached:
+        // The one screen where a benefit is promised without the server having
+        // agreed to it. It has to say so in the same breath, because a cashier
+        // who reads "código válido" tells the customer the affiliate has been
+        // credited, and nobody has been credited yet.
+        final benefit = offlineDecision?.benefit;
+        final affiliate = offlineDecision?.cache?.affiliateFirstName ??
+            offlineDecision?.cache?.affiliateDisplayName;
+        return _ReferralNotice(
+          key: const Key('referral-offline-cached-notice'),
+          icon: Icons.schedule_rounded,
+          variant: MaisUmSurfaceVariant.warning,
+          color: AppColors.warning,
+          title: 'Pendente de confirmação',
+          message: [
+            if (benefit != null) 'Cliente recebe: ${benefit.displayText}',
+            if (affiliate != null) 'Afiliado: $affiliate',
+            'A indicação só é confirmada quando houver ligação.',
+          ].join(' · '),
+        );
+      case _ReferralPhase.offlineUnknown:
+        return _ReferralNotice(
+          key: const Key('referral-offline-unknown-notice'),
+          icon: Icons.wifi_off_rounded,
+          variant: MaisUmSurfaceVariant.warning,
+          color: AppColors.warning,
+          title: 'Código guardado, sem benefício agora',
+          message: [
+            failureMessage ??
+                'Este aparelho ainda não conhece este código, por isso a venda '
+                    'fica pelo valor total.',
+            'O código segue com a venda e é verificado quando houver ligação.',
+          ].join(' '),
         );
       case _ReferralPhase.valid:
         final validation = result;

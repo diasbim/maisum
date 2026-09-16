@@ -162,6 +162,11 @@ class AffiliateCodeLookupCache {
     this.usageLimit,
     this.usageCount = 0,
     this.firstVisitOnly = true,
+    this.affiliateDisplayName,
+    this.affiliateFirstName,
+    this.affiliateStatus = 'ACTIVE',
+    this.linkStatus = 'ACTIVE',
+    this.refreshedAt,
   });
 
   final String normalizedCode;
@@ -180,6 +185,23 @@ class AffiliateCodeLookupCache {
   final DateTime cachedAt;
   final DateTime updatedAt;
 
+  /// The affiliate as a cashier would say it, cached alongside the terms.
+  ///
+  /// Without it an offline preview could only show an identifier, and "código
+  /// válido, afiliado ac_9f3b…" is not something anyone can read back to a
+  /// customer.
+  final String? affiliateDisplayName;
+  final String? affiliateFirstName;
+
+  /// The two statuses that make an ACTIVE code unusable anyway: a suspended
+  /// affiliate, or one no longer linked to this business.
+  final String affiliateStatus;
+  final String linkStatus;
+
+  /// When this row was last confirmed by a sync, as opposed to when it was
+  /// first written.
+  final DateTime? refreshedAt;
+
   Map<String, dynamic> toMap() => {
         'normalized_code': normalizedCode,
         'code_id': codeId,
@@ -196,6 +218,11 @@ class AffiliateCodeLookupCache {
         'first_visit_only': firstVisitOnly ? 1 : 0,
         'cached_at': cachedAt.millisecondsSinceEpoch,
         'updated_at': updatedAt.millisecondsSinceEpoch,
+        'affiliate_display_name': affiliateDisplayName,
+        'affiliate_first_name': affiliateFirstName,
+        'affiliate_status': affiliateStatus,
+        'link_status': linkStatus,
+        'refreshed_at': (refreshedAt ?? cachedAt).millisecondsSinceEpoch,
       };
 
   Map<String, dynamic> toDbMap() => toMap();
@@ -234,6 +261,22 @@ class AffiliateCodeLookupCache {
       ),
       cachedAt: readRequiredDateTime(map, ['cached_at', 'cachedAt']),
       updatedAt: readRequiredDateTime(map, ['updated_at', 'updatedAt']),
+      affiliateDisplayName: readNullableString(
+        map,
+        ['affiliate_display_name', 'affiliateDisplayName'],
+      ),
+      affiliateFirstName: readNullableString(
+        map,
+        ['affiliate_first_name', 'affiliateFirstName'],
+      ),
+      affiliateStatus: readNullableString(
+            map,
+            ['affiliate_status', 'affiliateStatus'],
+          ) ??
+          'ACTIVE',
+      linkStatus:
+          readNullableString(map, ['link_status', 'linkStatus']) ?? 'ACTIVE',
+      refreshedAt: readNullableDateTime(map, ['refreshed_at', 'refreshedAt']),
     );
   }
 

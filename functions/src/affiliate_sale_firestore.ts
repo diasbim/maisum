@@ -2,6 +2,11 @@ import * as admin from 'firebase-admin';
 
 import { affiliateConfigFrom } from './affiliate_store.js';
 import {
+  commitOfflineReferralSale,
+  type OfflineReferralSaleInput,
+  type OfflineReferralSaleOutcome,
+} from './affiliate_offline_sale.js';
+import {
   commitReferralSale,
   recordReferredCustomerReturn,
   reverseReferralSale,
@@ -78,6 +83,21 @@ export async function commitReferralSaleToFirestore(
   input: ReferralSaleCommitInput,
 ): Promise<ReferralSaleCommitOutcome> {
   return commitReferralSale(firestoreReferralSaleGateway, input, (business) =>
+    affiliateConfigFrom((business ?? {}) as DocumentData));
+}
+
+/**
+ * The reconciliation of a sale a till already made offline.
+ *
+ * Shares the gateway, the facts and the validation with the online commit on
+ * purpose: the only thing that differs is what may still be changed about a
+ * sale that has already been paid for, and that difference lives in
+ * `affiliate_offline_sale.ts` rather than in a second Firestore adapter.
+ */
+export async function commitOfflineReferralSaleToFirestore(
+  input: OfflineReferralSaleInput,
+): Promise<OfflineReferralSaleOutcome> {
+  return commitOfflineReferralSale(firestoreReferralSaleGateway, input, (business) =>
     affiliateConfigFrom((business ?? {}) as DocumentData));
 }
 
