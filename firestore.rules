@@ -477,10 +477,15 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
-      // The messages Phase 5 will send about a referral, written inside the
-      // sale transaction and delivered afterwards by a server worker. A client
-      // that could write one could make the product send WhatsApp messages in
-      // the business's name.
+      // The messages the product sends about a referral: written inside the
+      // sale transaction and delivered afterwards by the outbox worker, which
+      // composes every body from the stored template and reads every number
+      // from the merchant's own records. A client that could write one could
+      // make the product send arbitrary WhatsApp in the business's name, to a
+      // number of its choosing; a client that could read one could harvest
+      // customer and affiliate phone numbers. Neither is ever allowed —
+      // including the retry fields, which a client that could edit them could
+      // use to replay a message indefinitely.
       match /affiliate_outbox/{outboxId} {
         allow read, write: if false;
       }

@@ -4,16 +4,20 @@ import type { RewardStatus } from './affiliate_contracts.js';
  * What the affiliate and the customer are told, and how it leaves the building.
  *
  * Two halves, kept apart on purpose. Composing a message is pure and is tested
- * here; delivering one is not implemented, because the product has no WhatsApp
- * provider yet — no credentials, no webhook, no opt-in policy.
+ * here; delivering one goes through an adapter the product does not have yet —
+ * no WhatsApp provider is configured, no credentials, no webhook, no opt-in
+ * policy.
  *
  * That gap is handled by refusing rather than pretending. `deliverAffiliateMessage`
- * with no adapter returns `not_configured` and the outbox row stays queued, so
- * the day a provider is chosen the backlog sends. A stub that returned success
- * would mark every message delivered and quietly lose them all.
+ * with no adapter returns `not_configured` and the outbox row stays queued
+ * without burning a retry, so the day a provider is chosen the backlog sends. A
+ * stub that returned success would mark every message delivered and quietly
+ * lose them all.
  *
- * Nothing here is allowed to affect a sale. The caller enqueues after the
- * transaction commits and treats every failure as a log line.
+ * `affiliate_outbox.ts` owns the queue around this: claiming, backoff, terminal
+ * states and logging. Nothing in either file is allowed to affect a sale — the
+ * rows are written inside the sale transaction and read by a worker afterwards,
+ * so a provider outage is a backlog rather than a rolled-back sale.
  */
 
 export const AFFILIATE_TEMPLATE = [
@@ -22,6 +26,14 @@ export const AFFILIATE_TEMPLATE = [
   'affiliate_customer_returned',
 ] as const;
 export type AffiliateTemplate = (typeof AFFILIATE_TEMPLATE)[number];
+
+/** True for a template this build knows how to render. */
+export function isAffiliateTemplate(value: unknown): value is AffiliateTemplate {
+  return (
+    typeof value === 'string' &&
+    (AFFILIATE_TEMPLATE as readonly string[]).includes(value)
+  );
+}
 
 /**
  * Editable template strings with braced variables, as the spec asks.
@@ -107,8 +119,24 @@ export type OutboxMessage = {
 export type DeliveryOutcome =
   | { status: 'sent'; providerMessageId: string }
   | { status: 'not_configured' }
-  | { status: 'skipped'; reason: 'notifications_disabled' | 'no_phone' }
+  | { status: 'skipped'; reason: DeliverySkipReason }
   | { status: 'failed'; retryable: boolean; error: string };
+
+/**
+ * Why a message is not going out, and is not going to.
+ *
+ * Every one of these is a decision, not a fault: the merchant switched
+ * notifications off, nobody has a number, the customer never consented, the
+ * affiliate is no longer active. Retrying any of them would send a message the
+ * product was told not to send, so they are terminal.
+ */
+export const DELIVERY_SKIP_REASON = [
+  'notifications_disabled',
+  'no_phone',
+  'consent_missing',
+  'affiliate_inactive',
+] as const;
+export type DeliverySkipReason = (typeof DELIVERY_SKIP_REASON)[number];
 
 export type WhatsAppAdapter = {
   send(message: OutboxMessage): Promise<{ providerMessageId: string }>;

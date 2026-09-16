@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.merchantPolicyBootstrapOnBusinessWrite = exports.usageReconcileWeekly = exports.usageBackfillDaily = exports.retentionInactivityScanDaily = exports.retentionDomainEventPostgresProjection = exports.loyaltyLedgerSaleOnSaleWrite = exports.customerCoreCanonicalLinkOnCustomerWrite = exports.api = void 0;
+exports.merchantPolicyBootstrapOnBusinessWrite = exports.usageReconcileWeekly = exports.usageBackfillDaily = exports.retentionInactivityScanDaily = exports.retentionDomainEventPostgresProjection = exports.affiliateRetentionEventOnCreate = exports.affiliateOutboxRetrySweep = exports.affiliateOutboxOnCreate = exports.loyaltyLedgerSaleOnSaleWrite = exports.customerCoreCanonicalLinkOnCustomerWrite = exports.api = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const crypto_1 = require("crypto");
@@ -65,6 +65,8 @@ const admin_audit_js_1 = require("./admin_audit.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
 const affiliate_routes_js_1 = require("./affiliate_routes.js");
 const affiliate_sale_firestore_js_1 = require("./affiliate_sale_firestore.js");
+const affiliate_outbox_js_1 = require("./affiliate_outbox.js");
+const affiliate_outbox_firestore_js_1 = require("./affiliate_outbox_firestore.js");
 const survey_link_js_1 = require("./survey_link.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
 const retention_engine_js_1 = require("./retention_engine.js");
@@ -1553,6 +1555,7 @@ merchantRouter.get('/customers/:customerId/ledger', async (req, res) => {
     respondServerError: respondAdminServerError,
     normalizePhone: tryNormalizeMozambiquePhoneToE164,
     affiliateIdForPhone: buildAffiliateIdentityId,
+    sweepAffiliateOutbox: ({ merchantId, limit }) => (0, affiliate_outbox_js_1.processAffiliateOutbox)(affiliateOutboxDeps(), { merchantId, limit }),
 });
 app.use('/merchant', merchantRouter);
 app.get('/customer/session', async (req, res) => {
@@ -1998,8 +2001,10 @@ app.put('/retention/config', async (req, res) => {
         const rulesPatch = payload.rules;
         if (rulesPatch && typeof rulesPatch === 'object') {
             for (const [ruleKey, enabled] of Object.entries(rulesPatch)) {
-                if (typeof enabled !== 'boolean' || !(0, retention_engine_js_1.isRetentionRuleKey)(ruleKey))
+                if (typeof enabled !== 'boolean' ||
+                    !(0, retention_engine_js_1.isMerchantEditableRetentionRuleKey)(ruleKey)) {
                     continue;
+                }
                 await (0, retention_engine_js_1.setRetentionRuleEnabled)(pool, merchantId, ruleKey, enabled, now);
             }
         }
@@ -3544,6 +3549,147 @@ exports.loyaltyLedgerSaleOnSaleWrite = (0, firestore_2.onDocumentWritten)({
             return;
         }
         throw error;
+    }
+});
+/* -- Referral notifications ---------------------------------------------- */
+/**
+ * The outbox worker's dependencies, assembled once per call.
+ *
+ * `resolveWhatsAppAdapter()` returns null until a provider is configured, and
+ * that is the point: delivery answers `not_configured`, the row stays queued
+ * without burning a retry, and nothing pretends a message went out. See
+ * `affiliate_outbox_firestore.ts` for what configuring one involves.
+ */
+function affiliateOutboxDeps() {
+    return {
+        store: affiliate_outbox_firestore_js_1.firestoreOutboxStore,
+        resolveContext: (0, affiliate_outbox_firestore_js_1.createFirestoreOutboxContextResolver)({
+            normalizePhone: tryNormalizeMozambiquePhoneToE164,
+        }),
+        adapter: (0, affiliate_outbox_firestore_js_1.resolveWhatsAppAdapter)(),
+    };
+}
+/**
+ * One queued referral message, delivered after the sale that queued it.
+ *
+ * On create, not on write: the worker updates the same document to record the
+ * outcome, and a write trigger would re-enter on its own update — an infinite
+ * loop that also sends repeatedly. Creation happens exactly once per fact,
+ * because the document id is derived from the merchant, the template and the
+ * sale.
+ *
+ * A duplicate firing of the create event is still possible — Firestore
+ * triggers are at-least-once — and is handled a second way: the worker claims
+ * the row transactionally, so the second firing finds it claimed or already
+ * sent and does nothing.
+ *
+ * Nothing here can affect the sale. The sale committed before this document
+ * existed, and every failure below is recorded on the outbox row rather than
+ * thrown — a throw would retrigger the function against a message that may
+ * already have been delivered.
+ */
+exports.affiliateOutboxOnCreate = (0, firestore_2.onDocumentCreated)('businesses/{merchantId}/affiliate_outbox/{outboxId}', async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+        ? event.params.merchantId.trim()
+        : '';
+    const outboxId = isNonEmptyString(event.params.outboxId)
+        ? event.params.outboxId.trim()
+        : '';
+    if (!merchantId || !outboxId)
+        return;
+    try {
+        await (0, affiliate_outbox_js_1.processOutboxMessage)(affiliateOutboxDeps(), merchantId, outboxId);
+    }
+    catch (error) {
+        console.error('affiliate_outbox_trigger_failed', {
+            merchant_id: merchantId,
+            outbox_id: outboxId,
+            error,
+        });
+    }
+});
+/**
+ * Retries transient failures, expired claims and messages queued while no
+ * provider was configured. The create trigger handles the fast path; this
+ * bounded sweep is the durable retry path.
+ */
+exports.affiliateOutboxRetrySweep = (0, scheduler_1.onSchedule)({
+    schedule: 'every 5 minutes',
+    timeZone: 'UTC',
+    timeoutSeconds: 300,
+    memory: '256MiB',
+}, async () => {
+    try {
+        const summary = await (0, affiliate_outbox_js_1.processAffiliateOutbox)(affiliateOutboxDeps(), {
+            merchantId: null,
+        });
+        console.info('affiliate_outbox_sweep_completed', summary);
+    }
+    catch (error) {
+        console.error('affiliate_outbox_sweep_failed', {
+            error_name: error instanceof Error ? error.name : typeof error,
+            error_message: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+    }
+});
+/**
+ * A published referral event, handed to the Retention Engine.
+ *
+ * The events are written inside the sale transaction and this trigger fires
+ * once that transaction has committed, which is what "publish only after
+ * commit" means here: there is no moment at which a rule can act on a sale
+ * that later rolled back.
+ *
+ * The dispatch records rule executions; it does not send anything. The
+ * messages a referral produces are outbox rows delivered by the trigger above,
+ * and a second sender for the same fact is the one reliable way to send twice.
+ *
+ * Postgres is where the rule catalog lives, so a business with no rows there
+ * yet is seeded first. Every failure is logged and swallowed: a referral
+ * already recorded in Firestore must not be reprocessed because an analytics
+ * database was briefly unreachable.
+ */
+exports.affiliateRetentionEventOnCreate = (0, firestore_2.onDocumentCreated)('businesses/{merchantId}/affiliate_events/{eventId}', async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+        ? event.params.merchantId.trim()
+        : '';
+    const eventId = isNonEmptyString(event.params.eventId)
+        ? event.params.eventId.trim()
+        : '';
+    if (!merchantId || !eventId)
+        return;
+    const data = event.data ? snapshotDataRecord(event.data) : {};
+    const eventType = maybePayloadString(data, 'event_type', 'eventType');
+    if (!(0, retention_engine_js_1.isAffiliateRetentionEvent)(eventType))
+        return;
+    const subjectId = maybePayloadString(data, 'customer_id', 'customerId') ??
+        maybePayloadString(data, 'affiliate_id', 'affiliateId') ??
+        'unknown';
+    try {
+        const now = Date.now();
+        await (0, retention_engine_js_1.seedDefaultRetentionRules)(pool, merchantId, now);
+        const dispatched = await (0, retention_engine_js_1.dispatchAffiliateRetentionEvent)(pool, {
+            merchantId,
+            event: eventType,
+            sourceId: eventId,
+            subjectId,
+            now,
+        });
+        console.info('affiliate_retention_event_dispatched', {
+            merchant_id: merchantId,
+            event_id: eventId,
+            event_type: eventType,
+            rules: dispatched.map((entry) => `${entry.ruleKey}:${entry.status}`),
+        });
+    }
+    catch (error) {
+        console.error('affiliate_retention_event_failed', {
+            merchant_id: merchantId,
+            event_id: eventId,
+            event_type: eventType,
+            error,
+        });
     }
 });
 function resolveMerchantId(decoded) {

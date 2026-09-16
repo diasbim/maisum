@@ -725,6 +725,78 @@ test('a customer nobody referred triggers nothing on a second sale', async () =>
   assert.equal(outcome.status, 'not_referred');
 });
 
+test('a retriggered return writes one event, one reward and one message', async () => {
+  // The hook hangs off the ordinary sale write, and Firestore fires that
+  // trigger at least once — sometimes more. Every document it writes is keyed
+  // by the fact rather than by the firing, so the second one adds nothing.
+  const docs = storeWith();
+  await commit(docs);
+
+  const eventId = affiliateIds.event(MERCHANT, 'REFERRED_CUSTOMER_RETURNED', 'sale-2');
+  const rewardEventId = affiliateIds.event(
+    MERCHANT,
+    'AFFILIATE_REWARD_CREATED',
+    RETURN_REWARD_ID,
+  );
+  const outboxId = affiliateIds.outbox(MERCHANT, 'affiliate_customer_returned', 'sale-2');
+
+  const writes: WriteOperation[] = [];
+  for (let firing = 0; firing < 3; firing++) {
+    const { gateway, applied } = gatewayOver(docs);
+    await recordReferredCustomerReturn(
+      gateway,
+      {
+        merchantId: MERCHANT,
+        saleId: 'sale-2',
+        customerId: CUSTOMER,
+        amount: 300,
+        occurredAt: NOW + 86_400_000,
+      },
+      RETURNS_ON,
+    );
+    writes.push(...applied);
+  }
+
+  const created = (docPath: string) =>
+    writes.filter((write) => write.kind === 'create' && write.path === docPath).length;
+
+  assert.equal(created(referralPaths.event(MERCHANT, eventId)), 1, 'return event');
+  assert.equal(created(referralPaths.event(MERCHANT, rewardEventId)), 1, 'reward event');
+  assert.equal(created(referralPaths.reward(MERCHANT, RETURN_REWARD_ID)), 1, 'reward');
+  assert.equal(created(referralPaths.outbox(MERCHANT, outboxId)), 1, 'queued message');
+});
+
+test('a queued message names the reward it is about, not a frozen status', async () => {
+  // The worker re-reads the reward at delivery time, so a merchant who
+  // approves in the meantime is quoted correctly rather than as still
+  // deciding. That is only possible if the row says which reward it means.
+  const docs = storeWith();
+  await commit(docs);
+  await recordReturn(docs, 'sale-2', NOW + 86_400_000, RETURNS_ON);
+
+  const firstSale = docs.get(
+    referralPaths.outbox(
+      MERCHANT,
+      affiliateIds.outbox(MERCHANT, 'affiliate_new_customer', SALE_ID),
+    ),
+  );
+  const returned = docs.get(
+    referralPaths.outbox(
+      MERCHANT,
+      affiliateIds.outbox(MERCHANT, 'affiliate_customer_returned', 'sale-2'),
+    ),
+  );
+
+  assert.equal(
+    (firstSale?.payload as DocumentData | undefined)?.reward_id,
+    FIRST_REWARD_ID,
+  );
+  assert.equal(
+    (returned?.payload as DocumentData | undefined)?.reward_id,
+    RETURN_REWARD_ID,
+  );
+});
+
 test('cancelling a return sale cancels its reward and leaves the acquisition', async () => {
   const docs = storeWith();
   await commit(docs);

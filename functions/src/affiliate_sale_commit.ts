@@ -827,6 +827,10 @@ export function planReferralSaleCommit(
       now: input.now,
       payload: {
         attribution_id: attributionId,
+        // The reward is named rather than only valued, so the worker can read
+        // its status as it stands when the message goes out: a merchant who
+        // approves in the meantime should not be quoted as still deciding.
+        reward_id: rewardSummary?.id ?? null,
         reward_points: rewardSummary?.value ?? 0,
         reward_status: rewardSummary?.status ?? null,
       },
@@ -981,12 +985,12 @@ function pushEvent(
 }
 
 /**
- * The message Phase 5 will send, recorded now.
+ * The message the outbox worker will send, recorded now.
  *
  * Written inside the transaction because the fact is part of the sale; sent
- * outside it, by a worker that does not exist yet. A row that is queued and
- * never delivered is a backlog; a message sent for a sale that rolled back is
- * a correction nobody can make.
+ * outside it, by `affiliate_outbox.ts`, which claims each row transactionally
+ * before delivering. A row that is queued and never delivered is a backlog; a
+ * message sent for a sale that rolled back is a correction nobody can make.
  */
 function pushOutbox(
   writes: WriteOperation[],
@@ -1009,6 +1013,9 @@ function pushOutbox(
       source_key: sourceKey,
       status: 'QUEUED',
       attempts: 0,
+      // The spec's name for the same counter; written together and only ever
+      // updated together by the outbox worker.
+      retry_count: 0,
       next_attempt_at: entry.now,
       last_error: null,
       payload: entry.payload,
@@ -1414,9 +1421,15 @@ export async function recordReferredCustomerReturn(
           source_key: input.saleId,
           status: 'QUEUED',
           attempts: 0,
+          retry_count: 0,
           next_attempt_at: input.occurredAt,
           last_error: null,
-          payload: { reward_points: planned.value, reward_status: planned.status },
+          payload: {
+            attribution_id: attributionId,
+            reward_id: rewardId,
+            reward_points: planned.value,
+            reward_status: planned.status,
+          },
           created_at: input.occurredAt,
           updated_at: input.occurredAt,
         });

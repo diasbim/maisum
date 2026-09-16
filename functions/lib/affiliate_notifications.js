@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MAX_DELIVERY_ATTEMPTS = exports.AFFILIATE_TEMPLATES = exports.AFFILIATE_TEMPLATE = void 0;
+exports.MAX_DELIVERY_ATTEMPTS = exports.DELIVERY_SKIP_REASON = exports.AFFILIATE_TEMPLATES = exports.AFFILIATE_TEMPLATE = void 0;
+exports.isAffiliateTemplate = isAffiliateTemplate;
 exports.rewardStatusText = rewardStatusText;
 exports.renderAffiliateMessage = renderAffiliateMessage;
 exports.deliverAffiliateMessage = deliverAffiliateMessage;
@@ -11,22 +12,31 @@ exports.maskPhone = maskPhone;
  * What the affiliate and the customer are told, and how it leaves the building.
  *
  * Two halves, kept apart on purpose. Composing a message is pure and is tested
- * here; delivering one is not implemented, because the product has no WhatsApp
- * provider yet — no credentials, no webhook, no opt-in policy.
+ * here; delivering one goes through an adapter the product does not have yet —
+ * no WhatsApp provider is configured, no credentials, no webhook, no opt-in
+ * policy.
  *
  * That gap is handled by refusing rather than pretending. `deliverAffiliateMessage`
- * with no adapter returns `not_configured` and the outbox row stays queued, so
- * the day a provider is chosen the backlog sends. A stub that returned success
- * would mark every message delivered and quietly lose them all.
+ * with no adapter returns `not_configured` and the outbox row stays queued
+ * without burning a retry, so the day a provider is chosen the backlog sends. A
+ * stub that returned success would mark every message delivered and quietly
+ * lose them all.
  *
- * Nothing here is allowed to affect a sale. The caller enqueues after the
- * transaction commits and treats every failure as a log line.
+ * `affiliate_outbox.ts` owns the queue around this: claiming, backoff, terminal
+ * states and logging. Nothing in either file is allowed to affect a sale — the
+ * rows are written inside the sale transaction and read by a worker afterwards,
+ * so a provider outage is a backlog rather than a rolled-back sale.
  */
 exports.AFFILIATE_TEMPLATE = [
     'customer_referral_thanks',
     'affiliate_new_customer',
     'affiliate_customer_returned',
 ];
+/** True for a template this build knows how to render. */
+function isAffiliateTemplate(value) {
+    return (typeof value === 'string' &&
+        exports.AFFILIATE_TEMPLATE.includes(value));
+}
 /**
  * Editable template strings with braced variables, as the spec asks.
  *
@@ -79,6 +89,20 @@ function renderAffiliateMessage(template, variables) {
         values.statusText = variables.statusText;
     return exports.AFFILIATE_TEMPLATES[template].replace(/\{(\w+)\}/g, (whole, key) => values[key] ?? whole);
 }
+/**
+ * Why a message is not going out, and is not going to.
+ *
+ * Every one of these is a decision, not a fault: the merchant switched
+ * notifications off, nobody has a number, the customer never consented, the
+ * affiliate is no longer active. Retrying any of them would send a message the
+ * product was told not to send, so they are terminal.
+ */
+exports.DELIVERY_SKIP_REASON = [
+    'notifications_disabled',
+    'no_phone',
+    'consent_missing',
+    'affiliate_inactive',
+];
 /**
  * Sends one message, or says plainly why it did not.
  *

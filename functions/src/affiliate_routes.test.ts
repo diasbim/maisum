@@ -89,7 +89,11 @@ type Harness = {
   merchant: Registered[];
   admin: Registered[];
   captured: Captured;
-  calls: { requireBusiness: number; ownerChecks: number };
+  calls: {
+    requireBusiness: number;
+    ownerChecks: number;
+    sweeps: Array<{ merchantId: string | null; limit?: number }>;
+  };
 };
 
 function harness(
@@ -98,7 +102,11 @@ function harness(
   const merchant: Registered[] = [];
   const admin: Registered[] = [];
   const captured: Captured = { status: 200, body: undefined, headers: {}, serverErrors: [] };
-  const calls = { requireBusiness: 0, ownerChecks: 0 };
+  const calls = {
+    requireBusiness: 0,
+    ownerChecks: 0,
+    sweeps: [] as Array<{ merchantId: string | null; limit?: number }>,
+  };
   const business =
     overrides.business === undefined ? { id: 'm1', name: 'Loja' } : overrides.business;
 
@@ -130,6 +138,10 @@ function harness(
     normalizePhone: (raw) =>
       raw === '841234567' || raw === '+258841234567' ? '+258841234567' : null,
     affiliateIdForPhone: () => 'af_test',
+    sweepAffiliateOutbox: async (input) => {
+      calls.sweeps.push(input);
+      return { scanned: 2, sent: 0, not_configured: 2 };
+    },
     now: () => 1_800_000_000_000,
   };
 
@@ -192,6 +204,7 @@ const ADMIN_ROUTES: Array<[string, string]> = [
   ['post', '/affiliates/:affiliateId/status'],
   ['post', '/affiliates/:affiliateId/merchants/:merchantId'],
   ['delete', '/affiliates/:affiliateId/merchants/:merchantId'],
+  ['post', '/affiliates/outbox/sweep'],
   ['get', '/merchants/:merchantId/affiliates'],
   ['get', '/merchants/:merchantId/affiliate-rewards'],
   ['get', '/merchants/:merchantId/affiliate-metrics'],
@@ -522,6 +535,42 @@ test('no other route spends a rate-limit budget', () => {
   // A limit on a management route would lock an owner out of their own list.
   const occurrences = ROUTES_SOURCE.split('consumeRateLimit({').length - 1;
   assert.equal(occurrences, 1, 'consumeRateLimit is used somewhere new');
+});
+
+/* ------------------------------------------------------- the outbox sweep */
+
+test('the sweep asks for the whole backlog when no business is named', async () => {
+  const { admin, call, calls, captured } = harness();
+
+  await call(admin, 'post', '/affiliates/outbox/sweep', { body: {} });
+
+  assert.deepEqual(calls.sweeps, [{ merchantId: null, limit: undefined }]);
+  assert.equal(body(captured).success, true);
+});
+
+test('the sweep can be pointed at one business with a bound', async () => {
+  const { admin, call, calls } = harness();
+
+  await call(admin, 'post', '/affiliates/outbox/sweep', {
+    body: { merchant_id: ' m9 ', limit: 5 },
+  });
+
+  assert.deepEqual(calls.sweeps, [{ merchantId: 'm9', limit: 5 }]);
+});
+
+test('a nonsense bound is ignored rather than obeyed', async () => {
+  const { admin, call, calls } = harness();
+
+  await call(admin, 'post', '/affiliates/outbox/sweep', {
+    body: { limit: 'all of them' },
+  });
+
+  assert.equal(calls.sweeps[0].limit, undefined);
+});
+
+test('the sweep never takes a phone number or a message from the caller', () => {
+  const handler = handlerSource('adminRouter', 'post', '/affiliates/outbox/sweep');
+  assert.ok(!/phone|body\.(text|message)|to_phone/i.test(handler));
 });
 
 /* ------------------------------------------------- source-level obligations */

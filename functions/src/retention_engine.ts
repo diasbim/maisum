@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 
+import type { AffiliateEventType } from './affiliate_contracts.js';
+
 /**
  * Generalizes the ad hoc RED-risk/near-reward automation that used to live
  * inline in index.ts (`upsertCustomerRiskScore`) into a small rule catalog +
@@ -7,6 +9,12 @@ import { randomUUID } from 'crypto';
  * ACTION. This module intentionally implements only the RETURN_BONUS_AFTER_SALE
  * action end to end; the remaining MVP rules are seeded as metadata so the
  * catalog/cooldown plumbing already supports them when their actions land.
+ *
+ * The referral feature extends this catalog rather than starting a second
+ * engine: its three post-commit events are rows in the same `retention_rules`
+ * table, evaluated by the same enable/cooldown checks and recorded in the same
+ * `retention_rule_executions` log, so "this rule already ran for this fact" has
+ * one definition for every automation in the product.
  */
 
 export type RetentionRuleKey =
@@ -16,9 +24,27 @@ export type RetentionRuleKey =
   | 'WIN_BACK'
   | 'STREAK_MILESTONE'
   | 'BIRTHDAY'
-  | 'REFERRAL';
+  | 'REFERRAL'
+  | 'REFERRAL_ATTRIBUTED_NOTICE'
+  | 'REFERRAL_RETURN_REWARD'
+  | 'REFERRAL_REWARD_NOTICE';
 
-export type RetentionRuleAction = 'ISSUE_BONUS' | 'SEND_WHATSAPP' | 'ADD_POINTS';
+/**
+ * What a rule does.
+ *
+ * `ISSUE_BONUS` and `ISSUE_RETURN_BONUS` are the same action under two names:
+ * the first is what is already stored in every seeded row, the second is the
+ * name the referral spec uses. Rewriting the stored value would rename data in
+ * every merchant's catalog for no behavioural gain, so the stored spelling
+ * stays and `canonicalRetentionAction` maps it to the spec's one wherever the
+ * engine reasons about actions rather than persists them.
+ */
+export type RetentionRuleAction =
+  | 'ISSUE_BONUS'
+  | 'ISSUE_RETURN_BONUS'
+  | 'SEND_WHATSAPP'
+  | 'ADD_POINTS'
+  | 'CREATE_AFFILIATE_REWARD';
 
 export type RetentionRuleEvent =
   | 'SALE_COMPLETED'
@@ -27,7 +53,42 @@ export type RetentionRuleEvent =
   | 'CUSTOMER_INACTIVE'
   | 'STREAK_REACHED'
   | 'BIRTHDAY_APPROACHING'
-  | 'REFERRAL_COMPLETED';
+  | 'REFERRAL_COMPLETED'
+  | 'REFERRAL_ATTRIBUTED'
+  | 'REFERRED_CUSTOMER_RETURNED'
+  | 'AFFILIATE_REWARD_CREATED';
+
+/**
+ * The referral events this engine reacts to, spelled exactly as
+ * `affiliate_contracts.ts` stores them.
+ *
+ * `satisfies` is the point of the declaration: renaming an event there without
+ * renaming it here stops compiling, instead of leaving a rule that silently
+ * never matches anything.
+ */
+export const AFFILIATE_RETENTION_EVENTS = [
+  'REFERRAL_ATTRIBUTED',
+  'REFERRED_CUSTOMER_RETURNED',
+  'AFFILIATE_REWARD_CREATED',
+] as const satisfies readonly AffiliateEventType[];
+
+export type AffiliateRetentionEvent = (typeof AFFILIATE_RETENTION_EVENTS)[number];
+
+export function isAffiliateRetentionEvent(
+  value: unknown,
+): value is AffiliateRetentionEvent {
+  return (
+    typeof value === 'string' &&
+    (AFFILIATE_RETENTION_EVENTS as readonly string[]).includes(value)
+  );
+}
+
+/** The spec's name for an action, given whatever spelling is stored. */
+export function canonicalRetentionAction(action: string): RetentionRuleAction {
+  const normalized = action.trim().toUpperCase();
+  if (normalized === 'ISSUE_BONUS') return 'ISSUE_RETURN_BONUS';
+  return normalized as RetentionRuleAction;
+}
 
 export type DefaultRetentionRule = {
   ruleKey: RetentionRuleKey;
@@ -96,7 +157,49 @@ export const DEFAULT_RETENTION_RULES: DefaultRetentionRule[] = [
     priority: 4,
     cooldownHours: 0,
   },
+  /**
+   * The referral rules, in the order the facts happen.
+   *
+   * All three have no cooldown on purpose: every one of them is keyed to a
+   * single fact — one acquisition, one return, one reward — and a cooldown
+   * would drop the second genuine referral a customer brings in the same day.
+   * Duplicate suppression comes from the execution log's source id instead,
+   * which is the only kind that cannot silence real events.
+   */
+  {
+    ruleKey: 'REFERRAL_ATTRIBUTED_NOTICE',
+    name: 'Indicação confirmada',
+    event: 'REFERRAL_ATTRIBUTED',
+    action: 'SEND_WHATSAPP',
+    priority: 2,
+    cooldownHours: 0,
+  },
+  {
+    ruleKey: 'REFERRAL_RETURN_REWARD',
+    name: 'Cliente indicado voltou',
+    event: 'REFERRED_CUSTOMER_RETURNED',
+    action: 'CREATE_AFFILIATE_REWARD',
+    priority: 3,
+    cooldownHours: 0,
+  },
+  {
+    ruleKey: 'REFERRAL_REWARD_NOTICE',
+    name: 'Recompensa de indicação',
+    event: 'AFFILIATE_REWARD_CREATED',
+    action: 'SEND_WHATSAPP',
+    priority: 3,
+    cooldownHours: 0,
+  },
 ];
+
+/** Every rule that listens for an event, most important first. */
+export function retentionRulesForEvent(
+  event: RetentionRuleEvent,
+): DefaultRetentionRule[] {
+  return DEFAULT_RETENTION_RULES.filter((rule) => rule.event === event).sort(
+    (left, right) => left.priority - right.priority,
+  );
+}
 
 export type Queryable = {
   query(sql: string, values: unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount?: number | null }>;
@@ -221,15 +324,17 @@ export async function listRetentionRules(
     `,
     [merchantId],
   );
-  return result.rows.map((row) => ({
-    ruleKey: String(row.rule_key),
-    name: String(row.name),
-    event: String(row.event),
-    action: String(row.action),
-    priority: Number(row.priority),
-    enabled: row.enabled !== false,
-    cooldownHours: Number(row.cooldown_hours ?? 0),
-  }));
+  return result.rows
+    .map((row) => ({
+      ruleKey: String(row.rule_key),
+      name: String(row.name),
+      event: String(row.event),
+      action: String(row.action),
+      priority: Number(row.priority),
+      enabled: row.enabled !== false,
+      cooldownHours: Number(row.cooldown_hours ?? 0),
+    }))
+    .filter((rule) => isMerchantEditableRetentionRuleKey(rule.ruleKey));
 }
 
 export async function setRetentionRuleEnabled(
@@ -247,6 +352,26 @@ export async function setRetentionRuleEnabled(
 
 export function isRetentionRuleKey(value: string): value is RetentionRuleKey {
   return DEFAULT_RETENTION_RULES.some((rule) => rule.ruleKey === value);
+}
+
+const AFFILIATE_INTERNAL_RULE_KEYS = new Set<RetentionRuleKey>([
+  'REFERRAL_ATTRIBUTED_NOTICE',
+  'REFERRAL_RETURN_REWARD',
+  'REFERRAL_REWARD_NOTICE',
+]);
+
+/**
+ * Referral effects are configured through `affiliate_config`: notification
+ * delivery and return rewards already have dedicated merchant settings.
+ * Exposing a second toggle here would create two controls for one behaviour.
+ */
+export function isMerchantEditableRetentionRuleKey(
+  value: string,
+): value is RetentionRuleKey {
+  return (
+    isRetentionRuleKey(value) &&
+    !AFFILIATE_INTERNAL_RULE_KEYS.has(value)
+  );
 }
 
 async function getRuleIfEnabled(
@@ -321,6 +446,122 @@ async function logExecution(
       input.now,
     ],
   );
+}
+
+/**
+ * Records an execution and says whether it is the first one.
+ *
+ * `logExecution` swallows the duplicate, which is right for the bonus path —
+ * the bonus insert has already decided. An event-driven rule needs the answer:
+ * a Firestore trigger fires more than once for the same write, and "did this
+ * rule already run for this fact?" is what stops the second firing from acting
+ * again. The unique index on (merchant, customer, rule, source) is what makes
+ * the answer race-free; `RETURNING id` is how it is read.
+ */
+export async function recordRuleExecutionOnce(
+  db: Queryable,
+  input: {
+    merchantId: string;
+    customerId: string;
+    ruleKey: RetentionRuleKey;
+    action: RetentionRuleAction;
+    messagePriority?: number | null;
+    sourceType: string;
+    sourceId: string;
+    now: number;
+  },
+): Promise<boolean> {
+  const result = await db.query(
+    `
+      INSERT INTO retention_rule_executions (
+        id, merchant_id, customer_id, rule_key, action,
+        message_priority, source_type, source_id, executed_at, created_at
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)
+      ON CONFLICT (merchant_id, customer_id, rule_key, source_id) DO NOTHING
+      RETURNING id
+    `,
+    [
+      randomUUID(),
+      input.merchantId,
+      input.customerId,
+      input.ruleKey,
+      input.action,
+      input.messagePriority ?? null,
+      input.sourceType,
+      input.sourceId,
+      input.now,
+    ],
+  );
+  return result.rows.length > 0;
+}
+
+export type AffiliateRetentionEventInput = {
+  merchantId: string;
+  event: AffiliateRetentionEvent;
+  /**
+   * The `affiliate_events` document id.
+   *
+   * Deterministic by construction, so two firings of the same trigger carry
+   * the same source id and collapse into one execution.
+   */
+  sourceId: string;
+  /** The customer the fact is about, or the affiliate when there is none. */
+  subjectId: string;
+  now: number;
+};
+
+export type AffiliateRetentionDispatch = {
+  ruleKey: RetentionRuleKey;
+  /** Always the spec's name, whatever the catalog row spells. */
+  action: RetentionRuleAction;
+  status: 'executed' | 'duplicate' | 'rule_disabled';
+};
+
+/**
+ * Runs the referral rules for one published event.
+ *
+ * What a dispatch does *not* do is send anything. The messages a referral
+ * produces are rows written inside the sale transaction (`affiliate_outbox`)
+ * and delivered by the outbox worker, which claims each row transactionally;
+ * having this path send as well would be a second sender for the same fact and
+ * the one way to get two messages out of one referral. So `SEND_WHATSAPP` here
+ * means "the rule fired, and the queued message is the delivery" — the value
+ * of recording it is the common execution/audit trail. Merchant-facing
+ * referral switches live in `affiliate_config`, so these internal bridge
+ * rules are deliberately hidden from the generic retention toggle surface.
+ */
+export async function dispatchAffiliateRetentionEvent(
+  db: Queryable,
+  input: AffiliateRetentionEventInput,
+): Promise<AffiliateRetentionDispatch[]> {
+  const subjectId = input.subjectId.trim() === '' ? 'unknown' : input.subjectId.trim();
+  const dispatched: AffiliateRetentionDispatch[] = [];
+
+  for (const rule of retentionRulesForEvent(input.event)) {
+    const action = canonicalRetentionAction(rule.action);
+    if ((await getRuleIfEnabled(db, input.merchantId, rule.ruleKey)) === null) {
+      dispatched.push({ ruleKey: rule.ruleKey, action, status: 'rule_disabled' });
+      continue;
+    }
+
+    const first = await recordRuleExecutionOnce(db, {
+      merchantId: input.merchantId,
+      customerId: subjectId,
+      ruleKey: rule.ruleKey,
+      action: rule.action,
+      sourceType: 'affiliate_event',
+      sourceId: input.sourceId,
+      now: input.now,
+    });
+
+    dispatched.push({
+      ruleKey: rule.ruleKey,
+      action,
+      status: first ? 'executed' : 'duplicate',
+    });
+  }
+
+  return dispatched;
 }
 
 export async function getReturnBonusConfig(

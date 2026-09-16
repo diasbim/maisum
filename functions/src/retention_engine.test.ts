@@ -2,17 +2,24 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  AFFILIATE_RETENTION_EVENTS,
+  canonicalRetentionAction,
   DEFAULT_RETENTION_RULES,
   DEFAULT_RETURN_BONUS_CONFIG,
+  dispatchAffiliateRetentionEvent,
   evaluateSaleCompletedRetentionRules,
+  isAffiliateRetentionEvent,
+  isMerchantEditableRetentionRuleKey,
   isRetentionCoreEnabled,
   redeemReturnBonus,
+  retentionRulesForEvent,
   RetentionEngineError,
   seedDefaultRetentionRules,
   upsertReturnBonusConfig,
   type Queryable,
   type ReturnBonus,
 } from './retention_engine.js';
+import { AFFILIATE_EVENT, POST_COMMIT_EVENTS } from './affiliate_contracts.js';
 
 /**
  * A tiny in-memory stand-in for the four Postgres tables retention_engine.ts
@@ -152,7 +159,12 @@ class FakeRetentionDb implements Queryable {
         string, string, string, string, string, number | null, string | null, string | null, number,
       ];
       const key = `${merchantId}:${customerId}:${ruleKey}:${sourceId}`;
+      const fresh = !this.executions.has(key);
       this.executions.add(key);
+      // Only the event-driven insert asks; the bonus path ignores the answer.
+      if (s.includes('RETURNING id')) {
+        return { rows: fresh ? [{ id: key }] : [] };
+      }
       return { rows: [] };
     }
 
@@ -373,4 +385,184 @@ test('redeeming a bonus from a different merchant is rejected as not found', asy
     () => redeemReturnBonus(db, { merchantId: 'merchant-2', bonusId: issued.bonus.id, now: 2000 }),
     (error: unknown) => error instanceof RetentionEngineError && error.code === 'return_bonus_not_found',
   );
+});
+
+/* ------------------------------------------------------ referral wiring */
+
+/**
+ * The referral feature extends this catalog rather than starting a second
+ * engine, so the tests it needs are the ones that keep it inside: the event
+ * names are the stored ones, the rules live in the same table, and "already
+ * ran for this fact" is answered by the same execution log.
+ */
+
+test('the referral events are spelled exactly as the contracts store them', () => {
+  for (const event of AFFILIATE_RETENTION_EVENTS) {
+    assert.ok(
+      (AFFILIATE_EVENT as readonly string[]).includes(event),
+      `${event} is not an affiliate event name`,
+    );
+  }
+  // Exactly the events the plan says may only be published after commit.
+  assert.deepEqual([...AFFILIATE_RETENTION_EVENTS].sort(), [...POST_COMMIT_EVENTS].sort());
+});
+
+test('every referral event has a rule that listens for it', () => {
+  for (const event of AFFILIATE_RETENTION_EVENTS) {
+    assert.ok(
+      retentionRulesForEvent(event).length > 0,
+      `${event} would be published into nothing`,
+    );
+  }
+});
+
+test('the referral rules use the actions the spec names', () => {
+  const actionFor = (event: (typeof AFFILIATE_RETENTION_EVENTS)[number]) =>
+    retentionRulesForEvent(event).map((rule) => canonicalRetentionAction(rule.action));
+
+  assert.deepEqual(actionFor('REFERRAL_ATTRIBUTED'), ['SEND_WHATSAPP']);
+  assert.deepEqual(actionFor('AFFILIATE_REWARD_CREATED'), ['SEND_WHATSAPP']);
+  assert.deepEqual(actionFor('REFERRED_CUSTOMER_RETURNED'), ['CREATE_AFFILIATE_REWARD']);
+});
+
+test('the stored bonus action is the spec\'s ISSUE_RETURN_BONUS under its old name', () => {
+  // Renaming the stored value would rewrite every merchant's catalog for no
+  // behavioural gain, so the two names are mapped instead of migrated.
+  assert.equal(canonicalRetentionAction('ISSUE_BONUS'), 'ISSUE_RETURN_BONUS');
+  assert.equal(canonicalRetentionAction('issue_bonus'), 'ISSUE_RETURN_BONUS');
+  assert.equal(canonicalRetentionAction('SEND_WHATSAPP'), 'SEND_WHATSAPP');
+
+  const bonusRule = DEFAULT_RETENTION_RULES.find(
+    (rule) => rule.ruleKey === 'RETURN_BONUS_AFTER_SALE',
+  );
+  assert.ok(bonusRule);
+  assert.equal(canonicalRetentionAction(bonusRule.action), 'ISSUE_RETURN_BONUS');
+});
+
+test('only the referral event names are accepted as referral events', () => {
+  assert.equal(isAffiliateRetentionEvent('REFERRAL_ATTRIBUTED'), true);
+  assert.equal(isAffiliateRetentionEvent('REFERRAL_REJECTED'), false);
+  assert.equal(isAffiliateRetentionEvent('referral_attributed'), false);
+  assert.equal(isAffiliateRetentionEvent(undefined), false);
+});
+
+test('a published referral event runs its rules once', async () => {
+  const db = new FakeRetentionDb();
+  await seedDefaultRetentionRules(db, 'merchant-1', 1000);
+
+  const dispatched = await dispatchAffiliateRetentionEvent(db, {
+    merchantId: 'merchant-1',
+    event: 'REFERRAL_ATTRIBUTED',
+    sourceId: 'ae_1',
+    subjectId: 'customer-1',
+    now: 2000,
+  });
+
+  assert.deepEqual(dispatched, [
+    {
+      ruleKey: 'REFERRAL_ATTRIBUTED_NOTICE',
+      action: 'SEND_WHATSAPP',
+      status: 'executed',
+    },
+  ]);
+  assert.equal(
+    db.executions.has('merchant-1:customer-1:REFERRAL_ATTRIBUTED_NOTICE:ae_1'),
+    true,
+  );
+});
+
+test('the same event delivered twice runs its rules once', async () => {
+  // Firestore triggers are at-least-once, and the event id is deterministic,
+  // so the second delivery must be recognised rather than acted on.
+  const db = new FakeRetentionDb();
+  await seedDefaultRetentionRules(db, 'merchant-1', 1000);
+
+  const input = {
+    merchantId: 'merchant-1',
+    event: 'AFFILIATE_REWARD_CREATED' as const,
+    sourceId: 'ae_reward_1',
+    subjectId: 'customer-1',
+    now: 2000,
+  };
+
+  const first = await dispatchAffiliateRetentionEvent(db, input);
+  const second = await dispatchAffiliateRetentionEvent(db, { ...input, now: 9999 });
+
+  assert.equal(first[0].status, 'executed');
+  assert.equal(second[0].status, 'duplicate');
+  assert.equal(db.executions.size, 1);
+});
+
+test('two different facts of the same kind both run', async () => {
+  const db = new FakeRetentionDb();
+  await seedDefaultRetentionRules(db, 'merchant-1', 1000);
+
+  const one = await dispatchAffiliateRetentionEvent(db, {
+    merchantId: 'merchant-1',
+    event: 'REFERRED_CUSTOMER_RETURNED',
+    sourceId: 'ae_return_1',
+    subjectId: 'customer-1',
+    now: 2000,
+  });
+  const two = await dispatchAffiliateRetentionEvent(db, {
+    merchantId: 'merchant-1',
+    event: 'REFERRED_CUSTOMER_RETURNED',
+    sourceId: 'ae_return_2',
+    subjectId: 'customer-1',
+    now: 2000 + 60_000,
+  });
+
+  assert.equal(one[0].status, 'executed');
+  assert.equal(one[0].action, 'CREATE_AFFILIATE_REWARD');
+  assert.equal(two[0].status, 'executed', 'a second genuine return was silenced');
+});
+
+test('a rule the merchant turned off does not run and is not recorded', async () => {
+  const db = new FakeRetentionDb();
+  await seedDefaultRetentionRules(db, 'merchant-1', 1000);
+  db.rules.set('merchant-1:REFERRAL_ATTRIBUTED_NOTICE', {
+    enabled: false,
+    cooldownHours: 0,
+  });
+
+  test('referral bridge rules are not exposed as merchant toggles', () => {
+    assert.equal(isMerchantEditableRetentionRuleKey('NEAR_REWARD'), true);
+    assert.equal(
+      isMerchantEditableRetentionRuleKey('REFERRAL_ATTRIBUTED_NOTICE'),
+      false,
+    );
+    assert.equal(
+      isMerchantEditableRetentionRuleKey('REFERRAL_RETURN_REWARD'),
+      false,
+    );
+    assert.equal(
+      isMerchantEditableRetentionRuleKey('REFERRAL_REWARD_NOTICE'),
+      false,
+    );
+  });
+
+  const dispatched = await dispatchAffiliateRetentionEvent(db, {
+    merchantId: 'merchant-1',
+    event: 'REFERRAL_ATTRIBUTED',
+    sourceId: 'ae_1',
+    subjectId: 'customer-1',
+    now: 2000,
+  });
+
+  assert.equal(dispatched[0].status, 'rule_disabled');
+  assert.equal(db.executions.size, 0);
+});
+
+test('an event with no customer is still recorded against its affiliate', async () => {
+  const db = new FakeRetentionDb();
+  const dispatched = await dispatchAffiliateRetentionEvent(db, {
+    merchantId: 'merchant-1',
+    event: 'AFFILIATE_REWARD_CREATED',
+    sourceId: 'ae_2',
+    subjectId: '   ',
+    now: 2000,
+  });
+
+  assert.equal(dispatched[0].status, 'executed');
+  assert.equal(db.executions.has('merchant-1:unknown:REFERRAL_REWARD_NOTICE:ae_2'), true);
 });

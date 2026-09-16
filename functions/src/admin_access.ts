@@ -101,6 +101,11 @@ export const ADMIN_API_KEY_PATHS = [
   '/admin/loyalty/ledger/backfill',
   '/admin/loyalty/ledger/reconcile',
   '/admin/retention/classifications/scan',
+  // The referral outbox retry sweep. It sends only messages the server itself
+  // queued inside a sale transaction and decides nothing a person is
+  // accountable for, so a scheduled caller with the shared key is the right
+  // shape for it.
+  '/admin/affiliates/outbox/sweep',
 ] as const;
 
 /** True when `x-admin-key` may authenticate this full request path. */

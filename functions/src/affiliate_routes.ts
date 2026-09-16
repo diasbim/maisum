@@ -115,6 +115,16 @@ export type AffiliateRouteDeps = {
   normalizePhone: (raw: unknown) => string | null;
   /** HMAC of the normalised phone: one identity per person, race-free. */
   affiliateIdForPhone: (phoneE164: string) => string;
+  /**
+   * Processes the queued referral messages that are due.
+   *
+   * Injected rather than imported so this module keeps no opinion about where
+   * the queue lives, and so the route can be exercised without Firestore.
+   */
+  sweepAffiliateOutbox: (input: {
+    merchantId: string | null;
+    limit?: number;
+  }) => Promise<Record<string, number>>;
   now?: () => number;
 };
 
@@ -469,6 +479,38 @@ export function registerAffiliateRoutes(deps: AffiliateRouteDeps): void {
       });
     } catch (error) {
       return respond(deps, res, 'admin_merchant_affiliate_metrics', error);
+    }
+  });
+
+  /**
+   * The outbox retry sweep.
+   *
+   * The create trigger delivers the common case; this exists for the ones it
+   * cannot — a message that failed and is waiting on its backoff, one whose
+   * worker died mid-delivery, and the whole `NOT_CONFIGURED` backlog on the
+   * day a provider is finally configured. It is an endpoint rather than a
+   * scheduled function because the repository has no scheduler dependency to
+   * extend for this, and adding one for a retry sweep is not a trade worth
+   * making; `x-admin-key` already authenticates exactly this kind of batch
+   * automation.
+   *
+   * Bounded per call, and every message inside is claimed transactionally, so
+   * calling it twice at once cannot send anything twice.
+   */
+  adminRouter.post('/affiliates/outbox/sweep', async (req, res) => {
+    try {
+      const payload = parseBodyObject(req.body ?? {});
+      const merchantId =
+        typeof payload.merchant_id === 'string' && payload.merchant_id.trim() !== ''
+          ? payload.merchant_id.trim()
+          : null;
+      const rawLimit = Number(payload.limit);
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : undefined;
+
+      const summary = await deps.sweepAffiliateOutbox({ merchantId, limit });
+      return res.json({ success: true, data: summary });
+    } catch (error) {
+      return respond(deps, res, 'admin_affiliate_outbox_sweep', error);
     }
   });
 

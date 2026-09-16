@@ -545,6 +545,45 @@ const RETURNS_ON = config({
     const outcome = await recordReturn(docs, 'sale-2', NOW, RETURNS_ON);
     strict_1.default.equal(outcome.status, 'not_referred');
 });
+(0, node_test_1.default)('a retriggered return writes one event, one reward and one message', async () => {
+    // The hook hangs off the ordinary sale write, and Firestore fires that
+    // trigger at least once — sometimes more. Every document it writes is keyed
+    // by the fact rather than by the firing, so the second one adds nothing.
+    const docs = storeWith();
+    await commit(docs);
+    const eventId = affiliate_engine_js_1.affiliateIds.event(MERCHANT, 'REFERRED_CUSTOMER_RETURNED', 'sale-2');
+    const rewardEventId = affiliate_engine_js_1.affiliateIds.event(MERCHANT, 'AFFILIATE_REWARD_CREATED', RETURN_REWARD_ID);
+    const outboxId = affiliate_engine_js_1.affiliateIds.outbox(MERCHANT, 'affiliate_customer_returned', 'sale-2');
+    const writes = [];
+    for (let firing = 0; firing < 3; firing++) {
+        const { gateway, applied } = gatewayOver(docs);
+        await (0, affiliate_sale_commit_js_1.recordReferredCustomerReturn)(gateway, {
+            merchantId: MERCHANT,
+            saleId: 'sale-2',
+            customerId: CUSTOMER,
+            amount: 300,
+            occurredAt: NOW + 86400000,
+        }, RETURNS_ON);
+        writes.push(...applied);
+    }
+    const created = (docPath) => writes.filter((write) => write.kind === 'create' && write.path === docPath).length;
+    strict_1.default.equal(created(affiliate_sale_commit_js_1.referralPaths.event(MERCHANT, eventId)), 1, 'return event');
+    strict_1.default.equal(created(affiliate_sale_commit_js_1.referralPaths.event(MERCHANT, rewardEventId)), 1, 'reward event');
+    strict_1.default.equal(created(affiliate_sale_commit_js_1.referralPaths.reward(MERCHANT, RETURN_REWARD_ID)), 1, 'reward');
+    strict_1.default.equal(created(affiliate_sale_commit_js_1.referralPaths.outbox(MERCHANT, outboxId)), 1, 'queued message');
+});
+(0, node_test_1.default)('a queued message names the reward it is about, not a frozen status', async () => {
+    // The worker re-reads the reward at delivery time, so a merchant who
+    // approves in the meantime is quoted correctly rather than as still
+    // deciding. That is only possible if the row says which reward it means.
+    const docs = storeWith();
+    await commit(docs);
+    await recordReturn(docs, 'sale-2', NOW + 86400000, RETURNS_ON);
+    const firstSale = docs.get(affiliate_sale_commit_js_1.referralPaths.outbox(MERCHANT, affiliate_engine_js_1.affiliateIds.outbox(MERCHANT, 'affiliate_new_customer', SALE_ID)));
+    const returned = docs.get(affiliate_sale_commit_js_1.referralPaths.outbox(MERCHANT, affiliate_engine_js_1.affiliateIds.outbox(MERCHANT, 'affiliate_customer_returned', 'sale-2')));
+    strict_1.default.equal(firstSale?.payload?.reward_id, FIRST_REWARD_ID);
+    strict_1.default.equal(returned?.payload?.reward_id, RETURN_REWARD_ID);
+});
 (0, node_test_1.default)('cancelling a return sale cancels its reward and leaves the acquisition', async () => {
     const docs = storeWith();
     await commit(docs);

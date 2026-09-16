@@ -66,7 +66,11 @@ function harness(overrides = {}) {
     const merchant = [];
     const admin = [];
     const captured = { status: 200, body: undefined, headers: {}, serverErrors: [] };
-    const calls = { requireBusiness: 0, ownerChecks: 0 };
+    const calls = {
+        requireBusiness: 0,
+        ownerChecks: 0,
+        sweeps: [],
+    };
     const business = overrides.business === undefined ? { id: 'm1', name: 'Loja' } : overrides.business;
     const deps = {
         merchantRouter: fakeRouter(merchant, 'merchant'),
@@ -95,6 +99,10 @@ function harness(overrides = {}) {
         },
         normalizePhone: (raw) => raw === '841234567' || raw === '+258841234567' ? '+258841234567' : null,
         affiliateIdForPhone: () => 'af_test',
+        sweepAffiliateOutbox: async (input) => {
+            calls.sweeps.push(input);
+            return { scanned: 2, sent: 0, not_configured: 2 };
+        },
         now: () => 1800000000000,
     };
     (0, affiliate_routes_js_1.registerAffiliateRoutes)(deps);
@@ -142,6 +150,7 @@ const ADMIN_ROUTES = [
     ['post', '/affiliates/:affiliateId/status'],
     ['post', '/affiliates/:affiliateId/merchants/:merchantId'],
     ['delete', '/affiliates/:affiliateId/merchants/:merchantId'],
+    ['post', '/affiliates/outbox/sweep'],
     ['get', '/merchants/:merchantId/affiliates'],
     ['get', '/merchants/:merchantId/affiliate-rewards'],
     ['get', '/merchants/:merchantId/affiliate-metrics'],
@@ -426,6 +435,31 @@ const OWNER_ONLY = [
     // A limit on a management route would lock an owner out of their own list.
     const occurrences = ROUTES_SOURCE.split('consumeRateLimit({').length - 1;
     strict_1.default.equal(occurrences, 1, 'consumeRateLimit is used somewhere new');
+});
+/* ------------------------------------------------------- the outbox sweep */
+(0, node_test_1.default)('the sweep asks for the whole backlog when no business is named', async () => {
+    const { admin, call, calls, captured } = harness();
+    await call(admin, 'post', '/affiliates/outbox/sweep', { body: {} });
+    strict_1.default.deepEqual(calls.sweeps, [{ merchantId: null, limit: undefined }]);
+    strict_1.default.equal(body(captured).success, true);
+});
+(0, node_test_1.default)('the sweep can be pointed at one business with a bound', async () => {
+    const { admin, call, calls } = harness();
+    await call(admin, 'post', '/affiliates/outbox/sweep', {
+        body: { merchant_id: ' m9 ', limit: 5 },
+    });
+    strict_1.default.deepEqual(calls.sweeps, [{ merchantId: 'm9', limit: 5 }]);
+});
+(0, node_test_1.default)('a nonsense bound is ignored rather than obeyed', async () => {
+    const { admin, call, calls } = harness();
+    await call(admin, 'post', '/affiliates/outbox/sweep', {
+        body: { limit: 'all of them' },
+    });
+    strict_1.default.equal(calls.sweeps[0].limit, undefined);
+});
+(0, node_test_1.default)('the sweep never takes a phone number or a message from the caller', () => {
+    const handler = handlerSource('adminRouter', 'post', '/affiliates/outbox/sweep');
+    strict_1.default.ok(!/phone|body\.(text|message)|to_phone/i.test(handler));
 });
 /* ------------------------------------------------- source-level obligations */
 /** The body of one registered handler, up to the next registration. */

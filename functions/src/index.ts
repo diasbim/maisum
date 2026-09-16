@@ -2,7 +2,7 @@ import * as admin from 'firebase-admin';
 import { FieldPath } from 'firebase-admin/firestore';
 import { createHash, createHmac, randomBytes, randomUUID } from 'crypto';
 import express from 'express';
-import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onRequest } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -107,6 +107,17 @@ import {
   reverseReferralSaleInFirestore,
 } from './affiliate_sale_firestore.js';
 import {
+  OUTBOX_BATCH_LIMIT,
+  processAffiliateOutbox,
+  processOutboxMessage,
+  type OutboxDeps,
+} from './affiliate_outbox.js';
+import {
+  createFirestoreOutboxContextResolver,
+  firestoreOutboxStore,
+  resolveWhatsAppAdapter,
+} from './affiliate_outbox_firestore.js';
+import {
   createSurveyLinkToken,
   SURVEY_LINK_TTL_MS,
   verifySurveyLinkToken,
@@ -117,9 +128,11 @@ import {
   createOrGetOpenRecoveryTask,
 } from './recovery_task_creation.js';
 import {
+  dispatchAffiliateRetentionEvent,
   evaluateSaleCompletedRetentionRules,
   getReturnBonusConfig,
-  isRetentionRuleKey,
+  isAffiliateRetentionEvent,
+  isMerchantEditableRetentionRuleKey,
   listRetentionRules,
   redeemReturnBonus,
   RetentionEngineError,
@@ -1922,6 +1935,8 @@ registerAffiliateRoutes({
   respondServerError: respondAdminServerError,
   normalizePhone: tryNormalizeMozambiquePhoneToE164,
   affiliateIdForPhone: buildAffiliateIdentityId,
+  sweepAffiliateOutbox: ({ merchantId, limit }) =>
+    processAffiliateOutbox(affiliateOutboxDeps(), { merchantId, limit }),
 });
 
 app.use('/merchant', merchantRouter);
@@ -2471,7 +2486,12 @@ app.put('/retention/config', async (req, res) => {
     const rulesPatch = payload.rules;
     if (rulesPatch && typeof rulesPatch === 'object') {
       for (const [ruleKey, enabled] of Object.entries(rulesPatch as Record<string, unknown>)) {
-        if (typeof enabled !== 'boolean' || !isRetentionRuleKey(ruleKey)) continue;
+        if (
+          typeof enabled !== 'boolean' ||
+          !isMerchantEditableRetentionRuleKey(ruleKey)
+        ) {
+          continue;
+        }
         await setRetentionRuleEnabled(pool, merchantId, ruleKey, enabled, now);
       }
     }
@@ -4250,6 +4270,160 @@ export const loyaltyLedgerSaleOnSaleWrite = onDocumentWritten(
         return;
       }
       throw error;
+    }
+  },
+);
+
+/* -- Referral notifications ---------------------------------------------- */
+
+/**
+ * The outbox worker's dependencies, assembled once per call.
+ *
+ * `resolveWhatsAppAdapter()` returns null until a provider is configured, and
+ * that is the point: delivery answers `not_configured`, the row stays queued
+ * without burning a retry, and nothing pretends a message went out. See
+ * `affiliate_outbox_firestore.ts` for what configuring one involves.
+ */
+function affiliateOutboxDeps(): OutboxDeps {
+  return {
+    store: firestoreOutboxStore,
+    resolveContext: createFirestoreOutboxContextResolver({
+      normalizePhone: tryNormalizeMozambiquePhoneToE164,
+    }),
+    adapter: resolveWhatsAppAdapter(),
+  };
+}
+
+/**
+ * One queued referral message, delivered after the sale that queued it.
+ *
+ * On create, not on write: the worker updates the same document to record the
+ * outcome, and a write trigger would re-enter on its own update — an infinite
+ * loop that also sends repeatedly. Creation happens exactly once per fact,
+ * because the document id is derived from the merchant, the template and the
+ * sale.
+ *
+ * A duplicate firing of the create event is still possible — Firestore
+ * triggers are at-least-once — and is handled a second way: the worker claims
+ * the row transactionally, so the second firing finds it claimed or already
+ * sent and does nothing.
+ *
+ * Nothing here can affect the sale. The sale committed before this document
+ * existed, and every failure below is recorded on the outbox row rather than
+ * thrown — a throw would retrigger the function against a message that may
+ * already have been delivered.
+ */
+export const affiliateOutboxOnCreate = onDocumentCreated(
+  'businesses/{merchantId}/affiliate_outbox/{outboxId}',
+  async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+      ? event.params.merchantId.trim()
+      : '';
+    const outboxId = isNonEmptyString(event.params.outboxId)
+      ? event.params.outboxId.trim()
+      : '';
+    if (!merchantId || !outboxId) return;
+
+    try {
+      await processOutboxMessage(affiliateOutboxDeps(), merchantId, outboxId);
+    } catch (error) {
+      console.error('affiliate_outbox_trigger_failed', {
+        merchant_id: merchantId,
+        outbox_id: outboxId,
+        error,
+      });
+    }
+  },
+);
+
+/**
+ * Retries transient failures, expired claims and messages queued while no
+ * provider was configured. The create trigger handles the fast path; this
+ * bounded sweep is the durable retry path.
+ */
+export const affiliateOutboxRetrySweep = onSchedule(
+  {
+    schedule: 'every 5 minutes',
+    timeZone: 'UTC',
+    timeoutSeconds: 300,
+    memory: '256MiB',
+  },
+  async () => {
+    try {
+      const summary = await processAffiliateOutbox(affiliateOutboxDeps(), {
+        merchantId: null,
+      });
+      console.info('affiliate_outbox_sweep_completed', summary);
+    } catch (error) {
+      console.error('affiliate_outbox_sweep_failed', {
+        error_name: error instanceof Error ? error.name : typeof error,
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  },
+);
+
+/**
+ * A published referral event, handed to the Retention Engine.
+ *
+ * The events are written inside the sale transaction and this trigger fires
+ * once that transaction has committed, which is what "publish only after
+ * commit" means here: there is no moment at which a rule can act on a sale
+ * that later rolled back.
+ *
+ * The dispatch records rule executions; it does not send anything. The
+ * messages a referral produces are outbox rows delivered by the trigger above,
+ * and a second sender for the same fact is the one reliable way to send twice.
+ *
+ * Postgres is where the rule catalog lives, so a business with no rows there
+ * yet is seeded first. Every failure is logged and swallowed: a referral
+ * already recorded in Firestore must not be reprocessed because an analytics
+ * database was briefly unreachable.
+ */
+export const affiliateRetentionEventOnCreate = onDocumentCreated(
+  'businesses/{merchantId}/affiliate_events/{eventId}',
+  async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+      ? event.params.merchantId.trim()
+      : '';
+    const eventId = isNonEmptyString(event.params.eventId)
+      ? event.params.eventId.trim()
+      : '';
+    if (!merchantId || !eventId) return;
+
+    const data = event.data ? snapshotDataRecord(event.data) : {};
+    const eventType = maybePayloadString(data, 'event_type', 'eventType');
+    if (!isAffiliateRetentionEvent(eventType)) return;
+
+    const subjectId =
+      maybePayloadString(data, 'customer_id', 'customerId') ??
+      maybePayloadString(data, 'affiliate_id', 'affiliateId') ??
+      'unknown';
+
+    try {
+      const now = Date.now();
+      await seedDefaultRetentionRules(pool, merchantId, now);
+      const dispatched = await dispatchAffiliateRetentionEvent(pool, {
+        merchantId,
+        event: eventType,
+        sourceId: eventId,
+        subjectId,
+        now,
+      });
+      console.info('affiliate_retention_event_dispatched', {
+        merchant_id: merchantId,
+        event_id: eventId,
+        event_type: eventType,
+        rules: dispatched.map((entry) => `${entry.ruleKey}:${entry.status}`),
+      });
+    } catch (error) {
+      console.error('affiliate_retention_event_failed', {
+        merchant_id: merchantId,
+        event_id: eventId,
+        event_type: eventType,
+        error,
+      });
     }
   },
 );
