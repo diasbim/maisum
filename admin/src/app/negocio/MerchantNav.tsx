@@ -27,6 +27,10 @@ const GROUPS = [
       { href: '/negocio/recompensas', label: 'Recompensas' },
       { href: '/negocio/resgates', label: 'Resgates' },
       { href: '/negocio/bonus', label: 'Bónus de retorno' },
+      // Referrals live beside the other ways points are earned and spent: an
+      // affiliate is paid in points, and the code a customer says at the
+      // counter is a loyalty instrument, not a marketing campaign.
+      { href: '/negocio/afiliados', label: 'Afiliados' },
     ],
   },
   {

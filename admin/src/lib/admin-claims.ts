@@ -60,3 +60,38 @@ export function adminClaimNames(claims: unknown): string[] {
 
   return granting;
 }
+
+/**
+ * Mirror of `resolveAppUserRole()` in `functions/src/index.ts`.
+ *
+ * The app writes one of two roles into the token, and the API reads it to
+ * decide who may change an affiliate, a code or a reward. Anything that is not
+ * `STAFF` — including a token with no role at all — is the owner, which is the
+ * same fallback the API applies: a business bootstrapped under the owner's own
+ * uid carries no role claim.
+ */
+export function appUserRole(claims: unknown): 'OWNER' | 'STAFF' {
+  if (claims == null || typeof claims !== 'object') return 'OWNER';
+  const record = claims as Record<string, unknown>;
+  const raw =
+    typeof record.app_user_role === 'string'
+      ? record.app_user_role
+      : typeof record.appUserRole === 'string'
+        ? record.appUserRole
+        : typeof record.role === 'string'
+          ? record.role
+          : null;
+  return raw?.trim().toUpperCase() === 'STAFF' ? 'STAFF' : 'OWNER';
+}
+
+/**
+ * Mirror of `isOwnerOrAdminRequest()` in `functions/src/index.ts`.
+ *
+ * Used to decide whether a business screen offers a control or explains why it
+ * cannot. It is a courtesy, never the gate: the API re-derives exactly this
+ * from the same token and answers 403 with its own sentence, so a hidden
+ * button is not what stops a manager from approving a reward.
+ */
+export function canManageAsOwner(claims: unknown): boolean {
+  return hasAdminClaims(claims) || appUserRole(claims) === 'OWNER';
+}

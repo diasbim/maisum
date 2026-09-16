@@ -12,6 +12,15 @@ export class AdminApiError extends Error {
     readonly status: number,
     readonly path: string,
     message: string,
+    /**
+     * The API's own machine-readable reason, when it sent one.
+     *
+     * The `/merchant/affiliate*` and `/admin/affiliate*` routes answer a
+     * refusal with a stable code from `AFFILIATE_API_MESSAGE` beside the
+     * sentence. A form uses it to put the message under the field it is about;
+     * nothing branches on it for authorization, which stays with the API.
+     */
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = 'AdminApiError';

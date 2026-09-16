@@ -70,6 +70,42 @@ export function describe(caught: unknown, form: FormData): ActionState {
 }
 
 /**
+ * A failure the API named, rendered against the field it named.
+ *
+ * `describe` above is for the console's older endpoints, whose messages are
+ * English and are therefore quoted rather than spoken as our own. The
+ * `/merchant/affiliate*` and `/admin/affiliate*` routes are different: each
+ * refusal carries a stable `code` and a sentence from `AFFILIATE_API_MESSAGE`,
+ * written in Portuguese for the person reading it. Quoting those behind "a API
+ * respondeu" would bury the only useful part, and dropping the code would put
+ * "a percentagem deve estar entre 1% e 50%" at the foot of a form with ten
+ * inputs instead of under the one that is wrong.
+ *
+ * `fieldFor` is passed in rather than imported so this file keeps no opinion
+ * about which vocabulary of codes it is translating.
+ */
+export function apiFailure(
+  caught: unknown,
+  form: FormData,
+  fieldFor: (code: string | null) => string | null = () => null,
+): ActionState {
+  if (caught instanceof AdminApiError) {
+    const field = caught.code === null ? null : fieldFor(caught.code);
+    return {
+      status: 'error',
+      message: caught.message,
+      values: snapshot(form),
+      ...(field ? { fieldErrors: { [field]: caught.message } } : {}),
+    };
+  }
+  return {
+    status: 'error',
+    message: 'Erro inesperado. A operação pode não ter sido aplicada.',
+    values: snapshot(form),
+  };
+}
+
+/**
  * Whether a checkbox should come back checked after a failed submit.
  *
  * An unchecked box sends nothing at all, so once a submit has come back a

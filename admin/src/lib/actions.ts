@@ -3,13 +3,27 @@
 import { revalidatePath } from 'next/cache';
 
 import type { ActionState } from './action-state';
-// Shared with the form primitives and covered by form-result.test.ts.
-import { describe, failure } from './form-result';
 import {
+  affiliateFieldFor,
+  expiresAtFrom,
+  parseAffiliateName,
+  parseAffiliatePhone,
+  parseBenefit,
+  parseUsageLimit,
+  parseValidityDays,
+} from './affiliate-form';
+// Shared with the form primitives and covered by form-result.test.ts.
+import { apiFailure, describe, failure } from './form-result';
+import {
+  createAffiliate,
   JOB_PATHS,
   type JobPath,
   type JobResult,
+  linkAffiliateToMerchant,
   runJob,
+  setAffiliateStatus,
+  unlinkAffiliateFromMerchant,
+  updateAffiliateName,
   upsertEntitlement,
   upsertPlan,
   upsertPlanFeature,
@@ -343,5 +357,211 @@ export async function runJobAction(
       ? 'Executado. As alterações foram aplicadas.'
       : 'Simulação concluída. Nada foi alterado.',
     result,
+  };
+}
+
+/* --------------------------------------------------------------- afiliados */
+
+/**
+ * The console's writes against the referral programme.
+ *
+ * What the console governs is the person and their reach: the identity behind
+ * a phone, whether they may refer for anybody at all, and which businesses
+ * they are attached to. What a code is worth inside one business is the
+ * owner's decision and is made in `/negocio/afiliados` — the one exception is
+ * the benefit a link is created with, which has to be stated because a code
+ * cannot exist without one.
+ *
+ * Every one of these is recorded by the API in the audit trail, with the state
+ * before and after and the name of the operator who asked, because the
+ * portal forwards their own token rather than holding a credential of its own.
+ */
+
+const ADMIN_AFFILIATES = '/admin/afiliados';
+
+function adminAffiliatePath(affiliateId: string): string {
+  return `${ADMIN_AFFILIATES}/${encodeURIComponent(affiliateId)}`;
+}
+
+export async function createGlobalAffiliateAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const name = parseAffiliateName(text(form, 'name'));
+  if (!name.ok) return failure(form, name.message, name.field);
+
+  const phone = parseAffiliatePhone(text(form, 'phone'));
+  if (!phone.ok) return failure(form, phone.message, phone.field);
+
+  let created;
+  try {
+    created = await createAffiliate({ name: name.value, phone: phone.value });
+  } catch (caught) {
+    return apiFailure(caught, form, affiliateFieldFor);
+  }
+
+  revalidatePath(ADMIN_AFFILIATES);
+  if (created) revalidatePath(adminAffiliatePath(created.id));
+
+  return {
+    status: 'ok',
+    // The id is derived from the phone, so it is the one thing worth reading
+    // back: it is how this person is addressed everywhere else.
+    message: created
+      ? `Afiliado ${created.name} criado (${created.id}).`
+      : 'Afiliado criado.',
+  };
+}
+
+export async function renameAffiliateAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const affiliateId = text(form, 'affiliate_id');
+  if (!affiliateId) return failure(form, 'Indique o afiliado.', 'affiliate_id');
+
+  const name = parseAffiliateName(text(form, 'name'));
+  if (!name.ok) return failure(form, name.message, name.field);
+
+  try {
+    await updateAffiliateName({ affiliateId, name: name.value });
+  } catch (caught) {
+    return apiFailure(caught, form, affiliateFieldFor);
+  }
+
+  revalidatePath(ADMIN_AFFILIATES);
+  revalidatePath(adminAffiliatePath(affiliateId));
+  return {
+    status: 'ok',
+    // The code was minted from the name it was created with and does not
+    // change. Saying so here stops the next question.
+    message: `Nome gravado. Os códigos já emitidos mantêm-se como estão.`,
+  };
+}
+
+const AFFILIATE_STATUSES = new Set(['ACTIVE', 'INACTIVE', 'SUSPENDED']);
+
+export async function setGlobalAffiliateStatusAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const affiliateId = text(form, 'affiliate_id');
+  if (!affiliateId) return failure(form, 'Indique o afiliado.', 'affiliate_id');
+
+  const status = text(form, 'status').toUpperCase();
+  if (!AFFILIATE_STATUSES.has(status)) {
+    return failure(form, 'Estado inválido.', 'status');
+  }
+
+  // Suspension reaches every business this person refers for, which is not
+  // obvious from a button on one page.
+  if (status === 'SUSPENDED' && !checkbox(form, 'confirm')) {
+    return failure(
+      form,
+      'Confirme a suspensão: o afiliado deixa de poder indicar em todos os negócios.',
+      'confirm',
+    );
+  }
+
+  try {
+    await setAffiliateStatus({
+      affiliateId,
+      status: status as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED',
+    });
+  } catch (caught) {
+    return apiFailure(caught, form, affiliateFieldFor);
+  }
+
+  revalidatePath(ADMIN_AFFILIATES);
+  revalidatePath(adminAffiliatePath(affiliateId));
+  return {
+    status: 'ok',
+    message:
+      status === 'SUSPENDED'
+        ? 'Afiliado suspenso em toda a plataforma.'
+        : status === 'ACTIVE'
+          ? 'Afiliado reativado.'
+          : 'Afiliado marcado como inativo.',
+  };
+}
+
+export async function linkAffiliateAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const affiliateId = text(form, 'affiliate_id');
+  if (!affiliateId) return failure(form, 'Indique o afiliado.', 'affiliate_id');
+
+  const merchantId = text(form, 'merchant_id');
+  if (!merchantId) return failure(form, 'Indique o id do negócio.', 'merchant_id');
+
+  // A link without a code is not a link: the code is what a customer says at
+  // the counter, and it cannot be minted without a benefit.
+  const benefit = parseBenefit(
+    text(form, 'benefit_type'),
+    text(form, 'benefit_value'),
+  );
+  if (!benefit.ok) return failure(form, benefit.message, benefit.field);
+
+  const usageLimit = parseUsageLimit(text(form, 'usage_limit'));
+  if (!usageLimit.ok) return failure(form, usageLimit.message, usageLimit.field);
+
+  const validity = parseValidityDays(text(form, 'validity_days'));
+  if (!validity.ok) return failure(form, validity.message, validity.field);
+
+  try {
+    await linkAffiliateToMerchant({
+      affiliateId,
+      merchantId,
+      benefitType: benefit.value.type,
+      benefitValue: benefit.value.value,
+      usageLimit: usageLimit.value,
+      firstVisitOnly: checkbox(form, 'first_visit_only'),
+      expiresAt: expiresAtFrom(validity.value ?? 30, Date.now()),
+    });
+  } catch (caught) {
+    return apiFailure(caught, form, affiliateFieldFor);
+  }
+
+  revalidatePath(ADMIN_AFFILIATES);
+  revalidatePath(adminAffiliatePath(affiliateId));
+  revalidatePath(`/admin/merchants/${merchantId}/afiliados`);
+  revalidatePath('/negocio/afiliados');
+  return { status: 'ok', message: `Afiliado ligado ao negócio ${merchantId}.` };
+}
+
+export async function unlinkAffiliateAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const affiliateId = text(form, 'affiliate_id');
+  if (!affiliateId) return failure(form, 'Indique o afiliado.', 'affiliate_id');
+
+  const merchantId = text(form, 'merchant_id');
+  if (!merchantId) return failure(form, 'Indique o id do negócio.', 'merchant_id');
+
+  if (!checkbox(form, 'confirm')) {
+    return failure(
+      form,
+      'Confirme a desativação: o código deste afiliado deixa de ser aceite neste negócio.',
+      'confirm',
+    );
+  }
+
+  try {
+    await unlinkAffiliateFromMerchant({ affiliateId, merchantId });
+  } catch (caught) {
+    return apiFailure(caught, form, affiliateFieldFor);
+  }
+
+  revalidatePath(ADMIN_AFFILIATES);
+  revalidatePath(adminAffiliatePath(affiliateId));
+  revalidatePath(`/admin/merchants/${merchantId}/afiliados`);
+  revalidatePath('/negocio/afiliados');
+  return {
+    status: 'ok',
+    // Nothing is erased, and that is the part an operator needs to know: the
+    // history stays and re-linking brings the same person back.
+    message: `Ligação desativada. O histórico mantém-se e o código foi desativado.`,
   };
 }

@@ -21,6 +21,7 @@
     "src/lib/action-state.ts",
     "src/lib/admin-api-error.ts",
     "src/lib/admin-claims.ts",
+    "src/lib/affiliate-form.ts",
     "src/lib/form-result.ts",
     "src/lib/merchant-labels.ts",
     "src/lib/merchant-list.ts",

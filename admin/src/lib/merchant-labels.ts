@@ -303,3 +303,131 @@ const SURVEY_CHANNEL: Record<string, string> = {
 
 export const surveyChannelLabel = (value: string | null) =>
   translate(SURVEY_CHANNEL, value);
+
+/* ------------------------------------------------------- o programa de indicações */
+
+/**
+ * The referral vocabulary, in the words the app already says.
+ *
+ * Every table here is keyed on a value from
+ * `functions/src/affiliate_contracts.ts`, and the wording is the app's:
+ * `affiliate_repository.dart` says "Suspenso", `affiliate_rewards_screen.dart`
+ * says "Aprovada", `affiliate_code_screen.dart` says "Desativado". An owner who
+ * reads one word on the phone and another here would reasonably think they
+ * were looking at two different things. The test beside this file reads the
+ * contracts and fails if a stored value arrives with no name.
+ */
+
+const AFFILIATE_STATUS: Record<string, string> = {
+  ACTIVE: 'Ativo',
+  INACTIVE: 'Inativo',
+  SUSPENDED: 'Suspenso',
+};
+
+/** The link between one affiliate and one business, which is not the person. */
+const AFFILIATE_LINK_STATUS: Record<string, string> = {
+  ACTIVE: 'Ligado',
+  INACTIVE: 'Desligado',
+};
+
+const AFFILIATE_CODE_STATUS: Record<string, string> = {
+  ACTIVE: 'Ativo',
+  DISABLED: 'Desativado',
+};
+
+const BENEFIT_TYPE: Record<string, string> = {
+  FIXED_AMOUNT: 'Desconto fixo',
+  PERCENTAGE: 'Percentagem',
+  POINTS: 'Pontos',
+};
+
+const REWARD_STATUS: Record<string, string> = {
+  PENDING: 'Pendente',
+  APPROVED: 'Aprovada',
+  PAID: 'Paga',
+  CANCELLED: 'Cancelada',
+};
+
+/** Why a reward exists at all: the first sale, or the customer coming back. */
+const REWARD_TYPE: Record<string, string> = {
+  FIRST_QUALIFYING_SALE: 'Primeira compra',
+  CUSTOMER_RETURN: 'Cliente voltou',
+};
+
+const ATTRIBUTION_STATUS: Record<string, string> = {
+  CONFIRMED: 'Confirmada',
+  REJECTED: 'Recusada',
+  CANCELLED: 'Cancelada',
+};
+
+export const affiliateStatusLabel = (value: string | null) =>
+  translate(AFFILIATE_STATUS, value);
+
+export const affiliateLinkLabel = (value: string | null) =>
+  translate(AFFILIATE_LINK_STATUS, value);
+
+export const affiliateCodeStatusLabel = (value: string | null) =>
+  translate(AFFILIATE_CODE_STATUS, value);
+
+export const benefitTypeLabel = (value: string | null) =>
+  translate(BENEFIT_TYPE, value);
+
+export const rewardStatusLabel = (value: string | null) =>
+  translate(REWARD_STATUS, value);
+
+export const rewardTypeLabel = (value: string | null) =>
+  translate(REWARD_TYPE, value);
+
+export const attributionStatusLabel = (value: string | null) =>
+  translate(ATTRIBUTION_STATUS, value);
+
+/**
+ * The colour a state is worth, in the vocabulary `Badge` already understands.
+ *
+ * `Badge` colours by the tone it is handed, and its table speaks the older
+ * subscription and relationship states — it has never heard of `DISABLED` or
+ * `APPROVED`, so both would come out navy, and an approved reward would read
+ * as neutral next to a pending one. Mapping here rather than teaching `Badge`
+ * a second vocabulary keeps one place that decides what green means.
+ *
+ * The colour is never the whole message: every one of these is rendered beside
+ * its own word, so the state survives a screenshot, a printout and anyone who
+ * does not see the difference between green and amber.
+ */
+export function affiliateStatusTone(value: string | null): string {
+  const status = (value ?? '').trim().toUpperCase();
+  if (status === 'SUSPENDED') return 'SUSPENDED';
+  if (status === 'ACTIVE') return 'ACTIVE';
+  return 'INACTIVE';
+}
+
+export function codeStatusTone(value: string | null): string {
+  return (value ?? '').trim().toUpperCase() === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE';
+}
+
+export function rewardStatusTone(value: string | null): string {
+  switch ((value ?? '').trim().toUpperCase()) {
+    case 'PENDING':
+      return 'PENDING';
+    case 'APPROVED':
+    case 'PAID':
+      return 'ACTIVE';
+    case 'CANCELLED':
+      return 'CANCELLED';
+    default:
+      return 'INACTIVE';
+  }
+}
+
+export function attributionStatusTone(value: string | null): string {
+  switch ((value ?? '').trim().toUpperCase()) {
+    case 'CONFIRMED':
+      return 'ACTIVE';
+    case 'REJECTED':
+      return 'FAILED';
+    case 'CANCELLED':
+      return 'CANCELLED';
+    default:
+      return 'INACTIVE';
+  }
+}

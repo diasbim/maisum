@@ -21,6 +21,17 @@ export type ListQuery = {
   status?: string;
   limit?: number;
   offset?: number;
+  /**
+   * Narrows a list to one affiliate.
+   *
+   * Only the `/merchant/affiliate*` routes read it — `pageQuery` in
+   * `affiliate_routes.ts` is the one place that does — and sending it
+   * elsewhere is harmless because every other route ignores unknown
+   * parameters. It lives here rather than in a second builder so that a
+   * rewards list filtered by affiliate is still one definition of what a
+   * filtered page URL looks like.
+   */
+  affiliateId?: string;
 };
 
 export type ListEnvelope<T> = {
@@ -43,6 +54,9 @@ export function buildListQuery(params: ListQuery): string {
   const search = new URLSearchParams();
   if (params.search?.trim()) search.set('search', params.search.trim());
   if (params.status?.trim()) search.set('status', params.status.trim());
+  if (params.affiliateId?.trim()) {
+    search.set('affiliate_id', params.affiliateId.trim());
+  }
   search.set('limit', String(params.limit ?? MERCHANT_PAGE_SIZE));
   if (params.offset) search.set('offset', String(params.offset));
   return `?${search.toString()}`;

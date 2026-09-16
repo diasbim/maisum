@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { AdminApiError } from './admin-api-error';
+import { affiliateFieldFor } from './affiliate-form';
 import {
+  apiFailure,
   describe,
   failure,
   restoredCheckbox,
@@ -85,6 +87,63 @@ test('an unknown throw does not claim the write was rejected', () => {
   // to re-run a job that already ran.
   assert.match(state.message, /pode não ter sido aplicada/);
   assert.deepEqual(state.values, { plan_code: 'pro' });
+});
+
+/* ----------------------------------------------------------------- apiFailure */
+
+test('a refusal the API named is spoken plainly, not quoted', () => {
+  const form = formOf({ benefit_value: '80' });
+  const state = apiFailure(
+    new AdminApiError(
+      400,
+      '/merchant/affiliates',
+      'A percentagem deve estar entre 1% e 50%.',
+      'invalid_percentage',
+    ),
+    form,
+    affiliateFieldFor,
+  );
+
+  // Unlike the console's older endpoints, these messages are written in
+  // Portuguese for the person reading them. Framing them as "a API respondeu"
+  // would bury the only useful part behind an apology.
+  assert.equal(state.message, 'A percentagem deve estar entre 1% e 50%.');
+  assert.deepEqual(state.fieldErrors, {
+    benefit_value: 'A percentagem deve estar entre 1% e 50%.',
+  });
+  assert.deepEqual(state.values, { benefit_value: '80' });
+});
+
+test('a refusal about the record lands at the foot of the form', () => {
+  const state = apiFailure(
+    new AdminApiError(
+      409,
+      '/merchant/affiliates',
+      'Este afiliado já está ligado a este negócio.',
+      'affiliate_already_linked',
+    ),
+    formOf({ phone: '841234567' }),
+    affiliateFieldFor,
+  );
+
+  assert.equal(state.fieldErrors, undefined);
+  assert.match(state.message, /já está ligado/);
+});
+
+test('a failure with no code of its own is still shown as it arrived', () => {
+  const state = apiFailure(
+    new AdminApiError(503, '/merchant/affiliates', 'O serviço não respondeu.'),
+    formOf({}),
+    affiliateFieldFor,
+  );
+  assert.equal(state.message, 'O serviço não respondeu.');
+  assert.equal(state.fieldErrors, undefined);
+});
+
+test('an unknown throw does not claim the write was rejected either', () => {
+  const state = apiFailure(new TypeError('boom'), formOf({ name: 'Ana' }));
+  assert.match(state.message, /pode não ter sido aplicada/);
+  assert.deepEqual(state.values, { name: 'Ana' });
 });
 
 /* --------------------------------------------------------- checkbox restore */

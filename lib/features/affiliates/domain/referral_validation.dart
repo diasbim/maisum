@@ -49,16 +49,25 @@ class ReferralBenefitPreview {
     required this.benefitType,
     required this.benefitValue,
     this.benefitAmount,
+    this.displayText,
   });
 
   final ReferralBenefitType benefitType;
   final double benefitValue;
   final double? benefitAmount;
 
+  /// The server's own Portuguese wording for this benefit, when it sent one.
+  ///
+  /// Preferred over anything computed locally: the server knows whether a
+  /// percentage was capped or an amount rounded, and a till that re-phrased it
+  /// could promise a number the sale will not honour.
+  final String? displayText;
+
   Map<String, dynamic> toMap() => {
         'benefit_type': benefitType.storageValue,
         'benefit_value': benefitValue,
         'benefit_amount': benefitAmount,
+        'display_text': displayText,
       };
 
   Map<String, dynamic> toJson() => toMap();
@@ -73,6 +82,7 @@ class ReferralBenefitPreview {
       benefitValue: readRequiredDouble(map, ['benefit_value', 'benefitValue']),
       benefitAmount:
           readNullableDouble(map, ['benefit_amount', 'benefitAmount']),
+      displayText: readNullableString(map, ['display_text', 'displayText']),
     );
   }
 
@@ -87,6 +97,7 @@ class ReferralValidationResult {
     this.normalizedCode,
     this.affiliateCodeId,
     this.affiliateId,
+    this.affiliateName,
     this.saleStatus,
     this.benefit,
     this.errorCode,
@@ -98,10 +109,21 @@ class ReferralValidationResult {
   final String? normalizedCode;
   final String? affiliateCodeId;
   final String? affiliateId;
+
+  /// The affiliate's name, so the till can say who is being credited without
+  /// showing an identifier nobody at the counter can read.
+  final String? affiliateName;
   final ReferralSaleStatus? saleStatus;
   final ReferralBenefitPreview? benefit;
   final ReferralValidationErrorCode? errorCode;
   final String? statusText;
+
+  /// Just the first name, which is all a customer needs to hear.
+  String? get affiliateFirstName {
+    final full = affiliateName?.trim();
+    if (full == null || full.isEmpty) return null;
+    return full.split(RegExp(r'\s+')).first;
+  }
 
   Map<String, dynamic> toMap() => {
         'is_valid': isValid ? 1 : 0,
@@ -109,6 +131,7 @@ class ReferralValidationResult {
         'normalized_code': normalizedCode,
         'affiliate_code_id': affiliateCodeId,
         'affiliate_id': affiliateId,
+        'affiliate_name': affiliateName,
         'sale_status': saleStatus?.storageValue,
         'benefit': benefit?.toMap(),
         'error_code': errorCode?.storageValue,
@@ -121,6 +144,7 @@ class ReferralValidationResult {
         'normalized_code': normalizedCode,
         'affiliate_code_id': affiliateCodeId,
         'affiliate_id': affiliateId,
+        'affiliate_name': affiliateName,
         'sale_status': saleStatus?.storageValue,
         'benefit': benefit?.toJson(),
         'error_code': errorCode?.storageValue,
@@ -150,6 +174,10 @@ class ReferralValidationResult {
         ['affiliate_code_id', 'affiliateCodeId'],
       ),
       affiliateId: readNullableString(map, ['affiliate_id', 'affiliateId']),
+      affiliateName: readNullableString(
+        map,
+        ['affiliate_name', 'affiliateName'],
+      ),
       saleStatus: readNullableEnum(
         map,
         ['sale_status', 'saleStatus'],

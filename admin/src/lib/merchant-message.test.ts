@@ -29,14 +29,56 @@ const ADMIN_API = read('admin-api.ts');
 test('the business side never shows the API its own words', () => {
   // `body?.message` may still be logged; what must not happen is it being
   // handed to AdminApiError, which is what the screen prints.
-  const thrown = /throw new AdminApiError\(\s*response\.status,[\s\S]*?\);/.exec(
-    MERCHANT_API,
+  const thrown = [
+    ...MERCHANT_API.matchAll(
+      /throw new AdminApiError\(\s*response\.status,[\s\S]*?\);/g,
+    ),
+  ];
+  assert.ok(thrown.length >= 2, 'the failure paths in merchant-api.ts moved');
+  for (const match of thrown) {
+    assert.doesNotMatch(
+      match[0],
+      /body\?\.message/,
+      'a /merchant/* failure would print the API’s English message',
+    );
+  }
+});
+
+/**
+ * The one exception, and what keeps it narrow.
+ *
+ * The `/merchant/affiliate*` routes answer a refusal with a stable `code` and
+ * a sentence from `AFFILIATE_API_MESSAGE` — Portuguese by construction, and
+ * written for the person reading it. Those are worth showing, and "Este
+ * afiliado já está ligado a este negócio" is worth far more than "reveja os
+ * campos". The gate is the presence of the code: without one, nothing the API
+ * wrote reaches the screen.
+ */
+test('a refusal is only spoken when the API named it with a code', () => {
+  const guard = /function codedFailure\([\s\S]*?\n\}/.exec(MERCHANT_API);
+  assert.ok(guard, 'codedFailure moved in merchant-api.ts');
+  assert.match(guard[0], /if \(code === '' \|\| message === ''\) return null;/);
+
+  // And it is used as a gate rather than a preference: every use is guarded by
+  // the null check.
+  const uses = [...MERCHANT_API.matchAll(/const coded = codedFailure\(body\);/g)];
+  assert.equal(uses.length, 2, 'the read and write paths no longer agree');
+  assert.equal(
+    [...MERCHANT_API.matchAll(/if \(coded !== null\) \{/g)].length,
+    2,
   );
-  assert.ok(thrown, 'the failure path in merchant-api.ts moved');
-  assert.doesNotMatch(
-    thrown[0],
-    /body\?\.message/,
-    'a /merchant/* failure would print the API’s English message',
+});
+
+test('the affiliate routes really do send a code beside every message', () => {
+  // Guards the guard above: if the API stopped sending one, the portal would
+  // quietly fall back to generic wording on every affiliate failure.
+  const routes = readFileSync(
+    path.join(__dirname, '..', '..', 'functions', 'src', 'affiliate_routes.ts'),
+    'utf8',
+  );
+  assert.match(
+    routes,
+    /\.json\(\{ success: false, code: error\.code, message: error\.message \}\)/,
   );
 });
 

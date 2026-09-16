@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 
-import { adminClaimNames, hasAdminClaims } from './admin-claims';
+import {
+  adminClaimNames,
+  appUserRole,
+  canManageAsOwner,
+  hasAdminClaims,
+} from './admin-claims';
 
 /**
  * `functions/src/admin_access.test.ts` guards that this file still accepts the
@@ -91,4 +98,59 @@ test('the two functions never disagree', () => {
       `disagreement on ${JSON.stringify(claims)}`,
     );
   }
+});
+
+/* --------------------------------------------------------- who may change */
+
+/**
+ * The role, which decides whether a business screen offers a control.
+ *
+ * `resolveAppUserRole` in `functions/src/index.ts` is the authority and is
+ * mirrored in `admin-claims.ts` for the same reason `hasAdminClaims` is: the
+ * bundler will not resolve a runtime import from the Functions package. The
+ * test reads that file so the mirror cannot drift.
+ */
+const FUNCTIONS_INDEX_TS = readFileSync(
+  path.join(__dirname, '..', '..', 'functions', 'src', 'index.ts'),
+  'utf8',
+);
+
+test('the role is read from the same claims the API reads', () => {
+  const block = /function resolveAppUserRole\([\s\S]*?\n\}/.exec(
+    FUNCTIONS_INDEX_TS,
+  );
+  assert.ok(block, 'resolveAppUserRole moved in index.ts');
+
+  const names = [...block[0].matchAll(/claims\.(\w+) === 'string'/g)].map(
+    (match) => match[1],
+  );
+  assert.ok(names.length >= 3, `found only ${names.length} claim names`);
+
+  for (const name of names) {
+    assert.equal(
+      appUserRole({ [name]: 'STAFF' }),
+      'STAFF',
+      `${name} is read by the API and ignored here`,
+    );
+  }
+});
+
+test('anything that is not staff is the owner, as the API decides it', () => {
+  // A business bootstrapped under the owner's own uid carries no role claim at
+  // all, and the API treats that as the owner. Treating it as staff here would
+  // hide every control from the person the screens are for.
+  assert.equal(appUserRole(null), 'OWNER');
+  assert.equal(appUserRole({}), 'OWNER');
+  assert.equal(appUserRole({ role: 'owner' }), 'OWNER');
+  assert.equal(appUserRole({ role: '  staff  ' }), 'STAFF');
+  assert.equal(appUserRole({ app_user_role: 'staff' }), 'STAFF');
+});
+
+test('an internal admin may manage a business even as staff', () => {
+  // `isOwnerOrAdminRequest` is admin OR owner, and the console's operators
+  // carry a staff role on their own account often enough for this to matter.
+  assert.ok(FUNCTIONS_INDEX_TS.includes('return isAdminRequest(req) || isOwnerRequest(req);'));
+  assert.equal(canManageAsOwner({ role: 'staff', admin: true }), true);
+  assert.equal(canManageAsOwner({ app_user_role: 'STAFF' }), false);
+  assert.equal(canManageAsOwner({}), true);
 });

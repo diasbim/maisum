@@ -7,11 +7,20 @@ class ApiResponse<T> {
     required this.success,
     this.data,
     this.message,
+    this.envelope,
   });
 
   final bool success;
   final T? data;
   final String? message;
+
+  /// The decoded response object as it arrived, when the body was a JSON
+  /// object.
+  ///
+  /// Some endpoints put per-request facts beside `data` rather than inside it —
+  /// paging and truncation, for instance — and those are the ones a caller has
+  /// to read to know whether the list it received is the whole list.
+  final Map<String, dynamic>? envelope;
 
   factory ApiResponse.fromJson(
     Map<String, dynamic> json,
@@ -23,6 +32,7 @@ class ApiResponse<T> {
           ? fromData(json['data'])
           : null,
       message: json['message'] as String?,
+      envelope: json,
     );
   }
 }

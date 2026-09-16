@@ -69,18 +69,20 @@ npm run typecheck  # tsc --noEmit
 
 ## Estado
 
-Consola completa. Onze superfícies:
+Consola completa. Treze superfícies:
 
 | Secção | Rota | O que faz |
 | --- | --- | --- |
 | Visão geral | `/admin` | métricas agrupadas, negócios e auditoria recentes |
 | Negócios | `/admin/merchants` | procura, filtro por estado, paginação |
-| Detalhe | `/admin/merchants/[id]` | resumo, entitlements, auditoria do negócio |
+| Detalhe | `/admin/merchants/[id]` | resumo, entitlements, afiliados, auditoria do negócio |
 | Planos | `/admin/plans` | catálogo e edição de planos, preços e funcionalidades |
 | Reconciliação | `/admin/plans/reconciliacao` | anunciado contra provisionado |
 | Clientes | `/admin/customers` | procura por telefone, cartão ou id |
 | Livro de pontos | `/admin/customers/[id]` | entradas e saldo num negócio |
 | Cartões NFC | `/admin/nfc` | consulta de cartão ou dos cartões de um cliente |
+| Afiliados | `/admin/afiliados` | diretório global, procura, estado, criação da identidade |
+| Ficha do afiliado | `/admin/afiliados/[id]` | identidade, negócios ligados, ligar/desligar, suspensão |
 | Operações | `/admin/operations` | quatro trabalhos de manutenção |
 | Retenção | `/admin/retention` | política e varrimento de classificações |
 | Acessos | `/admin/access` | administradores da plataforma e contas de equipa |
@@ -105,6 +107,13 @@ controlo que altera dados de produção, e está destacada como tal; a mensagem 
 resultado diz qual dos dois modos correu.
 
 ### Fronteiras deliberadas
+
+**Um afiliado não tem login.** O programa de indicações vive inteiro nos dois
+lados do portal e na aplicação: o negócio gere quem indica e o que o código
+vale, a consola gere a identidade e as ligações. Não existe sessão, claim nem
+ecrã para o próprio afiliado, e a consola vê a máscara do telefone e os
+últimos quatro dígitos — o número contactável fica com o negócio que o
+registou.
 
 **Não há listagem de clientes.** O id canónico é um HMAC do telefone, portanto
 um telefone resolve para um registo sem varrimento — e não existe consulta que

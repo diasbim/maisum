@@ -62,6 +62,22 @@ test('filters and paging travel together', () => {
   assert.equal(params.get('offset'), '30');
 });
 
+test('an affiliate filter travels as the parameter the API reads', () => {
+  // `pageQuery` in `affiliate_routes.ts` reads `affiliate_id`, not
+  // `affiliateId`: a camelCase key would be ignored and the screen would show
+  // every reward in the business under one person's name.
+  const params = new URLSearchParams(
+    buildListQuery({ affiliateId: 'af_123', status: 'PENDING' }).slice(1),
+  );
+  assert.equal(params.get('affiliate_id'), 'af_123');
+  assert.equal(params.get('status'), 'PENDING');
+});
+
+test('no affiliate filter means no parameter at all', () => {
+  assert.equal(buildListQuery({}).includes('affiliate_id'), false);
+  assert.equal(buildListQuery({ affiliateId: '  ' }).includes('affiliate_id'), false);
+});
+
 /* -------------------------------------------------------------- the envelope */
 
 test('a full envelope arrives as the screen expects it', () => {

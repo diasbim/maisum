@@ -4,9 +4,20 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  affiliateCodeStatusLabel,
+  affiliateLinkLabel,
+  affiliateStatusLabel,
+  affiliateStatusTone,
+  attributionStatusLabel,
+  attributionStatusTone,
+  benefitTypeLabel,
+  codeStatusTone,
   featureLabel,
   lifecycleLabel,
   redemptionStatusLabel,
+  rewardStatusLabel,
+  rewardStatusTone,
+  rewardTypeLabel,
   surveyChannelLabel,
   relationshipLabel,
   retentionLabel,
@@ -350,4 +361,163 @@ test('the portal says what the app says about a channel', () => {
       `the portal says "${label}" for ${channel}; the app says none of that`,
     );
   }
+});
+
+/* ------------------------------------------------- o programa de indicações */
+
+/**
+ * The referral vocabulary, read from the contracts that store it.
+ *
+ * `affiliate_contracts.ts` is the one place these strings are decided — the
+ * engine writes them, the API sends them and both clients read them — so a
+ * status added there without a Portuguese name should fail here rather than
+ * reach a business owner as `FIRST_QUALIFYING_SALE`.
+ */
+const AFFILIATE_CONTRACTS_TS = readFileSync(
+  path.join(
+    __dirname,
+    '..',
+    '..',
+    'functions',
+    'src',
+    'affiliate_contracts.ts',
+  ),
+  'utf8',
+);
+
+function contractValues(name: string): string[] {
+  const block = new RegExp(`${name} = \\[([^\\]]+)\\]`).exec(
+    AFFILIATE_CONTRACTS_TS,
+  );
+  assert.ok(block, `${name} is no longer in affiliate_contracts.ts`);
+  return [...block[1].matchAll(/'([A-Z_]+)'/g)].map((match) => match[1]);
+}
+
+test('every affiliate state the engine writes has a translation', () => {
+  const cases: Array<[string, (value: string) => string | null, string[], number]> = [
+    ['affiliate status', affiliateStatusLabel, contractValues('AFFILIATE_STATUS'), 3],
+    [
+      'link status',
+      affiliateLinkLabel,
+      contractValues('AFFILIATE_LINK_STATUS'),
+      2,
+    ],
+    [
+      'code status',
+      affiliateCodeStatusLabel,
+      contractValues('AFFILIATE_CODE_STATUS'),
+      2,
+    ],
+    ['benefit type', benefitTypeLabel, contractValues('BENEFIT_TYPE'), 3],
+    ['reward status', rewardStatusLabel, contractValues('REWARD_STATUS'), 4],
+    ['reward type', rewardTypeLabel, contractValues('REWARD_TYPE'), 2],
+    [
+      'attribution status',
+      attributionStatusLabel,
+      contractValues('ATTRIBUTION_STATUS'),
+      3,
+    ],
+  ];
+
+  for (const [what, label, values, least] of cases) {
+    // Guards the guard: a parse that found nothing would pass vacuously.
+    assert.ok(values.length >= least, `${what}: found only ${values.length} values`);
+    for (const value of values) {
+      assert.notEqual(label(value), value, `${what} ${value} is untranslated`);
+    }
+  }
+});
+
+test('the portal says what the app says about an affiliate', () => {
+  // `affiliate_repository.dart` and `affiliate_rewards_screen.dart` already
+  // say these words on the phone. A merchant who reads one there and another
+  // here would reasonably think they were looking at two different things.
+  const repository = readFileSync(
+    path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'features',
+      'affiliates',
+      'data',
+      'affiliate_repository.dart',
+    ),
+    'utf8',
+  );
+  for (const word of ['Suspenso', 'Inativo', 'Ativo']) {
+    assert.ok(
+      repository.includes(`'${word}'`),
+      `the app no longer says "${word}" for an affiliate`,
+    );
+  }
+  assert.equal(affiliateStatusLabel('SUSPENDED'), 'Suspenso');
+  assert.equal(affiliateStatusLabel('INACTIVE'), 'Inativo');
+  assert.equal(affiliateStatusLabel('ACTIVE'), 'Ativo');
+
+  const rewards = readFileSync(
+    path.join(
+      __dirname,
+      '..',
+      '..',
+      'lib',
+      'features',
+      'affiliates',
+      'presentation',
+      'affiliate_rewards_screen.dart',
+    ),
+    'utf8',
+  );
+  for (const [status, word] of [
+    ['PENDING', 'Pendente'],
+    ['APPROVED', 'Aprovada'],
+    ['PAID', 'Paga'],
+    ['CANCELLED', 'Cancelada'],
+  ]) {
+    assert.ok(
+      rewards.includes(`'${word}'`),
+      `the app no longer says "${word}" for a reward`,
+    );
+    assert.equal(rewardStatusLabel(status), word);
+  }
+});
+
+test('a state that reads as good is coloured as good, and never only coloured', () => {
+  // `Badge` colours by a vocabulary it already knows — ACTIVE is green,
+  // PENDING amber, CANCELLED red — and has never heard of DISABLED or
+  // APPROVED. Without this mapping an approved reward would come out the same
+  // navy as a cancelled one.
+  assert.equal(affiliateStatusTone('ACTIVE'), 'ACTIVE');
+  assert.equal(affiliateStatusTone('SUSPENDED'), 'SUSPENDED');
+  assert.equal(affiliateStatusTone('INACTIVE'), 'INACTIVE');
+
+  assert.equal(codeStatusTone('ACTIVE'), 'ACTIVE');
+  assert.equal(codeStatusTone('DISABLED'), 'INACTIVE');
+
+  assert.equal(rewardStatusTone('PENDING'), 'PENDING');
+  assert.equal(rewardStatusTone('APPROVED'), 'ACTIVE');
+  assert.equal(rewardStatusTone('PAID'), 'ACTIVE');
+  assert.equal(rewardStatusTone('CANCELLED'), 'CANCELLED');
+
+  assert.equal(attributionStatusTone('CONFIRMED'), 'ACTIVE');
+  assert.equal(attributionStatusTone('REJECTED'), 'FAILED');
+
+  // Every tone is one `Badge` recognises; an unknown one would silently fall
+  // back to navy and the distinction would be lost.
+  const badgeSource = readFileSync(
+    path.join(__dirname, '..', 'src', 'app', 'admin', 'ui.tsx'),
+    'utf8',
+  );
+  for (const tone of ['ACTIVE', 'PENDING', 'SUSPENDED', 'CANCELLED', 'FAILED']) {
+    assert.ok(
+      badgeSource.includes(`tone === '${tone}'`),
+      `Badge no longer knows the tone ${tone}`,
+    );
+  }
+});
+
+test('an unknown affiliate state passes through rather than vanishing', () => {
+  assert.equal(rewardStatusLabel('SOMETHING_NEW'), 'SOMETHING_NEW');
+  assert.equal(affiliateStatusLabel(null), null);
+  assert.equal(rewardStatusTone(null), 'INACTIVE');
 });

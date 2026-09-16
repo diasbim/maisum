@@ -92,6 +92,7 @@ class AffiliateSaleApi implements AffiliateSaleGateway {
       'normalized_code': wire['normalized_code'],
       'affiliate_code_id': wire['affiliate_code_id'],
       'affiliate_id': wire['affiliate_id'],
+      'affiliate_name': wire['affiliate_name'],
       'sale_status': isValid ? 'PENDING' : 'REJECTED',
       'error_code': wire['reason'],
       'status_text':
@@ -101,6 +102,7 @@ class AffiliateSaleApi implements AffiliateSaleGateway {
           'benefit_type': benefit['type'],
           'benefit_value': benefit['value'],
           'benefit_amount': benefit['discount_amount'],
+          'display_text': benefit['display_text'],
         },
     };
   }

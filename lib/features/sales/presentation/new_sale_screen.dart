@@ -15,12 +15,28 @@ import '../../../core/widgets/quick_amount_button.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/errors/app_error_mapper.dart';
 import '../../../design_system/design_system.dart';
+import '../../affiliates/presentation/referred_sale_controller.dart';
+import '../../affiliates/presentation/widgets/referral_code_field.dart';
+import '../../affiliates/providers/affiliate_providers.dart';
 import '../../catalog/domain/merchant_item.dart';
 import '../../customers/domain/customer.dart';
 import '../domain/sale_item.dart';
 import '../widgets/sale_progress_stepper.dart';
 import 'sale_controller.dart';
 import 'sale_success_screen.dart';
+
+/// True only for a customer this business has demonstrably never served.
+///
+/// A referral code buys an acquisition, so it is offered to someone with no
+/// visit, no first visit date and no spend on record. Anything softer than that
+/// puts the question in front of a regular, who then hears an offer the server
+/// refuses — and a cashier who is refused twice stops reading the panel.
+bool isReferralEligibleCustomer(Customer customer) {
+  return customer.totalVisits <= 0 &&
+      customer.firstVisitAt == null &&
+      customer.lastVisitAt == null &&
+      customer.totalSpent <= 0;
+}
 
 class NewSaleArgs {
   const NewSaleArgs({
@@ -57,6 +73,15 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   List<SaleItemInput> _selectedSaleItems = <SaleItemInput>[];
   int? _quickAmount;
   int? _lastAmount;
+  ReferralCodeEntry? _referralEntry;
+  int _saleContextVersion = 0;
+
+  /// Minted once per sale, not once per attempt.
+  ///
+  /// With the device id this is the commit's idempotency key, so a retry after
+  /// a dropped response has to carry the same one: a fresh id would ask the
+  /// server to write a second sale for the same basket.
+  String? _pendingLocalSaleId;
   _SaleInitializationState _initializationState =
       _SaleInitializationState.loading;
 
@@ -228,8 +253,12 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   int get _points => (_amount / _pointsPerMzn).floor();
 
   void _selectCustomer(Customer c) {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     setState(() {
+      _saleContextVersion += 1;
       _selectedCustomer = c;
+      _referralEntry = null;
+      _pendingLocalSaleId = null;
       _showCompletedStepper = false;
       _completedPoints = null;
       _initializationState = _SaleInitializationState.ready;
@@ -237,8 +266,12 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   }
 
   void _changeCustomer() {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     setState(() {
+      _saleContextVersion += 1;
       _selectedCustomer = null;
+      _referralEntry = null;
+      _pendingLocalSaleId = null;
       _showCompletedStepper = false;
       _completedPoints = null;
     });
@@ -260,6 +293,128 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       return;
     }
 
+    final customer = _selectedCustomer;
+    final canUseReferral = customer != null &&
+        ref.read(affiliateFeatureEnabledProvider) &&
+        isReferralEligibleCustomer(customer);
+    final referral = canUseReferral ? _referralEntry : null;
+    final online = ref.read(isOnlineProvider).valueOrNull ?? true;
+    if (referral != null && referral.hasCode && online) {
+      await _confirmReferredSale(referral);
+      return;
+    }
+
+    // Phase 6 has no offline referral path. A code typed with no connection is
+    // kept on screen and said out loud rather than silently applied: the sale
+    // itself still goes through, unchanged, because losing it would be worse
+    // than losing the code.
+    final deferredCode = referral != null && referral.hasCode && !online;
+    await _confirmOrdinarySale(notifyReferralDeferred: deferredCode);
+  }
+
+  /// The authoritative path.
+  ///
+  /// Every outcome is terminal for this tap: the sale is written and the app
+  /// moves on, or it is refused and the form stays exactly as it was with one
+  /// action that finishes the same sale without the code.
+  Future<void> _confirmReferredSale(ReferralCodeEntry referral) async {
+    final customer = _selectedCustomer!;
+    final localSaleId = _pendingLocalSaleId ??=
+        ref.read(referredSaleControllerProvider.notifier).newLocalSaleId();
+
+    setState(() => _isSubmitting = true);
+    try {
+      final outcome =
+          await ref.read(referredSaleControllerProvider.notifier).commit(
+                customerId: customer.id,
+                customerPhone: customer.phone,
+                grossAmount: _amount,
+                code: referral.code,
+                localSaleId: localSaleId,
+                items: _selectedSaleItems,
+              );
+
+      if (!mounted) return;
+
+      switch (outcome) {
+        case ReferredSaleAccepted(:final result):
+          setState(() {
+            _showCompletedStepper = true;
+            _completedPoints = result.sale.points;
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 1000));
+          if (!mounted) return;
+          context.go('/sale-success', extra: SaleSuccessArgs(result: result));
+        case ReferredSaleRejected(:final message):
+          _offerSaleWithoutCode(message);
+        case ReferredSaleDeviceUnavailable(:final message):
+          _offerSaleWithoutCode(message);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final info = AppErrorMapper.describe(e);
+      _offerReferralRetry(info.message, referral);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  /// A transport failure may mean the server committed but the response was
+  /// lost. Retrying with the same local id is safe; creating an ordinary sale
+  /// here could duplicate the purchase and its points.
+  void _offerReferralRetry(String message, ReferralCodeEntry referral) {
+    final contextVersion = _saleContextVersion;
+    final customerId = _selectedCustomer?.id;
+    AppFeedback.showMessage(
+      context,
+      message: message,
+      isError: true,
+      action: SnackBarAction(
+        label: 'Tentar novamente',
+        onPressed: () {
+          if (!mounted ||
+              contextVersion != _saleContextVersion ||
+              customerId == null ||
+              _selectedCustomer?.id != customerId) {
+            return;
+          }
+          unawaited(_confirmReferredSale(referral));
+        },
+      ),
+    );
+  }
+
+  /// Keeps the customer, the amount and the items, and offers the one action
+  /// that still finishes this sale.
+  void _offerSaleWithoutCode(String message) {
+    final contextVersion = _saleContextVersion;
+    final customerId = _selectedCustomer?.id;
+    AppFeedback.showMessage(
+      context,
+      message: message,
+      isError: true,
+      action: SnackBarAction(
+        label: 'Concluir sem código',
+        onPressed: () {
+          if (!mounted ||
+              contextVersion != _saleContextVersion ||
+              customerId == null ||
+              _selectedCustomer?.id != customerId) {
+            return;
+          }
+          setState(() => _referralEntry = null);
+          unawaited(_confirmOrdinarySale());
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmOrdinarySale({
+    bool notifyReferralDeferred = false,
+  }) async {
+    if (_isSubmitting) return;
     final saleCtrl = ref.read(saleControllerProvider.notifier);
     final customer = _selectedCustomer!;
     setState(() => _isSubmitting = true);
@@ -272,6 +427,13 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       );
 
       if (!mounted) return;
+      if (notifyReferralDeferred) {
+        AppFeedback.showMessage(
+          context,
+          message: 'Venda registada sem código: sem ligação, o código não '
+              'pôde ser confirmado.',
+        );
+      }
       setState(() {
         _showCompletedStepper = true;
         _completedPoints = result.sale.points;
@@ -305,15 +467,22 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
           _SaleItemsSelectionSheet(initialItems: _selectedSaleItems),
     );
     if (!mounted || selected == null) return;
+    _invalidateReferralAction();
     setState(() => _selectedSaleItems = selected);
   }
 
   void _removeSaleItem(String merchantItemId) {
+    _invalidateReferralAction();
     setState(() {
       _selectedSaleItems = _selectedSaleItems
           .where((item) => item.merchantItemId != merchantItemId)
           .toList();
     });
+  }
+
+  void _invalidateReferralAction() {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    _saleContextVersion += 1;
   }
 
   @override
@@ -336,6 +505,13 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         : '$pointsPerBase ${AppStrings.pontosAbrev}';
     final canOpenSelector =
         !isBusy && !isInitializing && !noCustomers && !_isSelectingCustomer;
+    // The invitation is a rollout decision and an eligibility one, in that
+    // order: a business that has not switched affiliates on never sees it, and
+    // a customer who has already been here would only be offered a code the
+    // server would refuse.
+    final showReferralInvite = _selectedCustomer != null &&
+        ref.watch(affiliateFeatureEnabledProvider) &&
+        isReferralEligibleCustomer(_selectedCustomer!);
     final action = _canSubmit
         ? _confirmSale
         : noCustomers
@@ -422,15 +598,18 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                   (amt) => QuickAmountButton(
                                     amount: amt,
                                     selected: _quickAmount == amt,
-                                    onTap: () => setState(() {
-                                      _quickAmount =
-                                          _quickAmount == amt ? null : amt;
-                                      if (_quickAmount != null) {
-                                        _amountCtrl.clear();
-                                      }
-                                      _showCompletedStepper = false;
-                                      _completedPoints = null;
-                                    }),
+                                    onTap: () {
+                                      _invalidateReferralAction();
+                                      setState(() {
+                                        _quickAmount =
+                                            _quickAmount == amt ? null : amt;
+                                        if (_quickAmount != null) {
+                                          _amountCtrl.clear();
+                                        }
+                                        _showCompletedStepper = false;
+                                        _completedPoints = null;
+                                      });
+                                    },
                                   ),
                                 )
                                 .toList()
@@ -442,17 +621,20 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                           amount: _lastAmount!,
                                           label: AppStrings.ultimo,
                                           selected: _quickAmount == _lastAmount,
-                                          onTap: () => setState(() {
-                                            _quickAmount =
-                                                _quickAmount == _lastAmount
-                                                    ? null
-                                                    : _lastAmount;
-                                            if (_quickAmount != null) {
-                                              _amountCtrl.clear();
-                                            }
-                                            _showCompletedStepper = false;
-                                            _completedPoints = null;
-                                          }),
+                                          onTap: () {
+                                            _invalidateReferralAction();
+                                            setState(() {
+                                              _quickAmount =
+                                                  _quickAmount == _lastAmount
+                                                      ? null
+                                                      : _lastAmount;
+                                              if (_quickAmount != null) {
+                                                _amountCtrl.clear();
+                                              }
+                                              _showCompletedStepper = false;
+                                              _completedPoints = null;
+                                            });
+                                          },
                                         ),
                                       ],
                               ),
@@ -490,11 +672,14 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                     BorderSide(color: AppColors.primary),
                               ),
                             ),
-                            onChanged: (_) => setState(() {
-                              _quickAmount = null;
-                              _showCompletedStepper = false;
-                              _completedPoints = null;
-                            }),
+                            onChanged: (_) {
+                              _invalidateReferralAction();
+                              setState(() {
+                                _quickAmount = null;
+                                _showCompletedStepper = false;
+                                _completedPoints = null;
+                              });
+                            },
                           ),
                           const SizedBox(height: 12),
                           MaisUmButton(
@@ -519,6 +704,19 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                             pointsBaseMzn: pointsBaseMzn,
                             pointsPerBaseLabel: pointsPerBaseLabel,
                           ),
+                          if (showReferralInvite) ...[
+                            const SizedBox(height: 12),
+                            ReferralCodeSection(
+                              key: const Key('referral-code-section'),
+                              customerPhone: _selectedCustomer!.phone,
+                              grossAmount: _amount,
+                              enabled: !isBusy,
+                              onChanged: (entry) {
+                                _invalidateReferralAction();
+                                _referralEntry = entry;
+                              },
+                            ),
+                          ],
                         ],
                       ],
                     );

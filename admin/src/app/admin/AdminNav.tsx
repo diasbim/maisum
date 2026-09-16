@@ -32,6 +32,9 @@ export const GROUPS = [
     items: [
       { href: '/admin/customers', label: 'Clientes' },
       { href: '/admin/nfc', label: 'Cartões NFC' },
+      // A directory of people, like the two above it: one record per phone,
+      // reaching across every business that person refers for.
+      { href: '/admin/afiliados', label: 'Afiliados' },
     ],
   },
   {

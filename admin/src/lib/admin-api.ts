@@ -1,6 +1,13 @@
 import 'server-only';
 
 import type {
+  AdminAffiliateDto,
+  AffiliateCodeDto,
+  AffiliateMetricsDto,
+  AffiliateRewardDto,
+  MerchantAffiliateDto,
+} from '@contracts/affiliate_api_contracts';
+import type {
   AdminAuditEventDto,
   AdminCustomerLookupDto,
   AdminDirectoryEntryDto,
@@ -16,9 +23,20 @@ import type {
 } from '@contracts/admin_api_contracts';
 
 import { serverConfig } from './env';
+import {
+  buildListQuery,
+  toMerchantList,
+  type ListQuery,
+  type MerchantList,
+} from './merchant-list';
 import { getAdminSession } from './session';
 
 export type {
+  AdminAffiliateDto,
+  AffiliateCodeDto,
+  AffiliateMetricsDto,
+  AffiliateRewardDto,
+  MerchantAffiliateDto,
   AdminAuditEventDto,
   AdminCustomerLookupDto,
   AdminDirectoryEntryDto,
@@ -61,8 +79,13 @@ import { AdminApiError, statusMessage } from './admin-api-error';
 type Envelope<T> = {
   success?: boolean;
   message?: string;
+  /** Sent by the affiliate routes beside the message; see `AdminApiError`. */
+  code?: string;
   data?: T;
   paging?: AdminPagingDto;
+  /** The affiliate lists carry both; see `pageResponse` in the Functions. */
+  total?: number;
+  truncated?: boolean;
 };
 
 export type Page<T> = {
@@ -73,7 +96,7 @@ export type Page<T> = {
 async function call<T>(
   path: string,
   init: {
-    method?: 'GET' | 'POST';
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     params?: Record<string, string | number | undefined>;
     body?: unknown;
   } = {},
@@ -130,6 +153,11 @@ async function call<T>(
       response.status,
       path,
       body?.message ?? statusMessage(response.status),
+      // Carried so a form can render the refusal against the field it names;
+      // only the affiliate routes send one.
+      typeof body?.code === 'string' && body.code.trim() !== ''
+        ? body.code.trim()
+        : null,
     );
   }
 
@@ -442,4 +470,164 @@ export async function fetchNfcCards(options: {
     },
   });
   return body.data ?? [];
+}
+
+/* --------------------------------------------------------------- afiliados */
+
+/**
+ * The console's side of the referral programme.
+ *
+ * Internal staff govern the identity — one person, one phone, one record
+ * across every business they refer for — and the links to businesses. What
+ * they never get is a reachable number: `AdminAffiliateDto` carries
+ * `phone_masked` and the last four digits, which is enough to recognise
+ * somebody in a support call and not enough to contact them. The business that
+ * added them holds the real number, in `/merchant/affiliates`.
+ *
+ * The merchant-scoped reads below are the same rows a business owner sees, via
+ * `/admin/merchants/:merchantId/*`, so a drilldown does not require borrowing
+ * anyone's session.
+ */
+
+/** The affiliate lists answer with `total` and `truncated` beside `paging`. */
+function toAffiliatePage<T>(body: Envelope<T[]>): MerchantList<T> {
+  return toMerchantList({
+    data: body.data,
+    paging: body.paging,
+    total: body.total,
+    truncated: body.truncated,
+  });
+}
+
+export async function fetchAffiliates(
+  params: ListQuery = {},
+): Promise<MerchantList<AdminAffiliateDto>> {
+  const body = await call<AdminAffiliateDto[]>(
+    `/admin/affiliates${buildListQuery(params)}`,
+  );
+  return toAffiliatePage(body);
+}
+
+export async function fetchAffiliate(
+  affiliateId: string,
+): Promise<AdminAffiliateDto | null> {
+  try {
+    const body = await call<AdminAffiliateDto>(
+      `/admin/affiliates/${encodeURIComponent(affiliateId)}`,
+    );
+    return body.data ?? null;
+  } catch (caught) {
+    if (caught instanceof AdminApiError && caught.status === 404) return null;
+    throw caught;
+  }
+}
+
+/**
+ * Creates the identity with no business attached.
+ *
+ * The id is derived from the phone on the server, so adding somebody who
+ * already exists is a conflict rather than a second record for one person.
+ */
+export async function createAffiliate(input: {
+  name: string;
+  phone: string;
+}): Promise<AdminAffiliateDto | null> {
+  const body = await call<AdminAffiliateDto>('/admin/affiliates', {
+    method: 'POST',
+    body: { name: input.name, phone: input.phone },
+  });
+  return body.data ?? null;
+}
+
+export async function updateAffiliateName(input: {
+  affiliateId: string;
+  name: string;
+}): Promise<void> {
+  await call(`/admin/affiliates/${encodeURIComponent(input.affiliateId)}`, {
+    method: 'PATCH',
+    body: { name: input.name },
+  });
+}
+
+/**
+ * Suspends, reactivates or stands an affiliate down, platform-wide.
+ *
+ * Every one of these is recorded by the API in the audit trail with the state
+ * before and after and the operator's own name, which is the reason the portal
+ * forwards the caller's token rather than holding a credential of its own.
+ */
+export async function setAffiliateStatus(input: {
+  affiliateId: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+}): Promise<void> {
+  await call(
+    `/admin/affiliates/${encodeURIComponent(input.affiliateId)}/status`,
+    { method: 'POST', body: { status: input.status } },
+  );
+}
+
+export async function linkAffiliateToMerchant(input: {
+  affiliateId: string;
+  merchantId: string;
+  benefitType: string;
+  benefitValue: number;
+  usageLimit: number | null;
+  firstVisitOnly: boolean;
+  expiresAt: number;
+}): Promise<void> {
+  await call(
+    `/admin/affiliates/${encodeURIComponent(input.affiliateId)}/merchants/${encodeURIComponent(input.merchantId)}`,
+    {
+      method: 'POST',
+      body: {
+        benefit_type: input.benefitType,
+        benefit_value: input.benefitValue,
+        usage_limit: input.usageLimit,
+        first_visit_only: input.firstVisitOnly,
+        expires_at: input.expiresAt,
+      },
+    },
+  );
+}
+
+/** Detaches without erasing: the link goes inactive and the code is disabled. */
+export async function unlinkAffiliateFromMerchant(input: {
+  affiliateId: string;
+  merchantId: string;
+}): Promise<void> {
+  await call(
+    `/admin/affiliates/${encodeURIComponent(input.affiliateId)}/merchants/${encodeURIComponent(input.merchantId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function fetchMerchantAffiliates(
+  merchantId: string,
+  params: ListQuery = {},
+): Promise<MerchantList<MerchantAffiliateDto>> {
+  const body = await call<MerchantAffiliateDto[]>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/affiliates${buildListQuery(params)}`,
+  );
+  return toAffiliatePage(body);
+}
+
+export async function fetchMerchantAffiliateRewards(
+  merchantId: string,
+  params: ListQuery = {},
+): Promise<MerchantList<AffiliateRewardDto>> {
+  const body = await call<AffiliateRewardDto[]>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/affiliate-rewards${buildListQuery(params)}`,
+  );
+  return toAffiliatePage(body);
+}
+
+export async function fetchMerchantAffiliateMetrics(
+  merchantId: string,
+  affiliateId?: string,
+): Promise<AffiliateMetricsDto | null> {
+  const body = await call<AffiliateMetricsDto>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/affiliate-metrics`,
+    { params: { affiliate_id: affiliateId } },
+  );
+  return body.data ?? null;
 }
