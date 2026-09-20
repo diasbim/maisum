@@ -1,8 +1,11 @@
 # MaisUm Afiliados — Plano de implementação
 
-**Fase:** 0 — Avaliação
+**Fase original:** 0 — Avaliação
 
-**Estado:** A aguardar aprovação antes da Fase 1
+**Estado original:** A aguardar aprovação antes da Fase 1
+
+**Estado atual (2026-09-15):** Fases 1-9 concluídas. O registo pós-implementação
+fica em §15, preservando este cabeçalho como histórico da avaliação inicial.
 
 **Data:** 2026-09-15
 
@@ -725,3 +728,91 @@ O rollback será testado numa base temporária; nunca contra dados partilhados.
 ## 14. Condição para iniciar a Fase 1
 
 A Fase 1 só começa após aprovação explícita deste documento, incluindo as decisões D4 e D12 e as dependências de WhatsApp/migração acima.
+
+## 15. Registo pós-implementação (2026-09-15)
+
+### 15.1 Fases concluídas e commits reais
+
+| Fase | Estado | Commit(s) real(is) / nota |
+| --- | --- | --- |
+| 0 — Avaliação | Concluída | `c7053b0` — `docs(affiliates): assess referral implementation` |
+| 1 — Dados | Concluída | `d7c61b8` — `feat(affiliates): add data foundation` |
+| 2 — Domínio | Concluída | `00d1e5d` — `feat(affiliates): implement the referral domain and lock down its data`; `a6809bd` — `feat(affiliates): add rate limiting, code claiming and the message outbox`; `0d603cc` — `refactor(affiliates): match the stored code shape, and name the id separator` |
+| 3 — API | Concluída | `ae0ae6d` — `feat(affiliates): expose secured referral api` |
+| 4 — Integração da venda | Concluída | `b1ce0a6` — `feat(affiliates): integrate referrals with sales` |
+| 5 — Retention Engine e WhatsApp | Concluída | `82da991` — `feat(affiliates): add retention notifications` |
+| 6 — Frontend | Concluída | `f43d236` — `feat(affiliates): add management experiences` |
+| 7 — Offline | Concluída | `1403c59` — `feat(affiliates): complete offline sync` |
+| 8 — Hardening | Concluída | `229b462` — `test(affiliates): harden referral lifecycle` |
+| 9 — Documentação | Concluída | `docs(affiliates): document referral engine` — commit documental desta fase |
+
+### 15.2 Desvios e decisões reais
+
+1. **Fase 2 saiu em mais de um commit.** Rate limiting, code claiming e outbox
+   ficaram materializados entre `00d1e5d` e `a6809bd`, com cleanup em
+   `0d603cc`, em vez de um único commit com a mensagem planeada.
+2. **O gate de rollout não ficou como feature flag paga separada.** A
+   ativação real do programa é merchant-scoped, em
+   `businesses/{merchantId}.affiliate_config.enabled`, com
+   `first_sale_reward_points > 0` para o programa fazer sentido operacional.
+3. **Firestore manteve-se como autoridade operacional.** SQLite é projeção
+   local/offline; PostgreSQL permanece compatibilidade/analytics e não entra na
+   transação crítica da venda.
+4. **A lacuna do provedor WhatsApp continua intencionalmente aberta.** A
+   outbox existe e reprocessa, mas sem adapter configurado as mensagens ficam
+   em `NOT_CONFIGURED`/queued; a partilha manual da app continua funcional.
+### 15.3 Limitações conhecidas confirmadas na implementação
+
+- não há pagamentos automáticos, login de afiliado nem marketplace;
+- aprovação de recompensa é online-only;
+- a consola admin global lista `merchant_ids` ligados, mas não mostra ali o
+  estado por ligação (ativo/desligado) na própria tabela;
+- código offline não cacheado não recebe desconto monetário retroativo depois;
+- se uma venda offline já concedeu benefício local e o servidor rejeitar o
+  código, a venda mantém esse benefício registado e o afiliado não recebe
+  atribuição/recompensa;
+- os pontos do afiliado continuam separados do ledger de fidelização do
+  cliente.
+
+### 15.4 Resultados reais de validação acumulados pelas fases 1-8
+
+- Functions: **571** testes.
+- Flutter full suite: **779** testes.
+- Affiliate referral lifecycle: **14** testes/cenários.
+- AVD/device validation: **7** cenários.
+- Portal/admin: **120** testes.
+- Firestore emulator: **sucesso**.
+- Full repo format check: **falhou em 48 ficheiros pré-existentes** fora do
+  escopo desta fase.
+- Governance checker antes desta entrada ainda reportava módulos em falta,
+  incluindo `affiliates`.
+- `psql` permaneceu indisponível neste ambiente; o SQL não foi aplicado aqui.
+
+### 15.5 Validação rerun da Fase 9 (documentação)
+
+Ficheiros tocados nesta fase documental:
+
+- `README.md`
+- `admin/README.md`
+- `docs/backend_bootstrap_contract.md`
+- `docs/engage_openapi.yaml`
+- `docs/afiliados/OPERATIONS.md`
+- `docs/app_feature_decision_register.md`
+- `docs/afiliados/PLAN.md`
+
+Resultados observados nesta execução:
+
+1. **YAML parse (`docs/engage_openapi.yaml`)**
+   Não foi possível correr parser Ruby/Python porque o ambiente não tinha Ruby,
+   nem Python configurado, nem dependência Node de YAML instalada. Como
+   verificação disponível, os diagnósticos do editor para
+   `docs/engage_openapi.yaml` não reportaram erros.
+2. **Governance checker** — `dart run tool/check_feature_decision_register.dart`
+   Continua a falhar por módulos pré-existentes fora desta tarefa:
+   `admin_portal`, `business_profile`, `catalog`, `customer_app`,
+   `merchant_onboarding`. `affiliates` deixou de aparecer após esta entrada.
+3. **Plan catalog checker** — `dart run tool/check_plan_catalog.dart`
+   Passou. Mantiveram-se apenas os avisos informativos/documentados já
+   conhecidos em `docs/landing_page_recommendations.md`.
+4. **`git diff --check`**
+   Passou.

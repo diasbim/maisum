@@ -69,7 +69,11 @@ npm run typecheck  # tsc --noEmit
 
 ## Estado
 
-Consola completa. Treze superfícies:
+Portal web operativo em duas áreas protegidas. A consola interna continua a
+servir operações de plataforma; o espaço `/negocio/*` cobre operações do
+próprio negócio sem acesso direto a Firestore ou PostgreSQL.
+
+### Consola interna
 
 | Secção | Rota | O que faz |
 | --- | --- | --- |
@@ -87,6 +91,20 @@ Consola completa. Treze superfícies:
 | Retenção | `/admin/retention` | política e varrimento de classificações |
 | Acessos | `/admin/access` | administradores da plataforma e contas de equipa |
 
+### Superfícies de afiliados
+
+| Âmbito | Rota | Quem escreve | O que faz |
+| --- | --- | --- | --- |
+| Negócio | `/negocio/afiliados` | `OWNER` | lista afiliados ligados, estado do código, partilha e métricas |
+| Negócio | `/negocio/afiliados/novo` | `OWNER` | cria afiliado + código do negócio numa só operação |
+| Negócio | `/negocio/afiliados/[affiliateId]` | `OWNER` | detalhe do afiliado, estado, recompensas e partilha |
+| Negócio | `/negocio/afiliados/[affiliateId]/codigo` | `OWNER` | edita benefício, validade, limite e ativa/desativa o código |
+| Negócio | `/negocio/afiliados/recompensas` | `OWNER` | aprova ou cancela recompensas pendentes |
+| Negócio | as mesmas rotas | `STAFF` | leitura apenas; a API recusa mutações e o portal desativa controlos |
+| Admin interno | `/admin/afiliados` | admin claim | diretório global, criação de identidade e pesquisa |
+| Admin interno | `/admin/afiliados/[affiliateId]` | admin claim | renomear, ativar/inativar/suspender e ligar/desligar negócios |
+| Admin interno | `/admin/merchants/[merchantId]/afiliados` | admin claim | leitura do programa de um negócio, métricas e pendências |
+
 ### Como as páginas estão construídas
 
 **Cada painel tem a sua fronteira `Suspense`.** As consultas vão para tabelas
@@ -100,7 +118,15 @@ operador passa um problema a outro.
 
 **As mutações são server actions.** O cookie de sessão é lido no servidor e o
 ID token nunca chega ao browser. Não existe um único `fetch` do cliente para a
-API de administração.
+API. `src/lib/actions.ts` governa as escritas da consola interna
+(`/admin/afiliados*`); `src/lib/merchant-actions.ts` governa as escritas do
+espaço do negócio (`/negocio/afiliados*`) e revalida as páginas afetadas.
+
+**Regras owner/staff são duplicadas por intenção.** O portal esconde botões de
+edição a quem não é `OWNER`, mas a autoridade é a API: leituras merchant ficam
+abertas a qualquer membro autenticado do negócio, enquanto criar/editar
+afiliados, alterar códigos, sincronizar criação offline e aprovar/cancelar
+recompensas exigem `OWNER` (ou administrador interno quando a rota é `/admin/*`).
 
 **Trabalhos de manutenção simulam por omissão.** A caixa *Aplicar* é o único
 controlo que altera dados de produção, e está destacada como tal; a mensagem de
@@ -136,7 +162,9 @@ os tokens revogados.
   `merchants`. Se estiver vazia em produção, as superfícies de leitura ficam
   vazias — os negócios visíveis localmente são semeados.
 - **B7**, CORS restrito à origem do portal. Depende do hostname.
-- Fases 7 a 9: testes de ponta a ponta, CI e entrega, runbook.
+- O detalhe global do afiliado lista os `merchant_ids` ligados, mas não mostra
+  ainda o estado por ligação nessa própria tabela; para distinguir ativo de
+  desligado é preciso abrir a vista do negócio.
 
 ## Produção
 

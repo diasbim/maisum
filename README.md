@@ -114,6 +114,31 @@ lib/
 
 Each feature follows `domain/` → `data/` → `presentation/` layering.
 
+## MaisUm Afiliados
+
+MaisUm Afiliados adds a referral loop on top of the existing loyalty flow:
+an affiliate shares a code, a customer optionally uses it on a qualifying
+sale, the customer receives the configured benefit, and the affiliate earns a
+separate reward in points when the acquisition qualifies.
+
+- **Management surfaces:** Flutter owner flows (`/affiliates`, detail, code,
+  rewards, metrics), merchant portal pages under `/negocio/afiliados*`, and
+  internal admin pages under `/admin/afiliados*` plus
+  `/admin/merchants/[merchantId]/afiliados`.
+- **Optional sale flow:** a sale without a referral code keeps the normal path.
+  The referral preview is advisory; the authoritative decision happens server
+  side on commit or sync.
+- **Offline semantics:** cached active codes can be previewed offline and queued
+  sales reconcile later. If an offline code is rejected on sync, the recorded
+  sale stays valid, any already-granted local customer benefit stays recorded,
+  and the affiliate simply receives no attribution or reward.
+- **Separate ledgers:** affiliate rewards are **not** written into the customer
+  loyalty ledger. Customer points still come from the normal loyalty entries;
+  affiliate rewards stay in affiliate reward records.
+- **Basic local checks:** run `flutter test` for the app, `npm --prefix functions test`
+  for the Cloud Functions contracts and lifecycle, and `cd admin && npm test`
+  or `npm run build` for the portal.
+
 ## Environment
 
 Pass at build time via `--dart-define`:
@@ -291,11 +316,12 @@ flutter build ios --release --dart-define=API_BASE_URL=https://api.example.com
 
 ## Database
 
-SQLite schema version 25 is migrated additively. The existing merchant-scoped
+SQLite schema version 31 is migrated additively. The existing merchant-scoped
 `customers` table is the offline BusinessCustomer projection and links to a
 canonical Firestore customer identity. Sales remain offline-first; confirmed
 balances are projected from the server-owned `loyalty_ledger`. Legacy
-`total_points` remains a compatibility projection during rollout.
+`total_points` remains a compatibility projection during rollout. Affiliate
+tables and offline projections are included in v30/v31.
 
 ## Testing
 

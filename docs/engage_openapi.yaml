@@ -1,9 +1,12 @@
 openapi: 3.0.3
 info:
-  title: MaisUm Engage API
+  title: MaisUm Engage and Referral API
   version: 1.0.0
   description: |
-    OpenAPI specification for Engage endpoints implemented in Cloud Functions.
+    OpenAPI specification for Engage endpoints plus the implemented merchant
+    affiliate/referral/reward/metrics endpoints in Cloud Functions. Internal
+    admin affiliate routes exist as well, but this file stays oriented to the
+    merchant/customer operational surfaces.
 servers:
   - url: https://<region>-<project>.cloudfunctions.net/api
 security:
@@ -168,12 +171,577 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalyticsResponse'
+  /merchant/affiliates:
+    get:
+      summary: List merchant affiliates
+      description: Read-only for any authenticated member of the business.
+      tags: [Affiliates, Merchant]
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ACTIVE, INACTIVE, SUSPENDED]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Affiliates loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantAffiliatePageResponse'
+    post:
+      summary: Create affiliate for merchant
+      description: Owner-only. Creates or reuses the platform identity, links it, and mints the merchant code.
+      tags: [Affiliates, Merchant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AffiliateCreateRequest'
+      responses:
+        '200':
+          description: Affiliate created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantAffiliateResponse'
+        '400':
+          $ref: '#/components/responses/AffiliateError'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '409':
+          $ref: '#/components/responses/AffiliateError'
+        '500':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliates/sync:
+    post:
+      summary: Reconcile an offline affiliate create
+      description: Owner-only. Accepts either the direct payload or the queue wrapper with `payload`.
+      tags: [Affiliates, Merchant, Sync]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AffiliateSyncRequest'
+      responses:
+        '200':
+          description: Offline affiliate create reconciled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateSyncResponse'
+        '400':
+          $ref: '#/components/responses/AffiliateError'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+        '409':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliates/metrics:
+    get:
+      summary: Get merchant affiliate metrics
+      tags: [Affiliates, Merchant, Metrics]
+      responses:
+        '200':
+          description: Metrics loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateMetricsResponse'
+  /merchant/affiliates/{affiliateId}:
+    get:
+      summary: Get one merchant affiliate
+      tags: [Affiliates, Merchant]
+      parameters:
+        - $ref: '#/components/parameters/AffiliateId'
+      responses:
+        '200':
+          description: Affiliate loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantAffiliateResponse'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+    patch:
+      summary: Rename merchant affiliate
+      description: Owner-only. Renames the affiliate display name for the merchant-facing record. Existing codes do not change.
+      tags: [Affiliates, Merchant]
+      parameters:
+        - $ref: '#/components/parameters/AffiliateId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AffiliateRenameRequest'
+      responses:
+        '200':
+          description: Affiliate renamed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantAffiliateResponse'
+        '400':
+          $ref: '#/components/responses/AffiliateError'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliates/{affiliateId}/metrics:
+    get:
+      summary: Get metrics for one merchant affiliate
+      tags: [Affiliates, Merchant, Metrics]
+      parameters:
+        - $ref: '#/components/parameters/AffiliateId'
+      responses:
+        '200':
+          description: Metrics loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateMetricsResponse'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliates/{affiliateId}/activate:
+    post:
+      summary: Activate affiliate link for merchant
+      description: Owner-only. Reactivates the affiliate link for this merchant.
+      tags: [Affiliates, Merchant]
+      parameters:
+        - $ref: '#/components/parameters/AffiliateId'
+      responses:
+        '200':
+          description: Affiliate activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantAffiliateResponse'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliates/{affiliateId}/deactivate:
+    post:
+      summary: Deactivate affiliate link for merchant
+      description: Owner-only. The history stays; the code stops being accepted.
+      tags: [Affiliates, Merchant]
+      parameters:
+        - $ref: '#/components/parameters/AffiliateId'
+      responses:
+        '200':
+          description: Affiliate deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MerchantAffiliateResponse'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliate-codes:
+    get:
+      summary: List merchant affiliate codes
+      tags: [Affiliates, Merchant]
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ACTIVE, DISABLED]
+        - in: query
+          name: affiliate_id
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Codes loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateCodePageResponse'
+    post:
+      summary: Create affiliate code for linked affiliate
+      description: Owner-only. One code per affiliate-merchant pair in the current MVP.
+      tags: [Affiliates, Merchant]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AffiliateCodeCreateRequest'
+      responses:
+        '200':
+          description: Code created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateCodeResponse'
+        '400':
+          $ref: '#/components/responses/AffiliateError'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+        '409':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliate-codes/{codeId}:
+    get:
+      summary: Get one merchant affiliate code
+      tags: [Affiliates, Merchant]
+      parameters:
+        - $ref: '#/components/parameters/CodeId'
+      responses:
+        '200':
+          description: Code loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateCodeResponse'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+    patch:
+      summary: Update affiliate code
+      description: Owner-only. Omitting a field leaves it unchanged.
+      tags: [Affiliates, Merchant]
+      parameters:
+        - $ref: '#/components/parameters/CodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AffiliateCodePatchRequest'
+      responses:
+        '200':
+          description: Code updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateCodeResponse'
+        '400':
+          $ref: '#/components/responses/AffiliateError'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliate-codes/{codeId}/enable:
+    post:
+      summary: Enable affiliate code
+      description: Owner-only.
+      tags: [Affiliates, Merchant]
+      parameters:
+        - $ref: '#/components/parameters/CodeId'
+      responses:
+        '200':
+          description: Code enabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateCodeResponse'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliate-codes/{codeId}/disable:
+    post:
+      summary: Disable affiliate code
+      description: Owner-only.
+      tags: [Affiliates, Merchant]
+      parameters:
+        - $ref: '#/components/parameters/CodeId'
+      responses:
+        '200':
+          description: Code disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateCodeResponse'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/referrals/validate-code:
+    post:
+      summary: Validate referral code preview
+      description: Available to any authenticated business member. Advisory only; the sale commit revalidates everything.
+      tags: [Affiliates, Merchant, Referrals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralValidateRequest'
+      responses:
+        '200':
+          description: Validation answered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferralValidationApiResponse'
+        '400':
+          $ref: '#/components/responses/AffiliateError'
+        '429':
+          $ref: '#/components/responses/AffiliateRateLimited'
+  /merchant/referral-sales/commit:
+    post:
+      summary: Commit an online referred sale
+      description: Available to any authenticated business member. Firestore-backed authoritative decision.
+      tags: [Affiliates, Merchant, Referrals]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralSaleCommitRequest'
+      responses:
+        '200':
+          description: Sale committed, replayed, or referral rejected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferralSaleCommitResponse'
+        '400':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+        '409':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/referral-sales/sync:
+    post:
+      summary: Reconcile an offline referral sale
+      description: Available to any authenticated business member. Accepts either the direct payload or the queue wrapper with `payload`.
+      tags: [Affiliates, Merchant, Referrals, Sync]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReferralSaleSyncRequest'
+      responses:
+        '200':
+          description: Offline sale reconciled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferralSaleSyncResponse'
+        '400':
+          $ref: '#/components/responses/AffiliateError'
+        '409':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/referrals:
+    get:
+      summary: List referral attributions
+      tags: [Affiliates, Merchant, Referrals]
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [CONFIRMED, REJECTED, CANCELLED]
+        - in: query
+          name: affiliate_id
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Referrals loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferralAttributionPageResponse'
+  /merchant/referrals/{attributionId}:
+    get:
+      summary: Get referral attribution detail
+      tags: [Affiliates, Merchant, Referrals]
+      parameters:
+        - $ref: '#/components/parameters/AttributionId'
+      responses:
+        '200':
+          description: Attribution loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReferralAttributionDetailResponse'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliate-rewards:
+    get:
+      summary: List affiliate rewards
+      tags: [Affiliates, Merchant, Rewards]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, PAID, CANCELLED]
+        - in: query
+          name: affiliate_id
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Rewards loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateRewardPageResponse'
+  /merchant/affiliate-rewards/{rewardId}/approve:
+    post:
+      summary: Approve affiliate reward
+      description: Owner-only. Approval is online-only and does not pay the reward automatically.
+      tags: [Affiliates, Merchant, Rewards]
+      parameters:
+        - $ref: '#/components/parameters/RewardId'
+      responses:
+        '200':
+          description: Reward approved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateRewardResponse'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+        '409':
+          $ref: '#/components/responses/AffiliateError'
+  /merchant/affiliate-rewards/{rewardId}/cancel:
+    post:
+      summary: Cancel affiliate reward
+      description: Owner-only. A paid reward is refused for manual review rather than auto-reversed.
+      tags: [Affiliates, Merchant, Rewards]
+      parameters:
+        - $ref: '#/components/parameters/RewardId'
+      responses:
+        '200':
+          description: Reward cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AffiliateRewardResponse'
+        '403':
+          $ref: '#/components/responses/AffiliateError'
+        '404':
+          $ref: '#/components/responses/AffiliateError'
+        '409':
+          $ref: '#/components/responses/AffiliateError'
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  parameters:
+    AffiliateId:
+      in: path
+      name: affiliateId
+      required: true
+      schema:
+        type: string
+    CodeId:
+      in: path
+      name: codeId
+      required: true
+      schema:
+        type: string
+    AttributionId:
+      in: path
+      name: attributionId
+      required: true
+      schema:
+        type: string
+    RewardId:
+      in: path
+      name: rewardId
+      required: true
+      schema:
+        type: string
+  responses:
+    AffiliateError:
+      description: Stable affiliate/referral error envelope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AffiliateErrorResponse'
+    AffiliateRateLimited:
+      description: Validation budget exhausted for this caller and merchant
+      headers:
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds before the caller may retry.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AffiliateRateLimitedResponse'
   schemas:
     ApiEnvelopeBase:
       type: object
@@ -547,3 +1115,723 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/AnalyticsData'
+    Paging:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+    AffiliateErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+    AffiliateRateLimitedResponse:
+      allOf:
+        - $ref: '#/components/schemas/AffiliateErrorResponse'
+        - type: object
+          properties:
+            code:
+              type: string
+              enum: [rate_limited]
+    AffiliateStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE, SUSPENDED]
+    AffiliateLinkStatus:
+      type: string
+      enum: [ACTIVE, INACTIVE]
+    AffiliateCodeStatus:
+      type: string
+      enum: [ACTIVE, DISABLED]
+    BenefitType:
+      type: string
+      enum: [FIXED_AMOUNT, PERCENTAGE, POINTS]
+    RewardStatus:
+      type: string
+      enum: [PENDING, APPROVED, PAID, CANCELLED]
+    AffiliateDto:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        first_name:
+          type: string
+        last_name:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        phone_last4:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/AffiliateStatus'
+        created_at:
+          type: integer
+          nullable: true
+        updated_at:
+          type: integer
+          nullable: true
+    AffiliateCodeDto:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        affiliate_id:
+          type: string
+        code:
+          type: string
+        normalized_code:
+          type: string
+        benefit_type:
+          $ref: '#/components/schemas/BenefitType'
+        benefit_value:
+          type: number
+        starts_at:
+          type: integer
+          nullable: true
+        expires_at:
+          type: integer
+          nullable: true
+        usage_limit:
+          type: integer
+          nullable: true
+        usage_count:
+          type: integer
+        first_visit_only:
+          type: boolean
+        status:
+          $ref: '#/components/schemas/AffiliateCodeStatus'
+        created_at:
+          type: integer
+          nullable: true
+        updated_at:
+          type: integer
+          nullable: true
+    MerchantAffiliateDto:
+      allOf:
+        - $ref: '#/components/schemas/AffiliateDto'
+        - type: object
+          properties:
+            merchant_id:
+              type: string
+            link_status:
+              $ref: '#/components/schemas/AffiliateLinkStatus'
+            linked_at:
+              type: integer
+              nullable: true
+            code:
+              allOf:
+                - $ref: '#/components/schemas/AffiliateCodeDto'
+              nullable: true
+    ReferralAttributionDto:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        affiliate_id:
+          type: string
+        affiliate_code_id:
+          type: string
+          nullable: true
+        customer_id:
+          type: string
+          nullable: true
+        first_sale_id:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [CONFIRMED, REJECTED, CANCELLED]
+        rejection_reason:
+          type: string
+          nullable: true
+        attributed_at:
+          type: integer
+          nullable: true
+        created_at:
+          type: integer
+          nullable: true
+        updated_at:
+          type: integer
+          nullable: true
+    AffiliateRewardDto:
+      type: object
+      properties:
+        id:
+          type: string
+        merchant_id:
+          type: string
+        affiliate_id:
+          type: string
+        attribution_id:
+          type: string
+          nullable: true
+        type:
+          type: string
+          enum: [FIRST_QUALIFYING_SALE, CUSTOMER_RETURN]
+        value:
+          type: number
+        value_type:
+          type: string
+          enum: [POINTS, FIXED_AMOUNT]
+        status:
+          $ref: '#/components/schemas/RewardStatus'
+        trigger_sale_id:
+          type: string
+          nullable: true
+        approved_by:
+          type: string
+          nullable: true
+        approved_at:
+          type: integer
+          nullable: true
+        paid_at:
+          type: integer
+          nullable: true
+        cancelled_at:
+          type: integer
+          nullable: true
+        created_at:
+          type: integer
+          nullable: true
+        updated_at:
+          type: integer
+          nullable: true
+    AffiliateMetricsDto:
+      type: object
+      properties:
+        merchant_id:
+          type: string
+        affiliate_id:
+          type: string
+          nullable: true
+        unique_validation_attempts:
+          type: integer
+        confirmed_attributions:
+          type: integer
+        rejected_attributions:
+          type: integer
+        returned_customers:
+          type: integer
+        pending_reward_count:
+          type: integer
+        pending_reward_points:
+          type: integer
+        approved_reward_count:
+          type: integer
+        approved_reward_points:
+          type: integer
+        conversion_rate:
+          type: number
+        last_activity_at:
+          type: integer
+          nullable: true
+        truncated:
+          type: boolean
+    ReferralBenefitDto:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/BenefitType'
+        value:
+          type: number
+        display_text:
+          type: string
+    ReferralValidationValidData:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          enum: [true]
+        affiliate_id:
+          type: string
+        affiliate_name:
+          type: string
+        affiliate_code_id:
+          type: string
+        normalized_code:
+          type: string
+        first_visit_only:
+          type: boolean
+        benefit:
+          $ref: '#/components/schemas/ReferralBenefitDto'
+        validated_at:
+          type: integer
+    ReferralValidationRejectedData:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          enum: [false]
+        reason:
+          type: string
+          enum:
+            - CODE_NOT_FOUND
+            - CODE_DISABLED
+            - CODE_NOT_STARTED
+            - CODE_EXPIRED
+            - CODE_USAGE_LIMIT_REACHED
+            - AFFILIATE_INACTIVE
+            - SELF_REFERRAL_NOT_ALLOWED
+            - CUSTOMER_NOT_ELIGIBLE
+            - CUSTOMER_ALREADY_REFERRED
+            - BENEFIT_INVALID
+        message:
+          type: string
+        validated_at:
+          type: integer
+    ReferralValidationApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              oneOf:
+                - $ref: '#/components/schemas/ReferralValidationValidData'
+                - $ref: '#/components/schemas/ReferralValidationRejectedData'
+    MerchantAffiliateResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/MerchantAffiliateDto'
+    MerchantAffiliatePageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/MerchantAffiliateDto'
+            paging:
+              $ref: '#/components/schemas/Paging'
+            total:
+              type: integer
+            truncated:
+              type: boolean
+    AffiliateCodeResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AffiliateCodeDto'
+    AffiliateCodePageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AffiliateCodeDto'
+            paging:
+              $ref: '#/components/schemas/Paging'
+            total:
+              type: integer
+            truncated:
+              type: boolean
+    ReferralAttributionDetailDto:
+      allOf:
+        - $ref: '#/components/schemas/ReferralAttributionDto'
+        - type: object
+          properties:
+            rewards:
+              type: array
+              items:
+                $ref: '#/components/schemas/AffiliateRewardDto'
+    ReferralAttributionPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ReferralAttributionDto'
+            paging:
+              $ref: '#/components/schemas/Paging'
+            total:
+              type: integer
+            truncated:
+              type: boolean
+    ReferralAttributionDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReferralAttributionDetailDto'
+    AffiliateRewardResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AffiliateRewardDto'
+    AffiliateRewardPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/AffiliateRewardDto'
+            paging:
+              $ref: '#/components/schemas/Paging'
+            total:
+              type: integer
+            truncated:
+              type: boolean
+    AffiliateMetricsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AffiliateMetricsDto'
+    AffiliateCreateRequest:
+      type: object
+      required: [name, phone, benefit_type, benefit_value]
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        benefit_type:
+          $ref: '#/components/schemas/BenefitType'
+        benefit_value:
+          type: number
+        starts_at:
+          type: integer
+          nullable: true
+        expires_at:
+          type: integer
+          nullable: true
+        usage_limit:
+          type: integer
+          nullable: true
+        first_visit_only:
+          type: boolean
+          default: true
+    AffiliateRenameRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+    AffiliateCodeCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/AffiliateCreateRequest'
+        - type: object
+          required: [affiliate_id]
+          properties:
+            affiliate_id:
+              type: string
+    AffiliateCodePatchRequest:
+      type: object
+      properties:
+        benefit_type:
+          $ref: '#/components/schemas/BenefitType'
+        benefit_value:
+          type: number
+        starts_at:
+          type: integer
+          nullable: true
+        expires_at:
+          type: integer
+          nullable: true
+        usage_limit:
+          type: integer
+          nullable: true
+        first_visit_only:
+          type: boolean
+    AffiliateSyncDirectPayload:
+      allOf:
+        - $ref: '#/components/schemas/AffiliateCreateRequest'
+        - type: object
+          required: [local_id, local_affiliate_id, device_id, idempotency_key]
+          properties:
+            merchant_id:
+              type: string
+            local_id:
+              type: string
+            local_affiliate_id:
+              type: string
+            device_id:
+              type: string
+            idempotency_key:
+              type: string
+            created_at:
+              type: integer
+              nullable: true
+    AffiliateSyncWrappedPayload:
+      type: object
+      required: [payload]
+      properties:
+        operation:
+          type: string
+        entity_id:
+          type: string
+        payload:
+          $ref: '#/components/schemas/AffiliateSyncDirectPayload'
+    AffiliateSyncRequest:
+      oneOf:
+        - $ref: '#/components/schemas/AffiliateSyncDirectPayload'
+        - $ref: '#/components/schemas/AffiliateSyncWrappedPayload'
+    AffiliateSyncResponseData:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [committed, replayed]
+        local_id:
+          type: string
+        local_affiliate_id:
+          type: string
+        affiliate:
+          $ref: '#/components/schemas/MerchantAffiliateDto'
+    AffiliateSyncResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/AffiliateSyncResponseData'
+    ReferralValidateRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+        customer_phone:
+          type: string
+          nullable: true
+        sale_amount:
+          type: number
+          nullable: true
+    ReferralSaleItem:
+      type: object
+      required: [id, merchant_item_id, name_snapshot, type_snapshot, quantity]
+      properties:
+        id:
+          type: string
+        merchant_item_id:
+          type: string
+        name_snapshot:
+          type: string
+        type_snapshot:
+          type: string
+        quantity:
+          type: integer
+        unit_price:
+          type: number
+          nullable: true
+        subtotal:
+          type: number
+          nullable: true
+    ReferralSaleCommitRequest:
+      type: object
+      required:
+        [device_id, local_sale_id, customer_id, customer_phone, gross_amount, code]
+      properties:
+        device_id:
+          type: string
+        local_sale_id:
+          type: string
+        customer_id:
+          type: string
+        customer_phone:
+          type: string
+        gross_amount:
+          type: number
+        code:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReferralSaleItem'
+    AppliedOfflineBenefit:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/BenefitType'
+        value:
+          type: number
+        discount_amount:
+          type: number
+        points_awarded:
+          type: number
+    ReferralSaleSyncDirectRequest:
+      allOf:
+        - $ref: '#/components/schemas/ReferralSaleCommitRequest'
+        - type: object
+          properties:
+            merchant_id:
+              type: string
+            sale_id:
+              type: string
+            created_at:
+              type: integer
+              nullable: true
+            local_created_at:
+              type: integer
+              nullable: true
+            idempotency_key:
+              type: string
+            offline_benefit_applied:
+              type: boolean
+            applied_benefit:
+              $ref: '#/components/schemas/AppliedOfflineBenefit'
+            cached_code_id:
+              type: string
+              nullable: true
+    ReferralSaleSyncWrappedRequest:
+      type: object
+      required: [payload]
+      properties:
+        operation:
+          type: string
+        entity_id:
+          type: string
+        payload:
+          $ref: '#/components/schemas/ReferralSaleSyncDirectRequest'
+    ReferralSaleSyncRequest:
+      oneOf:
+        - $ref: '#/components/schemas/ReferralSaleSyncDirectRequest'
+        - $ref: '#/components/schemas/ReferralSaleSyncWrappedRequest'
+    ReferralRewardSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        value:
+          type: number
+        status:
+          $ref: '#/components/schemas/RewardStatus'
+    ReferralCommitResult:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [committed, replayed]
+        sale:
+          type: object
+          additionalProperties: true
+        referral:
+          type: object
+          properties:
+            affiliate_id:
+              type: string
+              nullable: true
+            affiliate_code_id:
+              type: string
+              nullable: true
+            normalized_code:
+              type: string
+            benefit:
+              type: object
+              properties:
+                type:
+                  $ref: '#/components/schemas/BenefitType'
+                value:
+                  type: number
+                discount_amount:
+                  type: number
+                points_awarded:
+                  type: number
+                display_text:
+                  type: string
+              additionalProperties: true
+            attribution_id:
+              type: string
+              nullable: true
+            attribution_status:
+              type: string
+              nullable: true
+            reward:
+              allOf:
+                - $ref: '#/components/schemas/ReferralRewardSummary'
+              nullable: true
+        idempotency_key:
+          type: string
+        replayed:
+          type: boolean
+    ReferralRejectedResult:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [rejected]
+        code:
+          type: string
+          enum: [referral_rejected]
+        reason:
+          type: string
+        message:
+          type: string
+    ReferralSaleCommitResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              oneOf:
+                - $ref: '#/components/schemas/ReferralCommitResult'
+                - $ref: '#/components/schemas/ReferralRejectedResult'
+    ReferralSaleSyncResult:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum: [committed, replayed, rejected, deferred]
+        sale:
+          type: object
+          additionalProperties: true
+        referral:
+          type: object
+          additionalProperties: true
+        events:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        idempotency_key:
+          type: string
+        clock_skew_ms:
+          type: integer
+          nullable: true
+        code:
+          type: string
+        reason:
+          type: string
+        message:
+          type: string
+    ReferralSaleSyncResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/ReferralSaleSyncResult'
