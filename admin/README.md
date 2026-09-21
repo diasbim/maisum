@@ -90,6 +90,53 @@ próprio negócio sem acesso direto a Firestore ou PostgreSQL.
 | Operações | `/admin/operations` | quatro trabalhos de manutenção |
 | Retenção | `/admin/retention` | política e varrimento de classificações |
 | Acessos | `/admin/access` | administradores da plataforma e contas de equipa |
+| Prospeção | `/admin/prospecao` | orçamento, procura de negócios, lista de leads |
+| Ficha do lead | `/admin/prospecao/[id]` | pontuação, evidências, decisores, mensagem, funil |
+| Definições de prospeção | `/admin/prospecao/definicoes` | orçamentos, pontuação mínima, cidades, consumo |
+
+### Prospeção
+
+O topo do funil, que até aqui vivia inteiro numa caixa de WhatsApp (§4.1 do
+plano). Descobre negócios que a MaisUm pode vir a servir, pontua-os, procura
+quem decide, e escreve a primeira mensagem — que uma pessoa revê e envia.
+
+Três regras moldam toda a superfície:
+
+**Nada é inventado.** Um email estimado é mostrado riscado e marcado como tal;
+um dado desconhecido aparece na lista de desconhecidos em vez de ser omitido; e
+cada afirmação da análise diz se foi observada ou deduzida, com a fonte.
+
+**Nada é gasto em silêncio.** Todas as chamadas pagas passam por um guarda que
+lê os orçamentos configurados, e todas deixam uma linha no registo de consumo —
+incluindo as que falham, porque os fornecedores cobram por chamadas que não
+devolvem nada. Quando um limite é atingido, o enriquecimento pago pára e a
+consola diz qual limite foi.
+
+**Nada é enviado.** O servidor gera o rascunho e regista que o gerou. A única
+coisa que pode registar uma mensagem como enviada é uma pessoa a dizer que a
+enviou, e os leads em «não contactar» ou «pediu para sair» não admitem nem uma
+coisa nem a outra.
+
+#### Fornecedores
+
+| Fornecedor | Para quê | Custo |
+| --- | --- | --- |
+| **Apollo** | descoberta de negócios, procura e enriquecimento de pessoas | estimado pela tabela |
+| **AIsa** | pesquisa web (Perplexity Sonar, através do gateway) | **real**, do cabeçalho `X-AISA-Price-USD` |
+| **Anthropic** | análise do lead e redação das mensagens | estimado pela tabela |
+
+AIsa é um *gateway* sobre milhares de APIs, não uma base de contactos: não tem
+procura de pessoas, por isso serve só a cadeia de pesquisa web. Em troca é o
+único que diz quanto cobrou — as linhas de consumo dele têm custo real, e a
+consola deixa de lhes chamar «estimado».
+
+A pesquisa devolve as páginas que consultou (`citations`) ao lado da resposta,
+e o adaptador **descarta qualquer afirmação cuja fonte não esteja nessa lista**.
+É a verificação mais forte do módulo contra invenção, e só é possível porque
+esta API separa o que leu daquilo que concluiu.
+
+Dados de desenvolvimento: `npm run seed:prospecting` (só emulador; os domínios
+estão sob `.test` e os telefones num bloco que não é atribuído).
 
 ### Superfícies de afiliados
 

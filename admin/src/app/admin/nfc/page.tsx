@@ -1,6 +1,8 @@
 import Link from 'next/link';
 
+import { revokeNfcCardAction } from '@/lib/actions';
 import { fetchNfcCards } from '@/lib/admin-api';
+import { ActionForm, Check } from '../forms';
 import {
   Badge,
   Card,
@@ -16,6 +18,33 @@ import {
 
 export const metadata = { title: 'Cartões NFC | Portal MaisUm' };
 export const dynamic = 'force-dynamic';
+
+/**
+ * Revokes one card, reported lost or stolen.
+ *
+ * Only reachable from a search by the full card UID: that search box is the
+ * one place on this page the full UID exists at all, since the table only
+ * ever prints the last four characters. A customer-id search cannot offer
+ * this button for the same reason it cannot print the UID.
+ */
+function RevokeButton({ cardUid }: { cardUid: string }) {
+  return (
+    <ActionForm
+      action={revokeNfcCardAction}
+      submitLabel="Revogar"
+      pendingLabel="A revogar…"
+      variant="btn-outline btn-sm"
+    >
+      <input type="hidden" name="card_uid" value={cardUid} />
+      <Check
+        name="confirm"
+        label="Confirmo"
+        hint="O cartão deixa de ser aceite em qualquer negócio."
+        danger
+      />
+    </ActionForm>
+  );
+}
 
 /**
  * The NFC card registry.
@@ -125,6 +154,7 @@ export default async function NfcPage({
                   <th scope="col">Origem</th>
                   <th scope="col">Associado por</th>
                   <th scope="col">Atualizado</th>
+                  <th scope="col">Ação</th>
                 </tr>
               </thead>
               <tbody>
@@ -157,11 +187,25 @@ export default async function NfcPage({
                       ) : null}
                     </td>
                     <td>{formatDateTime(card.updated_at)}</td>
+                    <td>
+                      {cardUid && card.status === 'ACTIVE' ? (
+                        <RevokeButton cardUid={cardUid} />
+                      ) : (
+                        <span className="muted">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {!cardUid && result.data.some((card) => card.status === 'ACTIVE') ? (
+            <p className="micro" style={{ marginTop: 10 }}>
+              Para revogar um cartão, procure pelo identificador completo — só
+              essa procura conhece o valor a revogar.
+            </p>
+          ) : null}
         </Panel>
       )}
     </>

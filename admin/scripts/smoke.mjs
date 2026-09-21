@@ -22,6 +22,7 @@ import {
 } from 'firebase/auth';
 
 import { seed, CONTAS, NEGOCIO } from './seed-dev.mjs';
+import { seedProspecting } from './seed-prospecting.mjs';
 
 const BASE = process.env.SMOKE_BASE_URL ?? 'http://127.0.0.1:3000';
 const AUTH_EMULATOR = 'http://127.0.0.1:9099';
@@ -362,6 +363,114 @@ for (const seccao of ['Vendas', 'Marcações', 'Resgates', 'Bónus de retorno', 
 grupo('quem entra onde');
 const interno = await entrar(CONTAS.interno);
 check('o interno entra na consola', interno.status === 200 && interno.corpo.area === 'admin', JSON.stringify(interno.corpo));
+
+/* ------------------------------------------------------------------ prospeção */
+
+/**
+ * The prospecting console, rendered.
+ *
+ * The unit suite can say that a guessed email is not `email_usable`. It cannot
+ * say that the lead page actually marks it on screen, that the unknowns panel
+ * is rendered rather than skipped when the list is empty, or that a blocked
+ * lead loses its outreach controls — those live in `.tsx` and are only true
+ * once a page has been rendered with data.
+ *
+ * The section is skipped rather than failed when the module is off. It is
+ * off by default, and a suite that failed for a flag nobody set would train
+ * people to ignore it.
+ */
+cookie = interno.cookies;
+const prospeccao = await pedir('/admin/prospecao');
+
+if (prospeccao.tudo.includes('está desligada nesta instalação')) {
+  grupo('prospeção');
+  console.log('  saltada  AI_PROSPECTING_ENABLED está desligada');
+} else {
+  grupo('prospeção');
+  check('a lista abre', prospeccao.status === 200, 'status=' + prospeccao.status);
+  // Both headings are in the shell, so their order is the page's order. The
+  // spent figure is not: it arrives when its boundary resolves, which is
+  // always after the whole shell, so comparing it against a heading would
+  // measure the order the stream happened to finish in and never the order an
+  // operator reads. Hence two checks: where the panel sits, and that it has a
+  // number in it — an empty budget panel in the right place is still a page
+  // that asks for money without saying how much is left.
+  check(
+    'o orçamento aparece antes de qualquer controlo pago',
+    prospeccao.texto.indexOf('Orçamento') < prospeccao.texto.indexOf('Procurar neg'),
+  );
+  check(
+    'e traz um valor, não um painel vazio',
+    /Gasto este m/.test(prospeccao.tudo) && /\$\d/.test(prospeccao.tudo),
+  );
+  check('o formulário oferece os setores do perfil', prospeccao.tudo.includes('Barbearia'));
+  check(
+    'a estimativa diz que o orçamento é o que limita',
+    /or.amento/i.test(prospeccao.tudo),
+  );
+
+  await seedProspecting();
+
+  grupo('prospeção — lead');
+  const lead = await pedir('/admin/prospecao/fx-org-001');
+  check('a ficha do lead abre', lead.status === 200, 'status=' + lead.status);
+  check('mostra o negócio', lead.tudo.includes('Barbearia Exemplo Central'));
+  check('mostra a pontuação', /\/ 100/.test(lead.tudo));
+  check('tem o painel «Porquê a MaisUm?»', lead.tudo.includes('Porqu'));
+  check('tem o painel de decisores', lead.tudo.includes('Decisores'));
+  check('tem histórico', lead.tudo.includes('Hist'));
+  check('mostra o custo já gasto neste lead', /Custo deste lead/.test(lead.tudo));
+
+  // fx-org-004's only contact has a pattern-built address, and it must never
+  // read as a way to reach somebody.
+  const estimado = await pedir('/admin/prospecao/fx-org-004');
+  check(
+    'um email estimado é marcado como tal',
+    estimado.tudo.includes('Estimado'),
+    'fx-org-004 tem um email GUESSED',
+  );
+
+  // fx-org-020 is DO_NOT_CONTACT.
+  const bloqueado = await pedir('/admin/prospecao/fx-org-020');
+  check(
+    'um lead bloqueado diz que não pode ser contactado',
+    bloqueado.tudo.includes('não pode ser contactado') ||
+      bloqueado.tudo.includes('nao pode ser contactado'),
+  );
+  check(
+    'e não oferece nada para gerar',
+    bloqueado.tudo.includes('Não há aqui nada a gerar') ||
+      bloqueado.tudo.includes('Nao ha aqui nada a gerar'),
+  );
+
+  // fx-org-007 yielded nobody, which is the common case and not an error.
+  const semDecisor = await pedir('/admin/prospecao/fx-org-007');
+  check(
+    'sem decisor é explicado como normal, não como erro',
+    semDecisor.tudo.includes('comum') && semDecisor.tudo.includes('erro'),
+  );
+
+  grupo('prospeção — definições');
+  const definicoes = await pedir('/admin/prospecao/definicoes');
+  check('as definições abrem', definicoes.status === 200, 'status=' + definicoes.status);
+  check('mostram o orçamento mensal', definicoes.tudo.includes('Or'));
+  check(
+    'dizem que os totais são estimados',
+    definicoes.tudo.includes('estimad'),
+    'sem chave da AIsa nenhum fornecedor comunica custo real',
+  );
+  // AIsa has a verified contract now, but it is a web-search gateway with no
+  // people search. The page has to say so, or the next person wires it into
+  // the contact chain and buys a column of failures.
+  check(
+    'marcam a AIsa como pesquisa web, não como fonte de contactos',
+    definicoes.tudo.includes('AIsa') && /n[ãa]o procura pessoas/.test(definicoes.tudo),
+  );
+}
+cookie = '';
+await entrar(CONTAS.dono).then((s) => {
+  cookie = s.cookies;
+});
 const ninguem = await entrar(CONTAS.ninguem);
 check('quem não tem negócio nem claim é recusado', ninguem.status === 403, 'status=' + ninguem.status);
 check('e não recebe cookie nenhum', !/maisum_admin_session/.test(ninguem.cookies));

@@ -20,8 +20,11 @@ import {
   type JobPath,
   type JobResult,
   linkAffiliateToMerchant,
+  revokeNfcCard,
   runJob,
   setAffiliateStatus,
+  setStaffStatus,
+  setSubscriptionStatus,
   unlinkAffiliateFromMerchant,
   updateAffiliateName,
   upsertEntitlement,
@@ -565,3 +568,145 @@ export async function unlinkAffiliateAction(
     message: `Ligação desativada. O histórico mantém-se e o código foi desativado.`,
   };
 }
+
+/* -------------------------------------------------------------------- nfc */
+
+/**
+ * Revokes an NFC card reported lost or stolen.
+ *
+ * The card UID travels as a hidden field rather than something typed here: the
+ * console only ever shows the last four characters, so the one place it can
+ * come from is the search box the operator already used to find this exact
+ * card by its full UID.
+ */
+export async function revokeNfcCardAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const cardUid = text(form, 'card_uid');
+  if (!cardUid) return failure(form, 'Indique o cartão.', 'card_uid');
+
+  if (!checkbox(form, 'confirm')) {
+    return failure(
+      form,
+      'Confirme a revogação: o cartão deixa de ser aceite em qualquer negócio.',
+      'confirm',
+    );
+  }
+
+  try {
+    await revokeNfcCard({ cardUid });
+  } catch (caught) {
+    return describe(caught, form);
+  }
+
+  revalidatePath('/admin/nfc');
+  return {
+    status: 'ok',
+    message: 'Cartão revogado. Pode ser associado de novo a qualquer cliente.',
+  };
+}
+
+/* ------------------------------------------------------------------ staff */
+
+/**
+ * Activates or deactivates a staff account.
+ *
+ * For an account reported compromised, or restoring one turned off by
+ * mistake. The API itself refuses to deactivate a business's one remaining
+ * active owner, so that refusal is shown with its own message rather than a
+ * generic one.
+ */
+export async function setStaffStatusAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const merchantId = text(form, 'merchant_id');
+  if (!merchantId) return failure(form, 'Indique o negócio.', 'merchant_id');
+
+  const userId = text(form, 'user_id');
+  if (!userId) return failure(form, 'Indique a conta.', 'user_id');
+
+  const status = text(form, 'status').toUpperCase();
+  if (status !== 'ACTIVE' && status !== 'INACTIVE') {
+    return failure(form, 'Estado inválido.', 'status');
+  }
+
+  if (status === 'INACTIVE' && !checkbox(form, 'confirm')) {
+    return failure(
+      form,
+      'Confirme a desativação: a conta deixa de conseguir iniciar sessão neste negócio.',
+      'confirm',
+    );
+  }
+
+  try {
+    await setStaffStatus({ merchantId, userId, status });
+  } catch (caught) {
+    return describe(caught, form);
+  }
+
+  revalidatePath('/admin/access');
+  revalidatePath(`/admin/merchants/${merchantId}`);
+  return {
+    status: 'ok',
+    message:
+      status === 'INACTIVE' ? 'Conta desativada.' : 'Conta reativada.',
+  };
+}
+
+/* ---------------------------------------------------------- subscription */
+
+const SUBSCRIPTION_STATUSES = new Set(['ACTIVE', 'TRIAL', 'PAST_DUE', 'CANCELLED']);
+
+/**
+ * Overrides a business's subscription status by hand.
+ *
+ * For what billing cannot cover today: a manual payment confirmed outside the
+ * app, a business paused while a dispute is sorted out, a mistake undone. The
+ * reason is required — it is what the audit trail will show in place of a
+ * billing event nobody can look up.
+ */
+export async function setSubscriptionStatusAction(
+  _prev: ActionState,
+  form: FormData,
+): Promise<ActionState> {
+  const merchantId = text(form, 'merchant_id');
+  if (!merchantId) return failure(form, 'Indique o negócio.', 'merchant_id');
+
+  const status = text(form, 'status').toUpperCase();
+  if (!SUBSCRIPTION_STATUSES.has(status)) {
+    return failure(form, 'Estado inválido.', 'status');
+  }
+
+  const reason = text(form, 'reason');
+  if (!reason) {
+    return failure(form, 'Indique o motivo desta alteração.', 'reason');
+  }
+
+  if (!checkbox(form, 'confirm')) {
+    return failure(
+      form,
+      'Confirme a alteração: isto substitui o estado da subscrição para este negócio.',
+      'confirm',
+    );
+  }
+
+  try {
+    await setSubscriptionStatus({
+      merchantId,
+      status: status as 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELLED',
+      reason,
+    });
+  } catch (caught) {
+    return describe(caught, form);
+  }
+
+  revalidatePath(`/admin/merchants/${merchantId}`);
+  revalidatePath('/admin/merchants');
+  return {
+    status: 'ok',
+    message: `Subscrição definida como ${status}.`,
+  };
+}
+

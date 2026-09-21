@@ -220,6 +220,24 @@ export async function fetchMerchantDetail(
   }
 }
 
+/**
+ * Overrides a business's subscription status by hand.
+ *
+ * For what billing cannot cover today: a manual payment confirmed outside the
+ * app, a business paused while a dispute is sorted out, a mistake undone.
+ * `reason` is required by the API and recorded only in the audit trail.
+ */
+export async function setSubscriptionStatus(input: {
+  merchantId: string;
+  status: 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELLED';
+  reason: string;
+}): Promise<void> {
+  await call(
+    `/admin/merchants/${encodeURIComponent(input.merchantId)}/subscription/status`,
+    { method: 'POST', body: { status: input.status, reason: input.reason } },
+  );
+}
+
 export async function fetchAuditEvents(options?: {
   merchantId?: string;
   targetType?: string;
@@ -392,6 +410,23 @@ export async function fetchStaff(options?: {
   return { items: body.data ?? [], paging: body.paging ?? null };
 }
 
+/**
+ * Activates or deactivates a staff account, platform-wide for that business.
+ *
+ * The API refuses to deactivate a business's one remaining active owner, so a
+ * failure here can mean that rather than a network or auth problem.
+ */
+export async function setStaffStatus(input: {
+  merchantId: string;
+  userId: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}): Promise<void> {
+  await call(
+    `/admin/merchants/${encodeURIComponent(input.merchantId)}/staff/${encodeURIComponent(input.userId)}/status`,
+    { method: 'POST', body: { status: input.status } },
+  );
+}
+
 export type AdminDirectory = {
   entries: AdminDirectoryEntryDto[];
   /** True when the Auth directory was larger than the scan cap. */
@@ -470,6 +505,21 @@ export async function fetchNfcCards(options: {
     },
   });
   return body.data ?? [];
+}
+
+/**
+ * Revokes an NFC card, platform-wide.
+ *
+ * For a card reported lost or stolen. The card can be relinked afterwards
+ * through the normal flow — a revoked card is free again — but nothing reads
+ * against it in the meantime.
+ */
+export async function revokeNfcCard(input: {
+  cardUid: string;
+}): Promise<void> {
+  await call(`/admin/nfc-cards/${encodeURIComponent(input.cardUid)}/revoke`, {
+    method: 'POST',
+  });
 }
 
 /* --------------------------------------------------------------- afiliados */

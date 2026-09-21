@@ -33,13 +33,15 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SCAN_CAP = void 0;
+exports.SUBSCRIPTION_STATUSES = exports.SCAN_CAP = void 0;
 exports.listMerchants = listMerchants;
 exports.getMerchantDetail = getMerchantDetail;
 exports.listEntitlements = listEntitlements;
 exports.merchantExists = merchantExists;
+exports.setSubscriptionStatus = setSubscriptionStatus;
 exports.upsertEntitlement = upsertEntitlement;
 exports.listStaff = listStaff;
+exports.setStaffStatus = setStaffStatus;
 exports.listPlans = listPlans;
 exports.upsertPlan = upsertPlan;
 exports.upsertPlanPrice = upsertPlanPrice;
@@ -89,7 +91,11 @@ async function scanOwned(collectionId) {
             // businesses/{merchantId}/{collectionId}/{docId} — the grandparent is
             // the business document.
             merchantId: doc.ref.parent.parent?.id ?? '',
-            data: doc.data(),
+            // The document's own id, same as `listEntitlements` attaches: nothing in
+            // this collection stores its id as a field, so a caller keying off
+            // `data.id` (React lists, dedup, ...) would otherwise see every row
+            // collide on the same missing key.
+            data: { id: doc.id, ...doc.data() },
         })),
         truncated,
     };
@@ -125,7 +131,12 @@ async function subcollection(merchantId, collectionId, limit = 500) {
         .collection(collectionId)
         .limit(limit)
         .get();
-    return snapshot.docs.map((doc) => doc.data());
+    // Same reasoning as `scanOwned`: the id is the document's, not a stored
+    // field, so it must be attached here or every row downstream is keyless.
+    return snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+    }));
 }
 function pickString(data, ...keys) {
     if (!data)
@@ -207,6 +218,51 @@ async function listEntitlements(merchantId) {
 async function merchantExists(merchantId) {
     const doc = await db().collection('businesses').doc(merchantId).get();
     return doc.exists;
+}
+/** The statuses an operator may set by hand. Matches what `/admin/merchants` filters on. */
+exports.SUBSCRIPTION_STATUSES = [
+    'ACTIVE',
+    'TRIAL',
+    'PAST_DUE',
+    'CANCELLED',
+];
+/**
+ * Overrides a business's subscription status.
+ *
+ * `bootstrapDocuments` writes this document exactly once, when a business is
+ * created, and nothing since has written it again — no billing provider is
+ * wired up yet, and `firestore.rules` refuses the client the write outright.
+ * This is the first thing to change it after that, for the cases billing
+ * cannot cover today: a manual payment confirmed outside the app, a business
+ * paused while a dispute is sorted out, a mistake undone. Only `status` and
+ * `updated_at` change; plan, pricing and period fields are left exactly as
+ * they were, since this is not the tool for changing what a business is on.
+ *
+ * Returns `null` for a business with no `businesses/{id}` document, and the
+ * before/after subscription state otherwise — the operator's reason for the
+ * change is not stored here; it belongs in the audit entry the caller writes,
+ * not in a document the business's own app reads.
+ */
+async function setSubscriptionStatus(input) {
+    const merchantRef = db().collection('businesses').doc(input.merchantId);
+    if (!(await merchantRef.get()).exists)
+        return null;
+    // The id `bootstrapDocuments` uses, so this reaches the one document a
+    // business's subscription actually lives in rather than creating a second.
+    const ref = merchantRef.collection('subscription_state').doc(input.merchantId);
+    const existing = await ref.get();
+    const before = existing.exists
+        ? existing.data()
+        : null;
+    const now = Date.now();
+    const after = {
+        merchant_id: input.merchantId,
+        ...(before ?? {}),
+        status: input.status,
+        updated_at: now,
+    };
+    await ref.set(after, { merge: true });
+    return { before, after };
 }
 /**
  * Writes an entitlement override.
@@ -292,6 +348,53 @@ async function listStaff(query) {
         hasMore: query.offset + items.length < rows.length,
         truncated: staff.truncated,
     };
+}
+/**
+ * Activates or deactivates one staff account, from the admin console.
+ *
+ * Guarded against locking a business out of itself: deactivating the one
+ * active owner would leave nobody able to manage the business's own team
+ * (`canManageAppUsers` in firestore.rules grants that to an owner, a matching
+ * claim, or an admin — but an admin console action is exactly the kind of
+ * mistake that check exists for). The guard and the write share one
+ * transaction so two concurrent deactivations of a business's last two owners
+ * cannot both read "one other owner remains" and both succeed.
+ */
+async function setStaffStatus(input) {
+    const userRef = db()
+        .collection('businesses')
+        .doc(input.merchantId)
+        .collection('app_users')
+        .doc(input.userId);
+    return db().runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(userRef);
+        if (!snapshot.exists)
+            return { ok: false, reason: 'not_found' };
+        const before = snapshot.data();
+        const wasActive = String(before.status ?? '').toUpperCase() === 'ACTIVE';
+        const isOwner = String(before.role ?? '').toUpperCase() === 'OWNER';
+        if (input.status === 'INACTIVE' && isOwner && wasActive) {
+            const ownersSnapshot = await transaction.get(userRef.parent.where('role', '==', 'OWNER'));
+            const remainingActiveOwners = ownersSnapshot.docs.filter((doc) => {
+                if (doc.id === input.userId)
+                    return false;
+                const data = doc.data();
+                return String(data.status ?? '').toUpperCase() === 'ACTIVE';
+            });
+            if (remainingActiveOwners.length === 0) {
+                return { ok: false, reason: 'last_owner' };
+            }
+        }
+        const now = Date.now();
+        const after = {
+            ...before,
+            status: input.status,
+            updated_at: now,
+            ...(input.status === 'INACTIVE' ? { deactivated_at: now } : {}),
+        };
+        transaction.set(userRef, after, { merge: true });
+        return { ok: true, before, after };
+    });
 }
 /**
  * The plan catalogue.
