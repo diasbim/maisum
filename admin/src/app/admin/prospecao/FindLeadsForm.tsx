@@ -1,6 +1,14 @@
 'use client';
 
+import { useState } from 'react';
+
 import { startSearchAction } from '@/lib/prospecting-actions';
+import {
+  estimateSearch,
+  formatUsd,
+  formatUsdRange,
+  type EstimateUnits,
+} from '@/lib/prospecting-form';
 import { ActionForm, Field, Select } from '../forms';
 
 /**
@@ -17,11 +25,11 @@ import { ActionForm, Field, Select } from '../forms';
  */
 
 export type EstimateSummary = {
-  range: string;
-  likely: string;
   verified: boolean;
   budget: string;
   remaining: string;
+  /** The inputs the estimate is computed from. Never a precomputed answer. */
+  units: EstimateUnits;
 };
 
 export function FindLeadsForm({
@@ -39,6 +47,22 @@ export function FindLeadsForm({
   cities: string[];
   estimate: EstimateSummary | null;
 }) {
+  // The two fields the cost depends on are held here so the figure below the
+  // form moves with them. Everything else stays uncontrolled — the form posts
+  // to a server action, and React state for fields nothing reads would be
+  // machinery for its own sake.
+  const [maxLeads, setMaxLeads] = useState(
+    String(maxLeadsOptions.includes(100) ? 100 : (maxLeadsOptions[0] ?? 100)),
+  );
+  const [minScore, setMinScore] = useState(
+    String(minScoreOptions.includes(60) ? 60 : (minScoreOptions[0] ?? 60)),
+  );
+
+  const computed =
+    estimate === null
+      ? null
+      : estimateSearch(Number(maxLeads), Number(minScore), estimate.units);
+
   return (
     <ActionForm
       action={startSearchAction}
@@ -101,7 +125,8 @@ export function FindLeadsForm({
         <Select
           name="maxLeads"
           label="Quantos negócios"
-          defaultValue="100"
+          defaultValue={maxLeads}
+          onChange={(event) => setMaxLeads(event.target.value)}
           options={maxLeadsOptions.map((value) => ({
             value: String(value),
             label: `${value} negócios`,
@@ -111,7 +136,8 @@ export function FindLeadsForm({
         <Select
           name="minScore"
           label="Pontuação mínima para enriquecer"
-          defaultValue="60"
+          defaultValue={minScore}
+          onChange={(event) => setMinScore(event.target.value)}
           options={minScoreOptions.map((value) => ({
             value: String(value),
             label: `${value} pontos`,
@@ -126,13 +152,24 @@ export function FindLeadsForm({
           ser o que limita o gasto.
         </p>
       ) : (
-        <div className="notice" role="status" style={{ gridColumn: '1 / -1' }}>
+        // `aria-live` because the figure changes without the region appearing
+        // or disappearing: a sighted operator sees it move when they change
+        // the size of the search, and everyone else is told.
+        <div
+          aria-live="polite"
+          className="notice"
+          role="status"
+          style={{ gridColumn: '1 / -1' }}
+        >
           <span className="notice__mark" aria-hidden>
             $
           </span>
           <span>
-            Custo estimado para 100 negócios: <strong>{estimate.range}</strong>,
-            provavelmente à volta de {estimate.likely}.{' '}
+            Custo estimado para {maxLeads} negócios:{' '}
+            <strong>{formatUsdRange(computed!.minUsd, computed!.maxUsd)}</strong>,
+            provavelmente à volta de {formatUsd(computed!.likelyUsd)} — assumindo
+            que {Math.round(computed!.assumedQualifyRate * 100)}% passam os{' '}
+            {minScore} pontos.{' '}
             {estimate.verified
               ? null
               : 'Os preços unitários ainda não foram confirmados contra uma fatura, por isso trate isto como ordem de grandeza — '}

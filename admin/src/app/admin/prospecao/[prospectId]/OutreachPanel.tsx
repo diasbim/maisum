@@ -78,18 +78,18 @@ type Draft = {
   body: string;
   truncated: boolean;
   addressedTo: string | null;
+  /** Which template wrote it. Reply rates are grouped by this. */
+  templateId: string;
 };
 
 export function OutreachPanel({
   prospectId,
   channels,
   blocked,
-  hasAnalysis,
 }: {
   prospectId: string;
   channels: string[];
   blocked: boolean;
-  hasAnalysis: boolean;
 }) {
   const [state, action] = useActionState(generateOutreachAction, IDLE);
   const [contactState, contactAction] = useActionState(markContactedAction, IDLE);
@@ -116,18 +116,14 @@ export function OutreachPanel({
     );
   }
 
-  if (!hasAnalysis) {
-    return (
-      <Panel title="Mensagem">
-        <EmptyState message="A mensagem é construída a partir da análise. Analise o lead primeiro." />
-      </Panel>
-    );
-  }
-
+  // There is deliberately no analysis gate here any more. The message comes
+  // from a template over the business's own data, not from a model's reading
+  // of it — and while the module runs without a model, `analysis` is always
+  // null, so gating on it made this panel permanently unreachable.
   if (channels.length === 0) {
     return (
       <Panel title="Mensagem">
-        <EmptyState message="Não há nenhum canal com um endereço utilizável para este negócio — nem telefone, nem email verificado, nem LinkedIn. Encontre um decisor primeiro." />
+        <EmptyState message="Este negócio ainda não tem um contacto utilizável, ou não há modelo de mensagem para os canais em que ele é alcançável. Enriqueça o lead para procurar o telefone e o site." />
       </Panel>
     );
   }
@@ -164,7 +160,10 @@ export function OutreachPanel({
               pendingLabel="A gerar…"
               variant="btn-navy"
             />
-            <span className="micro">Cada geração chama o modelo e é cobrada.</span>
+            <span className="micro">
+              A mensagem vem de um modelo de texto. Gerar não custa nada, pode
+              repetir.
+            </span>
           </div>
         </form>
 
@@ -175,9 +174,12 @@ export function OutreachPanel({
         <Card
           title={`Rascunho — ${CHANNEL_LABELS[draft.channel] ?? draft.channel}`}
           hint={
+            // The template id is shown because it is what the reply rate is
+            // grouped by: an operator comparing two versions needs to know
+            // which one they are reading.
             draft.addressedTo === null
-              ? 'Sem tratamento pessoal: o nome de quem decide não é conhecido, e não foi inventado.'
-              : `Dirigida a ${draft.addressedTo}.`
+              ? `Modelo ${draft.templateId}. Sem tratamento pessoal: o nome de quem decide não é conhecido, e não foi inventado.`
+              : `Modelo ${draft.templateId}. Dirigida a ${draft.addressedTo}.`
           }
         >
           {draft.truncated ? (

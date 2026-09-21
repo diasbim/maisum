@@ -129,6 +129,21 @@ function registerProspectingRoutes(deps) {
                     })),
                     max_leads_options: prospecting_config_js_1.MAX_LEADS_OPTIONS,
                     min_score_options: prospecting_config_js_1.MIN_SCORE_OPTIONS,
+                    /**
+                     * What the console needs to recompute a search estimate itself.
+                     *
+                     * The estimate endpoint answers for one pair of values; the form has
+                     * twenty combinations and the operator changes them before pressing
+                     * anything. Sending the inputs rather than an answer lets the figure
+                     * beside the button move with the form, and keeps the numbers
+                     * themselves in one place — the console does the arithmetic, never
+                     * the constants.
+                     */
+                    estimate_units: {
+                        discovery_unit_usd: prospecting_config_js_1.OPERATION_COST_USD.SEARCH_BUSINESSES,
+                        enrichment_unit_usd: prospecting_config_js_1.ENRICHMENT_UNIT_COST_USD,
+                        qualify_rates: prospecting_budget_js_1.QUALIFY_RATE_BY_MIN_SCORE,
+                    },
                     statuses: prospecting_contracts_js_1.PROSPECT_STATUS.map((status) => ({
                         value: status,
                         label: prospecting_contracts_js_1.PROSPECT_STATUS_LABEL[status],

@@ -248,12 +248,22 @@ export function Select({
   options,
   hint,
   defaultValue,
+  onChange,
 }: {
   name: string;
   label: string;
   options: Array<{ value: string; label: string }>;
   hint?: string;
   defaultValue?: string;
+  /**
+   * Notified when the value changes, without taking ownership of it.
+   *
+   * Deliberately not a `value` prop: this select stays uncontrolled so that
+   * `restored` keeps putting the operator's input back after a failed submit.
+   * A caller that needs to *react* to a change — a cost estimate that has to
+   * move with the field — gets told, and the DOM stays the source of truth.
+   */
+  onChange?: (event: React.ChangeEvent<HTMLSelectElement>) => void;
 }) {
   const { restored, error, fieldKey } = useFieldState(name);
 
@@ -268,6 +278,7 @@ export function Select({
         defaultValue={restored ?? defaultValue}
         id={name}
         name={name}
+        onChange={onChange}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

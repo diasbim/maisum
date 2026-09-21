@@ -35,12 +35,14 @@ import {
 } from './prospecting_api_contracts.js';
 import {
   estimateSearchCost,
+  QUALIFY_RATE_BY_MIN_SCORE,
   monthKey,
   round,
   spendIsEstimated,
 } from './prospecting_budget.js';
 import {
   COMPANY_SIZE_BANDS,
+  ENRICHMENT_UNIT_COST_USD,
   ICP_INDUSTRIES,
   OPERATION_COST_USD,
   MAX_LEADS_OPTIONS,
@@ -370,6 +372,21 @@ export function registerProspectingRoutes(deps: ProspectingRouteDeps): void {
           })),
           max_leads_options: MAX_LEADS_OPTIONS,
           min_score_options: MIN_SCORE_OPTIONS,
+          /**
+           * What the console needs to recompute a search estimate itself.
+           *
+           * The estimate endpoint answers for one pair of values; the form has
+           * twenty combinations and the operator changes them before pressing
+           * anything. Sending the inputs rather than an answer lets the figure
+           * beside the button move with the form, and keeps the numbers
+           * themselves in one place — the console does the arithmetic, never
+           * the constants.
+           */
+          estimate_units: {
+            discovery_unit_usd: OPERATION_COST_USD.SEARCH_BUSINESSES,
+            enrichment_unit_usd: ENRICHMENT_UNIT_COST_USD,
+            qualify_rates: QUALIFY_RATE_BY_MIN_SCORE,
+          },
           statuses: PROSPECT_STATUS.map((status) => ({
             value: status,
             label: PROSPECT_STATUS_LABEL[status],

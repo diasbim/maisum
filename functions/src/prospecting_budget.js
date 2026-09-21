@@ -1,11 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.QUALIFY_RATE_BY_MIN_SCORE = exports.SPEND_REFUSAL_MESSAGE = exports.SPEND_REFUSAL = exports.BUDGET_UTC_OFFSET_MINUTES = void 0;
+exports.SPEND_REFUSAL_MESSAGE = exports.SPEND_REFUSAL = exports.BUDGET_UTC_OFFSET_MINUTES = void 0;
 exports.monthKey = monthKey;
 exports.dayKey = dayKey;
 exports.evaluateSpend = evaluateSpend;
 exports.round = round;
-exports.qualifyRateFor = qualifyRateFor;
 exports.estimateSearchCost = estimateSearchCost;
 exports.totalSpend = totalSpend;
 exports.spendIsEstimated = spendIsEstimated;
@@ -37,7 +36,7 @@ const prospecting_config_js_1 = require("./prospecting_config.js");
  */
 exports.BUDGET_UTC_OFFSET_MINUTES = 120;
 function localParts(atMillis) {
-    const shifted = new Date(atMillis + exports.BUDGET_UTC_OFFSET_MINUTES * 60000);
+    const shifted = new Date(atMillis + exports.BUDGET_UTC_OFFSET_MINUTES * 60_000);
     return {
         year: shifted.getUTCFullYear(),
         month: shifted.getUTCMonth() + 1,
@@ -142,7 +141,7 @@ function evaluateSpend(request) {
  * six additions.
  */
 function round(value) {
-    return Math.round(value * 10000) / 10000;
+    return Math.round(value * 10_000) / 10_000;
 }
 /**
  * What a search might cost, as a range.
@@ -158,31 +157,11 @@ function round(value) {
  * than asking for 40+. The rates are judgement, not measurement, and they are
  * the first thing to replace once a month of real runs exists.
  */
-/**
- * How many discovered leads are assumed to clear the threshold, by threshold.
- *
- * A step table rather than a curve, and exported rather than inlined for two
- * reasons: these are assumptions an operator is entitled to disagree with, and
- * the console recomputes the estimate as the form changes. Sending it the
- * table instead of a second copy of these numbers is what keeps the two from
- * drifting — the console owns the arithmetic, never the constants.
- *
- * Ordered high to low; the first threshold the score meets wins.
- */
-exports.QUALIFY_RATE_BY_MIN_SCORE = [
-    { minScore: 80, rate: 0.1 },
-    { minScore: 70, rate: 0.2 },
-    { minScore: 60, rate: 0.35 },
-    { minScore: 0, rate: 0.6 },
-];
-function qualifyRateFor(minScore) {
-    return (exports.QUALIFY_RATE_BY_MIN_SCORE.find((entry) => minScore >= entry.minScore)?.rate ?? 0.6);
-}
 function estimateSearchCost(input) {
     const leads = Math.max(0, Math.floor(input.maxLeads));
     const discovery = round(leads * prospecting_config_js_1.OPERATION_COST_USD.SEARCH_BUSINESSES);
     const fullEnrichment = round(leads * prospecting_config_js_1.ENRICHMENT_UNIT_COST_USD);
-    const assumedQualifyRate = qualifyRateFor(input.minScore);
+    const assumedQualifyRate = input.minScore >= 80 ? 0.1 : input.minScore >= 70 ? 0.2 : input.minScore >= 60 ? 0.35 : 0.6;
     return {
         minUsd: discovery,
         maxUsd: round(discovery + fullEnrichment),

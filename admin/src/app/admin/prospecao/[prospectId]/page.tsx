@@ -427,7 +427,6 @@ export default async function LeadDetailPage({
         prospectId={prospect.id}
         channels={detail.available_channels}
         blocked={detail.outreach_blocked}
-        hasAnalysis={analysis !== null}
       />
 
       {/* ------------------------------------------------------- actions */}

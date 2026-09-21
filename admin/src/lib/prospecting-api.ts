@@ -3,7 +3,11 @@ import 'server-only';
 import { serverConfig } from './env';
 import { getAdminSession } from './session';
 import { AdminApiError, statusMessage } from './admin-api-error';
-import { buildLeadQuery, type LeadListQuery } from './prospecting-form';
+import {
+  buildLeadQuery,
+  type EstimateUnits,
+  type LeadListQuery,
+} from './prospecting-form';
 
 /**
  * The prospecting half of the console's API client.
@@ -118,6 +122,8 @@ export type ProspectingConfig = {
   sizes: Array<{ key: string; label: string }>;
   max_leads_options: number[];
   min_score_options: number[];
+  /** Unit costs and the qualify-rate table, so the form can price itself. */
+  estimate_units: EstimateUnits;
   statuses: Array<{ value: string; label: string }>;
   bands: string[];
   enrichment_statuses: string[];

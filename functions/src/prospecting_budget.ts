@@ -236,13 +236,39 @@ export type SearchEstimate = {
  * than asking for 40+. The rates are judgement, not measurement, and they are
  * the first thing to replace once a month of real runs exists.
  */
+/**
+ * How many discovered leads are assumed to clear the threshold, by threshold.
+ *
+ * A step table rather than a curve, and exported rather than inlined for two
+ * reasons: these are assumptions an operator is entitled to disagree with, and
+ * the console recomputes the estimate as the form changes. Sending it the
+ * table instead of a second copy of these numbers is what keeps the two from
+ * drifting — the console owns the arithmetic, never the constants.
+ *
+ * Ordered high to low; the first threshold the score meets wins.
+ */
+export const QUALIFY_RATE_BY_MIN_SCORE: ReadonlyArray<{
+  minScore: number;
+  rate: number;
+}> = [
+  { minScore: 80, rate: 0.1 },
+  { minScore: 70, rate: 0.2 },
+  { minScore: 60, rate: 0.35 },
+  { minScore: 0, rate: 0.6 },
+];
+
+export function qualifyRateFor(minScore: number): number {
+  return (
+    QUALIFY_RATE_BY_MIN_SCORE.find((entry) => minScore >= entry.minScore)?.rate ?? 0.6
+  );
+}
+
 export function estimateSearchCost(input: SearchEstimateInput): SearchEstimate {
   const leads = Math.max(0, Math.floor(input.maxLeads));
   const discovery = round(leads * OPERATION_COST_USD.SEARCH_BUSINESSES);
   const fullEnrichment = round(leads * ENRICHMENT_UNIT_COST_USD);
 
-  const assumedQualifyRate =
-    input.minScore >= 80 ? 0.1 : input.minScore >= 70 ? 0.2 : input.minScore >= 60 ? 0.35 : 0.6;
+  const assumedQualifyRate = qualifyRateFor(input.minScore);
 
   return {
     minUsd: discovery,

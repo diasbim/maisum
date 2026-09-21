@@ -126,11 +126,14 @@ async function FindLeadsPanel() {
         estimate.error !== null
           ? null
           : {
-              range: formatUsdRange(estimate.data.min_usd, estimate.data.max_usd),
-              likely: formatUsd(estimate.data.likely_usd),
               verified: estimate.data.verified,
               budget: formatUsd(estimate.data.monthly_budget_usd),
               remaining: formatUsd(estimate.data.remaining_this_month_usd),
+              // The inputs, not a precomputed answer: the form has twenty
+              // combinations of size and threshold and the operator changes
+              // them before pressing anything, so the figure has to be
+              // recomputed there rather than fetched once for the default.
+              units: config.data.estimate_units,
             }
       }
     />

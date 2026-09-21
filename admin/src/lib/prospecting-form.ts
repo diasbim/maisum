@@ -208,3 +208,60 @@ export function formatUsdRange(min: number, max: number): string {
   if (min === max) return formatUsd(min);
   return `${formatUsd(min)} – ${formatUsd(max)}`;
 }
+
+/* ------------------------------------------------------- the cost estimate */
+
+/**
+ * What a search would cost, recomputed as the operator changes the form.
+ *
+ * The panel fetches an estimate once, for the default size. That number stops
+ * being true the moment somebody changes "Quantos negócios" from 100 to 500 —
+ * and on the one screen in this console that spends money, a stale figure
+ * beside the button is worse than no figure: it is a specific, confident,
+ * wrong number the operator has no reason to doubt.
+ *
+ * So the arithmetic runs here, on every change. The *numbers* it runs over —
+ * the unit costs and the qualify-rate table — come from the server in
+ * `estimate_units`, never from a second copy in this file. That is the part
+ * that would have drifted; the four lines below are the part that will not.
+ */
+export type EstimateUnits = {
+  discovery_unit_usd: number;
+  enrichment_unit_usd: number;
+  /** Ordered high to low; the first threshold the score meets wins. */
+  qualify_rates: ReadonlyArray<{ minScore: number; rate: number }>;
+};
+
+export type LocalEstimate = {
+  minUsd: number;
+  maxUsd: number;
+  likelyUsd: number;
+  assumedQualifyRate: number;
+};
+
+/** Cents, matching the server's `round`. */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+export function qualifyRateFrom(units: EstimateUnits, minScore: number): number {
+  return units.qualify_rates.find((entry) => minScore >= entry.minScore)?.rate ?? 0.6;
+}
+
+export function estimateSearch(
+  maxLeads: number,
+  minScore: number,
+  units: EstimateUnits,
+): LocalEstimate {
+  const leads = Math.max(0, Math.floor(maxLeads));
+  const discovery = round2(leads * units.discovery_unit_usd);
+  const fullEnrichment = round2(leads * units.enrichment_unit_usd);
+  const rate = qualifyRateFrom(units, minScore);
+
+  return {
+    minUsd: discovery,
+    maxUsd: round2(discovery + fullEnrichment),
+    likelyUsd: round2(discovery + fullEnrichment * rate),
+    assumedQualifyRate: rate,
+  };
+}
