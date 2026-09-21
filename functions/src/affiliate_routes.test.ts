@@ -210,6 +210,12 @@ const ADMIN_ROUTES: Array<[string, string]> = [
   ['get', '/merchants/:merchantId/affiliates'],
   ['get', '/merchants/:merchantId/affiliate-rewards'],
   ['get', '/merchants/:merchantId/affiliate-metrics'],
+  // The attributions themselves. Scoped to one business like every other read
+  // here: a cross-merchant list would need a collection-group index on
+  // `affiliate_attributions`, and the security contract allows exactly one of
+  // those — the outbox sweep, which no client can reach.
+  ['get', '/merchants/:merchantId/referrals'],
+  ['get', '/merchants/:merchantId/referrals/:attributionId'],
 ];
 
 test('every planned merchant route is registered, and nothing else is', () => {
@@ -705,6 +711,8 @@ test('admin routes for one business check that the business exists', () => {
     '/merchants/:merchantId/affiliates',
     '/merchants/:merchantId/affiliate-rewards',
     '/merchants/:merchantId/affiliate-metrics',
+    '/merchants/:merchantId/referrals',
+    '/merchants/:merchantId/referrals/:attributionId',
     '/affiliates/:affiliateId/merchants/:merchantId',
   ]) {
     assert.ok(
@@ -716,7 +724,7 @@ test('admin routes for one business check that the business exists', () => {
   // the first of them; both are meant to check.
   assert.equal(
     ROUTES_SOURCE.split('await merchantExists(').length - 1,
-    5,
+    7,
     'an admin route acting on one business no longer checks it exists',
   );
 });

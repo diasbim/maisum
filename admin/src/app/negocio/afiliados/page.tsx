@@ -281,6 +281,10 @@ export default async function MerchantAffiliatesPage({
           <Link href={`${AFFILIATES_PATH}/recompensas`}>
             Recompensas por aprovar
           </Link>
+          {' · '}
+          <Link href={`${AFFILIATES_PATH}/indicacoes`}>
+            Indicações registadas
+          </Link>
         </p>
       </Panel>
 

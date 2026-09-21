@@ -4,6 +4,7 @@ import type {
   AffiliateCodeDto,
   AffiliateMetricsDto,
   AffiliateRewardDto,
+  ReferralAttributionDto,
   MerchantAffiliateDto,
 } from '@contracts/affiliate_api_contracts';
 
@@ -35,6 +36,7 @@ export type {
   AffiliateCodeDto,
   AffiliateMetricsDto,
   AffiliateRewardDto,
+  ReferralAttributionDto,
   MerchantAffiliateDto,
 };
 
@@ -703,6 +705,18 @@ export async function fetchMyAffiliate(
 
 export function fetchMyAffiliateRewards(params: ListQuery = {}) {
   return callList<AffiliateRewardDto>('/merchant/affiliate-rewards', params);
+}
+
+/**
+ * The indications themselves, which the portal could not show until now.
+ *
+ * The endpoint has existed since the API went in and nothing called it — the
+ * rewards screen answered "who do I owe" and nothing answered "which customers
+ * did this affiliate actually bring me", which is the question a merchant asks
+ * before deciding the programme is worth running.
+ */
+export function fetchMyReferrals(params: ListQuery = {}) {
+  return callList<ReferralAttributionDto>('/merchant/referrals', params);
 }
 
 /**

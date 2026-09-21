@@ -156,6 +156,12 @@ const ADMIN_ROUTES = [
     ['get', '/merchants/:merchantId/affiliates'],
     ['get', '/merchants/:merchantId/affiliate-rewards'],
     ['get', '/merchants/:merchantId/affiliate-metrics'],
+    // The attributions themselves. Scoped to one business like every other read
+    // here: a cross-merchant list would need a collection-group index on
+    // `affiliate_attributions`, and the security contract allows exactly one of
+    // those — the outbox sweep, which no client can reach.
+    ['get', '/merchants/:merchantId/referrals'],
+    ['get', '/merchants/:merchantId/referrals/:attributionId'],
 ];
 (0, node_test_1.default)('every planned merchant route is registered, and nothing else is', () => {
     const { merchant } = harness();
@@ -565,13 +571,15 @@ function handlerSource(router, method, route) {
         '/merchants/:merchantId/affiliates',
         '/merchants/:merchantId/affiliate-rewards',
         '/merchants/:merchantId/affiliate-metrics',
+        '/merchants/:merchantId/referrals',
+        '/merchants/:merchantId/referrals/:attributionId',
         '/affiliates/:affiliateId/merchants/:merchantId',
     ]) {
         strict_1.default.ok(handlerSource('adminRouter', route.startsWith('/merchants') ? 'get' : 'post', route).includes('merchantExists('), `${route} acts on a business without checking it is one`);
     }
     // The link and unlink handlers share a path, so the loop above only reaches
     // the first of them; both are meant to check.
-    strict_1.default.equal(ROUTES_SOURCE.split('await merchantExists(').length - 1, 5, 'an admin route acting on one business no longer checks it exists');
+    strict_1.default.equal(ROUTES_SOURCE.split('await merchantExists(').length - 1, 7, 'an admin route acting on one business no longer checks it exists');
 });
 (0, node_test_1.default)('every merchant-scoped store read is scoped by the merchant it was given', () => {
     // The path already scopes a subcollection; the filter is what keeps a

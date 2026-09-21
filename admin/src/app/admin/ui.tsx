@@ -216,6 +216,7 @@ export function Pagination({
   offset,
   hasMore,
   returned,
+  offsetParam = 'offset',
 }: {
   basePath: string;
   query?: Record<string, string | undefined>;
@@ -223,6 +224,15 @@ export function Pagination({
   offset: number;
   hasMore: boolean;
   returned: number;
+  /**
+   * Which search param carries the offset.
+   *
+   * Defaults to `offset`, which is every existing caller. A page with two
+   * paginated tables on one URL gives the second its own name — otherwise
+   * paging one table silently resets the other, and the reset is invisible
+   * because both read the same number.
+   */
+  offsetParam?: string;
 }) {
   if (offset === 0 && !hasMore) return null;
 
@@ -231,7 +241,7 @@ export function Pagination({
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value) params.set(key, value);
     }
-    if (nextOffset > 0) params.set('offset', String(nextOffset));
+    if (nextOffset > 0) params.set(offsetParam, String(nextOffset));
     const qs = params.toString();
     return qs ? `${basePath}?${qs}` : basePath;
   };

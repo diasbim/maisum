@@ -5,6 +5,7 @@ import {
   fetchMerchantAffiliateMetrics,
   fetchMerchantAffiliateRewards,
   fetchMerchantAffiliates,
+  fetchMerchantReferrals,
 } from '@/lib/admin-api';
 import {
   affiliateCodeAvailability,
@@ -18,6 +19,8 @@ import {
 import { MERCHANT_PAGE_SIZE } from '@/lib/merchant-list';
 import {
   affiliateStatusLabel,
+  attributionStatusLabel,
+  attributionStatusTone,
   affiliateStatusTone,
   rewardStatusLabel,
   rewardStatusTone,
@@ -61,6 +64,14 @@ const STATUSES = [
   { value: '', label: 'Todos' },
   { value: 'ACTIVE', label: 'Ligados' },
   { value: 'INACTIVE', label: 'Desligados' },
+];
+
+/** `ATTRIBUTION_STATUS`, plus the "everything" chip the other filters have. */
+const REFERRAL_STATUSES = [
+  { value: '', label: 'Todas' },
+  { value: 'CONFIRMED', label: 'Confirmadas' },
+  { value: 'REJECTED', label: 'Recusadas' },
+  { value: 'CANCELLED', label: 'Canceladas' },
 ];
 
 async function MetricsPanel({ merchantId }: { merchantId: string }) {
@@ -292,6 +303,117 @@ async function RewardsPanel({ merchantId }: { merchantId: string }) {
   );
 }
 
+/**
+ * The attributions behind the totals.
+ *
+ * The panel above says an affiliate has pending rewards; this one says which
+ * sales produced them. It is the screen that turns "the engine credited João
+ * 400 points" from a number an operator has to trust into a list they can read
+ * — and it is the only place a rejected attribution is visible at all, which
+ * is the case somebody actually calls about.
+ *
+ * `REJECTED` rows carry their reason, and are not hidden. A referral that was
+ * refused is the outcome a merchant most wants explained, and a table that
+ * only showed the confirmed ones would answer the easy question.
+ */
+async function ReferralsPanel({
+  basePath,
+  merchantId,
+  offset,
+  status,
+}: {
+  basePath: string;
+  merchantId: string;
+  offset: number;
+  status: string;
+}) {
+  const result = await load(() =>
+    fetchMerchantReferrals(merchantId, {
+      status: status || undefined,
+      limit: MERCHANT_PAGE_SIZE,
+      offset,
+    }),
+  );
+  if (result.error !== null) return <ErrorState message={result.error} />;
+
+  if (result.data.items.length === 0) {
+    return (
+      <EmptyState
+        message={
+          status === ''
+            ? 'Este negócio ainda não tem indicações.'
+            : 'Nenhuma indicação neste estado.'
+        }
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="card card--flush scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Afiliado</th>
+              <th scope="col">Cliente</th>
+              <th scope="col">Venda</th>
+              <th scope="col">Atribuída</th>
+              <th scope="col">Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {result.data.items.map((referral) => (
+              <tr key={referral.id}>
+                <td>
+                  <Link
+                    href={`/admin/afiliados/${encodeURIComponent(referral.affiliate_id)}`}
+                  >
+                    <code className="inline">{referral.affiliate_id}</code>
+                  </Link>
+                </td>
+                <td>
+                  {referral.customer_id === null ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <code className="inline">{referral.customer_id}</code>
+                  )}
+                </td>
+                <td>
+                  {referral.first_sale_id === null ? (
+                    <span className="muted">—</span>
+                  ) : (
+                    <code className="inline">{referral.first_sale_id}</code>
+                  )}
+                </td>
+                <td>{formatDateTime(referral.attributed_at ?? referral.created_at)}</td>
+                <td>
+                  <Badge
+                    label={attributionStatusLabel(referral.status)}
+                    tone={attributionStatusTone(referral.status)}
+                  />
+                  {referral.rejection_reason === null ? null : (
+                    <div className="micro">{referral.rejection_reason}</div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <Pagination
+        basePath={basePath}
+        hasMore={result.data.hasMore}
+        limit={MERCHANT_PAGE_SIZE}
+        offset={offset}
+        offsetParam="referral_offset"
+        query={{ referral_status: status || undefined }}
+        returned={result.data.items.length}
+      />
+    </>
+  );
+}
+
 export default async function AdminMerchantAffiliatesPage({
   params,
   searchParams,
@@ -304,6 +426,10 @@ export default async function AdminMerchantAffiliatesPage({
   const search = parseSearch(query.search);
   const status = parseSearch(query.status).toUpperCase();
   const offset = parseOffset(query.offset);
+  // Separate params from the affiliates table above, so filtering one panel
+  // does not silently reset the other — both live on the same URL.
+  const referralStatus = parseSearch(query.referral_status).toUpperCase();
+  const referralOffset = parseOffset(query.referral_offset);
   const basePath = `/admin/merchants/${encodeURIComponent(merchantId)}/afiliados`;
 
   return (
@@ -320,7 +446,14 @@ export default async function AdminMerchantAffiliatesPage({
           param="status"
           current={status}
           options={STATUSES}
-          keep={{ search: search || undefined }}
+          // The referral filter is kept: `ChipFilter` rebuilds the URL from
+          // scratch, so anything not listed here is dropped — and two panels
+          // on one URL means filtering this table would silently clear the
+          // other one.
+          keep={{
+            search: search || undefined,
+            referral_status: referralStatus || undefined,
+          }}
         />
         <Suspense
           key={`${search}|${status}|${offset}`}
@@ -339,6 +472,24 @@ export default async function AdminMerchantAffiliatesPage({
       <Panel title="Recompensas pendentes">
         <Suspense fallback={<TableSkeleton rows={4} />}>
           <RewardsPanel merchantId={merchantId} />
+        </Suspense>
+      </Panel>
+
+      <Panel title="Indicações">
+        <ChipFilter
+          basePath={basePath}
+          param="referral_status"
+          current={referralStatus}
+          options={REFERRAL_STATUSES}
+          keep={{ search: search || undefined, status: status || undefined }}
+        />
+        <Suspense key={`${referralStatus}|${referralOffset}`} fallback={<TableSkeleton rows={6} />}>
+          <ReferralsPanel
+            basePath={basePath}
+            merchantId={merchantId}
+            offset={referralOffset}
+            status={referralStatus}
+          />
         </Suspense>
       </Panel>
     </div>

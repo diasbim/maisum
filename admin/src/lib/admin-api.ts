@@ -6,6 +6,7 @@ import type {
   AffiliateMetricsDto,
   AffiliateRewardDto,
   MerchantAffiliateDto,
+  ReferralAttributionDto,
 } from '@contracts/affiliate_api_contracts';
 import type {
   AdminAuditEventDto,
@@ -37,6 +38,7 @@ export type {
   AffiliateMetricsDto,
   AffiliateRewardDto,
   MerchantAffiliateDto,
+  ReferralAttributionDto,
   AdminAuditEventDto,
   AdminCustomerLookupDto,
   AdminDirectoryEntryDto,
@@ -669,6 +671,44 @@ export async function fetchMerchantAffiliateRewards(
     `/admin/merchants/${encodeURIComponent(merchantId)}/affiliate-rewards${buildListQuery(params)}`,
   );
   return toAffiliatePage(body);
+}
+
+/**
+ * The attributions behind the totals.
+ *
+ * Until now the console could show that an affiliate had earned four hundred
+ * points and not which sales earned them. This is the record the metrics are
+ * made of, and it is the screen an operator needs when a merchant disputes one.
+ *
+ * Scoped to one business, like every other affiliate read here — the API has no
+ * cross-merchant list, deliberately.
+ */
+export async function fetchMerchantReferrals(
+  merchantId: string,
+  params: ListQuery = {},
+): Promise<MerchantList<ReferralAttributionDto>> {
+  // `buildListQuery` already serialises `affiliateId` as `affiliate_id`, which
+  // is the name the route reads.
+  const body = await call<ReferralAttributionDto[]>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/referrals${buildListQuery(params)}`,
+  );
+  return toAffiliatePage(body);
+}
+
+export async function fetchMerchantReferral(
+  merchantId: string,
+  attributionId: string,
+): Promise<{
+  attribution: ReferralAttributionDto;
+  rewards: AffiliateRewardDto[];
+} | null> {
+  const body = await call<{
+    attribution: ReferralAttributionDto;
+    rewards: AffiliateRewardDto[];
+  }>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/referrals/${encodeURIComponent(attributionId)}`,
+  );
+  return body.data ?? null;
 }
 
 export async function fetchMerchantAffiliateMetrics(

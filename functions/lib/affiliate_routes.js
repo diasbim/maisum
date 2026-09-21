@@ -290,6 +290,68 @@ function registerAffiliateRoutes(deps) {
             return respond(deps, res, 'admin_merchant_affiliate_rewards', error);
         }
     });
+    /**
+     * The attributions themselves, which the console could not see until now.
+     *
+     * Everything else about the engine was visible — the affiliates, their
+     * codes, the rewards, the totals — but not the records those totals are made
+     * of. "This affiliate earned 400 points" was a number an operator had to take
+     * on trust, with no way to answer *which sales*, or to look at the one
+     * attribution a merchant is disputing.
+     *
+     * Scoped to one business, like every other read here, and deliberately so.
+     * A cross-merchant list would need a collection-group index on
+     * `affiliate_attributions`, and `affiliate_security_contracts.test.ts` allows
+     * exactly one of those — the outbox sweep, which no client can reach. The
+     * isolation is worth more than the convenience of a single global table, and
+     * the merchant is already in the URL of the screen that wants this.
+     */
+    adminRouter.get('/merchants/:merchantId/referrals', async (req, res) => {
+        const request = req;
+        try {
+            const merchantId = (0, affiliate_api_contracts_js_1.parseIdParam)(req.params.merchantId, 'merchant_not_found');
+            if (!(await (0, affiliate_store_js_1.merchantExists)(merchantId)))
+                throw notFound('merchant_not_found');
+            const query = pageQuery(request);
+            const affiliateId = queryString(request.query.affiliate_id) ?? undefined;
+            return pageResponse(res, query, await (0, affiliate_store_js_1.listAttributions)(merchantId, { ...query, affiliateId }));
+        }
+        catch (error) {
+            return respond(deps, res, 'admin_merchant_referrals', error);
+        }
+    });
+    adminRouter.get('/merchants/:merchantId/referrals/:attributionId', async (req, res) => {
+        const request = req;
+        try {
+            const merchantId = (0, affiliate_api_contracts_js_1.parseIdParam)(req.params.merchantId, 'merchant_not_found');
+            if (!(await (0, affiliate_store_js_1.merchantExists)(merchantId)))
+                throw notFound('merchant_not_found');
+            const attributionId = (0, affiliate_api_contracts_js_1.parseIdParam)(req.params.attributionId, 'referral_not_found');
+            const attribution = await (0, affiliate_store_js_1.getAttribution)(merchantId, attributionId);
+            // `getAttribution` already refuses a row whose own `merchant_id`
+            // disagrees with the path, so a guessed id from another business reads
+            // as absent rather than as someone else's record.
+            if (attribution === null)
+                throw notFound('referral_not_found');
+            // The rewards this attribution produced, which is the question anyone
+            // opening one record actually has: did the affiliate get paid for it?
+            const rewards = await (0, affiliate_store_js_1.listRewards)(merchantId, {
+                limit: MAX_PAGE,
+                offset: 0,
+                affiliateId: attribution.affiliate_id,
+            });
+            return res.json({
+                success: true,
+                data: {
+                    attribution,
+                    rewards: rewards.items.filter((reward) => reward.attribution_id === attribution.id),
+                },
+            });
+        }
+        catch (error) {
+            return respond(deps, res, 'admin_merchant_referral', error);
+        }
+    });
     adminRouter.get('/merchants/:merchantId/affiliate-metrics', async (req, res) => {
         const request = req;
         try {
