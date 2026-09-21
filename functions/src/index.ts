@@ -67,6 +67,9 @@ import {
   listStaff as listStaffFromFirestore,
   merchantExists as merchantExistsInFirestore,
   setPlanFeature as setPlanFeatureInFirestore,
+  setStaffStatus as setStaffStatusInFirestore,
+  setSubscriptionStatus as setSubscriptionStatusInFirestore,
+  SUBSCRIPTION_STATUSES,
   upsertEntitlement as upsertEntitlementInFirestore,
   upsertPlan as upsertPlanInFirestore,
   upsertPlanPrice as upsertPlanPriceInFirestore,
@@ -102,6 +105,53 @@ import {
 } from './admin_audit.js';
 import { resolveAuthenticatedRequestScope } from './customer_request_auth.js';
 import { registerAffiliateRoutes } from './affiliate_routes.js';
+import {
+  LeadAnalysisService,
+  OutreachService,
+} from './prospecting_analysis.js';
+import {
+  OPERATION_COST_USD,
+  resolveProspectingFlags,
+  type ProspectingSettings,
+} from './prospecting_config.js';
+import {
+  consumeProspectingRateLimit,
+  createJob as createProspectingJob,
+  cancelJob as cancelProspectingJob,
+  driveJob as driveProspectingJob,
+  firestoreStore as prospectingFirestoreStore,
+  getJob as getProspectingJob,
+  listClaimableJobs as listClaimableProspectingJobs,
+} from './prospecting_firestore.js';
+import { resolveLlm as resolveProspectingLlm } from './prospecting_llm.js';
+import type { PipelineDeps } from './prospecting_pipeline.js';
+import { AisaProvider } from './prospecting_provider_aisa.js';
+import { ApolloProvider } from './prospecting_provider_apollo.js';
+import { PlacesProvider } from './prospecting_provider_places.js';
+import { TemplateOutreachService } from './prospecting_templates.js';
+import {
+  FixtureProvider,
+  NotConfiguredProvider,
+} from './prospecting_provider_fixtures.js';
+import { registerProspectingRoutes } from './prospecting_routes.js';
+import {
+  appendActivity as appendProspectActivity,
+  getCompany as getProspectCompany,
+  getProspect,
+  latestAnalysis as latestProspectAnalysis,
+  listActivities as listProspectActivities,
+  listContacts as listProspectContacts,
+  listProspects,
+  listUsage as listProspectingUsage,
+  prospectingRefs,
+  readSettings as readProspectingSettings,
+  readSpend as readProspectingSpend,
+  saveAnalysis as saveProspectAnalysis,
+  readFunnelCounts as readProspectingFunnelCounts,
+  saveScores as saveProspectScores,
+  setProspectStatus,
+  writeSettings as writeProspectingSettings,
+} from './prospecting_store.js';
 import {
   recordReferredCustomerReturnInFirestore,
   reverseReferralSaleInFirestore,
@@ -382,6 +432,28 @@ const DEFAULT_LOYALTY_POINTS_PER_MZN = 100;
 const DEFAULT_LOYALTY_CONFIG_VERSION = 1;
 const CUSTOMER_CORE_SECRET_ENV = 'CUSTOMER_IDENTITY_HMAC_SECRET';
 const customerIdentityHmacSecret = defineSecret(CUSTOMER_CORE_SECRET_ENV);
+
+/**
+ * The prospecting module's credentials.
+ *
+ * Declared here so the runtime is handed them through Secret Manager and they
+ * never appear in `.env.<projectId>`, a log line or an error body. The
+ * adapters read them from `process.env` at call time, which is where a
+ * declared secret lands — so a function that forgets to list them below has a
+ * provider that reports itself unconfigured rather than one that half-works.
+ *
+ * All three are optional in the sense that an unset one disables its provider
+ * cleanly: the chain skips it without calling it, and the console says the
+ * integration needs attention.
+ */
+const apolloApiKeySecret = defineSecret('APOLLO_API_KEY');
+const anthropicApiKeySecret = defineSecret('ANTHROPIC_API_KEY');
+const aisaApiKeySecret = defineSecret('AISA_API_KEY');
+const prospectingSecrets = [
+  apolloApiKeySecret,
+  anthropicApiKeySecret,
+  aisaApiKeySecret,
+];
 const CUSTOMER_QR_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CUSTOMER_REDEMPTION_CODE_TTL_MS = 15 * 60 * 1000;
 const MAX_CUSTOMER_ACTIVITY_ENTRIES = 100;
@@ -781,6 +853,65 @@ function auditActorFrom(req: AuthedRequest): AuditActor {
   };
 }
 
+/**
+ * Overrides a business's subscription status by hand.
+ *
+ * The one write path to `subscription_state` after the business is created —
+ * see `setSubscriptionStatus` for why that has been safe to be true so far.
+ * `reason` is required and lands only in the audit entry: it explains an
+ * operator's decision, and does not belong in a document the business's own
+ * app reads back.
+ */
+adminRouter.post('/merchants/:merchantId/subscription/status', async (req, res) => {
+  const merchantId = isNonEmptyString(req.params.merchantId)
+    ? req.params.merchantId.trim()
+    : null;
+  const payload = req.body ?? {};
+  const status = pickString(payload, 'status')?.trim().toUpperCase();
+  const reason = pickString(payload, 'reason')?.trim();
+
+  if (!merchantId) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Missing merchant id' });
+  }
+  if (!status || !(SUBSCRIPTION_STATUSES as readonly string[]).includes(status)) {
+    return res.status(400).json({
+      success: false,
+      message: `Status must be one of ${SUBSCRIPTION_STATUSES.join(', ')}.`,
+    });
+  }
+  if (!reason) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'A reason is required.' });
+  }
+
+  try {
+    const result = await setSubscriptionStatusInFirestore({
+      merchantId,
+      status: status as (typeof SUBSCRIPTION_STATUSES)[number],
+    });
+    if (!result) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Merchant not found' });
+    }
+
+    await recordAuditEvent(auditActorFrom(req as unknown as AuthedRequest), {
+      action: 'subscription.override',
+      targetType: 'subscription_state',
+      targetId: merchantId,
+      merchantId,
+      details: { reason, before: result.before, after: result.after },
+    });
+
+    return res.json({ success: true, data: result.after });
+  } catch (error) {
+    return respondAdminServerError(res, 'set_subscription_status', error);
+  }
+});
+
 adminRouter.post('/merchants/:merchantId/entitlements', async (req, res) => {
   const merchantId = isNonEmptyString(req.params.merchantId)
     ? req.params.merchantId.trim()
@@ -1087,6 +1218,73 @@ adminRouter.get('/access/staff', async (req, res) => {
     });
   } catch (error) {
     return respondAdminServerError(res, 'get_access_staff', error);
+  }
+});
+
+/**
+ * Activates or deactivates a staff account, from the admin console.
+ *
+ * For an account reported compromised, or restoring one deactivated by
+ * mistake. Refuses to deactivate a business's one remaining active owner —
+ * `setStaffStatus` holds that check and the write in one transaction — since
+ * that would leave nobody able to manage the business's own team at all.
+ */
+adminRouter.post('/merchants/:merchantId/staff/:userId/status', async (req, res) => {
+  const merchantId = isNonEmptyString(req.params.merchantId)
+    ? req.params.merchantId.trim()
+    : null;
+  const userId = isNonEmptyString(req.params.userId)
+    ? req.params.userId.trim()
+    : null;
+  const status = pickString(req.body ?? {}, 'status')?.trim().toUpperCase();
+
+  if (!merchantId || !userId) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Missing merchant or staff id' });
+  }
+  if (status !== 'ACTIVE' && status !== 'INACTIVE') {
+    return res.status(400).json({
+      success: false,
+      message: 'Status must be ACTIVE or INACTIVE.',
+    });
+  }
+
+  try {
+    if (!(await merchantExistsInFirestore(merchantId))) {
+      return res
+        .status(404)
+        .json({ success: false, message: 'Merchant not found' });
+    }
+
+    const result = await setStaffStatusInFirestore({ merchantId, userId, status });
+    if (!result.ok) {
+      if (result.reason === 'not_found') {
+        return res
+          .status(404)
+          .json({ success: false, message: 'Staff account not found' });
+      }
+      return res.status(409).json({
+        success: false,
+        message:
+          'This account is the only active owner of this business. Deactivate another owner first, or leave one active.',
+      });
+    }
+
+    await recordAuditEvent(auditActorFrom(req as unknown as AuthedRequest), {
+      action: 'staff.status',
+      targetType: 'app_user',
+      targetId: userId,
+      merchantId,
+      details: { before: result.before, after: result.after },
+    });
+
+    return res.json({
+      success: true,
+      data: toAdminStaffUser({ ...result.after, id: userId, merchant_id: merchantId }),
+    });
+  } catch (error) {
+    return respondAdminServerError(res, 'set_staff_status', error);
   }
 });
 
@@ -1413,6 +1611,43 @@ adminRouter.get('/nfc-cards', async (req, res) => {
     });
   } catch (error) {
     return respondAdminServerError(res, 'get_nfc_cards', error);
+  }
+});
+
+/**
+ * Revokes a card from the admin console.
+ *
+ * The same transition `revokeNfcCardLink` already performs for a customer
+ * revoking their own card or a merchant clearing one at the counter — an
+ * admin has no ownership to check, so this is the same call with no expected
+ * customer. Meant for a card reported lost or stolen: relinking it afterwards
+ * goes through the normal link flow, which treats a revoked card as free.
+ */
+adminRouter.post('/nfc-cards/:cardUid/revoke', async (req, res) => {
+  const normalized = isNonEmptyString(req.params.cardUid)
+    ? tryNormalizeNfcCardUid(req.params.cardUid.trim())
+    : null;
+  if (!normalized) {
+    return res.status(400).json({ success: false, message: 'Invalid card UID.' });
+  }
+
+  try {
+    const before = await revokeNfcCardLink({ cardUid: normalized });
+
+    await recordAuditEvent(auditActorFrom(req as unknown as AuthedRequest), {
+      action: 'nfc_card.revoke',
+      targetType: 'nfc_card',
+      targetId: last4(normalized),
+      merchantId: null,
+      details: { canonical_customer_id: before.canonicalCustomerId },
+    });
+
+    return res.json({
+      success: true,
+      data: { card_uid_last4: last4(normalized), revoked: true },
+    });
+  } catch (error) {
+    return respondCustomerCoreError(res, error);
   }
 });
 
@@ -1937,6 +2172,157 @@ registerAffiliateRoutes({
   affiliateIdForPhone: buildAffiliateIdentityId,
   sweepAffiliateOutbox: ({ merchantId, limit }) =>
     processAffiliateOutbox(affiliateOutboxDeps(), { merchantId, limit }),
+});
+
+/**
+ * Which data providers this installation has, in the configured order.
+ *
+ * Built per request rather than once at module load, because the settings
+ * document decides the order and an operator changing it must not need a
+ * redeploy. A provider that is not configured is skipped by the chain without
+ * being called, so listing all three here costs nothing.
+ *
+ * `fixtures` is last and is only reachable when `PROSPECTING_FIXTURES_ENABLED`
+ * is on — it exists for the emulator and for the seeded development data, and
+ * an installation that turned it on in production would be discovering
+ * businesses that do not exist. The flag is the thing that stops that.
+ */
+function prospectingProviders(settings: ProspectingSettings) {
+  const apollo = new ApolloProvider({
+    apiKey: process.env.APOLLO_API_KEY,
+    baseUrl: process.env.APOLLO_BASE_URL,
+  });
+
+  /**
+   * AIsa answers web research, and only web research.
+   *
+   * It is a gateway over thousands of APIs — search, Perplexity, finance,
+   * social, scholar — not a B2B contact database. There is no people search
+   * behind it, so it is absent from the discovery and person chains: putting
+   * it there would add a provider that can only ever fail, and every failure
+   * costs a call.
+   */
+  const aisa = new AisaProvider({
+    apiKey:
+      process.env.PROSPECTING_AISA_ENABLED === 'true'
+        ? process.env.AISA_API_KEY
+        : undefined,
+    baseUrl: process.env.AISA_BASE_URL,
+  });
+
+  /**
+   * Places answers discovery and the listing detail, and nothing else.
+   *
+   * It describes storefronts, not companies: no headcount, no named owner, no
+   * corporate record. It is in the discovery chain and the detail chain, and
+   * absent from the person chains for the same reason AIsa is — a provider
+   * that can only fail there still costs a call each time it is asked.
+   */
+  const places = new PlacesProvider({
+    apiKey:
+      process.env.PROSPECTING_PLACES_ENABLED === 'true'
+        ? process.env.GOOGLE_PLACES_API_KEY
+        : undefined,
+    baseUrl: process.env.GOOGLE_PLACES_BASE_URL,
+    searchCostUsd: OPERATION_COST_USD.SEARCH_BUSINESSES,
+    detailCostUsd: OPERATION_COST_USD.FETCH_LISTING_DETAILS,
+  });
+
+  const fixtures =
+    process.env.PROSPECTING_FIXTURES_ENABLED === 'true'
+      ? new FixtureProvider()
+      : new NotConfiguredProvider('fixtures');
+
+  const byKey: Record<string, unknown> = { apollo, places, fixtures };
+  const ordered = settings.providerPriority
+    .map((key) => byKey[key])
+    .filter((provider): provider is object => provider !== undefined);
+
+  return {
+    discovery: ordered as never,
+    personDiscovery: ordered as never,
+    personEnrichment: ordered as never,
+    // AIsa first, fixtures behind it. An unconfigured AIsa is skipped without
+    // being called, so this order costs nothing when it is not set up.
+    webResearch: [aisa, fixtures] as never,
+    // Places only. Nothing else in the registry has a second, dearer call to
+    // make about a listing, and a chain of providers that cannot answer is a
+    // chain of failures that each cost something.
+    listingDetail: [places] as never,
+  };
+}
+
+function prospectingPipelineDeps(settings: ProspectingSettings): PipelineDeps {
+  return {
+    store: prospectingFirestoreStore(settings),
+    providers: prospectingProviders(settings),
+    settings,
+    now: Date.now,
+  };
+}
+
+/**
+ * The prospecting console's API.
+ *
+ * Mounted on the admin router, so it is already behind `isAdminRequest` and
+ * nothing over there re-checks the claim. Like the affiliate routes, it is
+ * handed every authority it needs: the audit actor, the settings reader, the
+ * provider registry and the model. It cannot reach for a provider key, decide
+ * who the caller is, or read a budget of its own.
+ *
+ * The whole surface is off unless `AI_PROSPECTING_ENABLED` says otherwise.
+ */
+registerProspectingRoutes({
+  adminRouter,
+  auditActorFrom,
+  respondServerError: respondAdminServerError,
+  flags: () => resolveProspectingFlags(process.env),
+  readSettings: readProspectingSettings,
+  writeSettings: writeProspectingSettings,
+  pipelineDeps: prospectingPipelineDeps,
+
+  getProspect,
+  getCompany: getProspectCompany,
+  listProspects,
+  listContacts: listProspectContacts,
+  listActivities: listProspectActivities,
+  latestAnalysis: latestProspectAnalysis,
+  saveAnalysis: saveProspectAnalysis,
+  setProspectStatus,
+  saveScores: saveProspectScores,
+  appendActivity: appendProspectActivity,
+  saveProspectAnalysisFields: async (input) => {
+    await prospectingRefs.prospect(input.prospectId).set(
+      {
+        ai_summary: input.summary,
+        ai_reasoning: input.reasoning,
+        recommended_pitch: input.pitch,
+        recommended_channel: input.channel,
+        updated_at: input.now,
+      },
+      { merge: true },
+    );
+  },
+
+  createJob: createProspectingJob,
+  getJob: getProspectingJob,
+  cancelJob: cancelProspectingJob,
+  // Fire and forget: the request returns a job id and the work happens in the
+  // trigger that this write fires. Awaiting the drive here would put a
+  // five-hundred-lead search inside an HTTP request.
+  scheduleJob: async () => {},
+
+  readSpend: (prospectId) => readProspectingSpend({ now: Date.now(), prospectId }),
+  readFunnelCounts: readProspectingFunnelCounts,
+  listUsage: listProspectingUsage,
+
+  analysisService: () => new LeadAnalysisService(resolveProspectingLlm(process.env)),
+  outreachService: () => new TemplateOutreachService(),
+
+  consumeRateLimit: ({ actorId, action }) =>
+    consumeProspectingRateLimit({ actorId, action }),
+
+  newId: () => randomUUID(),
 });
 
 app.use('/merchant', merchantRouter);
@@ -4053,7 +4439,7 @@ export const api = onRequest(
   {
     cors: allowedOrigins(process.env, runningInEmulator(process.env)),
     invoker: 'public',
-    secrets: [customerIdentityHmacSecret],
+    secrets: [customerIdentityHmacSecret, ...prospectingSecrets],
   },
   app,
 );
@@ -4341,6 +4727,105 @@ export const affiliateOutboxOnCreate = onDocumentCreated(
  * provider was configured. The create trigger handles the fast path; this
  * bounded sweep is the durable retry path.
  */
+/**
+ * Runs a discovery job as soon as it is written.
+ *
+ * The same shape the referral outbox uses: the request writes a record and
+ * returns, and this trigger does the work. It drives the job in bounded
+ * batches inside a time budget, and whatever is left over stays claimable for
+ * the sweep below — so a search larger than one invocation finishes across
+ * several rather than timing out inside one.
+ *
+ * Failing here must not retry the whole job: the batches already committed
+ * their companies, and a retry would re-run the search and charge for it
+ * again. The error is logged and swallowed for that reason.
+ */
+export const prospectingJobOnCreate = onDocumentCreated(
+  {
+    document: 'prospecting_jobs/{jobId}',
+    secrets: prospectingSecrets,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async (event) => {
+    if (!resolveProspectingFlags(process.env).prospectingEnabled) return;
+
+    const jobId = typeof event.params.jobId === 'string' ? event.params.jobId : '';
+    if (jobId === '') return;
+
+    try {
+      const settings = await readProspectingSettings();
+      const job = await driveProspectingJob({
+        jobId,
+        deps: prospectingPipelineDeps,
+        settings,
+        timeBudgetMs: 420_000,
+      });
+      console.info('prospecting_job_drive_completed', {
+        event: 'prospecting_job_drive_completed',
+        job_id: jobId,
+        status: job?.status ?? null,
+        discovered: job?.discovered ?? 0,
+        spent_usd: job?.spent_usd ?? 0,
+      });
+    } catch (error) {
+      console.error('prospecting_job_drive_failed', {
+        event: 'prospecting_job_drive_failed',
+        job_id: jobId,
+        error_name: error instanceof Error ? error.name : typeof error,
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+);
+
+/**
+ * Picks up jobs a crashed or timed-out invocation left behind.
+ *
+ * The claim lease is what makes this safe: a job another worker still holds is
+ * skipped, and one whose lease has lapsed is taken over at its stored cursor.
+ * Nothing is processed twice, and nothing is stranded.
+ */
+export const prospectingJobSweep = onSchedule(
+  {
+    schedule: 'every 10 minutes',
+    timeZone: 'UTC',
+    secrets: prospectingSecrets,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async () => {
+    if (!resolveProspectingFlags(process.env).prospectingEnabled) return;
+
+    try {
+      const settings = await readProspectingSettings();
+      const jobs = await listClaimableProspectingJobs(5);
+
+      for (const job of jobs) {
+        await driveProspectingJob({
+          jobId: job.id,
+          deps: prospectingPipelineDeps,
+          settings,
+          // Shorter than the trigger's, because the sweep may have several.
+          timeBudgetMs: 120_000,
+        });
+      }
+
+      console.info('prospecting_job_sweep_completed', {
+        event: 'prospecting_job_sweep_completed',
+        considered: jobs.length,
+      });
+    } catch (error) {
+      console.error('prospecting_job_sweep_failed', {
+        event: 'prospecting_job_sweep_failed',
+        error_name: error instanceof Error ? error.name : typeof error,
+        error_message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
+  },
+);
+
 export const affiliateOutboxRetrySweep = onSchedule(
   {
     schedule: 'every 5 minutes',
@@ -7585,12 +8070,19 @@ async function linkNfcCardToCanonicalCustomer(options: {
   });
 }
 
+/**
+ * Revokes an active card link.
+ *
+ * Returns the link as it stood before the revoke, so a caller that needs to
+ * say what it undid — the admin route's audit entry — does not have to read
+ * the document a second time outside this transaction.
+ */
 async function revokeNfcCardLink(options: {
   cardUid: string;
   expectedCanonicalCustomerId?: string | null;
-}): Promise<void> {
+}): Promise<NfcCardLink> {
   const { cardUid } = options;
-  await admin.firestore().runTransaction(async (transaction) => {
+  return admin.firestore().runTransaction(async (transaction) => {
     const ref = nfcCardRef(cardUid);
     const snapshot = await transaction.get(ref);
     const existing = nfcCardLinkFromSnapshot(cardUid, snapshot);
@@ -7612,6 +8104,7 @@ async function revokeNfcCardLink(options: {
       );
     }
     transaction.set(ref, { status: 'REVOKED', updated_at: Date.now() }, { merge: true });
+    return existing;
   });
 }
 

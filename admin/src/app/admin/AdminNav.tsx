@@ -25,6 +25,11 @@ export const GROUPS = [
     items: [
       { href: '/admin/plans', label: 'Planos' },
       { href: '/admin/plans/reconciliacao', label: 'Reconciliação' },
+      // The top of the funnel, which until now lived entirely in a WhatsApp
+      // inbox. It belongs beside the plans rather than in a section of its
+      // own: both answer commercial questions about businesses that are not
+      // yet operating on the platform.
+      { href: '/admin/prospecao', label: 'Prospeção' },
     ],
   },
   {

@@ -567,6 +567,58 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ── Prospeção ────────────────────────────────────────────────────────
+    // The acquisition funnel: businesses MaisUm might sell to, before they
+    // are merchants. Written only by the Admin SDK behind the internal-admin
+    // claim, and read only through the `/admin/prospecting/*` API — no client
+    // ever touches these paths.
+    //
+    // Closed to everyone rather than opened to `isAdmin()`, deliberately.
+    // These documents hold contact details of people at businesses that have
+    // not asked to hear from MaisUm, and an admin's browser session is not
+    // the right place to be able to enumerate them. The API is the only door,
+    // and it leaves an audit trail; a Firestore console read would not.
+    //
+    // Spelled out one by one rather than left to the default deny, so the
+    // intent is explicit next to the collections that are readable.
+    match /prospects/{prospectId} {
+      allow read, write: if false;
+
+      match /{collectionId}/{docId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /prospect_companies/{companyId} {
+      allow read, write: if false;
+    }
+
+    // The deduplication keys. Closed for the same reason as the companies:
+    // a normalised phone number is a contact detail.
+    match /prospect_company_lookup/{keyId} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_usage/{usageId} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_spend/{periodKey} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_settings/{configId} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_jobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_rate_limits/{bucketId} {
+      allow read, write: if false;
+    }
+
     // Deny everything else by default.
     match /{document=**} {
       allow read, write: if false;

@@ -25,6 +25,8 @@
     "src/lib/form-result.ts",
     "src/lib/merchant-labels.ts",
     "src/lib/merchant-list.ts",
+    "src/lib/prospecting-form.ts",
+    "src/lib/prospecting-labels.ts",
     "src/lib/*.test.ts"
   ]
 }
