@@ -711,7 +711,6 @@ class _SchemaVerifier {
       await _createV8Schema(txn);
       await _createV9Schema(txn);
       await _createV10Schema(txn);
-      await _createV11Schema(txn);
       await _createV12Schema(txn);
       await _createV13Schema(txn);
       await _createV14Schema(txn);
