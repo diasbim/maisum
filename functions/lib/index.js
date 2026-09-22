@@ -275,14 +275,20 @@ const customerIdentityHmacSecret = (0, params_1.defineSecret)(CUSTOMER_CORE_SECR
  * declared secret lands — so a function that forgets to list them below has a
  * provider that reports itself unconfigured rather than one that half-works.
  *
- * All three are optional in the sense that an unset one disables its provider
+ * Each is optional in the sense that an unset one disables its provider
  * cleanly: the chain skips it without calling it, and the console says the
  * integration needs attention.
+ *
+ * `GOOGLE_PLACES_API_KEY` is the one that matters now — it is the only paid
+ * provider the default `providerPriority` reaches, so a deployment without it
+ * discovers nothing at all rather than discovering less.
  */
+const googlePlacesApiKeySecret = (0, params_1.defineSecret)('GOOGLE_PLACES_API_KEY');
 const apolloApiKeySecret = (0, params_1.defineSecret)('APOLLO_API_KEY');
 const anthropicApiKeySecret = (0, params_1.defineSecret)('ANTHROPIC_API_KEY');
 const aisaApiKeySecret = (0, params_1.defineSecret)('AISA_API_KEY');
 const prospectingSecrets = [
+    googlePlacesApiKeySecret,
     apolloApiKeySecret,
     anthropicApiKeySecret,
     aisaApiKeySecret,
