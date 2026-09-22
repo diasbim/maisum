@@ -93,6 +93,70 @@ jobs:
       # has none of.
       - run: flutter test
 
+  ios:
+    name: flutter app (iOS build)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # GoogleService-Info.plist is gitignored like android/app/google-services.json
+      # (see firebase.json / lib/firebase_options.dart for the same app's other
+      # platforms). The values below are the standard client identifiers Firebase
+      # itself documents as safe to ship inside a distributed app; access control
+      # is enforced by Firestore rules and App Check, not by hiding this file.
+      - name: escrever GoogleService-Info.plist
+        run: |
+          cat > ios/Runner/GoogleService-Info.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CLIENT_ID</key>
+            <string>517299605672-brpravevidme3nn2osmvr9u9su7pr586.apps.googleusercontent.com</string>
+            <key>REVERSED_CLIENT_ID</key>
+            <string>com.googleusercontent.apps.517299605672-brpravevidme3nn2osmvr9u9su7pr586</string>
+            <key>ANDROID_CLIENT_ID</key>
+            <string>517299605672-5vi5ersr1uq4rapb257rkfeg6nm8kodb.apps.googleusercontent.com</string>
+            <key>API_KEY</key>
+            <string>AIzaSyCdKWPIZrwgyOjwRxUDd4AXbmW939m0FIs</string>
+            <key>GCM_SENDER_ID</key>
+            <string>517299605672</string>
+            <key>PLIST_VERSION</key>
+            <string>1</string>
+            <key>BUNDLE_ID</key>
+            <string>com.tsintsivadigital.maisum</string>
+            <key>PROJECT_ID</key>
+            <string>loyaltyos-fc4dd</string>
+            <key>STORAGE_BUCKET</key>
+            <string>loyaltyos-fc4dd.firebasestorage.app</string>
+            <key>IS_ADS_ENABLED</key>
+            <false></false>
+            <key>IS_ANALYTICS_ENABLED</key>
+            <false></false>
+            <key>IS_APPINVITE_ENABLED</key>
+            <true></true>
+            <key>IS_GCM_ENABLED</key>
+            <true></true>
+            <key>IS_SIGNIN_ENABLED</key>
+            <true></true>
+            <key>GOOGLE_APP_ID</key>
+            <string>1:517299605672:ios:b34613825197e48ec7329d</string>
+          </dict>
+          </plist>
+          PLIST
+
+      # No signing identity on this runner, so this only proves the Dart code,
+      # native plugin glue (CocoaPods) and Firebase config compile together —
+      # it does not produce an installable/distributable artifact.
+      - run: flutter build ios --no-codesign
+
   smoke:
     name: portal smoke
     runs-on: ubuntu-latest

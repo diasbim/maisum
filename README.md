@@ -81,7 +81,30 @@ at its `127.0.0.1` default. Cleartext to those addresses is permitted by
 — release builds still refuse plain HTTP everywhere.
 
 The web target is not configured for Firebase (`firebase_options.dart` has
-Android only), so `-d chrome` starts but never connects.
+Android and iOS only), so `-d chrome` starts but never connects.
+
+### iOS
+
+`firebase.json` and `lib/firebase_options.dart` are configured for the
+`com.tsintsivadigital.maisum` iOS app (`flutterfire configure`), and
+`ios/Runner/Info.plist` declares the NFC and camera usage descriptions the app
+needs. Two things still require a Mac with Xcode, since neither can be done
+safely from the CLI:
+
+1. Run `firebase apps:sdkconfig IOS <iosAppId> > ios/Runner/GoogleService-Info.plist`
+   (or `flutterfire configure`) to fetch the config file — it is gitignored
+   like `android/app/google-services.json`, so every environment provisions
+   its own copy.
+2. In Xcode, drag that file into the `Runner` group with "Copy items if
+   needed" and target membership "Runner" checked. Neither `flutterfire
+   configure` nor any CLI step registers it in `Runner.xcodeproj`'s Copy
+   Bundle Resources phase — until that's done in Xcode, the app will build
+   but `Firebase.initializeApp()` will fail at runtime on iOS.
+
+CI builds the iOS target on every push (`.github/workflows/ci.yml`, `ios`
+job) with a config file written inline, to catch compilation regressions —
+that build does not exercise the Xcode resource-bundling step above, so it
+cannot substitute for the one-time manual setup on a real checkout.
 
 ## Stack
 
