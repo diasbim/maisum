@@ -111,6 +111,7 @@ function prospect(overrides = {}) {
         band: 'GOOD',
         scoring_version: prospecting_config_js_1.SCORING_VERSION,
         furthest_stage: 2,
+        outreach_template_id: null,
         ai_summary: null,
         ai_reasoning: null,
         recommended_pitch: null,
@@ -177,7 +178,7 @@ function harness(overrides = {}) {
         rateLimitAllows: true,
         settings: prospecting_config_js_1.DEFAULT_SETTINGS,
         spend: { monthUsd: 0, dayUsd: 0, leadUsd: 0 },
-        funnel: { reachedByStage: {}, exitsByStatus: {}, byBand: {} },
+        funnel: { reachedByStage: {}, exitsByStatus: {}, byBand: {}, byTemplate: {} },
     };
     let counter = 0;
     const deps = {
@@ -292,6 +293,21 @@ function harness(overrides = {}) {
         },
         readSpend: async () => state.spend,
         readFunnelCounts: async () => state.funnel,
+        recordOutreachTemplate: async ({ prospectId, templateId }) => {
+            const stored = state.prospects.get(prospectId);
+            if (stored === undefined)
+                throw new Error('prospect not found');
+            // Set once, exactly as the store's transaction does: the first message
+            // sent is the one that can have earned a reply.
+            const existing = stored.outreach_template_id;
+            if (existing !== null && existing !== '')
+                return existing;
+            state.prospects.set(prospectId, {
+                ...stored,
+                outreach_template_id: templateId,
+            });
+            return templateId;
+        },
         listUsage: async () => ({ rows: [], hasMore: false }),
         analysisService: () => new prospecting_analysis_js_1.LeadAnalysisService(llm),
         outreachService: () => new prospecting_templates_js_1.TemplateOutreachService(),

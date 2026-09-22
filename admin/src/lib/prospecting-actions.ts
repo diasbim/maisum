@@ -220,6 +220,7 @@ export async function markContactedAction(
       prospectId,
       channel,
       note: optionalText(form, 'note'),
+      templateId: optionalText(form, 'template_id'),
     });
     revalidatePath(`/admin/prospecao/${prospectId}`);
     revalidatePath('/admin/prospecao');

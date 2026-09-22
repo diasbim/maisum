@@ -335,6 +335,16 @@ export type FunnelDto = {
   };
   /** The two numbers that decide whether AI is ever worth adding back. */
   signals: { replyRate: number | null; bandSeparation: number | null };
+  /** The A/B table, best first among the conclusive ones. */
+  templates: Array<{
+    template_id: string;
+    sent: number;
+    replied: number;
+    reply_rate: number | null;
+    conclusive: boolean;
+  }>;
+  /** Sends below which a rate is noise. Shown, so the bar is not a mystery. */
+  min_sends_to_compare: number;
 };
 
 /* ------------------------------------------------------------------ reads */
@@ -521,10 +531,16 @@ export async function markContacted(input: {
   prospectId: string;
   channel: string;
   note: string | null;
+  /** The template that actually went out, when one was generated here. */
+  templateId?: string | null;
 }): Promise<void> {
   await call(`/admin/prospecting/leads/${encodeURIComponent(input.prospectId)}/contact`, {
     method: 'POST',
-    body: { channel: input.channel, note: input.note },
+    body: {
+      channel: input.channel,
+      note: input.note,
+      template_id: input.templateId ?? null,
+    },
   });
 }
 

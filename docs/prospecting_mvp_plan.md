@@ -335,10 +335,13 @@ Pré-existente e não commitado. Quebrava o JSON e teria quebrado o deploy.
 
 ## O que ficou por fazer
 
-- **A atribuição de respostas por template.** `template_id` já é gravado em cada
-  atividade `OUTREACH_GENERATED`, portanto o dado existe. Falta a query de
-  grupo de coleções que o agrega, e o índice que ela exige. A taxa de resposta
-  global — que é o número da regra de decisão — já está no ecrã do funil.
+- ~~A atribuição de respostas por template.~~ **Feito.** Atribuída no *envio*,
+  não na geração, e só ao primeiro modelo enviado a cada lead — um seguimento
+  noutro modelo não rouba o crédito de uma resposta que a primeira mensagem
+  ganhou. Sem query de grupo: `outreach_template_id` fica no prospecto e a
+  contagem é agregação, como as bandas. A tabela A/B está no ecrã do funil, e
+  um modelo com menos de 30 envios é marcado como amostra pequena em vez de
+  ser ordenado como se a percentagem significasse alguma coisa.
 - **A edição de templates na consola.** `validateTemplate` existe e é chamado na
   renderização; falta o ecrã em `Definições → Prospeção` que o chama na gravação.
   Os quatro templates por omissão vivem em código até lá.

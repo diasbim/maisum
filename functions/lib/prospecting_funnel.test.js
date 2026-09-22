@@ -161,3 +161,39 @@ const prospecting_contracts_js_1 = require("./prospecting_contracts.js");
     });
     strict_1.default.equal(signals.bandSeparation, null);
 });
+/* ----------------------------------------------------------- the A/B table */
+(0, node_test_1.default)('a template with no sends has no rate, rather than a rate of zero', () => {
+    const [row] = (0, prospecting_funnel_js_1.templateResults)({ 'a-v1': { sent: 0, replied: 0 } });
+    strict_1.default.equal(row.replyRate, null);
+    strict_1.default.equal(row.conclusive, false);
+});
+(0, node_test_1.default)('a small sample is marked inconclusive and sorted below a real one', () => {
+    // 1 of 2 is 50% and means nothing; 9 of 60 is 15% and means something. A
+    // table that ranked by rate alone would put the noise on top and send an
+    // operator to rewrite the template that is actually working.
+    const rows = (0, prospecting_funnel_js_1.templateResults)({
+        'lucky-v1': { sent: 2, replied: 1 },
+        'real-v1': { sent: 60, replied: 9 },
+    });
+    strict_1.default.equal(rows[0].templateId, 'real-v1');
+    strict_1.default.equal(rows[0].conclusive, true);
+    strict_1.default.equal(rows[1].templateId, 'lucky-v1');
+    strict_1.default.equal(rows[1].conclusive, false);
+});
+(0, node_test_1.default)('conclusive templates are ranked best first', () => {
+    const rows = (0, prospecting_funnel_js_1.templateResults)({
+        'worse-v1': { sent: 100, replied: 5 },
+        'better-v2': { sent: 100, replied: 20 },
+    });
+    strict_1.default.equal(rows[0].templateId, 'better-v2');
+    strict_1.default.equal(rows[0].replyRate, 0.2);
+    strict_1.default.equal(rows[1].templateId, 'worse-v1');
+});
+(0, node_test_1.default)('the threshold is the stated one', () => {
+    strict_1.default.equal((0, prospecting_funnel_js_1.templateResults)({ x: { sent: prospecting_funnel_js_1.MIN_SENDS_TO_COMPARE - 1, replied: 1 } })[0]
+        .conclusive, false);
+    strict_1.default.equal((0, prospecting_funnel_js_1.templateResults)({ x: { sent: prospecting_funnel_js_1.MIN_SENDS_TO_COMPARE, replied: 1 } })[0].conclusive, true);
+});
+(0, node_test_1.default)('nothing sent at all produces an empty table, not a row of dashes', () => {
+    strict_1.default.deepEqual((0, prospecting_funnel_js_1.templateResults)({}), []);
+});

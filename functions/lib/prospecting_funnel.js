@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.LAST_STAGE = exports.STAGE_OF = void 0;
+exports.MIN_SENDS_TO_COMPARE = exports.LAST_STAGE = exports.STAGE_OF = void 0;
 exports.stageFor = stageFor;
 exports.raiseStage = raiseStage;
 exports.buildFunnel = buildFunnel;
+exports.templateResults = templateResults;
 exports.decisionSignals = decisionSignals;
 const prospecting_contracts_js_1 = require("./prospecting_contracts.js");
 /**
@@ -102,6 +103,25 @@ function buildFunnel(input) {
     }))
         .sort((left, right) => right.count - left.count);
     return { stages, exits, total };
+}
+/** Below this, a reply rate is a coincidence with a percentage sign on it. */
+exports.MIN_SENDS_TO_COMPARE = 30;
+function templateResults(byTemplate) {
+    return Object.entries(byTemplate)
+        .map(([templateId, counts]) => ({
+        templateId,
+        sent: counts.sent,
+        replied: counts.replied,
+        replyRate: counts.sent === 0 ? null : counts.replied / counts.sent,
+        conclusive: counts.sent >= exports.MIN_SENDS_TO_COMPARE,
+    }))
+        // Best first, but only among the conclusive ones: an inconclusive template
+        // at the top of the table is a recommendation nobody meant to make.
+        .sort((left, right) => {
+        if (left.conclusive !== right.conclusive)
+            return left.conclusive ? -1 : 1;
+        return (right.replyRate ?? -1) - (left.replyRate ?? -1);
+    });
 }
 function decisionSignals(input) {
     const contacted = input.funnel.stages.find((stage) => stage.status === 'CONTACTED')?.reached ?? 0;

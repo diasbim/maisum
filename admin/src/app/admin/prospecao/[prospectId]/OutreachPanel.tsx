@@ -237,6 +237,13 @@ export function OutreachPanel({
       >
         <form action={contactAction}>
           <input name="prospectId" type="hidden" value={prospectId} />
+          {/* Which template actually went out — the A/B is grouped by this,
+              and only a message that was sent can have earned a reply. Absent
+              when nothing was generated in this session, in which case the
+              lead simply is not attributed to an arm. */}
+          {draft === null ? null : (
+            <input name="template_id" type="hidden" value={draft.templateId} />
+          )}
 
           <div className="form-grid">
             <div className="field">

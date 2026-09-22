@@ -110,6 +110,76 @@ function Exits({ funnel }: { funnel: FunnelDto }) {
   );
 }
 
+/* --------------------------------------------------------------- templates */
+
+/**
+ * Which message works, which is the first thing to fix when replies are low.
+ *
+ * A template is attributed on *send*, not on generate, and only the first one
+ * sent to a lead counts — so a follow-up cannot take credit for a reply the
+ * first message won.
+ *
+ * Rates under the sample bar are shown with the number of sends beside them
+ * and marked plainly. One reply out of two is fifty percent and means nothing,
+ * and a table that ranked it first would send an operator off to rewrite the
+ * template that is actually working.
+ */
+function Templates({ funnel }: { funnel: FunnelDto }) {
+  if (funnel.templates.length === 0) {
+    return (
+      <EmptyState message="Ainda não foi enviada nenhuma mensagem. A comparação aparece quando registar o primeiro envio." />
+    );
+  }
+
+  const anyConclusive = funnel.templates.some((entry) => entry.conclusive);
+
+  return (
+    <>
+      {anyConclusive ? null : (
+        <p className="micro">
+          Nenhum modelo tem ainda {funnel.min_sends_to_compare} envios. Até lá as
+          percentagens são ruído — vale a pena continuar a enviar antes de
+          reescrever seja o que for.
+        </p>
+      )}
+
+      <div className="card card--flush scroll-x">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Modelo</th>
+              <th className="num" scope="col">
+                Enviadas
+              </th>
+              <th className="num" scope="col">
+                Respostas
+              </th>
+              <th className="num" scope="col">
+                Taxa
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {funnel.templates.map((entry) => (
+              <tr key={entry.template_id}>
+                <th scope="row">
+                  <code className="inline">{entry.template_id}</code>
+                  {entry.conclusive ? null : (
+                    <div className="micro">Amostra pequena</div>
+                  )}
+                </th>
+                <td className="num">{entry.sent}</td>
+                <td className="num">{entry.replied}</td>
+                <td className="num">{percent(entry.reply_rate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 /* ----------------------------------------------------------------- signals */
 
 /**
@@ -184,6 +254,10 @@ async function FunnelPanels() {
 
       <Panel title="O que isto diz">
         <Signals funnel={result.data} />
+      </Panel>
+
+      <Panel title="Modelos de mensagem">
+        <Templates funnel={result.data} />
       </Panel>
 
       <Panel title="Saídas">

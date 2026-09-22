@@ -158,6 +158,7 @@ function prospect(overrides: Partial<StoredProspect> = {}): StoredProspect {
     band: 'GOOD',
     scoring_version: SCORING_VERSION,
     furthest_stage: 2,
+    outreach_template_id: null,
     ai_summary: null,
     ai_reasoning: null,
     recommended_pitch: null,
@@ -228,6 +229,7 @@ type Harness = {
       reachedByStage: Record<number, number>;
       exitsByStatus: Partial<Record<ProspectStatus, number>>;
       byBand: Record<string, { total: number; customers: number }>;
+      byTemplate: Record<string, { sent: number; replied: number }>;
     };
   };
 };
@@ -258,7 +260,7 @@ function harness(
     rateLimitAllows: true,
     settings: DEFAULT_SETTINGS,
     spend: { monthUsd: 0, dayUsd: 0, leadUsd: 0 },
-    funnel: { reachedByStage: {}, exitsByStatus: {}, byBand: {} },
+    funnel: { reachedByStage: {}, exitsByStatus: {}, byBand: {}, byTemplate: {} },
   };
 
   let counter = 0;
@@ -378,6 +380,19 @@ function harness(
 
     readSpend: async () => state.spend,
     readFunnelCounts: async () => state.funnel,
+    recordOutreachTemplate: async ({ prospectId, templateId }) => {
+      const stored = state.prospects.get(prospectId);
+      if (stored === undefined) throw new Error('prospect not found');
+      // Set once, exactly as the store's transaction does: the first message
+      // sent is the one that can have earned a reply.
+      const existing = stored.outreach_template_id;
+      if (existing !== null && existing !== '') return existing;
+      state.prospects.set(prospectId, {
+        ...stored,
+        outreach_template_id: templateId,
+      });
+      return templateId;
+    },
     listUsage: async () => ({ rows: [], hasMore: false }),
 
     analysisService: () => new LeadAnalysisService(llm),

@@ -810,6 +810,20 @@
       ]
     },
     {
+      "collectionGroup": "prospects",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "outreach_template_id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "furthest_stage",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "prospecting_usage",
       "queryScope": "COLLECTION",
       "fields": [

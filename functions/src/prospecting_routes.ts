@@ -68,7 +68,12 @@ import {
   type PipelineDeps,
 } from './prospecting_pipeline.js';
 import { newJob, type ProspectingJob } from './prospecting_jobs.js';
-import { buildFunnel, decisionSignals } from './prospecting_funnel.js';
+import {
+  buildFunnel,
+  decisionSignals,
+  MIN_SENDS_TO_COMPARE,
+  templateResults,
+} from './prospecting_funnel.js';
 import { scoreProspect } from './prospecting_scoring.js';
 import {
   channelsWithTemplate,
@@ -218,11 +223,18 @@ export type ProspectingRouteDeps = {
     dayUsd: number;
     leadUsd: number;
   }>;
-  readFunnelCounts: () => Promise<{
+  readFunnelCounts: (input: { templateIds: readonly string[] }) => Promise<{
     reachedByStage: Record<number, number>;
     exitsByStatus: Partial<Record<ProspectStatus, number>>;
     byBand: Record<string, { total: number; customers: number }>;
+    byTemplate: Record<string, { sent: number; replied: number }>;
   }>;
+  /** Records which template a lead was written to with, once. */
+  recordOutreachTemplate: (input: {
+    prospectId: string;
+    templateId: string;
+    now: number;
+  }) => Promise<string>;
   listUsage: (input: { monthKey?: string; limit: number; offset: number }) => Promise<{
     rows: EnrichmentUsage[];
     hasMore: boolean;
@@ -952,12 +964,32 @@ export function registerProspectingRoutes(deps: ProspectingRouteDeps): void {
 
       const channel = parseChannel((req.body ?? {}).channel);
       const note = parseNote((req.body ?? {}).note);
+      const templateId = parseTemplateId((req.body ?? {}).template_id);
+
+      /**
+       * The A/B attribution, recorded here and not on generate.
+       *
+       * An operator may draft three versions and send one; only the one that
+       * went out can have earned a reply. `recordOutreachTemplate` sets it
+       * once, so a follow-up in another template cannot take credit for a
+       * reply the first message won — and it answers with whatever the lead
+       * ended up attributed to, which is what the timeline should record.
+       */
+      const attributed =
+        templateId === null
+          ? null
+          : await deps.recordOutreachTemplate({
+              prospectId,
+              templateId,
+              now: now(),
+            });
 
       await deps.appendActivity({
         prospectId,
         type: 'OUTREACH_SENT',
         description: note ?? `Mensagem enviada por ${channel}.`,
         channel,
+        metadata: attributed === null ? undefined : { template_id: attributed },
         actor: actorId(authed(req)),
         now: now(),
       });
@@ -1077,7 +1109,8 @@ export function registerProspectingRoutes(deps: ProspectingRouteDeps): void {
    */
   router.get('/prospecting/funnel', async (_req, res) => {
     try {
-      const counts = await deps.readFunnelCounts();
+      const templates = deps.outreachService().templateIds();
+      const counts = await deps.readFunnelCounts({ templateIds: templates });
       const funnel = buildFunnel({
         reachedByStage: counts.reachedByStage,
         exitsByStatus: counts.exitsByStatus,
@@ -1106,6 +1139,14 @@ export function registerProspectingRoutes(deps: ProspectingRouteDeps): void {
             priority: { total: priority.total, customers: priority.customers },
             nurture: { total: nurture.total, customers: nurture.customers },
           },
+          templates: templateResults(counts.byTemplate).map((entry) => ({
+            template_id: entry.templateId,
+            sent: entry.sent,
+            replied: entry.replied,
+            reply_rate: entry.replyRate,
+            conclusive: entry.conclusive,
+          })),
+          min_sends_to_compare: MIN_SENDS_TO_COMPARE,
           signals: decisionSignals({
             funnel,
             priorityCustomers: priority.customers,

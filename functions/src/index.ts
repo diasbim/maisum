@@ -148,6 +148,7 @@ import {
   readSpend as readProspectingSpend,
   saveAnalysis as saveProspectAnalysis,
   readFunnelCounts as readProspectingFunnelCounts,
+  recordOutreachTemplate as recordProspectOutreachTemplate,
   saveScores as saveProspectScores,
   setProspectStatus,
   writeSettings as writeProspectingSettings,
@@ -2314,6 +2315,7 @@ registerProspectingRoutes({
 
   readSpend: (prospectId) => readProspectingSpend({ now: Date.now(), prospectId }),
   readFunnelCounts: readProspectingFunnelCounts,
+  recordOutreachTemplate: recordProspectOutreachTemplate,
   listUsage: listProspectingUsage,
 
   analysisService: () => new LeadAnalysisService(resolveProspectingLlm(process.env)),

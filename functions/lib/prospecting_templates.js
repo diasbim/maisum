@@ -306,6 +306,17 @@ class TemplateOutreachService {
     constructor(templates = exports.DEFAULT_TEMPLATES) {
         this.templates = templates;
     }
+    /**
+     * Which templates exist, for the funnel to count replies by.
+     *
+     * Firestore cannot group by a field, so the A/B table is two queries per
+     * template — which means the funnel has to be told which ones to ask about
+     * rather than discovering them. Here rather than in the store, because this
+     * is the module that knows what a template is.
+     */
+    templateIds() {
+        return this.templates.map((entry) => entry.id);
+    }
     generate(request) {
         if ((0, prospecting_contracts_js_1.blocksOutreach)(request.status)) {
             throw new OutreachBlockedError(request.status);

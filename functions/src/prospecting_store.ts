@@ -40,7 +40,7 @@ import {
   type ProspectStatus,
   type ProviderOperation,
 } from './prospecting_contracts.js';
-import { raiseStage } from './prospecting_funnel.js';
+import { raiseStage, STAGE_OF } from './prospecting_funnel.js';
 import {
   buildMatchKeys,
   matchKeyDocId,
@@ -154,6 +154,15 @@ export type StoredProspect = {
    * Null for prospects written before the funnel existed, read as stage 0.
    */
   furthest_stage: number | null;
+  /**
+   * The template of the first message actually sent to this lead.
+   *
+   * Written on send, not on generate: an operator may draft three versions and
+   * send one, and only the one that went out can have earned a reply. Set once
+   * and never overwritten, so a follow-up in a different template cannot take
+   * credit for a reply the first message won.
+   */
+  outreach_template_id: string | null;
   ai_summary: string | null;
   ai_reasoning: string | null;
   recommended_pitch: string | null;
@@ -460,6 +469,7 @@ export async function createProspectForCompany(
       band: null,
       scoring_version: null,
       furthest_stage: raiseStage(null, input.status),
+      outreach_template_id: null,
       ai_summary: null,
       ai_reasoning: null,
       recommended_pitch: null,
@@ -629,6 +639,37 @@ export async function updateCompanyListing(input: {
 }
 
 /**
+ * Records which template a lead was actually written to with. Once.
+ *
+ * A transaction rather than a merge, because "set only if unset" is a
+ * read-then-write and two operators sending from two tabs would otherwise
+ * race — with the loser silently reassigning an A/B arm. Returns what the
+ * lead ended up attributed to, which is not always what was passed.
+ */
+export async function recordOutreachTemplate(input: {
+  prospectId: string;
+  templateId: string;
+  now: number;
+}): Promise<string> {
+  const ref = prospectingRefs.prospect(input.prospectId);
+
+  return db().runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (!snapshot.exists) throw new Error('prospect not found');
+
+    const existing = (snapshot.data() as StoredProspect).outreach_template_id;
+    if (typeof existing === 'string' && existing.trim() !== '') return existing;
+
+    transaction.set(
+      ref,
+      { outreach_template_id: input.templateId, updated_at: input.now },
+      { merge: true },
+    );
+    return input.templateId;
+  });
+}
+
+/**
  * The funnel's raw counts.
  *
  * Aggregation queries rather than reading the documents: a count over ten
@@ -639,10 +680,14 @@ export async function updateCompanyListing(input: {
  * terminal status, all in parallel. The arithmetic — the accumulating, the
  * rates — is `buildFunnel`'s, which is pure and tested without an emulator.
  */
-export async function readFunnelCounts(): Promise<{
+export async function readFunnelCounts(input?: {
+  /** The templates to count, from the settings document. */
+  templateIds?: readonly string[];
+}): Promise<{
   reachedByStage: Record<number, number>;
   exitsByStatus: Partial<Record<ProspectStatus, number>>;
   byBand: Record<string, { total: number; customers: number }>;
+  byTemplate: Record<string, { sent: number; replied: number }>;
 }> {
   const prospects = db().collection(COLLECTIONS.prospects);
   const countOf = async (query: FirebaseFirestore.Query): Promise<number> =>
@@ -674,9 +719,38 @@ export async function readFunnelCounts(): Promise<{
     })),
   );
 
+  /**
+   * Sent and replied, per template.
+   *
+   * `replied` is `furthest_stage >= REPLIED`, not `status == 'REPLIED'` — a
+   * lead that replied and then became a customer replied. Counting current
+   * status here would make the best template look like the worst.
+   *
+   * Only the templates the caller names are counted: Firestore cannot group
+   * by a field, so each is two queries, and asking about templates nobody has
+   * configured would be round trips for guaranteed zeros.
+   */
+  const repliedStage = STAGE_OF.REPLIED ?? 6;
+  const templates = await Promise.all(
+    (input?.templateIds ?? []).map(async (templateId) => {
+      const scoped = prospects.where('outreach_template_id', '==', templateId);
+      return {
+        templateId,
+        sent: await countOf(scoped),
+        replied: await countOf(scoped.where('furthest_stage', '>=', repliedStage)),
+      };
+    }),
+  );
+
   return {
     reachedByStage: Object.fromEntries(
       stages.map((entry) => [entry.stage, entry.count]),
+    ),
+    byTemplate: Object.fromEntries(
+      templates.map((entry) => [
+        entry.templateId,
+        { sent: entry.sent, replied: entry.replied },
+      ]),
     ),
     exitsByStatus: Object.fromEntries(
       exits.map((entry) => [entry.status, entry.count]),

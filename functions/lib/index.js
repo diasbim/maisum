@@ -1863,6 +1863,7 @@ function prospectingPipelineDeps(settings) {
     scheduleJob: async () => { },
     readSpend: (prospectId) => (0, prospecting_store_js_1.readSpend)({ now: Date.now(), prospectId }),
     readFunnelCounts: prospecting_store_js_1.readFunnelCounts,
+    recordOutreachTemplate: prospecting_store_js_1.recordOutreachTemplate,
     listUsage: prospecting_store_js_1.listUsage,
     analysisService: () => new prospecting_analysis_js_1.LeadAnalysisService((0, prospecting_llm_js_1.resolveLlm)(process.env)),
     outreachService: () => new prospecting_templates_js_1.TemplateOutreachService(),

@@ -8,6 +8,8 @@ import {
   raiseStage,
   stageFor,
   STAGE_OF,
+  templateResults,
+  MIN_SENDS_TO_COMPARE,
 } from './prospecting_funnel.js';
 import { PROSPECT_PIPELINE } from './prospecting_contracts.js';
 
@@ -196,4 +198,54 @@ test('one band converting and the other not is not a ratio', () => {
   });
 
   assert.equal(signals.bandSeparation, null);
+});
+
+/* ----------------------------------------------------------- the A/B table */
+
+test('a template with no sends has no rate, rather than a rate of zero', () => {
+  const [row] = templateResults({ 'a-v1': { sent: 0, replied: 0 } });
+  assert.equal(row!.replyRate, null);
+  assert.equal(row!.conclusive, false);
+});
+
+test('a small sample is marked inconclusive and sorted below a real one', () => {
+  // 1 of 2 is 50% and means nothing; 9 of 60 is 15% and means something. A
+  // table that ranked by rate alone would put the noise on top and send an
+  // operator to rewrite the template that is actually working.
+  const rows = templateResults({
+    'lucky-v1': { sent: 2, replied: 1 },
+    'real-v1': { sent: 60, replied: 9 },
+  });
+
+  assert.equal(rows[0]!.templateId, 'real-v1');
+  assert.equal(rows[0]!.conclusive, true);
+  assert.equal(rows[1]!.templateId, 'lucky-v1');
+  assert.equal(rows[1]!.conclusive, false);
+});
+
+test('conclusive templates are ranked best first', () => {
+  const rows = templateResults({
+    'worse-v1': { sent: 100, replied: 5 },
+    'better-v2': { sent: 100, replied: 20 },
+  });
+
+  assert.equal(rows[0]!.templateId, 'better-v2');
+  assert.equal(rows[0]!.replyRate, 0.2);
+  assert.equal(rows[1]!.templateId, 'worse-v1');
+});
+
+test('the threshold is the stated one', () => {
+  assert.equal(
+    templateResults({ x: { sent: MIN_SENDS_TO_COMPARE - 1, replied: 1 } })[0]!
+      .conclusive,
+    false,
+  );
+  assert.equal(
+    templateResults({ x: { sent: MIN_SENDS_TO_COMPARE, replied: 1 } })[0]!.conclusive,
+    true,
+  );
+});
+
+test('nothing sent at all produces an empty table, not a row of dashes', () => {
+  assert.deepEqual(templateResults({}), []);
 });

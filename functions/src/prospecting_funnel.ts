@@ -166,6 +166,46 @@ export type DecisionSignals = {
   bandSeparation: number | null;
 };
 
+/* ------------------------------------------------------------ the A/B table */
+
+export type TemplateResult = {
+  templateId: string;
+  sent: number;
+  replied: number;
+  /** Null until anything was sent — never zero, which would read as a verdict. */
+  replyRate: number | null;
+  /**
+   * Whether the sample is big enough to act on.
+   *
+   * Thirty sends, and the number is stated rather than hidden: two templates
+   * at 1/2 and 0/3 look like a 50-point difference and are noise. A table that
+   * ranked them anyway would send an operator to rewrite the better one.
+   */
+  conclusive: boolean;
+};
+
+/** Below this, a reply rate is a coincidence with a percentage sign on it. */
+export const MIN_SENDS_TO_COMPARE = 30;
+
+export function templateResults(
+  byTemplate: Readonly<Record<string, { sent: number; replied: number }>>,
+): TemplateResult[] {
+  return Object.entries(byTemplate)
+    .map(([templateId, counts]): TemplateResult => ({
+      templateId,
+      sent: counts.sent,
+      replied: counts.replied,
+      replyRate: counts.sent === 0 ? null : counts.replied / counts.sent,
+      conclusive: counts.sent >= MIN_SENDS_TO_COMPARE,
+    }))
+    // Best first, but only among the conclusive ones: an inconclusive template
+    // at the top of the table is a recommendation nobody meant to make.
+    .sort((left, right) => {
+      if (left.conclusive !== right.conclusive) return left.conclusive ? -1 : 1;
+      return (right.replyRate ?? -1) - (left.replyRate ?? -1);
+    });
+}
+
 export function decisionSignals(input: {
   funnel: FunnelReport;
   priorityCustomers: number;

@@ -42,6 +42,7 @@ exports.getCompany = getCompany;
 exports.setProspectStatus = setProspectStatus;
 exports.saveScores = saveScores;
 exports.updateCompanyListing = updateCompanyListing;
+exports.recordOutreachTemplate = recordOutreachTemplate;
 exports.readFunnelCounts = readFunnelCounts;
 exports.saveContact = saveContact;
 exports.listContacts = listContacts;
@@ -316,6 +317,7 @@ async function createProspectForCompany(input) {
             band: null,
             scoring_version: null,
             furthest_stage: (0, prospecting_funnel_js_1.raiseStage)(null, input.status),
+            outreach_template_id: null,
             ai_summary: null,
             ai_reasoning: null,
             recommended_pitch: null,
@@ -446,6 +448,27 @@ async function updateCompanyListing(input) {
     await exports.prospectingRefs.company(input.companyId).set(patch, { merge: true });
 }
 /**
+ * Records which template a lead was actually written to with. Once.
+ *
+ * A transaction rather than a merge, because "set only if unset" is a
+ * read-then-write and two operators sending from two tabs would otherwise
+ * race — with the loser silently reassigning an A/B arm. Returns what the
+ * lead ended up attributed to, which is not always what was passed.
+ */
+async function recordOutreachTemplate(input) {
+    const ref = exports.prospectingRefs.prospect(input.prospectId);
+    return db().runTransaction(async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists)
+            throw new Error('prospect not found');
+        const existing = snapshot.data().outreach_template_id;
+        if (typeof existing === 'string' && existing.trim() !== '')
+            return existing;
+        transaction.set(ref, { outreach_template_id: input.templateId, updated_at: input.now }, { merge: true });
+        return input.templateId;
+    });
+}
+/**
  * The funnel's raw counts.
  *
  * Aggregation queries rather than reading the documents: a count over ten
@@ -456,7 +479,7 @@ async function updateCompanyListing(input) {
  * terminal status, all in parallel. The arithmetic — the accumulating, the
  * rates — is `buildFunnel`'s, which is pure and tested without an emulator.
  */
-async function readFunnelCounts() {
+async function readFunnelCounts(input) {
     const prospects = db().collection(exports.COLLECTIONS.prospects);
     const countOf = async (query) => (await query.count().get()).data().count;
     const stages = await Promise.all(prospecting_contracts_js_1.PROSPECT_PIPELINE.map(async (_status, stage) => ({
@@ -474,8 +497,32 @@ async function readFunnelCounts() {
         total: await countOf(prospects.where('band', '==', band)),
         customers: await countOf(prospects.where('band', '==', band).where('status', '==', 'CUSTOMER')),
     })));
+    /**
+     * Sent and replied, per template.
+     *
+     * `replied` is `furthest_stage >= REPLIED`, not `status == 'REPLIED'` — a
+     * lead that replied and then became a customer replied. Counting current
+     * status here would make the best template look like the worst.
+     *
+     * Only the templates the caller names are counted: Firestore cannot group
+     * by a field, so each is two queries, and asking about templates nobody has
+     * configured would be round trips for guaranteed zeros.
+     */
+    const repliedStage = prospecting_funnel_js_1.STAGE_OF.REPLIED ?? 6;
+    const templates = await Promise.all((input?.templateIds ?? []).map(async (templateId) => {
+        const scoped = prospects.where('outreach_template_id', '==', templateId);
+        return {
+            templateId,
+            sent: await countOf(scoped),
+            replied: await countOf(scoped.where('furthest_stage', '>=', repliedStage)),
+        };
+    }));
     return {
         reachedByStage: Object.fromEntries(stages.map((entry) => [entry.stage, entry.count])),
+        byTemplate: Object.fromEntries(templates.map((entry) => [
+            entry.templateId,
+            { sent: entry.sent, replied: entry.replied },
+        ])),
         exitsByStatus: Object.fromEntries(exits.map((entry) => [entry.status, entry.count])),
         byBand: Object.fromEntries(bands.map((entry) => [
             entry.band,
