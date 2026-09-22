@@ -82,16 +82,65 @@ console.log('═'.repeat(78));
 
 console.log('\n■ ESTÁGIO 1 — pesquisa (campos baratos)\n');
 
-const found = await places.searchBusinesses({
-  industries: [INDUSTRY],
-  city: CITY,
-  province: null,
-  country: DEFAULT_GEOGRAPHY.country,
-  employeeMin: null,
-  employeeMax: null,
-  limit: PAGE_SIZE,
-  cursor: null,
-});
+/**
+ * O que a Google respondeu, por extenso.
+ *
+ * O fornecedor deixa o corpo de fora do erro de propósito — pode nomear o
+ * negócio pesquisado, e isso não pertence a um log de produção. Aqui não há
+ * log de produção nenhum, e sem a mensagem um 403 não se distingue de outro:
+ * chave restrita a um referrer, API por activar, facturação em falta e chave
+ * errada chegam todos como o mesmo número.
+ */
+async function explainFailure() {
+  try {
+    const probe = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'places.id',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ textQuery: 'teste' }),
+    });
+    const detail = await probe.json().catch(() => null);
+    const error = detail?.error ?? {};
+    console.error('');
+    console.error(`   Google respondeu HTTP ${probe.status} ${error.status ?? ''}`);
+    if (error.message) console.error(`   "${error.message}"`);
+    for (const item of error.details ?? []) {
+      if (item.reason) console.error(`   motivo ..... ${item.reason}`);
+      if (item.metadata?.service) console.error(`   serviço .... ${item.metadata.service}`);
+    }
+  } catch (probeError) {
+    console.error(`   Não foi possível obter a mensagem: ${probeError.message}`);
+  }
+}
+
+let found;
+try {
+  found = await places.searchBusinesses({
+    industries: [INDUSTRY],
+    city: CITY,
+    province: null,
+    country: DEFAULT_GEOGRAPHY.country,
+    employeeMin: null,
+    employeeMax: null,
+    limit: PAGE_SIZE,
+    cursor: null,
+  });
+} catch (error) {
+  console.error('');
+  console.error(
+    `✗ A pesquisa falhou: ${error.code ?? 'ERRO'} (${error.detail ?? error.message})`,
+  );
+  if (error.code === 'NOT_CONFIGURED') {
+    console.error('');
+    console.error('   A chave foi enviada — o arranque já a tinha validado.');
+    console.error('   Um 403 aqui é a Google a recusá-la, não a sua ausência.');
+  }
+  await explainFailure();
+  process.exit(1);
+}
 charge(places.lastCostUsd ?? 0, 'pesquisa');
 
 console.log(`   ${found.length} negócios devolvidos\n`);
