@@ -143,6 +143,32 @@ paths:
                 $ref: '#/components/schemas/CreateSurveyResponse'
         '400':
           description: Validation failed
+  /engage/surveys/{surveyId}/link:
+    get:
+      summary: Mint a shareable, time-boxed link for an active survey
+      tags: [Engage, Surveys]
+      parameters:
+        - in: path
+          name: surveyId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: customer_id
+          schema:
+            type: string
+          description: Optional customer to pre-attribute the response to.
+      responses:
+        '200':
+          description: Link minted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SurveyLinkResponse'
+        '404':
+          description: Survey not found
+        '409':
+          description: Survey is closed (inactive); reactivate it before sharing.
   /engage/survey-response:
     post:
       summary: Submit survey response
@@ -1040,6 +1066,26 @@ components:
           properties:
             data:
               $ref: '#/components/schemas/Survey'
+    SurveyLinkResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelopeBase'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                token:
+                  type: string
+                url:
+                  type: string
+                  nullable: true
+                  description: Null when no public base URL is configured for this deployment.
+                expires_at:
+                  type: integer
+                  description: Unix epoch milliseconds.
+                survey_title:
+                  type: string
+                  nullable: true
     SubmitSurveyAnswerInput:
       type: object
       required: [question_id]
