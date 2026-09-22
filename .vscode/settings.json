@@ -35,6 +35,10 @@
     "/^Set-Location 'C:\\\\Dev\\\\flutter\\\\maisum\\\\functions'; npm test$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^firebase --version; java -version; node --version; npm --version$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   },
   "java.configuration.updateBuildConfiguration": "interactive"
