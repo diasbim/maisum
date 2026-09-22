@@ -284,21 +284,6 @@ class SecureStorageService {
         aOptions: _androidOptions,
       );
 
-  // SMS permission onboarding
-  Future<void> setSmsPermissionPrompted(bool value) => _storage.write(
-        key: AppConstants.smsPermissionPromptedKey,
-        value: value ? '1' : '0',
-        aOptions: _androidOptions,
-      );
-
-  Future<bool> hasSmsPermissionPrompted() async {
-    final raw = await _storage.read(
-      key: AppConstants.smsPermissionPromptedKey,
-      aOptions: _androidOptions,
-    );
-    return raw == '1';
-  }
-
   // Onboarding plan selection
   Future<void> saveMerchantOnboardingDraft(
     String value, {

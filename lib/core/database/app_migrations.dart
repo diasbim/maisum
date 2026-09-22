@@ -56,7 +56,6 @@ class AppMigrations {
       name: 'sync backoff',
       up: _createV10Schema,
     ),
-    const MigrationStep(version: 11, name: 'sms inbox', up: _createV11Schema),
     const MigrationStep(
       version: 12,
       name: 'analytics + notifications',
@@ -1036,35 +1035,6 @@ Future<void> _createV10Schema(DatabaseExecutor db) async {
     db,
     'sync_queue',
     'next_attempt_at INTEGER NOT NULL DEFAULT 0',
-  );
-}
-
-Future<void> _createV11Schema(DatabaseExecutor db) async {
-  await db.execute('''
-    CREATE TABLE IF NOT EXISTS sms_inbox (
-      id TEXT PRIMARY KEY,
-      address TEXT,
-      body TEXT NOT NULL,
-      received_at INTEGER NOT NULL,
-      processed INTEGER NOT NULL DEFAULT 0
-    )
-  ''');
-  await db.execute(
-    'CREATE INDEX IF NOT EXISTS idx_sms_inbox_processed ON sms_inbox(processed, received_at)',
-  );
-
-  await db.execute('''
-    CREATE TABLE IF NOT EXISTS sms_transactions (
-      id TEXT PRIMARY KEY,
-      provider TEXT NOT NULL,
-      transaction_id TEXT,
-      amount REAL NOT NULL,
-      phone TEXT,
-      received_at INTEGER NOT NULL
-    )
-  ''');
-  await db.execute(
-    'CREATE INDEX IF NOT EXISTS idx_sms_transactions_provider ON sms_transactions(provider, transaction_id)',
   );
 }
 

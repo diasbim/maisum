@@ -407,16 +407,40 @@ console.log(
 const planned = scored.slice(0, MAX_DETAILS);
 
 if (DRY_RUN) {
-  console.log(`\n■ ESTÁGIO 2 PLANEADO (não executado) · ${planned.length} negócios\n`);
-  for (const entry of planned) {
+  /**
+   * How many of the planned calls the ceiling actually pays for.
+   *
+   * The plan is only useful if it is the plan the real run would follow. A
+   * dry run that lists eight businesses and a total above `--max-spend`,
+   * while the real run would stop at five, is not a preview — it is a
+   * different answer to the same question, and the operator finds out which
+   * one was right by spending money.
+   */
+  const affordable = Math.max(0, Math.floor((MAX_SPEND - spent) / DETAIL_COST));
+  const willRun = planned.slice(0, affordable);
+  const cutOff = planned.slice(affordable);
+
+  console.log(`\n■ ESTÁGIO 2 PLANEADO (não executado) · ${willRun.length} negócios\n`);
+  for (const entry of willRun) {
     console.log(
       `   ${pad(entry.company.name.slice(0, 40), 42)}${entry.score.total} pts · ${entry.score.band}`,
     );
   }
-  const estimate = planned.length * DETAIL_COST;
+
+  if (cutOff.length > 0) {
+    console.log(`\n   ⛔ Fora do tecto de ${money(MAX_SPEND)} — não seriam consultados:\n`);
+    for (const entry of cutOff) {
+      console.log(
+        `   ${pad(entry.company.name.slice(0, 40), 42)}${entry.score.total} pts`,
+      );
+    }
+    console.log(`\n   Suba --max-spend para ${money(spent + planned.length * DETAIL_COST)} para os incluir.`);
+  }
+
+  const estimate = willRun.length * DETAIL_COST;
   console.log(`\n   Custo estimado do estágio 2: ${money(estimate)}`);
   console.log(`   Já gasto na pesquisa ......: ${money(spent)}`);
-  console.log(`   Total previsto ............: ${money(spent + estimate)}`);
+  console.log(`   Total previsto ............: ${money(spent + estimate)}  (tecto ${money(MAX_SPEND)})`);
 } else {
   console.log(
     `\n■ ESTÁGIO 2 — ficha do negócio (campos caros) · até ${planned.length} de ${scored.length}\n`,

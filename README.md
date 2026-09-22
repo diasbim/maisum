@@ -153,18 +153,20 @@ Read in `AppConstants`:
 static const apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:3000');
 ```
 
-### Customer redemption pilot
+### Customer redemption
 
-Keep `CUSTOMER_REDEMPTION_ENABLED=true` behind both allow-lists during a
-controlled pilot:
+`CUSTOMER_REDEMPTION_ENABLED=true` is general availability: redemption is open
+to every customer and merchant. An optional pair of allow-lists exists if a
+controlled rollout is ever needed again:
 
 | Functions environment variable | Description |
 |---|---|
 | `CUSTOMER_REDEMPTION_ALLOWED_UIDS` | Comma-separated Firebase UIDs allowed to redeem |
 | `CUSTOMER_REDEMPTION_ALLOWED_MERCHANT_IDS` | Comma-separated business IDs allowed to validate and consume |
 
-When either allow-list is configured, an identifier that is missing from it is
-denied. Omit both only after the pilot is approved for broad rollout.
+Both are unset in production today, which is what makes redemption available
+to everyone. Configuring either one narrows access: an identifier missing from
+a configured allow-list is denied.
 
 Redemption lifecycle events are emitted to Cloud Logging as structured records
 with `event="customer_redemption_lifecycle"`. They contain operational IDs,

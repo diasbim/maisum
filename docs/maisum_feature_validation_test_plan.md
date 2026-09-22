@@ -7,6 +7,12 @@ Platform: Android (Flutter) + Spring Boot Backend
 Product: MaisUm  
 Primary KPI: Sales registered per day per merchant
 
+> **Goal 3 / section 5.4 status:** SMS-based semi-automatic registration was
+> never implemented. The placeholder `sms_inbox`/`sms_transactions` SQLite
+> tables and the `smsPermissionPromptedKey` storage flag were removed from
+> the app (dead schema, no reader/parser/UI ever consumed them). Sections
+> below describing this flow are historical planning only.
+
 ---
 
 # 1. PURPOSE

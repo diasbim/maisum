@@ -68,7 +68,6 @@ class AppConstants {
   static const String firebaseUidKey = 'firebase_uid';
   static const String pinKey = 'user_pin';
   static const String pinAttemptsKey = 'pin_attempts';
-  static const String smsPermissionPromptedKey = 'sms_permission_prompted';
   static const String onboardingPlanConfirmedKey = 'onboarding_plan_confirmed';
   static const String debugBypassPaidFeatureGateKey =
       'debug_bypass_paid_feature_gate';
