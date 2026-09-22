@@ -46,7 +46,6 @@ function provider(fetchImpl: typeof fetch) {
   return new PlacesProvider({
     apiKey: 'secret-key',
     fetchImpl,
-    baseUrl: 'https://places.googleapis.com/v1',
     searchCostUsd: 0.02,
     detailCostUsd: 0.03,
   });

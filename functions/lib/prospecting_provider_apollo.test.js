@@ -22,7 +22,7 @@ function mockFetch(responder) {
     return { fetchImpl, calls };
 }
 function provider(fetchImpl, apiKey = 'secret-key') {
-    return new prospecting_provider_apollo_js_1.ApolloProvider({ apiKey, fetchImpl, baseUrl: 'https://api.apollo.io/api/v1' });
+    return new prospecting_provider_apollo_js_1.ApolloProvider({ apiKey, fetchImpl });
 }
 const SEARCH_CRITERIA = {
     industries: ['barbershop'],

@@ -214,9 +214,6 @@ class PlacesProvider {
             ? (this.options.detailCostUsd ?? 0)
             : (this.options.searchCostUsd ?? 0);
     }
-    baseUrl() {
-        return (this.options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-    }
     /**
      * One request, with every failure turned into a typed one.
      *
@@ -237,7 +234,7 @@ class PlacesProvider {
         this.lastOperation = operation;
         this.lastCostUsd = null;
         const fetchImpl = this.options.fetchImpl ?? fetch;
-        const url = new URL(`${this.baseUrl()}${path}`);
+        const url = new URL(`${DEFAULT_BASE_URL}${path}`);
         for (const [name, value] of Object.entries(init.query ?? {})) {
             url.searchParams.set(name, value);
         }

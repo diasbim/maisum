@@ -68,7 +68,6 @@ export const APOLLO_KEY = 'apollo';
 
 export type ApolloOptions = {
   apiKey: string | undefined;
-  baseUrl?: string;
   timeoutMs?: number;
   /** Injected so the adapter can be exercised without a network. */
   fetchImpl?: typeof fetch;
@@ -202,10 +201,6 @@ export class ApolloProvider
     return typeof key === 'string' && key.trim() !== '';
   }
 
-  private baseUrl(): string {
-    return (this.options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-  }
-
   /**
    * One request, with every failure turned into a typed one.
    *
@@ -231,7 +226,7 @@ export class ApolloProvider
     }
 
     const fetchImpl = this.options.fetchImpl ?? fetch;
-    const url = new URL(`${this.baseUrl()}${path}`);
+    const url = new URL(`${DEFAULT_BASE_URL}${path}`);
     for (const [name, value] of Object.entries(init.query ?? {})) {
       url.searchParams.set(name, value);
     }

@@ -75,7 +75,6 @@ export const AISA_MODEL = 'sonar';
 
 export type AisaOptions = {
   apiKey: string | undefined;
-  baseUrl?: string;
   model?: string;
   timeoutMs?: number;
   /** Overrides the pre-authorisation figure; the header still wins. */
@@ -274,7 +273,6 @@ export class AisaProvider implements WebResearchProvider {
       });
     }
 
-    const baseUrl = (this.options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
     const fetchImpl = this.options.fetchImpl ?? fetch;
     const controller = new AbortController();
     const timer = setTimeout(
@@ -284,7 +282,7 @@ export class AisaProvider implements WebResearchProvider {
 
     let response: Response;
     try {
-      response = await fetchImpl(`${baseUrl}/perplexity/sonar`, {
+      response = await fetchImpl(`${DEFAULT_BASE_URL}/perplexity/sonar`, {
         method: 'POST',
         headers: {
           // Bearer, per the gateway's security scheme. Never logged, never in

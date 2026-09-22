@@ -42,7 +42,7 @@ function mockFetch(
 }
 
 function provider(fetchImpl: typeof fetch, apiKey = 'secret-key') {
-  return new ApolloProvider({ apiKey, fetchImpl, baseUrl: 'https://api.apollo.io/api/v1' });
+  return new ApolloProvider({ apiKey, fetchImpl });
 }
 
 const SEARCH_CRITERIA = {

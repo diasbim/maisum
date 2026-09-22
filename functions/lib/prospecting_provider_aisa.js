@@ -243,13 +243,12 @@ class AisaProvider {
                 detail: 'AISA_API_KEY is not set',
             });
         }
-        const baseUrl = (this.options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
         const fetchImpl = this.options.fetchImpl ?? fetch;
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), this.options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
         let response;
         try {
-            response = await fetchImpl(`${baseUrl}/perplexity/sonar`, {
+            response = await fetchImpl(`${DEFAULT_BASE_URL}/perplexity/sonar`, {
                 method: 'POST',
                 headers: {
                     // Bearer, per the gateway's security scheme. Never logged, never in

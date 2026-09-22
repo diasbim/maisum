@@ -25,7 +25,6 @@ function provider(fetchImpl) {
     return new prospecting_provider_places_js_1.PlacesProvider({
         apiKey: 'secret-key',
         fetchImpl,
-        baseUrl: 'https://places.googleapis.com/v1',
         searchCostUsd: 0.02,
         detailCostUsd: 0.03,
     });

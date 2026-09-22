@@ -1761,7 +1761,6 @@ merchantRouter.get('/customers/:customerId/ledger', async (req, res) => {
 function prospectingProviders(settings) {
     const apollo = new prospecting_provider_apollo_js_1.ApolloProvider({
         apiKey: process.env.APOLLO_API_KEY,
-        baseUrl: process.env.APOLLO_BASE_URL,
     });
     /**
      * AIsa answers web research, and only web research.
@@ -1776,7 +1775,6 @@ function prospectingProviders(settings) {
         apiKey: process.env.PROSPECTING_AISA_ENABLED === 'true'
             ? process.env.AISA_API_KEY
             : undefined,
-        baseUrl: process.env.AISA_BASE_URL,
     });
     /**
      * Places answers discovery and the listing detail, and nothing else.
@@ -1790,7 +1788,6 @@ function prospectingProviders(settings) {
         apiKey: process.env.PROSPECTING_PLACES_ENABLED === 'true'
             ? process.env.GOOGLE_PLACES_API_KEY
             : undefined,
-        baseUrl: process.env.GOOGLE_PLACES_BASE_URL,
         searchCostUsd: prospecting_config_js_1.OPERATION_COST_USD.SEARCH_BUSINESSES,
         detailCostUsd: prospecting_config_js_1.OPERATION_COST_USD.FETCH_LISTING_DETAILS,
     });

@@ -2197,7 +2197,6 @@ registerAffiliateRoutes({
 function prospectingProviders(settings: ProspectingSettings) {
   const apollo = new ApolloProvider({
     apiKey: process.env.APOLLO_API_KEY,
-    baseUrl: process.env.APOLLO_BASE_URL,
   });
 
   /**
@@ -2214,7 +2213,6 @@ function prospectingProviders(settings: ProspectingSettings) {
       process.env.PROSPECTING_AISA_ENABLED === 'true'
         ? process.env.AISA_API_KEY
         : undefined,
-    baseUrl: process.env.AISA_BASE_URL,
   });
 
   /**
@@ -2230,7 +2228,6 @@ function prospectingProviders(settings: ProspectingSettings) {
       process.env.PROSPECTING_PLACES_ENABLED === 'true'
         ? process.env.GOOGLE_PLACES_API_KEY
         : undefined,
-    baseUrl: process.env.GOOGLE_PLACES_BASE_URL,
     searchCostUsd: OPERATION_COST_USD.SEARCH_BUSINESSES,
     detailCostUsd: OPERATION_COST_USD.FETCH_LISTING_DETAILS,
   });

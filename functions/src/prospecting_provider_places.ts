@@ -100,7 +100,6 @@ export const UNSUPPORTED_FILTERS = ['employeeMin', 'employeeMax'] as const;
 
 export type PlacesOptions = {
   apiKey: string | undefined;
-  baseUrl?: string;
   timeoutMs?: number;
   /** Injected so the adapter can be exercised without a network. */
   fetchImpl?: typeof fetch;
@@ -267,10 +266,6 @@ export class PlacesProvider
       : (this.options.searchCostUsd ?? 0);
   }
 
-  private baseUrl(): string {
-    return (this.options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
-  }
-
   /**
    * One request, with every failure turned into a typed one.
    *
@@ -302,7 +297,7 @@ export class PlacesProvider
     this.lastCostUsd = null;
 
     const fetchImpl = this.options.fetchImpl ?? fetch;
-    const url = new URL(`${this.baseUrl()}${path}`);
+    const url = new URL(`${DEFAULT_BASE_URL}${path}`);
     for (const [name, value] of Object.entries(init.query ?? {})) {
       url.searchParams.set(name, value);
     }
