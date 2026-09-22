@@ -112,7 +112,17 @@ export class NotConfiguredProvider
  * otherwise. Silence maps to null, which is "not known", which is what a
  * fixture that never looked at a listing should say.
  */
-type ListingFields = 'rating' | 'review_count' | 'has_opening_hours' | 'has_photos' | 'business_status';
+type ListingFields =
+  | 'rating'
+  | 'review_count'
+  | 'has_opening_hours'
+  | 'has_photos'
+  | 'business_status'
+  // Optional here, unlike on the record: a fixture exists to exercise the
+  // pipeline, and most of these predate deduplication and have no coordinates
+  // to give. The ones written for the dedup tests state theirs.
+  | 'latitude'
+  | 'longitude';
 
 export type CompanyFixture = Omit<
   CompanyRecord,
@@ -849,6 +859,8 @@ export class FixtureProvider
         has_opening_hours: fixture.has_opening_hours ?? null,
         has_photos: fixture.has_photos ?? null,
         business_status: fixture.business_status ?? null,
+        latitude: fixture.latitude ?? null,
+        longitude: fixture.longitude ?? null,
         source: this.key,
         source_reference: fixture.provider_org_id,
       },

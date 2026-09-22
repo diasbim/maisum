@@ -155,9 +155,69 @@ export type DimensionScore = {
   criteria: CriterionResult[];
 };
 
+/**
+ * Run-level context the score needs but a single lead cannot supply.
+ *
+ * Optional, and absent means the old behaviour exactly: raw rating, no
+ * penalty. Every existing caller keeps working, and a caller that wants the
+ * evidence-weighted ranking opts into it by supplying the run's mean.
+ */
+export type ScoreContext = {
+  /** `C`: the mean rating across the businesses being compared. */
+  meanRating?: number | null;
+  /** `m`: how many reviews of evidence it takes to move off that mean. */
+  priorCount?: number;
+  /** Points removed when the source carries no rating at all. */
+  noRatingPenalty?: number;
+};
+
+/**
+ * A rating weighted by how much evidence stands behind it.
+ *
+ * `(v/(v+m))·R + (m/(v+m))·C`. A shop with one five-star review sits almost
+ * entirely on the run's mean; one with a hundred and seven sits almost
+ * entirely on its own average. Without this, a single enthusiastic review
+ * outranks a business with a hundred — which is what the Maputo run did, and
+ * it put the better lead outside the paid slots.
+ *
+ * Returns null when there is nothing to weigh, rather than inventing a value;
+ * the penalty is what handles that case, visibly.
+ */
+export function bayesianRating(
+  rating: number | null,
+  reviewCount: number | null,
+  meanRating: number | null,
+  priorCount: number,
+): number | null {
+  if (rating === null) return null;
+  if (meanRating === null || priorCount <= 0) return rating;
+  const v = Math.max(0, reviewCount ?? 0);
+  return (v / (v + priorCount)) * rating + (priorCount / (v + priorCount)) * meanRating;
+}
+
+/** The mean rating of the listings that carry one. Null when none do. */
+export function meanRatingOf(
+  entries: readonly { rating: number | null }[],
+): number | null {
+  const rated = entries
+    .map((entry) => entry.rating)
+    .filter((value): value is number => value !== null);
+  if (rated.length === 0) return null;
+  return rated.reduce((sum, value) => sum + value, 0) / rated.length;
+}
+
 export type ScoreResult = {
   total: number;
   band: ScoreBand;
+  /**
+   * The evidence-weighted rating the score used, when one applied.
+   *
+   * Reported rather than kept internal: an operator comparing two leads is
+   * entitled to see why the 4.4 outranked the 5.0.
+   */
+  bayesianRating: number | null;
+  /** Points removed for absent evidence. Zero when nothing was missing. */
+  evidencePenalty: number;
   businessFit: number;
   digitalPresence: number;
   retentionPotential: number;
@@ -268,8 +328,16 @@ export function scoreProspect(
   signals: ScoringSignals,
   config: ScoringConfig,
   geography: TargetGeography,
+  context: ScoreContext = {},
 ): ScoreResult {
   const icp = findIcpIndustry(signals.businessType);
+  const priorCount = context.priorCount ?? 0;
+  const weightedRating = bayesianRating(
+    signals.rating,
+    signals.reviewCount,
+    context.meanRating ?? null,
+    priorCount,
+  );
   const fit = config.businessFit;
   const digital = config.digitalPresence;
   const retention = config.retentionPotential;
@@ -328,8 +396,13 @@ export function scoreProspect(
       // A rating says the business is worth walking into, which is what makes
       // it worth selling to. Not a judgement about the shop's quality — a
       // filter against listings that are dead or disputed.
-      met: signals.rating === null ? null : signals.rating >= fit.minRating,
-      evidence: signals.rating === null ? null : `${signals.rating.toFixed(1)} / 5`,
+      met: weightedRating === null ? null : weightedRating >= fit.minRating,
+      evidence:
+        signals.rating === null
+          ? null
+          : weightedRating !== null && weightedRating !== signals.rating
+            ? `${signals.rating.toFixed(1)} / 5 · ponderada ${weightedRating.toFixed(2)}`
+            : `${signals.rating.toFixed(1)} / 5`,
     }),
   ]);
 
@@ -516,11 +589,29 @@ export function scoreProspect(
     retentionPotential,
     commercialOpportunity,
   ];
-  const total = dimensions.reduce((sum, entry) => sum + entry.score, 0);
+  const raw = dimensions.reduce((sum, entry) => sum + entry.score, 0);
+
+  /**
+   * Absent evidence costs points, and is stated as its own number.
+   *
+   * Applied to the total rather than folded into a criterion, because it is
+   * not a criterion: it says "there was nothing here to judge", which is a
+   * statement about the listing and not about the business. Keeping it
+   * separate also keeps the dimension breakdown honest — an operator reading
+   * BUSINESS_FIT sees what the shop scored, and the deduction underneath it.
+   */
+  const evidencePenalty =
+    signals.rating === null || (signals.reviewCount ?? 0) === 0
+      ? (context.noRatingPenalty ?? 0)
+      : 0;
+
+  const total = Math.max(0, raw - evidencePenalty);
 
   return {
     total,
     band: bandFor(total, config),
+    bayesianRating: weightedRating,
+    evidencePenalty,
     businessFit: businessFit.score,
     digitalPresence: digitalPresence.score,
     retentionPotential: retentionPotential.score,
@@ -531,6 +622,45 @@ export function scoreProspect(
       .filter((entry) => entry.basis === 'UNKNOWN')
       .map((entry) => entry.label),
   };
+}
+
+/* ----------------------------------------------------------------- ranking */
+
+/** What ordering needs, beyond the score itself. */
+export type Rankable = {
+  score: number;
+  reviewCount: number | null;
+  rating: number | null;
+  name: string;
+};
+
+/**
+ * The order the paid slots are handed out in.
+ *
+ * Score first, then review count, then rating, then name. Every step exists
+ * because the one before it ties: the Maputo run put nine businesses on 75
+ * and then took the first five *in the order the API happened to return
+ * them*, which is not an order anyone chose and is not stable between runs.
+ * Three of those five were the same shop.
+ *
+ * Name last, ascending, so that two genuinely indistinguishable leads still
+ * come out in the same order twice — a ranking that reshuffles on every run
+ * makes a regression test impossible and makes an operator distrust the list.
+ *
+ * Kept apart from the score on purpose. The score stays on its 0–100 scale
+ * because the bands are stored values and `PRIORITY` means "80 or more" in
+ * data already written; widening the scale to break ties would silently
+ * rewrite what every saved prospect's band means.
+ */
+export function compareForRank(left: Rankable, right: Rankable): number {
+  if (left.score !== right.score) return right.score - left.score;
+  const leftReviews = left.reviewCount ?? -1;
+  const rightReviews = right.reviewCount ?? -1;
+  if (leftReviews !== rightReviews) return rightReviews - leftReviews;
+  const leftRating = left.rating ?? -1;
+  const rightRating = right.rating ?? -1;
+  if (leftRating !== rightRating) return rightRating - leftRating;
+  return left.name.localeCompare(right.name, 'pt');
 }
 
 /* -------------------------------------------------------------- qualifying */

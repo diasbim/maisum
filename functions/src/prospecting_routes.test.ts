@@ -117,6 +117,8 @@ function company(overrides: Partial<StoredCompany> = {}): StoredCompany {
     domain: 'barbearia-exemplo.test',
     website: 'https://barbearia-exemplo.test',
     industry: 'barbershop',
+    latitude: null,
+    longitude: null,
     industry_raw: 'Barbearia',
     employee_count: 6,
     city: 'Maputo',

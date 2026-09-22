@@ -4,11 +4,15 @@ import test from 'node:test';
 import {
   DEFAULT_GEOGRAPHY,
   DEFAULT_SCORING,
+  DEFAULT_SETTINGS,
   bandFor,
   findIcpIndustry,
 } from './prospecting_config.js';
 import {
+  bayesianRating,
+  compareForRank,
   isTargetGeography,
+  meanRatingOf,
   qualify,
   scoreProspect,
   UNKNOWN_SIGNALS,
@@ -404,4 +408,169 @@ test('an unknown trade is not a refusal', () => {
     geography,
   );
   assert.equal(result.qualified, true);
+});
+
+/* ------------------------------------- evidence-weighted rating and ranking */
+
+test('a five-star rating from one review does not outrank a 4.4 from a hundred', () => {
+  // The failure this exists to prevent, taken from a real run: Level Up
+  // Barber MZ (5.0, 2 reviews) was ranked above Tchetcho's (4.4, 107) and the
+  // better lead fell outside the paid slots.
+  const mean = 4.6;
+  const loud = bayesianRating(5, 1, mean, 10);
+  const proven = bayesianRating(4.4, 107, mean, 10);
+  assert.ok(loud !== null && proven !== null);
+  assert.ok(
+    (proven as number) < 5,
+    'a média ponderada não inventa pontuação acima da real',
+  );
+  assert.ok(
+    (loud as number) < (proven as number) + 0.35,
+    'uma avaliação de uma só review aproxima-se da média da corrida',
+  );
+  assert.ok(Math.abs((proven as number) - 4.4) < 0.05, '107 reviews quase não são puxadas');
+});
+
+test('the prior pulls hardest where there is least evidence', () => {
+  const mean = 4.0;
+  const one = bayesianRating(5, 1, mean, 10) as number;
+  const fifty = bayesianRating(5, 50, mean, 10) as number;
+  assert.ok(one < fifty);
+});
+
+test('no prior and no mean leaves the rating exactly as it was', () => {
+  assert.equal(bayesianRating(4.7, 12, null, 10), 4.7);
+  assert.equal(bayesianRating(4.7, 12, 4.0, 0), 4.7);
+});
+
+test('a listing with no rating has no weighted rating either', () => {
+  // Not zero, and not the mean. Nothing was measured, and saying otherwise
+  // would hand an unrated shop the average shop's score.
+  assert.equal(bayesianRating(null, null, 4.5, 10), null);
+});
+
+test('the run mean ignores the listings that carry no rating', () => {
+  assert.equal(meanRatingOf([{ rating: 4 }, { rating: 5 }, { rating: null }]), 4.5);
+  assert.equal(meanRatingOf([{ rating: null }]), null);
+});
+
+test('a business with no rating scores below the threshold it used to equal', () => {
+  const blank = {
+    ...UNKNOWN_SIGNALS,
+    businessType: 'barbershop',
+    city: 'Maputo',
+    country: 'Moçambique',
+    isOperational: true,
+  };
+  const before = scoreProspect(blank, DEFAULT_SCORING, DEFAULT_GEOGRAPHY);
+  const after = scoreProspect(blank, DEFAULT_SCORING, DEFAULT_GEOGRAPHY, {
+    noRatingPenalty: 10,
+  });
+  assert.equal(after.total, before.total - 10);
+  assert.equal(after.evidencePenalty, 10);
+  assert.ok(after.total < DEFAULT_SETTINGS.minScoreForEnrichment);
+});
+
+test('the penalty is configurable, and zero restores the old behaviour', () => {
+  const blank = { ...UNKNOWN_SIGNALS, businessType: 'barbershop', city: 'Maputo' };
+  const plain = scoreProspect(blank, DEFAULT_SCORING, DEFAULT_GEOGRAPHY);
+  const unpenalised = scoreProspect(blank, DEFAULT_SCORING, DEFAULT_GEOGRAPHY, {
+    noRatingPenalty: 0,
+  });
+  assert.equal(unpenalised.total, plain.total);
+  assert.equal(unpenalised.evidencePenalty, 0);
+});
+
+test('a rated business is not penalised', () => {
+  const rated = {
+    ...UNKNOWN_SIGNALS,
+    businessType: 'barbershop',
+    city: 'Maputo',
+    rating: 4.5,
+    reviewCount: 56,
+  };
+  const score = scoreProspect(rated, DEFAULT_SCORING, DEFAULT_GEOGRAPHY, {
+    noRatingPenalty: 10,
+  });
+  assert.equal(score.evidencePenalty, 0);
+});
+
+test('a rating with zero reviews counts as no evidence', () => {
+  // A rating of 5.0 attached to no reviews at all is a field, not a finding.
+  const hollow = {
+    ...UNKNOWN_SIGNALS,
+    businessType: 'barbershop',
+    city: 'Maputo',
+    rating: 5,
+    reviewCount: 0,
+  };
+  assert.equal(
+    scoreProspect(hollow, DEFAULT_SCORING, DEFAULT_GEOGRAPHY, { noRatingPenalty: 10 })
+      .evidencePenalty,
+    10,
+  );
+});
+
+test('the score never goes below zero, however large the penalty', () => {
+  const blank = { ...UNKNOWN_SIGNALS };
+  const score = scoreProspect(blank, DEFAULT_SCORING, DEFAULT_GEOGRAPHY, {
+    noRatingPenalty: 1000,
+  });
+  assert.equal(score.total, 0);
+});
+
+test('ties are broken by evidence, then rating, then name — never by arrival order', () => {
+  // Nine businesses tied at 75 in the real run, and the first five were taken
+  // in whatever order the API answered in.
+  const tied = [
+    { score: 75, reviewCount: 35, rating: 4.8, name: 'Hair Studio' },
+    { score: 75, reviewCount: 107, rating: 4.4, name: "Tchetcho's Barber Shop" },
+    { score: 75, reviewCount: 43, rating: 4.7, name: 'ManCave' },
+    { score: 75, reviewCount: 43, rating: 4.9, name: 'Zulu Cortes' },
+    { score: 80, reviewCount: 1, rating: 5, name: 'Outro' },
+  ];
+  const order = [...tied].sort(compareForRank).map((entry) => entry.name);
+  assert.deepEqual(order, [
+    'Outro',
+    "Tchetcho's Barber Shop",
+    'Zulu Cortes',
+    'ManCave',
+    'Hair Studio',
+  ]);
+});
+
+test('the same list sorts the same way twice', () => {
+  const rows = [
+    { score: 75, reviewCount: null, rating: null, name: 'Beta' },
+    { score: 75, reviewCount: null, rating: null, name: 'Alfa' },
+    { score: 75, reviewCount: null, rating: null, name: 'Gama' },
+  ];
+  const once = [...rows].sort(compareForRank).map((entry) => entry.name);
+  const twice = [...rows].reverse().sort(compareForRank).map((entry) => entry.name);
+  assert.deepEqual(once, twice);
+  assert.deepEqual(once, ['Alfa', 'Beta', 'Gama']);
+});
+
+test('the score stays on its 0-100 scale, so stored bands keep their meaning', () => {
+  const strong = {
+    ...UNKNOWN_SIGNALS,
+    businessType: 'barbershop',
+    city: 'Maputo',
+    country: 'Moçambique',
+    rating: 4.8,
+    reviewCount: 200,
+    websiteUrl: 'https://exemplo.co.mz',
+    hasContactChannel: true,
+    reachableContact: true,
+    hasOpeningHours: true,
+    hasPhotos: true,
+    isOperational: true,
+  };
+  const score = scoreProspect(strong, DEFAULT_SCORING, DEFAULT_GEOGRAPHY, {
+    meanRating: 4.5,
+    priorCount: 10,
+    noRatingPenalty: 10,
+  });
+  assert.ok(score.total <= 100);
+  assert.ok(score.total >= 0);
 });

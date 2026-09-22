@@ -74,6 +74,12 @@ export const SEARCH_FIELD_MASK = [
   'places.types',
   'places.formattedAddress',
   'places.addressComponents',
+  // Deduplication, not mapping. Costs nothing extra here: the SKU is set by
+  // the dearest field asked for, `location` sits in the Pro tier, and this
+  // mask already asks for `rating` and `userRatingCount`, which are
+  // Enterprise. Adding a Pro field under an Enterprise mask does not move the
+  // tier. Not yet checked against an invoice — see ESTIMATES_VERIFIED.
+  'places.location',
   'places.rating',
   'places.userRatingCount',
   'places.businessStatus',
@@ -460,6 +466,8 @@ export class PlacesProvider
       has_opening_hours: null,
       has_photos: null,
       business_status: asStringField(place.businessStatus),
+      latitude: asNumberField(asRecord(place.location)?.latitude),
+      longitude: asNumberField(asRecord(place.location)?.longitude),
       source: this.key,
       // The place id is the deduplication key, and the only field Google
       // permits being stored indefinitely.

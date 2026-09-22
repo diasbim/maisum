@@ -130,9 +130,15 @@ export function evaluateSpend(request: SpendRequest): SpendDecision {
   const estimatedCostUsd =
     request.estimatedCostUsd ?? OPERATION_COST_USD[request.operation];
 
+  // Strictly above, not "at least". A lead sitting exactly on the threshold
+  // is the case the threshold exists to decide, and a run against Maputo
+  // showed which way it should fall: twenty discovered, every business with
+  // no rating and no reviews scoring exactly the 60 it was being measured
+  // against, and a gate that passed all twenty while reporting that it had
+  // filtered. See `minScoreForEnrichment`.
   if (
     request.leadScore !== null &&
-    request.leadScore < settings.minScoreForEnrichment
+    request.leadScore <= settings.minScoreForEnrichment
   ) {
     return {
       allowed: false,

@@ -1,4 +1,5 @@
 import type { OutreachChannel, ProviderOperation } from './prospecting_contracts.js';
+import { DEFAULT_DEDUP_RADIUS_METRES } from './prospecting_dedup.js';
 
 /**
  * Every number the prospecting module decides with.
@@ -405,8 +406,39 @@ export type ProspectingSettings = {
   monthlyBudgetUsd: number;
   dailyBudgetUsd: number;
   maxEnrichmentCostPerLeadUsd: number;
-  /** A lead below this is never paid for. */
+  /**
+   * A lead that does not clear this is never paid for.
+   *
+   * Strictly: the score must be **above** it, not equal to it. A run against
+   * Maputo found twenty businesses, scored the ones with no rating and no
+   * reviews at exactly 60 against a threshold of 60, and passed all twenty —
+   * a gate that rejects nothing while reporting that it ran. Equality is the
+   * boundary case a threshold exists to decide, and "not enough evidence to
+   * judge" should land outside it.
+   */
   minScoreForEnrichment: number;
+  /**
+   * Points removed from a business the source knows nothing about.
+   *
+   * Not a judgement on the business: a shop with no reviews may be excellent.
+   * It is a judgement on the *lead* — there is nothing to act on, and paying
+   * for its details buys a phone number chosen at random from the city.
+   * Configurable because how much silence to forgive is a market question,
+   * and in a market where most shops carry no reviews this should be lowered
+   * rather than the threshold moved.
+   */
+  noRatingPenalty: number;
+  /**
+   * The prior weight `m` in the Bayesian rating.
+   *
+   * A 5.0 from one review outranking a 4.4 from a hundred-and-seven is the
+   * failure this fixes. Read it as "every business starts with `m` imaginary
+   * reviews at the run's mean", so a rating earns its distance from that mean
+   * in proportion to the evidence behind it.
+   */
+  bayesianPriorCount: number;
+  /** Metres within which two listings of one name are one business. */
+  dedupRadiusMetres: number;
   maxProspectsPerSearch: number;
   /** Provider keys, most preferred first. The fallback chain walks this. */
   providerPriority: readonly string[];
@@ -419,6 +451,14 @@ export const DEFAULT_SETTINGS: ProspectingSettings = {
   dailyBudgetUsd: 5,
   maxEnrichmentCostPerLeadUsd: 0.5,
   minScoreForEnrichment: 60,
+  /**
+   * Ten points. Enough to put a business with no evidence below a threshold
+   * of 60 from the 60 it would otherwise score, and not so much that a single
+   * missing field buries a lead that is fine on everything else.
+   */
+  noRatingPenalty: 10,
+  bayesianPriorCount: 10,
+  dedupRadiusMetres: DEFAULT_DEDUP_RADIUS_METRES,
   maxProspectsPerSearch: 500,
   /**
    * The order the discovery and contact chains are walked.

@@ -179,6 +179,31 @@ function assertCompanySane(company, provider, operation) {
             detail: 'review_count is not a whole number',
         });
     }
+    // A coordinate off its scale is worse than a missing one: the distance test
+    // would still answer, and it would answer "far apart" for two listings of
+    // the same shop. Deduplication would then pay twice and report success.
+    if (company.latitude !== null &&
+        (!Number.isFinite(company.latitude) ||
+            company.latitude < -90 ||
+            company.latitude > 90)) {
+        throw new ProviderError({
+            code: 'INVALID_SCHEMA',
+            provider,
+            operation,
+            detail: 'latitude is not a degree between -90 and 90',
+        });
+    }
+    if (company.longitude !== null &&
+        (!Number.isFinite(company.longitude) ||
+            company.longitude < -180 ||
+            company.longitude > 180)) {
+        throw new ProviderError({
+            code: 'INVALID_SCHEMA',
+            provider,
+            operation,
+            detail: 'longitude is not a degree between -180 and 180',
+        });
+    }
     return company;
 }
 /* ------------------------------------------------------------- titles */

@@ -744,6 +744,8 @@ class FixtureProvider {
             has_opening_hours: fixture.has_opening_hours ?? null,
             has_photos: fixture.has_photos ?? null,
             business_status: fixture.business_status ?? null,
+            latitude: fixture.latitude ?? null,
+            longitude: fixture.longitude ?? null,
             source: this.key,
             source_reference: fixture.provider_org_id,
         }, this.key, 'SEARCH_BUSINESSES');

@@ -14,6 +14,8 @@ function company(overrides = {}) {
         domain: null,
         website: null,
         industry: 'barbershop',
+        latitude: null,
+        longitude: null,
         industry_raw: 'barber_shop',
         employee_count: null,
         city: 'Maputo',

@@ -315,6 +315,12 @@ class ApolloProvider {
             name,
             legal_name: null,
             domain,
+            // Apollo describes companies, not storefronts: it carries a city and a
+            // country but no point on the ground. Null rather than geocoded from
+            // the address — a guessed coordinate would feed the distance test that
+            // decides whether two listings are one business.
+            latitude: null,
+            longitude: null,
             website,
             industry: industryFrom(organization.industry, organization.keywords, name),
             industry_raw: asStringField(organization.industry),

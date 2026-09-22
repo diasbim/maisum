@@ -31,8 +31,16 @@ function spend(overrides = {}) {
     strict_1.default.equal(decision.allowed, false);
     strict_1.default.equal(decision.allowed === false && decision.refusal, 'BELOW_THRESHOLD');
 });
-(0, node_test_1.default)('a lead exactly at the threshold is allowed', () => {
-    strict_1.default.equal(spend({ leadScore: 60 }).allowed, true);
+(0, node_test_1.default)('a lead exactly at the threshold is refused, and one point above passes', () => {
+    // This used to assert the opposite, and a real run showed why it was wrong:
+    // twenty businesses discovered in Maputo, every one with no rating and no
+    // reviews landing on exactly 60 against a threshold of 60, and a gate that
+    // passed all twenty while its own report said it had filtered. Equality is
+    // the case a threshold exists to decide, and it decides against paying.
+    const atThreshold = spend({ leadScore: 60 });
+    strict_1.default.equal(atThreshold.allowed, false);
+    strict_1.default.equal(atThreshold.allowed === false && atThreshold.refusal, 'BELOW_THRESHOLD');
+    strict_1.default.equal(spend({ leadScore: 61 }).allowed, true);
 });
 (0, node_test_1.default)('the threshold refusal wins over an exhausted budget, because it is the real reason', () => {
     // Telling an operator "budget reached" when the lead scored 43 sends them to

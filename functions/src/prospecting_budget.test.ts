@@ -43,8 +43,16 @@ test('a lead below the minimum score is refused before the budget is consulted',
   assert.equal(decision.allowed === false && decision.refusal, 'BELOW_THRESHOLD');
 });
 
-test('a lead exactly at the threshold is allowed', () => {
-  assert.equal(spend({ leadScore: 60 }).allowed, true);
+test('a lead exactly at the threshold is refused, and one point above passes', () => {
+  // This used to assert the opposite, and a real run showed why it was wrong:
+  // twenty businesses discovered in Maputo, every one with no rating and no
+  // reviews landing on exactly 60 against a threshold of 60, and a gate that
+  // passed all twenty while its own report said it had filtered. Equality is
+  // the case a threshold exists to decide, and it decides against paying.
+  const atThreshold = spend({ leadScore: 60 });
+  assert.equal(atThreshold.allowed, false);
+  assert.equal(atThreshold.allowed === false && atThreshold.refusal, 'BELOW_THRESHOLD');
+  assert.equal(spend({ leadScore: 61 }).allowed, true);
 });
 
 test('the threshold refusal wins over an exhausted budget, because it is the real reason', () => {

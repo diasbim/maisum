@@ -335,6 +335,8 @@ function fixtureCompany(orgId: string): CompanyRecord {
     has_opening_hours: fixture.has_opening_hours ?? null,
     has_photos: fixture.has_photos ?? null,
     business_status: fixture.business_status ?? null,
+    latitude: fixture.latitude ?? null,
+    longitude: fixture.longitude ?? null,
     source: 'fixtures',
     source_reference: orgId,
   };

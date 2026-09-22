@@ -205,6 +205,8 @@ function company(overrides: Partial<CompanyRecord> = {}): CompanyRecord {
     domain: null,
     website: null,
     industry: 'barbershop',
+    latitude: null,
+    longitude: null,
     industry_raw: 'Barbearia',
     employee_count: null,
     city: 'Maputo',

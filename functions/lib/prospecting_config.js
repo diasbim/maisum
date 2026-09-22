@@ -5,6 +5,7 @@ exports.findIcpIndustry = findIcpIndustry;
 exports.bandFor = bandFor;
 exports.findSizeBand = findSizeBand;
 exports.resolveProspectingFlags = resolveProspectingFlags;
+const prospecting_dedup_js_1 = require("./prospecting_dedup.js");
 exports.ICP_INDUSTRIES = [
     {
         businessType: 'barbershop',
@@ -254,6 +255,14 @@ exports.DEFAULT_SETTINGS = {
     dailyBudgetUsd: 5,
     maxEnrichmentCostPerLeadUsd: 0.5,
     minScoreForEnrichment: 60,
+    /**
+     * Ten points. Enough to put a business with no evidence below a threshold
+     * of 60 from the 60 it would otherwise score, and not so much that a single
+     * missing field buries a lead that is fine on everything else.
+     */
+    noRatingPenalty: 10,
+    bayesianPriorCount: 10,
+    dedupRadiusMetres: prospecting_dedup_js_1.DEFAULT_DEDUP_RADIUS_METRES,
     maxProspectsPerSearch: 500,
     /**
      * The order the discovery and contact chains are walked.

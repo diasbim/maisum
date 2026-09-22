@@ -1,8 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DISQUALIFY_REASON_LABEL = exports.DISQUALIFY_REASON = exports.SCORE_DIMENSION_LABEL = exports.SCORE_DIMENSION = exports.UNKNOWN_SIGNALS = void 0;
+exports.bayesianRating = bayesianRating;
+exports.meanRatingOf = meanRatingOf;
 exports.isTargetGeography = isTargetGeography;
 exports.scoreProspect = scoreProspect;
+exports.compareForRank = compareForRank;
 exports.qualify = qualify;
 const prospecting_config_js_1 = require("./prospecting_config.js");
 const prospecting_normalization_js_1 = require("./prospecting_normalization.js");
@@ -47,6 +50,35 @@ exports.SCORE_DIMENSION_LABEL = {
     RETENTION_POTENTIAL: 'Potencial de retenção',
     COMMERCIAL_OPPORTUNITY: 'Oportunidade comercial',
 };
+/**
+ * A rating weighted by how much evidence stands behind it.
+ *
+ * `(v/(v+m))·R + (m/(v+m))·C`. A shop with one five-star review sits almost
+ * entirely on the run's mean; one with a hundred and seven sits almost
+ * entirely on its own average. Without this, a single enthusiastic review
+ * outranks a business with a hundred — which is what the Maputo run did, and
+ * it put the better lead outside the paid slots.
+ *
+ * Returns null when there is nothing to weigh, rather than inventing a value;
+ * the penalty is what handles that case, visibly.
+ */
+function bayesianRating(rating, reviewCount, meanRating, priorCount) {
+    if (rating === null)
+        return null;
+    if (meanRating === null || priorCount <= 0)
+        return rating;
+    const v = Math.max(0, reviewCount ?? 0);
+    return (v / (v + priorCount)) * rating + (priorCount / (v + priorCount)) * meanRating;
+}
+/** The mean rating of the listings that carry one. Null when none do. */
+function meanRatingOf(entries) {
+    const rated = entries
+        .map((entry) => entry.rating)
+        .filter((value) => value !== null);
+    if (rated.length === 0)
+        return null;
+    return rated.reduce((sum, value) => sum + value, 0) / rated.length;
+}
 /* ---------------------------------------------------------------- helpers */
 function criterion(input) {
     const known = input.met !== null;
@@ -117,8 +149,10 @@ function isTargetGeography(signals, geography) {
     return false;
 }
 /* ------------------------------------------------------------------ engine */
-function scoreProspect(signals, config, geography) {
+function scoreProspect(signals, config, geography, context = {}) {
     const icp = (0, prospecting_config_js_1.findIcpIndustry)(signals.businessType);
+    const priorCount = context.priorCount ?? 0;
+    const weightedRating = bayesianRating(signals.rating, signals.reviewCount, context.meanRating ?? null, priorCount);
     const fit = config.businessFit;
     const digital = config.digitalPresence;
     const retention = config.retentionPotential;
@@ -173,8 +207,12 @@ function scoreProspect(signals, config, geography) {
             // A rating says the business is worth walking into, which is what makes
             // it worth selling to. Not a judgement about the shop's quality — a
             // filter against listings that are dead or disputed.
-            met: signals.rating === null ? null : signals.rating >= fit.minRating,
-            evidence: signals.rating === null ? null : `${signals.rating.toFixed(1)} / 5`,
+            met: weightedRating === null ? null : weightedRating >= fit.minRating,
+            evidence: signals.rating === null
+                ? null
+                : weightedRating !== null && weightedRating !== signals.rating
+                    ? `${signals.rating.toFixed(1)} / 5 · ponderada ${weightedRating.toFixed(2)}`
+                    : `${signals.rating.toFixed(1)} / 5`,
         }),
     ]);
     const hasWebsite = signals.websiteUrl !== null && signals.websiteUrl.trim() !== '';
@@ -347,10 +385,25 @@ function scoreProspect(signals, config, geography) {
         retentionPotential,
         commercialOpportunity,
     ];
-    const total = dimensions.reduce((sum, entry) => sum + entry.score, 0);
+    const raw = dimensions.reduce((sum, entry) => sum + entry.score, 0);
+    /**
+     * Absent evidence costs points, and is stated as its own number.
+     *
+     * Applied to the total rather than folded into a criterion, because it is
+     * not a criterion: it says "there was nothing here to judge", which is a
+     * statement about the listing and not about the business. Keeping it
+     * separate also keeps the dimension breakdown honest — an operator reading
+     * BUSINESS_FIT sees what the shop scored, and the deduction underneath it.
+     */
+    const evidencePenalty = signals.rating === null || (signals.reviewCount ?? 0) === 0
+        ? (context.noRatingPenalty ?? 0)
+        : 0;
+    const total = Math.max(0, raw - evidencePenalty);
     return {
         total,
         band: (0, prospecting_config_js_1.bandFor)(total, config),
+        bayesianRating: weightedRating,
+        evidencePenalty,
         businessFit: businessFit.score,
         digitalPresence: digitalPresence.score,
         retentionPotential: retentionPotential.score,
@@ -361,6 +414,37 @@ function scoreProspect(signals, config, geography) {
             .filter((entry) => entry.basis === 'UNKNOWN')
             .map((entry) => entry.label),
     };
+}
+/**
+ * The order the paid slots are handed out in.
+ *
+ * Score first, then review count, then rating, then name. Every step exists
+ * because the one before it ties: the Maputo run put nine businesses on 75
+ * and then took the first five *in the order the API happened to return
+ * them*, which is not an order anyone chose and is not stable between runs.
+ * Three of those five were the same shop.
+ *
+ * Name last, ascending, so that two genuinely indistinguishable leads still
+ * come out in the same order twice — a ranking that reshuffles on every run
+ * makes a regression test impossible and makes an operator distrust the list.
+ *
+ * Kept apart from the score on purpose. The score stays on its 0–100 scale
+ * because the bands are stored values and `PRIORITY` means "80 or more" in
+ * data already written; widening the scale to break ties would silently
+ * rewrite what every saved prospect's band means.
+ */
+function compareForRank(left, right) {
+    if (left.score !== right.score)
+        return right.score - left.score;
+    const leftReviews = left.reviewCount ?? -1;
+    const rightReviews = right.reviewCount ?? -1;
+    if (leftReviews !== rightReviews)
+        return rightReviews - leftReviews;
+    const leftRating = left.rating ?? -1;
+    const rightRating = right.rating ?? -1;
+    if (leftRating !== rightRating)
+        return rightRating - leftRating;
+    return left.name.localeCompare(right.name, 'pt');
 }
 /* -------------------------------------------------------------- qualifying */
 /**

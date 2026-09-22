@@ -62,3 +62,6 @@ app.*.map.json
 /functions/.env*
 # ...except the template, which is the only record of what those files hold.
 !/functions/.env.example
+
+# Cache local do arnês de prospeção. Respostas pagas do Places, por place_id.
+functions/scripts/.cache/

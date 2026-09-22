@@ -19,10 +19,11 @@
  * Mozambique.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MATCH_KIND = void 0;
+exports.MATCH_KIND = exports.GENERIC_NAME_TOKENS = void 0;
 exports.normalizeDomain = normalizeDomain;
 exports.normalizePhone = normalizePhone;
 exports.normalizeCompanyName = normalizeCompanyName;
+exports.normalizeMatchName = normalizeMatchName;
 exports.normalizeCity = normalizeCity;
 exports.normalizeSocialUrl = normalizeSocialUrl;
 exports.buildMatchKeys = buildMatchKeys;
@@ -184,6 +185,61 @@ function normalizeCompanyName(raw) {
         }
     }
     return value;
+}
+/**
+ * Words that describe the trade rather than name the business.
+ *
+ * Dropped only when comparing two listings. "Tsemeta Barbershop" and
+ * "Tsemeta Barber Shop" are one business written two ways, and the trade word
+ * is the part that varies.
+ */
+exports.GENERIC_NAME_TOKENS = [
+    'barber',
+    'barbers',
+    'barbershop',
+    'barbearia',
+    'shop',
+    'studio',
+    'salon',
+    'salao',
+    'hair',
+    'cabeleireiro',
+    'spa',
+    'clinic',
+    'clinica',
+];
+/**
+ * A company name folded down to what distinguishes it from its neighbours.
+ *
+ * Built on `normalizeCompanyName`, which already strips accents, punctuation
+ * and legal suffixes — and, as a consequence, already collapses every
+ * apostrophe variant, since `'`, `’`, `´` and `` ` `` are all punctuation to
+ * it. This adds two things.
+ *
+ * NFKD rather than NFD, so compatibility forms fold too: a provider that
+ * returns a ligature or a fullwidth letter should not read as a different
+ * business.
+ *
+ * The trade words go, because they are the part that varies between two
+ * writings of one shop. That makes matching looser, which is why the caller
+ * must also require the two listings to be close together — this string on
+ * its own would merge every unrelated "Barbearia Central" in the city.
+ *
+ * Returns `''` when a name is nothing but trade words. The caller treats that
+ * as "no comparison key" and falls back to the full folded name, because
+ * merging every shop called "Barber Shop" into one lead would be a bug that
+ * silently costs the operator real businesses.
+ */
+function normalizeMatchName(raw) {
+    if (typeof raw !== 'string')
+        return '';
+    const folded = normalizeCompanyName(raw.normalize('NFKD').replace(/\p{M}/gu, ''));
+    if (folded === '')
+        return '';
+    const kept = folded
+        .split(' ')
+        .filter((token) => token !== '' && !exports.GENERIC_NAME_TOKENS.includes(token));
+    return kept.join(' ');
 }
 /** The name key is only distinguishing together with a place. */
 function normalizeCity(raw) {
