@@ -382,3 +382,40 @@ test('a refused call reports no cost', async () => {
   await assert.rejects(() => places.searchBusinesses(CRITERIA));
   assert.equal(places.lastCostUsd, null);
 });
+
+/* ------------------------------------------- a trade is matched by words */
+
+test('a keyword inside a longer word is not a match', () => {
+  // "spa" sits inside "Sparkle" and inside "Espaço", and "Espaço" names a
+  // great many Mozambican businesses. A car wash typed `car_wash` by Places
+  // was coming out as a spa — wrong trade, wrong retention score, stored as
+  // the lead's business type, and silent about all three.
+  assert.equal(industryFromPlace('car_wash', ['car_wash'], 'Sparkle Car Wash'), 'car_wash');
+  assert.equal(industryFromPlace('car_wash', ['car_wash'], 'Espaço Auto Lavagem'), 'car_wash');
+  assert.equal(industryFromPlace('gym', ['gym'], 'Sparta Gym'), 'gym');
+});
+
+test('a real spa is still a spa', () => {
+  assert.equal(industryFromPlace('spa', ['spa'], 'Serenity Spa'), 'spa');
+  assert.equal(industryFromPlace('establishment', ['establishment'], 'Clínica de Estética Maputo'), 'spa');
+});
+
+test('accents do not end a word', () => {
+  // With `\b` as the boundary, "estética" would break at the "é" and the
+  // keyword would never match the name it was written for.
+  assert.equal(
+    industryFromPlace('establishment', ['establishment'], 'Estética Avenida'),
+    'spa',
+  );
+});
+
+test('a multi-word keyword still matches', () => {
+  assert.equal(
+    industryFromPlace('establishment', ['establishment'], 'Lavagem Auto do Zé'),
+    'car_wash',
+  );
+});
+
+test('a trade nobody sells to is still null', () => {
+  assert.equal(industryFromPlace('car_repair', ['car_repair'], 'Oficina do Zé'), null);
+});

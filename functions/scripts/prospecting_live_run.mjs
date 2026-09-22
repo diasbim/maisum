@@ -30,6 +30,7 @@ import {
   DEFAULT_GEOGRAPHY,
   DEFAULT_SCORING,
   DEFAULT_SETTINGS,
+  ICP_INDUSTRIES,
   OPERATION_COST_USD,
 } from '../lib/prospecting_config.js';
 import {
@@ -59,6 +60,28 @@ const flag = (name) => process.argv.includes(`--${name}`);
 
 const CITY = arg('city', 'Maputo');
 const INDUSTRY = arg('industry', 'barbershop');
+
+/**
+ * The trade must be one the ICP table knows.
+ *
+ * An unknown id does not fail: `buildTextQuery` falls back to "negócios em
+ * <cidade>" and Google answers with a sample of whatever is in town. The
+ * operator asked for car washes, is billed the full search price, and gets
+ * twenty unrelated businesses that look like a plausible result. `--industry
+ * carwash` did exactly that — the id is `car_wash`.
+ */
+const KNOWN_INDUSTRIES = ICP_INDUSTRIES.map((entry) => entry.businessType);
+if (!KNOWN_INDUSTRIES.includes(INDUSTRY)) {
+  console.error(`"${INDUSTRY}" não é um setor conhecido. Nada foi chamado.`);
+  console.error('');
+  console.error('Sem isto, a pesquisa vira "negócios em <cidade>" — paga na mesma,');
+  console.error('e devolve o que calhar. Os setores válidos são:');
+  console.error('');
+  for (const entry of ICP_INDUSTRIES) {
+    console.error(`  ${entry.businessType.padEnd(12)} ${entry.label}`);
+  }
+  process.exit(1);
+}
 const PAGE_SIZE = Number(arg('page-size', '20'));
 const MAX_DETAILS = Number(arg('max-details', '5'));
 

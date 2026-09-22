@@ -162,12 +162,43 @@ function industryFromPlace(primaryType, types, name) {
     for (const entry of prospecting_config_js_1.ICP_INDUSTRIES) {
         for (const keyword of entry.keywords) {
             const folded = keyword.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-            if (haystack.includes(folded))
+            if (containsWord(haystack, folded))
                 return entry.businessType;
         }
     }
     return null;
 }
+/**
+ * Whether the keyword appears as a word, not merely as a run of letters.
+ *
+ * `includes` was matching inside words, and the short keywords made that
+ * expensive: "spa" sits inside "Sparkle" and inside "Espaço" — a word that
+ * names a great many Mozambican businesses. A car wash called "Sparkle Car
+ * Wash", typed `car_wash` by Places, was being classified as a spa, and the
+ * ICP is not cosmetic: it drives the retention criteria and is stored as the
+ * lead's trade. The lead came out wrong, scored wrong, and said nothing.
+ *
+ * Boundaries are non-letters rather than `\b`, so accented characters count
+ * as part of a word — with `\b`, "estética" would end a word at the "é".
+ * Multi-word keywords work unchanged, since only the two outer edges are
+ * tested.
+ */
+function containsWord(haystack, keyword) {
+    if (keyword === '')
+        return false;
+    let from = 0;
+    for (;;) {
+        const at = haystack.indexOf(keyword, from);
+        if (at === -1)
+            return false;
+        const before = at === 0 ? '' : haystack[at - 1];
+        const after = haystack[at + keyword.length] ?? '';
+        if (!isWordCharacter(before) && !isWordCharacter(after))
+            return true;
+        from = at + 1;
+    }
+}
+const isWordCharacter = (character) => character !== '' && /[\p{L}\p{N}]/u.test(character);
 /** HTTP status and body, mapped to the code the chain acts on. */
 function statusToCode(status, body) {
     const error = asRecord(asRecord(body)?.error);

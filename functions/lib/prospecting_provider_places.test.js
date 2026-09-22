@@ -291,3 +291,28 @@ function place(overrides = {}) {
     await strict_1.default.rejects(() => places.searchBusinesses(CRITERIA));
     strict_1.default.equal(places.lastCostUsd, null);
 });
+/* ------------------------------------------- a trade is matched by words */
+(0, node_test_1.default)('a keyword inside a longer word is not a match', () => {
+    // "spa" sits inside "Sparkle" and inside "Espaço", and "Espaço" names a
+    // great many Mozambican businesses. A car wash typed `car_wash` by Places
+    // was coming out as a spa — wrong trade, wrong retention score, stored as
+    // the lead's business type, and silent about all three.
+    strict_1.default.equal((0, prospecting_provider_places_js_1.industryFromPlace)('car_wash', ['car_wash'], 'Sparkle Car Wash'), 'car_wash');
+    strict_1.default.equal((0, prospecting_provider_places_js_1.industryFromPlace)('car_wash', ['car_wash'], 'Espaço Auto Lavagem'), 'car_wash');
+    strict_1.default.equal((0, prospecting_provider_places_js_1.industryFromPlace)('gym', ['gym'], 'Sparta Gym'), 'gym');
+});
+(0, node_test_1.default)('a real spa is still a spa', () => {
+    strict_1.default.equal((0, prospecting_provider_places_js_1.industryFromPlace)('spa', ['spa'], 'Serenity Spa'), 'spa');
+    strict_1.default.equal((0, prospecting_provider_places_js_1.industryFromPlace)('establishment', ['establishment'], 'Clínica de Estética Maputo'), 'spa');
+});
+(0, node_test_1.default)('accents do not end a word', () => {
+    // With `\b` as the boundary, "estética" would break at the "é" and the
+    // keyword would never match the name it was written for.
+    strict_1.default.equal((0, prospecting_provider_places_js_1.industryFromPlace)('establishment', ['establishment'], 'Estética Avenida'), 'spa');
+});
+(0, node_test_1.default)('a multi-word keyword still matches', () => {
+    strict_1.default.equal((0, prospecting_provider_places_js_1.industryFromPlace)('establishment', ['establishment'], 'Lavagem Auto do Zé'), 'car_wash');
+});
+(0, node_test_1.default)('a trade nobody sells to is still null', () => {
+    strict_1.default.equal((0, prospecting_provider_places_js_1.industryFromPlace)('car_repair', ['car_repair'], 'Oficina do Zé'), null);
+});
