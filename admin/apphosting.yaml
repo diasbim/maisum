@@ -1,0 +1,65 @@
+# Where the portal lives.
+#
+# Firebase App Hosting, in the same project as everything else it talks to
+# (loyaltyos-fc4dd). The alternative considered was Vercel, and the deciding
+# difference is credentials: on Cloud Run the Admin SDK picks up the service
+# identity through Application Default Credentials — which is what
+# `serverConfig()` in src/lib/env.ts already says it expects — while off-platform
+# it would need FIREBASE_SERVICE_ACCOUNT_JSON, a long-lived private key minted,
+# stored in a third-party secret store, and rotated by hand. Same project also
+# means one IAM boundary, one Secret Manager, and one place to look when
+# something breaks.
+#
+# App Hosting builds and rolls out from the connected GitHub branch, so there is
+# no deploy workflow here. CI still typechecks, tests and builds the portal on
+# every push; that job is what should fail first, before a rollout starts.
+
+runConfig:
+  # The portal is internal tooling plus one public page. It is quiet, and a
+  # cold start on the survey page is cheaper than paying for an idle instance.
+  minInstances: 0
+  maxInstances: 2
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  # Not a secret: Firebase web API keys are public by design and ship inside
+  # the client bundle. It lives in Secret Manager only because it is not in the
+  # repository, and nobody should have to guess which project's key is which.
+  # Needed at BUILD because Next inlines NEXT_PUBLIC_* into the client bundle.
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    secret: portalFirebaseApiKey
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: loyaltyos-fc4dd.firebaseapp.com
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: loyaltyos-fc4dd
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: FIREBASE_PROJECT_ID
+    value: loyaltyos-fc4dd
+    availability:
+      - RUNTIME
+
+  # The Cloud Functions HTTP API. Read per request rather than at build time,
+  # but BUILD is included so a build that accidentally reads it does not fail
+  # in a way that looks like a code error.
+  - variable: ADMIN_API_BASE_URL
+    value: https://us-central1-loyaltyos-fc4dd.cloudfunctions.net/api
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # FIREBASE_SERVICE_ACCOUNT_JSON is deliberately absent. On App Hosting the
+  # Admin SDK uses the service identity; setting a key here would replace a
+  # managed credential with one somebody has to rotate.

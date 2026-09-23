@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../errors/app_error_reporter.dart';
+import '../errors/app_exception.dart';
 
 class FirebaseAuthService {
   FirebaseAuthService(this._auth);
@@ -13,6 +14,30 @@ class FirebaseAuthService {
   User? get currentUser => _auth.currentUser;
   bool get isSignedIn => _auth.currentUser != null;
   String? get uid => _auth.currentUser?.uid;
+
+  /// [currentUser] right after process start can briefly read null even
+  /// though a user is persisted: on native platforms the SDK still has to
+  /// restore its saved sign-in state over a platform channel, and the
+  /// getter answers before that finishes — `authStateChanges()` itself can
+  /// also emit a transient null before the real restored user arrives.
+  /// Session restore has to tell "really signed out" apart from "not
+  /// finished restoring yet", so this waits (briefly, bounded) for the
+  /// first non-null event instead of trusting an immediate `currentUser`
+  /// read or the stream's first emission.
+  Future<User?> waitForCurrentUser({
+    Duration timeout = const Duration(seconds: 3),
+  }) async {
+    final immediate = _auth.currentUser;
+    if (immediate != null) return immediate;
+    try {
+      return await _auth
+          .authStateChanges()
+          .firstWhere((user) => user != null, orElse: () => _auth.currentUser)
+          .timeout(timeout, onTimeout: () => _auth.currentUser);
+    } catch (_) {
+      return _auth.currentUser;
+    }
+  }
 
   Future<void> verifyPhoneNumber({
     required String phoneNumber,
@@ -104,12 +129,26 @@ class FirebaseAuthService {
     }
   }
 
+  // Codes Firebase/Google use when the user simply closes the account
+  // picker or backs out of the consent screen. Never treat these as errors.
+  static const _googleSignInCancelledCodes = {
+    'web-context-cancelled',
+    'cancelled-popup-request',
+    'popup-closed-by-user',
+    'canceled',
+    'user-cancelled',
+  };
+
   Future<UserCredential> signInWithGoogle() async {
     try {
       final provider = GoogleAuthProvider()
         ..setCustomParameters({'prompt': 'select_account'});
-      return _auth.signInWithProvider(provider);
+      return await _auth.signInWithProvider(provider);
     } on FirebaseAuthException catch (e) {
+      if (_googleSignInCancelledCodes.contains(e.code)) {
+        _recordPhoneAuthStage('google_sign_in_cancelled', errorCode: e.code);
+        throw const GoogleSignInCancelledException();
+      }
       AppErrorReporter.report(
         e,
         StackTrace.current,
@@ -168,7 +207,6 @@ class FirebaseAuthService {
         'user-disabled' => 'Conta desativada. Contacte o suporte.',
         'network-request-failed' =>
           'Sem internet. Verifique a ligação e tente novamente.',
-        'web-context-cancelled' => 'Login cancelado.',
         _ => 'Não foi possível autenticar com o Google.',
       };
 

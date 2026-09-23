@@ -26,6 +26,58 @@ void main() {
     );
   });
 
+  /// The retention badges and the status pills pair a foreground with a tinted
+  /// fill. Those pairs were eyeballed once and got it wrong — AppColors.green
+  /// as 12px text on greenLight is 2.9:1 — so every pair the product relies on
+  /// is pinned here instead.
+  test('status pairs used as badge text meet WCAG AA', () {
+    const pairs = <String, (Color, Color)>{
+      'risco: vermelho sobre tinta vermelha': (
+        AppColors.red,
+        AppColors.redLight,
+      ),
+      'atenção: âmbar sobre tinta âmbar': (
+        AppColors.secondaryForeground,
+        AppColors.amberLight,
+      ),
+      'perdido: cinza escuro sobre cinza claro': (AppColors.g800, AppColors.g100),
+      'ativo: verde escuro sobre tinta verde': (
+        AppColors.greenDark,
+        AppColors.greenLight,
+      ),
+      'verde escuro sobre branco': (AppColors.greenDark, AppColors.white),
+      'fiel: azul-marinho sobre creme': (
+        AppColors.primary,
+        AppColors.secondaryLight,
+      ),
+      'botão dourado: azul-marinho sobre dourado': (
+        AppColors.primary,
+        AppColors.secondary,
+      ),
+    };
+
+    for (final entry in pairs.entries) {
+      final (foreground, background) = entry.value;
+      expect(
+        _contrast(foreground, background),
+        greaterThanOrEqualTo(4.5),
+        reason: entry.key,
+      );
+    }
+  });
+
+  /// The pale green is fine as a fill or a large accent, but it must never be
+  /// reached for as body-sized text: that is the mistake greenDark exists to
+  /// prevent, and a regression would be invisible to the eye.
+  test('the pale green would fail as badge text, which is why greenDark exists',
+      () {
+    expect(_contrast(AppColors.green, AppColors.greenLight), lessThan(4.5));
+    expect(
+      _contrast(AppColors.greenDark, AppColors.greenLight),
+      greaterThanOrEqualTo(4.5),
+    );
+  });
+
   testWidgets('light surfaces establish readable semantics in a dark theme',
       (tester) async {
     await tester.pumpWidget(

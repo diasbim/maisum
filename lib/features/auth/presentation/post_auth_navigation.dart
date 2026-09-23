@@ -40,8 +40,7 @@ Future<String> resolvePostAuthRoute(
     final data = doc.data() ?? <String, dynamic>{};
     final draft =
         merchantDraftFromBusinessData(data, fallbackPhone: session.phone);
-    final isComplete = isMerchantOnboardingCompleteDraft(draft) &&
-        _hasRealMerchantName(draft.businessName);
+    final isComplete = isOnboardedBusiness(data, draft);
 
     if (!isComplete) {
       final hasExplicitMerchant = session.merchantId != null &&
@@ -71,6 +70,24 @@ Future<String> resolvePostAuthRoute(
     // Prefer onboarding setup as safe fallback when profile state is unknown.
     return merchantOnboardingStartRoute;
   }
+}
+
+/// Whether this business has actually been through onboarding.
+///
+/// The steps themselves are the first question, and `business_profile_version`
+/// is the second: the onboarding flow writes it, so its presence is a positive
+/// statement that these screens ran to the end.
+///
+/// The name check behind it exists only to catch businesses created before
+/// that flow existed — auto-named and never set up. It must not outrank the
+/// marker, because "Minha Loja" is *also* the name this app suggests, and an
+/// owner who accepted the suggestion finished onboarding, was judged never to
+/// have started, and was returned to the first screen — every time they signed
+/// in, with no way through. A shop is allowed to be called Minha Loja.
+bool isOnboardedBusiness(Map<String, dynamic> data, MerchantDraft draft) {
+  if (!isMerchantOnboardingCompleteDraft(draft)) return false;
+  if (data['business_profile_version'] != null) return true;
+  return _hasRealMerchantName(draft.businessName);
 }
 
 bool _hasRealMerchantName(String? value) {

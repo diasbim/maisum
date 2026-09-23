@@ -4,15 +4,17 @@ import Link from 'next/link';
 import { fetchAuditEvents } from '@/lib/admin-api';
 import {
   ChipFilter,
+  ClearFilters,
   EmptyState,
+  ErrorState,
+  formatDateTime,
+  load,
   PageHeader,
   Pagination,
   Panel,
-  TableSkeleton,
-  formatDateTime,
-  load,
   parseOffset,
   parseSearch,
+  TableSkeleton,
 } from '../ui';
 import { AuditDetails } from './AuditDetails';
 
@@ -52,9 +54,14 @@ async function Events({
     }),
   );
 
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
   if (result.data.items.length === 0) {
-    return <EmptyState message="Nenhum evento corresponde a estes filtros." />;
+    return (
+      <EmptyState
+        action={<ClearFilters href="/admin/audit" />}
+        message="Nenhum evento corresponde a estes filtros."
+      />
+    );
   }
 
   return (
@@ -63,12 +70,12 @@ async function Events({
         <table>
           <thead>
             <tr>
-              <th>Quando</th>
-              <th>Ação</th>
-              <th>Alvo</th>
-              <th>Negócio</th>
-              <th>Autor</th>
-              <th>Detalhe</th>
+              <th scope="col">Quando</th>
+              <th scope="col">Ação</th>
+              <th scope="col">Alvo</th>
+              <th scope="col">Negócio</th>
+              <th scope="col">Autor</th>
+              <th scope="col">Detalhe</th>
             </tr>
           </thead>
           <tbody>
@@ -81,7 +88,7 @@ async function Events({
                 <td>
                   {event.target_type}
                   {event.target_id ? (
-                    <div style={{ color: 'var(--g500)', fontSize: 12 }}>
+                    <div style={{ color: 'var(--g500)', fontSize: '0.75rem' }}>
                       {event.target_id}
                     </div>
                   ) : null}
@@ -100,7 +107,7 @@ async function Events({
                 <td>
                   {event.actor_app_user_id ?? event.actor_role ?? '—'}
                   {event.actor_firebase_uid ? (
-                    <div style={{ color: 'var(--g500)', fontSize: 12 }}>
+                    <div style={{ color: 'var(--g500)', fontSize: '0.75rem' }}>
                       {event.actor_firebase_uid}
                     </div>
                   ) : null}

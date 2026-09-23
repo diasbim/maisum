@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_layout.dart';
 import '../../../../design_system/components/maisum_button.dart';
 import '../../../../design_system/components/maisum_surface.dart';
+import '../../../retention/domain/return_bonus.dart' show ReturnBonusType;
 import '../../domain/customer_models.dart';
 
 String formatCustomerPoints(int points) =>
@@ -20,11 +21,16 @@ class CustomerStatusChip extends StatelessWidget {
     required this.label,
     this.icon,
     this.tone = CustomerStatusTone.neutral,
+    this.semanticLabel,
   });
 
   final String label;
   final IconData? icon;
   final CustomerStatusTone tone;
+
+  /// Overrides the accessibility label when the visible [label] is too
+  /// terse on its own (e.g. a bare number) to make sense to screen readers.
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +57,7 @@ class CustomerStatusChip extends StatelessWidget {
         ),
     };
     return Semantics(
-      label: label,
+      label: semanticLabel ?? label,
       excludeSemantics: true,
       child: Container(
         padding: const EdgeInsets.symmetric(
@@ -688,8 +694,9 @@ class CustomerActivityItem extends StatelessWidget {
           Text(
             '${earned ? '+' : '-'}${formatCustomerPoints(activity.pointsDelta.abs())} pts',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color:
-                      earned ? AppColors.success : AppColors.secondaryForeground,
+                  color: earned
+                      ? AppColors.success
+                      : AppColors.secondaryForeground,
                   fontWeight: FontWeight.w900,
                 ),
           ),
@@ -848,6 +855,9 @@ class CustomerAccountHeader extends StatelessWidget {
             CustomerStatusChip(
               label: '$linkedBusinessCount',
               icon: LucideIcons.store,
+              semanticLabel: linkedBusinessCount == 1
+                  ? '1 negócio associado'
+                  : '$linkedBusinessCount negócios associados',
             ),
           ],
         ),
@@ -1109,6 +1119,131 @@ class CustomerBottomNavigation extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// A Bónus de Regresso the customer is holding, and how long is left on it.
+///
+/// Deliberately has no action: this bonus is applied by the merchant at the
+/// counter, so offering a button here would promise something the app cannot
+/// do. The card's whole job is to be seen, and to say when it runs out.
+class CustomerReturnBonusCard extends StatelessWidget {
+  const CustomerReturnBonusCard({
+    super.key,
+    required this.bonus,
+    this.businessName,
+    this.now,
+  });
+
+  final CustomerReturnBonus bonus;
+  final String? businessName;
+
+  /// Injectable so the countdown can be tested without waiting for a day
+  /// to pass.
+  final DateTime? now;
+
+  @override
+  Widget build(BuildContext context) {
+    final reference = now ?? DateTime.now();
+    final days = bonus.daysUntilExpiry(reference);
+    // Urgency is carried by the words, not only by the colour.
+    final urgent = days <= 2;
+    final remaining = switch (days) {
+      0 => 'Termina hoje',
+      1 => 'Termina amanhã',
+      _ => 'Faltam $days dias',
+    };
+    final value = customerReturnBonusValue(bonus);
+
+    return MaisUmSurface(
+      semanticLabel: '$value. $remaining. '
+          '${businessName == null ? '' : 'Em $businessName. '}'
+          'Peça ao negócio para aplicar na próxima compra.',
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      radius: AppRadius.xl,
+      borderColor: urgent ? AppColors.error : AppColors.success,
+      borderWidth: 1.5,
+      child: ExcludeSemantics(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _CustomerIconTile(
+              icon: LucideIcons.ticketPercent,
+              tone: urgent
+                  ? CustomerStatusTone.error
+                  : CustomerStatusTone.success,
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (businessName != null) ...[
+                    Text(
+                      businessName!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: AppColors.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                  ],
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: AppColors.primaryDarker,
+                          fontWeight: FontWeight.w900,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    'Peça ao negócio para aplicar na próxima compra.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  CustomerStatusChip(
+                    label: remaining,
+                    icon: urgent
+                        ? LucideIcons.clockAlert
+                        : LucideIcons.calendarClock,
+                    tone: urgent
+                        ? CustomerStatusTone.error
+                        : CustomerStatusTone.success,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What the bonus is worth, in the merchant's own terms. The server stores the
+/// type as an English enum, so nothing here prints it raw.
+String customerReturnBonusValue(CustomerReturnBonus bonus) {
+  switch (bonus.type) {
+    case ReturnBonusType.discount:
+      return '${_formatBonusAmount(bonus.value)} MZN de desconto';
+    case ReturnBonusType.extraPoints:
+      return '${formatCustomerPoints(bonus.value.round())} pontos extra';
+    case ReturnBonusType.freeService:
+      return 'Um serviço grátis';
+    default:
+      return 'Bónus de regresso';
+  }
+}
+
+String _formatBonusAmount(double value) {
+  final rounded = value.roundToDouble();
+  final text = value == rounded
+      ? rounded.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
+  return NumberFormat.decimalPattern('pt_PT').format(num.parse(text));
 }
 
 class _CustomerIconTile extends StatelessWidget {

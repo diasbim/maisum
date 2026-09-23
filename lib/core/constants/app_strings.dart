@@ -131,7 +131,7 @@ class AppStrings {
   static const String recompensasInsuficientes = 'Pontos insuficientes';
   static const String notificarWhatsApp = 'Notificar via WhatsApp';
   static const String recompensasTitle = 'Recompensas';
-  static const String novaRecompensa = 'Nova Recompensa';
+  static const String novaRecompensa = 'Nova recompensa';
   static const String semRecompensas = 'Nenhuma recompensa ainda';
   static const String criarRecompensa = 'Criar recompensa';
   static const String nomeRecompensa = 'Nome da recompensa';

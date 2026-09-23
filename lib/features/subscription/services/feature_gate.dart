@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
+
 import '../data/subscription_dao.dart';
 import '../domain/feature_keys.dart';
 import '../domain/plan.dart';
@@ -60,10 +62,21 @@ class GateDecision {
 }
 
 class FeatureGate {
-  FeatureGate(this._dao, this._quotaEngine);
+  FeatureGate(
+    this._dao,
+    this._quotaEngine, {
+    this.debugBypassEnabled = false,
+  });
 
   final SubscriptionDao _dao;
   final UsageQuotaEngine _quotaEngine;
+
+  /// QA-only escape hatch: when true (and only in debug builds), every
+  /// feature check is allowed regardless of plan, entitlement, or quota, so
+  /// testers can exercise paid modules end-to-end. Toggled from the
+  /// Settings screen and never honored outside `kDebugMode`, so a stray
+  /// stored value cannot leak the bypass into a release build.
+  final bool debugBypassEnabled;
 
   Future<GateDecision> check({
     required String featureKey,
@@ -72,6 +85,10 @@ class FeatureGate {
     final now = DateTime.now();
     final state = await _dao.getSubscriptionState();
     final subscriptionStatus = SubscriptionStatus.fromWire(state?.status).code;
+
+    if (kDebugMode && debugBypassEnabled) {
+      return GateDecision.allowed(status: subscriptionStatus);
+    }
 
     final blockedStatus = _blockedBySubscription(state, now);
     if (blockedStatus != null) {

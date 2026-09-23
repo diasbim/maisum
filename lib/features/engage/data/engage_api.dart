@@ -194,6 +194,26 @@ class EngageApi {
     return (data['response_id'] as String?) ?? '';
   }
 
+  /// The link a customer opens to answer [surveyId].
+  ///
+  /// A read, not a write: the token is derived server-side rather than stored,
+  /// so asking twice gives two equally valid links. Passing [customerId] makes
+  /// the answer arrive attributed to that customer instead of anonymous.
+  Future<SurveyLink> getSurveyLink(
+    String surveyId, {
+    String? customerId,
+  }) async {
+    final token = await _requireToken();
+    final response = await _client.get(
+      '/engage/surveys/${Uri.encodeComponent(surveyId)}/link',
+      bearerToken: token,
+      queryParameters: {
+        if (customerId != null && customerId.isNotEmpty) 'customer_id': customerId,
+      },
+    );
+    return SurveyLink.fromJson(_asMap(response.data) ?? {});
+  }
+
   Future<EngageSurveyAnalytics> getSurveyAnalytics() async {
     final token = await _requireToken();
     final response = await _client.get('/engage/analytics', bearerToken: token);

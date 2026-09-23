@@ -8,11 +8,20 @@
           "fileOutput": "android/app/google-services.json"
         }
       },
+      "ios": {
+        "default": {
+          "projectId": "loyaltyos-fc4dd",
+          "appId": "1:517299605672:ios:b34613825197e48ec7329d",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
       "dart": {
         "lib/firebase_options.dart": {
           "projectId": "loyaltyos-fc4dd",
           "configurations": {
-            "android": "1:517299605672:android:392da87b191d830cc7329d"
+            "android": "1:517299605672:android:392da87b191d830cc7329d",
+            "ios": "1:517299605672:ios:b34613825197e48ec7329d"
           }
         }
       }
@@ -21,9 +30,6 @@
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
-  },
-  "dataconnect": {
-    "source": "dataconnect"
   },
   "functions": {
     "source": "functions"

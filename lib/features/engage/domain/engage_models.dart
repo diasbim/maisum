@@ -312,6 +312,30 @@ class EngageDashboardData {
   final int recoveredCustomers;
 }
 
+/// How a survey answer reached the merchant. Stored verbatim on the response,
+/// so the values must stay stable.
+class SurveyChannel {
+  static const String whatsapp = 'whatsapp';
+  static const String sms = 'sms';
+  static const String inApp = 'in-app';
+  static const String manual = 'manual';
+
+  /// Answered by the customer through a link the merchant sent or displayed.
+  ///
+  /// Written only by the server, from the public survey endpoint — which is
+  /// why it is deliberately absent from [values]: that list is what a merchant
+  /// may choose when recording an answer by hand, and nobody transcribing an
+  /// answer at the counter used a link to do it.
+  static const String link = 'link';
+
+  /// The channels a merchant can pick when recording an answer themselves.
+  static const List<String> values = [whatsapp, sms, inApp, manual];
+
+  /// Every channel that can appear on a stored response, including the ones
+  /// only the server writes.
+  static const List<String> all = [whatsapp, sms, inApp, manual, link];
+}
+
 class SurveyQuestionType {
   static const String multipleChoice = 'MULTIPLE_CHOICE';
   static const String yesNo = 'YES_NO';
@@ -482,33 +506,113 @@ class SurveySubmissionInput {
       };
 }
 
+/// How often one answer to a choice question came up.
+class SurveyAnswerTally {
+  const SurveyAnswerTally({required this.label, required this.count});
+
+  final String label;
+  final int count;
+
+  factory SurveyAnswerTally.fromJson(Map<String, dynamic> json) {
+    return SurveyAnswerTally(
+      label: (json['label'] ?? json['answer_text'] ?? '').toString(),
+      count: _readInt(json['count'] ?? json['total']),
+    );
+  }
+}
+
+/// How many people gave each score on the 1–5 scale.
+class SurveyRatingTally {
+  const SurveyRatingTally({required this.score, required this.count});
+
+  final int score;
+  final int count;
+
+  factory SurveyRatingTally.fromJson(Map<String, dynamic> json) {
+    return SurveyRatingTally(
+      score: _readInt(json['score']),
+      count: _readInt(json['count'] ?? json['total']),
+    );
+  }
+}
+
 class EngageSurveyAnalytics {
   const EngageSurveyAnalytics({
-    required this.responseRate,
+    required this.responsesPerSurvey,
     required this.customerSatisfaction,
     required this.responsesTotal,
-    required this.topChurnReasons,
-    required this.topRecoveryIncentives,
-    required this.staffRatings,
+    required this.ratedResponses,
+    required this.topAnswers,
+    required this.ratingBreakdown,
   });
 
-  final double responseRate;
+  /// Responses collected for each active survey. Deliberately *not* a
+  /// percentage: nothing records how many customers were asked, so the old
+  /// "taxa de resposta" could print 500% off five answers to one survey.
+  final double responsesPerSurvey;
+
+  /// Mean of the 1–5 ratings only — never an average over every numeric answer.
   final double customerSatisfaction;
   final int responsesTotal;
-  final List<String> topChurnReasons;
-  final List<String> topRecoveryIncentives;
-  final List<String> staffRatings;
+
+  /// How many ratings [customerSatisfaction] is built on. An average of one
+  /// answer must not be presented with the same confidence as an average of 50.
+  final int ratedResponses;
+
+  /// Most frequent answers to choice questions, commonest first. Free text is
+  /// excluded: every free-text answer is unique, so counting it says nothing.
+  final List<SurveyAnswerTally> topAnswers;
+  final List<SurveyRatingTally> ratingBreakdown;
+
+  static const empty = EngageSurveyAnalytics(
+    responsesPerSurvey: 0,
+    customerSatisfaction: 0,
+    responsesTotal: 0,
+    ratedResponses: 0,
+    topAnswers: [],
+    ratingBreakdown: [],
+  );
 
   factory EngageSurveyAnalytics.fromJson(Map<String, dynamic> json) {
     return EngageSurveyAnalytics(
-      responseRate: _readDouble(json['response_rate']),
+      responsesPerSurvey: _readDouble(
+        json['responses_per_survey'] ?? json['response_rate'],
+      ),
       customerSatisfaction: _readDouble(json['customer_satisfaction']),
       responsesTotal: _readInt(json['responses_total']),
-      topChurnReasons: _readStringList(json['top_churn_reasons']),
-      topRecoveryIncentives: _readStringList(json['top_recovery_incentives']),
-      staffRatings: _readStringList(json['staff_ratings']),
+      ratedResponses: _readInt(json['rated_responses']),
+      // `top_churn_reasons` is the old shape — a bare list of strings that a
+      // server not yet redeployed may still send. Read it so an updated app
+      // against an old backend shows the answers, just without the counts.
+      topAnswers: _readTallyList(json['top_answers']) ??
+          _readStringList(json['top_churn_reasons'])
+              .map((label) => SurveyAnswerTally(label: label, count: 0))
+              .toList(),
+      ratingBreakdown: (json['rating_breakdown'] is List)
+          ? (json['rating_breakdown'] as List)
+              .whereType<Map>()
+              .map(
+                (item) => SurveyRatingTally.fromJson(
+                  item.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .toList()
+          : const [],
     );
   }
+}
+
+List<SurveyAnswerTally>? _readTallyList(Object? value) {
+  if (value is! List) return null;
+  return value
+      .whereType<Map>()
+      .map(
+        (item) => SurveyAnswerTally.fromJson(
+          item.map((key, val) => MapEntry(key.toString(), val)),
+        ),
+      )
+      .where((tally) => tally.label.trim().isNotEmpty)
+      .toList();
 }
 
 class EngageAccess {
@@ -605,4 +709,40 @@ List<String> _readStringList(Object? value) {
         .toList();
   }
   return const [];
+}
+
+/// A link a customer can open to answer a survey.
+///
+/// Minted by the server and never stored: the token carries the business, the
+/// survey and — when it was addressed to someone — the customer, all signed.
+/// [url] is null when the server has no public base URL configured, which is
+/// a state the app says out loud rather than papering over with a guess.
+class SurveyLink {
+  const SurveyLink({
+    required this.token,
+    required this.url,
+    required this.expiresAt,
+    this.surveyTitle,
+  });
+
+  final String token;
+  final String? url;
+  final DateTime expiresAt;
+  final String? surveyTitle;
+
+  bool get isShareable => url != null && url!.isNotEmpty;
+
+  factory SurveyLink.fromJson(Map<String, dynamic> json) {
+    final expires = json['expires_at'];
+    return SurveyLink(
+      token: (json['token'] as String?) ?? '',
+      url: (json['url'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : (json['url'] as String).trim(),
+      expiresAt: expires is num
+          ? DateTime.fromMillisecondsSinceEpoch(expires.toInt())
+          : DateTime.now(),
+      surveyTitle: json['survey_title'] as String?,
+    );
+  }
 }

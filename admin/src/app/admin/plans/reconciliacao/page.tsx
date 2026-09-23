@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 
+import { savePlanFeatureAction } from '@/lib/actions';
 import { fetchPlans, type AdminPlanDto } from '@/lib/admin-api';
 import {
   promisedKeys,
@@ -7,8 +8,10 @@ import {
   type Catalog,
   type DeclaredPlan,
 } from '@/lib/plan-catalog';
+import { ActionForm } from '../../forms';
 import {
   Card,
+  ErrorState,
   PageHeader,
   Panel,
   Skeleton,
@@ -35,6 +38,17 @@ type Row = {
   tone: VerdictTone;
   label: string;
   title: string;
+  /**
+   * Present only when the gap can be closed with one click: the plan already
+   * exists in the database and is only missing this feature key. A promise
+   * whose plan does not exist yet has nothing here — that gap needs a plan
+   * created on `/admin/plans` first, not a feature toggled on one.
+   */
+  fixable?: {
+    planCode: string;
+    planVersion: number;
+    featureKey: string;
+  };
 };
 
 function provisionedKeys(plan: AdminPlanDto | undefined): Set<string> {
@@ -98,6 +112,10 @@ function evaluate(
           title: live
             ? `Prometida mas não provisionada: ${key} não está ativa em ${declared.code}.`
             : `O plano ${declared.code} não existe na base de dados.`,
+          fixable:
+            live && key && live.version != null
+              ? { planCode: declared.code, planVersion: live.version, featureKey: key }
+              : undefined,
         };
       }
 
@@ -113,14 +131,41 @@ function evaluate(
   });
 }
 
+/**
+ * Closes one gap in place: turns the feature on, unlimited, on the plan that
+ * already exists. Nothing here is typed by the operator — every value is
+ * already known from the row it appears on — so the form carries only hidden
+ * fields and a submit button.
+ */
+function ProvisionButton({
+  fixable,
+}: {
+  fixable: { planCode: string; planVersion: number; featureKey: string };
+}) {
+  return (
+    <ActionForm
+      action={savePlanFeatureAction}
+      submitLabel="Provisionar agora"
+      pendingLabel="A provisionar…"
+      variant="btn-outline btn-sm"
+      hint="Ativa sem limite. Pode ajustar o limite depois em Planos."
+    >
+      <input type="hidden" name="plan_code" value={fixable.planCode} />
+      <input type="hidden" name="plan_version" value={fixable.planVersion} />
+      <input type="hidden" name="feature_key" value={fixable.featureKey} />
+      <input type="hidden" name="is_enabled" value="true" />
+    </ActionForm>
+  );
+}
+
 async function Matrix() {
   const [catalogResult, liveResult] = await Promise.all([
     readCatalog(),
     load(fetchPlans),
   ]);
 
-  if (catalogResult.error !== null) return <p className="error">{catalogResult.error}</p>;
-  if (liveResult.error !== null) return <p className="error">{liveResult.error}</p>;
+  if (catalogResult.error !== null) return <ErrorState message={catalogResult.error} />;
+  if (liveResult.error !== null) return <ErrorState message={liveResult.error} />;
 
   const catalog = catalogResult.catalog;
   const live = liveResult.data;
@@ -187,8 +232,9 @@ async function Matrix() {
               <table className="matrix">
                 <thead>
                   <tr>
-                    <th>Promessa pública</th>
-                    <th>Contrapartida</th>
+                    <th scope="col">Promessa pública</th>
+                    <th scope="col">Contrapartida</th>
+                    <th scope="col">Ação</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -201,6 +247,13 @@ async function Matrix() {
                           label={row.label}
                           title={row.title}
                         />
+                      </td>
+                      <td>
+                        {row.fixable ? (
+                          <ProvisionButton fixable={row.fixable} />
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -233,7 +286,7 @@ async function Matrix() {
                 <p style={{ margin: '0 0 10px', fontSize: '0.86rem' }}>
                   {decision.summary}
                 </p>
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.82rem' }}>
+                <ul style={{ margin: 0, paddingLeft: 16, fontSize: '0.82rem' }}>
                   {decision.options.map((option) => (
                     <li key={option}>{option}</li>
                   ))}

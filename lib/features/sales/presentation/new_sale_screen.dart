@@ -15,12 +15,28 @@ import '../../../core/widgets/quick_amount_button.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/errors/app_error_mapper.dart';
 import '../../../design_system/design_system.dart';
+import '../../affiliates/presentation/referred_sale_controller.dart';
+import '../../affiliates/presentation/widgets/referral_code_field.dart';
+import '../../affiliates/providers/affiliate_providers.dart';
 import '../../catalog/domain/merchant_item.dart';
 import '../../customers/domain/customer.dart';
 import '../domain/sale_item.dart';
 import '../widgets/sale_progress_stepper.dart';
 import 'sale_controller.dart';
 import 'sale_success_screen.dart';
+
+/// True only for a customer this business has demonstrably never served.
+///
+/// A referral code buys an acquisition, so it is offered to someone with no
+/// visit, no first visit date and no spend on record. Anything softer than that
+/// puts the question in front of a regular, who then hears an offer the server
+/// refuses — and a cashier who is refused twice stops reading the panel.
+bool isReferralEligibleCustomer(Customer customer) {
+  return customer.totalVisits <= 0 &&
+      customer.firstVisitAt == null &&
+      customer.lastVisitAt == null &&
+      customer.totalSpent <= 0;
+}
 
 class NewSaleArgs {
   const NewSaleArgs({
@@ -57,6 +73,15 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   List<SaleItemInput> _selectedSaleItems = <SaleItemInput>[];
   int? _quickAmount;
   int? _lastAmount;
+  ReferralCodeEntry? _referralEntry;
+  int _saleContextVersion = 0;
+
+  /// Minted once per sale, not once per attempt.
+  ///
+  /// With the device id this is the commit's idempotency key, so a retry after
+  /// a dropped response has to carry the same one: a fresh id would ask the
+  /// server to write a second sale for the same basket.
+  String? _pendingLocalSaleId;
   _SaleInitializationState _initializationState =
       _SaleInitializationState.loading;
 
@@ -228,8 +253,12 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   int get _points => (_amount / _pointsPerMzn).floor();
 
   void _selectCustomer(Customer c) {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     setState(() {
+      _saleContextVersion += 1;
       _selectedCustomer = c;
+      _referralEntry = null;
+      _pendingLocalSaleId = null;
       _showCompletedStepper = false;
       _completedPoints = null;
       _initializationState = _SaleInitializationState.ready;
@@ -237,8 +266,12 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
   }
 
   void _changeCustomer() {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
     setState(() {
+      _saleContextVersion += 1;
       _selectedCustomer = null;
+      _referralEntry = null;
+      _pendingLocalSaleId = null;
       _showCompletedStepper = false;
       _completedPoints = null;
     });
@@ -260,6 +293,190 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
       return;
     }
 
+    final customer = _selectedCustomer;
+    final canUseReferral = customer != null &&
+        ref.read(affiliateFeatureEnabledProvider) &&
+        isReferralEligibleCustomer(customer);
+    final referral = canUseReferral ? _referralEntry : null;
+    final online = ref.read(isOnlineProvider).valueOrNull ?? true;
+    if (referral != null && referral.hasCode && online) {
+      await _confirmReferredSale(referral);
+      return;
+    }
+
+    // Offline, the code is still honoured as far as this device can honour it:
+    // one sale, one queued authoritative operation, and a benefit only when the
+    // cache could price the code. The sale is never split into an ordinary sale
+    // plus a separate referral record — that would be two purchases.
+    if (referral != null && referral.hasCode && !online) {
+      await _confirmOfflineReferredSale(referral);
+      return;
+    }
+
+    await _confirmOrdinarySale();
+  }
+
+  /// The authoritative path.
+  ///
+  /// Every outcome is terminal for this tap: the sale is written and the app
+  /// moves on, or it is refused and the form stays exactly as it was with one
+  /// action that finishes the same sale without the code.
+  Future<void> _confirmReferredSale(ReferralCodeEntry referral) async {
+    final customer = _selectedCustomer!;
+    final localSaleId = _pendingLocalSaleId ??=
+        ref.read(referredSaleControllerProvider.notifier).newLocalSaleId();
+
+    setState(() => _isSubmitting = true);
+    try {
+      final outcome =
+          await ref.read(referredSaleControllerProvider.notifier).commit(
+                customerId: customer.id,
+                customerPhone: customer.phone,
+                grossAmount: _amount,
+                code: referral.code,
+                localSaleId: localSaleId,
+                items: _selectedSaleItems,
+              );
+
+      if (!mounted) return;
+
+      switch (outcome) {
+        case ReferredSaleAccepted(:final result):
+          setState(() {
+            _showCompletedStepper = true;
+            _completedPoints = result.sale.points;
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 1000));
+          if (!mounted) return;
+          context.go('/sale-success', extra: SaleSuccessArgs(result: result));
+        case ReferredSaleRejected(:final message):
+          _offerSaleWithoutCode(message);
+        case ReferredSaleDeviceUnavailable(:final message):
+          _offerSaleWithoutCode(message);
+        case ReferredSaleQueuedOffline():
+          // The online path never queues: it either commits or is refused.
+          break;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final info = AppErrorMapper.describe(e);
+      _offerReferralRetry(info.message, referral);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  /// The offline path.
+  ///
+  /// Terminal for this tap too: the sale is written here and the referral is
+  /// left to the queue. A failure to write locally is the only thing that can
+  /// still send the cashier back to the form.
+  Future<void> _confirmOfflineReferredSale(ReferralCodeEntry referral) async {
+    final customer = _selectedCustomer!;
+    final localSaleId = _pendingLocalSaleId ??=
+        ref.read(referredSaleControllerProvider.notifier).newLocalSaleId();
+
+    setState(() => _isSubmitting = true);
+    try {
+      final outcome =
+          await ref.read(referredSaleControllerProvider.notifier).commitOffline(
+                customerId: customer.id,
+                customerPhone: customer.phone,
+                grossAmount: _amount,
+                code: referral.code,
+                localSaleId: localSaleId,
+                items: _selectedSaleItems,
+              );
+
+      if (!mounted) return;
+
+      switch (outcome) {
+        case ReferredSaleQueuedOffline(:final result, :final benefitApplied):
+          AppFeedback.showMessage(
+            context,
+            message: benefitApplied
+                ? 'Benefício aplicado. Indicação pendente de confirmação.'
+                : 'Código guardado. Sem ligação não foi possível aplicar '
+                    'benefício; a indicação fica pendente de confirmação.',
+          );
+          setState(() {
+            _showCompletedStepper = true;
+            _completedPoints = result.sale.points;
+          });
+          await Future<void>.delayed(const Duration(milliseconds: 1000));
+          if (!mounted) return;
+          context.go('/sale-success', extra: SaleSuccessArgs(result: result));
+        case ReferredSaleDeviceUnavailable(:final message):
+          _offerSaleWithoutCode(message);
+        case ReferredSaleAccepted():
+        case ReferredSaleRejected():
+          break;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final info = AppErrorMapper.describe(e);
+      AppFeedback.showMessage(context, message: info.message, isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
+
+  /// A transport failure may mean the server committed but the response was
+  /// lost. Retrying with the same local id is safe; creating an ordinary sale
+  /// here could duplicate the purchase and its points.
+  void _offerReferralRetry(String message, ReferralCodeEntry referral) {
+    final contextVersion = _saleContextVersion;
+    final customerId = _selectedCustomer?.id;
+    AppFeedback.showMessage(
+      context,
+      message: message,
+      isError: true,
+      action: SnackBarAction(
+        label: 'Tentar novamente',
+        onPressed: () {
+          if (!mounted ||
+              contextVersion != _saleContextVersion ||
+              customerId == null ||
+              _selectedCustomer?.id != customerId) {
+            return;
+          }
+          unawaited(_confirmReferredSale(referral));
+        },
+      ),
+    );
+  }
+
+  /// Keeps the customer, the amount and the items, and offers the one action
+  /// that still finishes this sale.
+  void _offerSaleWithoutCode(String message) {
+    final contextVersion = _saleContextVersion;
+    final customerId = _selectedCustomer?.id;
+    AppFeedback.showMessage(
+      context,
+      message: message,
+      isError: true,
+      action: SnackBarAction(
+        label: 'Concluir sem código',
+        onPressed: () {
+          if (!mounted ||
+              contextVersion != _saleContextVersion ||
+              customerId == null ||
+              _selectedCustomer?.id != customerId) {
+            return;
+          }
+          setState(() => _referralEntry = null);
+          unawaited(_confirmOrdinarySale());
+        },
+      ),
+    );
+  }
+
+  Future<void> _confirmOrdinarySale() async {
+    if (_isSubmitting) return;
     final saleCtrl = ref.read(saleControllerProvider.notifier);
     final customer = _selectedCustomer!;
     setState(() => _isSubmitting = true);
@@ -305,15 +522,22 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
           _SaleItemsSelectionSheet(initialItems: _selectedSaleItems),
     );
     if (!mounted || selected == null) return;
+    _invalidateReferralAction();
     setState(() => _selectedSaleItems = selected);
   }
 
   void _removeSaleItem(String merchantItemId) {
+    _invalidateReferralAction();
     setState(() {
       _selectedSaleItems = _selectedSaleItems
           .where((item) => item.merchantItemId != merchantItemId)
           .toList();
     });
+  }
+
+  void _invalidateReferralAction() {
+    ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar();
+    _saleContextVersion += 1;
   }
 
   @override
@@ -336,6 +560,13 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
         : '$pointsPerBase ${AppStrings.pontosAbrev}';
     final canOpenSelector =
         !isBusy && !isInitializing && !noCustomers && !_isSelectingCustomer;
+    // The invitation is a rollout decision and an eligibility one, in that
+    // order: a business that has not switched affiliates on never sees it, and
+    // a customer who has already been here would only be offered a code the
+    // server would refuse.
+    final showReferralInvite = _selectedCustomer != null &&
+        ref.watch(affiliateFeatureEnabledProvider) &&
+        isReferralEligibleCustomer(_selectedCustomer!);
     final action = _canSubmit
         ? _confirmSale
         : noCustomers
@@ -422,15 +653,18 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                   (amt) => QuickAmountButton(
                                     amount: amt,
                                     selected: _quickAmount == amt,
-                                    onTap: () => setState(() {
-                                      _quickAmount =
-                                          _quickAmount == amt ? null : amt;
-                                      if (_quickAmount != null) {
-                                        _amountCtrl.clear();
-                                      }
-                                      _showCompletedStepper = false;
-                                      _completedPoints = null;
-                                    }),
+                                    onTap: () {
+                                      _invalidateReferralAction();
+                                      setState(() {
+                                        _quickAmount =
+                                            _quickAmount == amt ? null : amt;
+                                        if (_quickAmount != null) {
+                                          _amountCtrl.clear();
+                                        }
+                                        _showCompletedStepper = false;
+                                        _completedPoints = null;
+                                      });
+                                    },
                                   ),
                                 )
                                 .toList()
@@ -442,17 +676,20 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                           amount: _lastAmount!,
                                           label: AppStrings.ultimo,
                                           selected: _quickAmount == _lastAmount,
-                                          onTap: () => setState(() {
-                                            _quickAmount =
-                                                _quickAmount == _lastAmount
-                                                    ? null
-                                                    : _lastAmount;
-                                            if (_quickAmount != null) {
-                                              _amountCtrl.clear();
-                                            }
-                                            _showCompletedStepper = false;
-                                            _completedPoints = null;
-                                          }),
+                                          onTap: () {
+                                            _invalidateReferralAction();
+                                            setState(() {
+                                              _quickAmount =
+                                                  _quickAmount == _lastAmount
+                                                      ? null
+                                                      : _lastAmount;
+                                              if (_quickAmount != null) {
+                                                _amountCtrl.clear();
+                                              }
+                                              _showCompletedStepper = false;
+                                              _completedPoints = null;
+                                            });
+                                          },
                                         ),
                                       ],
                               ),
@@ -490,11 +727,14 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                                     BorderSide(color: AppColors.primary),
                               ),
                             ),
-                            onChanged: (_) => setState(() {
-                              _quickAmount = null;
-                              _showCompletedStepper = false;
-                              _completedPoints = null;
-                            }),
+                            onChanged: (_) {
+                              _invalidateReferralAction();
+                              setState(() {
+                                _quickAmount = null;
+                                _showCompletedStepper = false;
+                                _completedPoints = null;
+                              });
+                            },
                           ),
                           const SizedBox(height: 12),
                           MaisUmButton(
@@ -519,6 +759,22 @@ class _NewSaleScreenState extends ConsumerState<NewSaleScreen> {
                             pointsBaseMzn: pointsBaseMzn,
                             pointsPerBaseLabel: pointsPerBaseLabel,
                           ),
+                          if (showReferralInvite) ...[
+                            const SizedBox(height: 12),
+                            ReferralCodeSection(
+                              key: const Key('referral-code-section'),
+                              customerPhone: _selectedCustomer!.phone,
+                              grossAmount: _amount,
+                              enabled: !isBusy,
+                              customerIsNew: isReferralEligibleCustomer(
+                                _selectedCustomer!,
+                              ),
+                              onChanged: (entry) {
+                                _invalidateReferralAction();
+                                _referralEntry = entry;
+                              },
+                            ),
+                          ],
                         ],
                       ],
                     );
@@ -1255,12 +1511,12 @@ class _PointsPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.star_rounded, size: 14, color: AppColors.green),
+          const Icon(Icons.star_rounded, size: 14, color: AppColors.greenDark),
           const SizedBox(width: 4),
           Text(
             '$points ${AppStrings.pontosAbrev}',
             style: const TextStyle(
-              color: AppColors.green,
+              color: AppColors.greenDark,
               fontWeight: FontWeight.w700,
               fontSize: 12,
             ),
@@ -1332,7 +1588,7 @@ class _SummaryCard extends StatelessWidget {
                       '$points ${AppStrings.pontosAbrev}',
                       style:
                           Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                color: AppColors.green,
+                                color: AppColors.greenDark,
                                 fontWeight: FontWeight.w800,
                               ),
                     ),
@@ -1351,7 +1607,7 @@ class _SummaryCard extends StatelessWidget {
                 child: Text(
                   '$pointsPerBaseLabel ${AppStrings.por} $pointsBaseMzn ${AppStrings.moedaMzn}',
                   style: const TextStyle(
-                    color: AppColors.green,
+                    color: AppColors.greenDark,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
@@ -1400,7 +1656,7 @@ class _SaleCompletionHint extends StatelessWidget {
         children: [
           const Icon(
             Icons.celebration_rounded,
-            color: AppColors.success,
+            color: AppColors.greenDark,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1417,7 +1673,7 @@ class _SaleCompletionHint extends StatelessWidget {
                 Text(
                   '+$points ${AppStrings.pontosAtribuidos}',
                   style: const TextStyle(
-                    color: AppColors.success,
+                    color: AppColors.greenDark,
                     fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),

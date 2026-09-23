@@ -28,6 +28,19 @@ dart run tool/check_plan_catalog.dart
 Open product decisions on plan promises are tracked in the `openDecisions` block
 of `docs/plans.json`. See `docs/landing_page_recommendations.md`.
 
+What the backend provisions is not declared a second time: Cloud Functions
+renders `functions/src/plan_policy.generated.ts` from the app's own
+`lib/features/subscription/domain/{feature_keys,plan,plan_catalog}.dart`. After
+changing a feature key, a plan, or what a plan grants, regenerate it — the file
+is committed because `firebase deploy` uploads only `functions/`:
+
+```bash
+cd functions && npm run codegen
+```
+
+`npm test` re-renders and compares, so forgetting to regenerate fails the suite
+instead of deploying a stale copy.
+
 ## GitHub Pages Deployment
 
 This repository deploys the static landing page from `docs/` to GitHub Pages via GitHub Actions.
@@ -43,6 +56,55 @@ flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 flutter run -d android --dart-define=API_BASE_URL=https://your-api.example.com
 ```
+
+### Running against the local emulators
+
+Without `USE_FIREBASE_EMULATORS` the app reads and writes the real Firebase
+project even when it is running on your machine, so this is the flag that makes
+"run it locally" mean what it sounds like. It is honoured only in debug builds;
+a release build asked for it refuses to start rather than quietly using
+production.
+
+```bash
+firebase emulators:start          # auth 9099, firestore 8085, functions 5099
+
+flutter run -d emulator-5554 \
+  --dart-define=USE_FIREBASE_EMULATORS=true \
+  --dart-define=FIREBASE_EMULATOR_HOST=10.0.2.2 \
+  --dart-define=CLOUD_FUNCTIONS_API_BASE_URL=http://10.0.2.2:5099/loyaltyos-fc4dd/us-central1/api
+```
+
+`10.0.2.2` is how an Android emulator reaches its host; on a physical device
+use `adb reverse tcp:8085 tcp:8085` (and the other two ports) and leave the host
+at its `127.0.0.1` default. Cleartext to those addresses is permitted by
+`android/app/src/debug/res/xml/network_security_config.xml`, which is debug-only
+— release builds still refuse plain HTTP everywhere.
+
+The web target is not configured for Firebase (`firebase_options.dart` has
+Android and iOS only), so `-d chrome` starts but never connects.
+
+### iOS
+
+`firebase.json` and `lib/firebase_options.dart` are configured for the
+`com.tsintsivadigital.maisum` iOS app (`flutterfire configure`), and
+`ios/Runner/Info.plist` declares the NFC and camera usage descriptions the app
+needs. Two things still require a Mac with Xcode, since neither can be done
+safely from the CLI:
+
+1. Run `firebase apps:sdkconfig IOS <iosAppId> > ios/Runner/GoogleService-Info.plist`
+   (or `flutterfire configure`) to fetch the config file — it is gitignored
+   like `android/app/google-services.json`, so every environment provisions
+   its own copy.
+2. In Xcode, drag that file into the `Runner` group with "Copy items if
+   needed" and target membership "Runner" checked. Neither `flutterfire
+   configure` nor any CLI step registers it in `Runner.xcodeproj`'s Copy
+   Bundle Resources phase — until that's done in Xcode, the app will build
+   but `Firebase.initializeApp()` will fail at runtime on iOS.
+
+CI builds the iOS target on every push (`.github/workflows/ci.yml`, `ios`
+job) with a config file written inline, to catch compilation regressions —
+that build does not exercise the Xcode resource-bundling step above, so it
+cannot substitute for the one-time manual setup on a real checkout.
 
 ## Stack
 
@@ -75,6 +137,31 @@ lib/
 
 Each feature follows `domain/` → `data/` → `presentation/` layering.
 
+## MaisUm Afiliados
+
+MaisUm Afiliados adds a referral loop on top of the existing loyalty flow:
+an affiliate shares a code, a customer optionally uses it on a qualifying
+sale, the customer receives the configured benefit, and the affiliate earns a
+separate reward in points when the acquisition qualifies.
+
+- **Management surfaces:** Flutter owner flows (`/affiliates`, detail, code,
+  rewards, metrics), merchant portal pages under `/negocio/afiliados*`, and
+  internal admin pages under `/admin/afiliados*` plus
+  `/admin/merchants/[merchantId]/afiliados`.
+- **Optional sale flow:** a sale without a referral code keeps the normal path.
+  The referral preview is advisory; the authoritative decision happens server
+  side on commit or sync.
+- **Offline semantics:** cached active codes can be previewed offline and queued
+  sales reconcile later. If an offline code is rejected on sync, the recorded
+  sale stays valid, any already-granted local customer benefit stays recorded,
+  and the affiliate simply receives no attribution or reward.
+- **Separate ledgers:** affiliate rewards are **not** written into the customer
+  loyalty ledger. Customer points still come from the normal loyalty entries;
+  affiliate rewards stay in affiliate reward records.
+- **Basic local checks:** run `flutter test` for the app, `npm --prefix functions test`
+  for the Cloud Functions contracts and lifecycle, and `cd admin && npm test`
+  or `npm run build` for the portal.
+
 ## Environment
 
 Pass at build time via `--dart-define`:
@@ -89,18 +176,20 @@ Read in `AppConstants`:
 static const apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:3000');
 ```
 
-### Customer redemption pilot
+### Customer redemption
 
-Keep `CUSTOMER_REDEMPTION_ENABLED=true` behind both allow-lists during a
-controlled pilot:
+`CUSTOMER_REDEMPTION_ENABLED=true` is general availability: redemption is open
+to every customer and merchant. An optional pair of allow-lists exists if a
+controlled rollout is ever needed again:
 
 | Functions environment variable | Description |
 |---|---|
 | `CUSTOMER_REDEMPTION_ALLOWED_UIDS` | Comma-separated Firebase UIDs allowed to redeem |
 | `CUSTOMER_REDEMPTION_ALLOWED_MERCHANT_IDS` | Comma-separated business IDs allowed to validate and consume |
 
-When either allow-list is configured, an identifier that is missing from it is
-denied. Omit both only after the pilot is approved for broad rollout.
+Both are unset in production today, which is what makes redemption available
+to everyone. Configuring either one narrows access: an identifier missing from
+a configured allow-list is denied.
 
 Redemption lifecycle events are emitted to Cloud Logging as structured records
 with `event="customer_redemption_lifecycle"`. They contain operational IDs,
@@ -252,11 +341,12 @@ flutter build ios --release --dart-define=API_BASE_URL=https://api.example.com
 
 ## Database
 
-SQLite schema version 25 is migrated additively. The existing merchant-scoped
+SQLite schema version 31 is migrated additively. The existing merchant-scoped
 `customers` table is the offline BusinessCustomer projection and links to a
 canonical Firestore customer identity. Sales remain offline-first; confirmed
 balances are projected from the server-owned `loyalty_ledger`. Legacy
-`total_points` remains a compatibility projection during rollout.
+`total_points` remains a compatibility projection during rollout. Affiliate
+tables and offline projections are included in v30/v31.
 
 ## Testing
 

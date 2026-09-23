@@ -202,7 +202,8 @@ service cloud.firestore {
         'customer_recommendations',
         'usage_balances',
         'usage_events',
-        'notification_queue'
+        'notification_queue',
+        'return_bonuses'
       ];
     }
 
@@ -317,8 +318,52 @@ service cloud.firestore {
           request.resource.data.updated_at is number);
     }
 
+    // What a referred sale carries, and why a client may not write any of it.
+    //
+    // A referral's benefit, its gross amount and the code behind it are decided
+    // by the commit transaction in the Cloud Functions, which also writes the
+    // attribution, the affiliate's reward and the code's usage count in the
+    // same breath. A till that could set these fields directly could hand
+    // itself a discount and claim an acquisition that never happened, without
+    // any of the other records existing to contradict it.
+    //
+    // `saleClientWritableFields` already excludes them, so this is the same
+    // refusal said out loud: it names the fields, and a future edit that adds
+    // one to the writable list fails here rather than silently opening a door.
+    function saleServerOwnedReferralFields() {
+      return [
+        'gross_amount',
+        'referral_benefit_type',
+        'referral_benefit_value',
+        'referral_benefit_amount',
+        'affiliate_code_id',
+        'affiliate_id',
+        'referral_status',
+        'referral_idempotency_key',
+        'referral_request_hash',
+        // Written only by the offline reconciliation, and for the same reason
+        // as the rest: `referral_offline_benefit_applied` is what stops the
+        // server taking back a discount a customer has already been given, so a
+        // till that could set it could keep any discount it liked.
+        'referral_source',
+        'referral_offline_benefit_applied',
+        'referral_rejection_reason'
+      ];
+    }
+
+    function saleCarriesNoReferralClaim() {
+      return !request.resource.data.keys().hasAny(saleServerOwnedReferralFields());
+    }
+
+    function saleReferralFieldsUnchanged() {
+      return !request.resource.data.diff(resource.data)
+        .affectedKeys()
+        .hasAny(saleServerOwnedReferralFields());
+    }
+
     function saleCreateIsValid(merchantId, docId) {
       return request.resource.data.keys().hasOnly(saleClientWritableFields()) &&
+        saleCarriesNoReferralClaim() &&
         saleMerchantIdMatchesPath(merchantId) &&
         saleIdMatchesPath(docId) &&
         saleHasRequiredShape();
@@ -328,6 +373,7 @@ service cloud.firestore {
       return request.resource.data.diff(resource.data)
         .affectedKeys()
         .hasOnly(saleClientWritableFields()) &&
+        saleReferralFieldsUnchanged() &&
         saleMerchantIdMatchesPath(merchantId) &&
         saleIdMatchesPath(docId) &&
         (!resource.data.keys().hasAny(['merchant_id']) ||
@@ -405,6 +451,71 @@ service cloud.firestore {
         allow read: if canAccessBusiness(merchantId);
         allow write: if false;
       }
+
+      // ── Affiliates ──────────────────────────────────────────────────────
+      //
+      // Every one of these is server-owned. The app and the portal reach them
+      // through the Cloud Functions API, which runs with the Admin SDK and so
+      // bypasses these rules entirely; no client reads or writes here, ever.
+      //
+      // The reason is not tidiness. A code's usageCount, an attribution and a
+      // reward are the record of who earned what — a till that could edit them
+      // could award itself money. And the uniqueness the feature depends on
+      // ("one live attribution per customer") is enforced by a transaction on
+      // the server; a direct client write would step around it.
+      //
+      match /affiliate_merchants/{affiliateId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_codes/{codeId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_attributions/{attributionId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_rewards/{rewardId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_events/{eventId} {
+        allow read, write: if false;
+      }
+
+      // The messages the product sends about a referral: written inside the
+      // sale transaction and delivered afterwards by the outbox worker, which
+      // composes every body from the stored template and reads every number
+      // from the merchant's own records. A client that could write one could
+      // make the product send arbitrary WhatsApp in the business's name, to a
+      // number of its choosing; a client that could read one could harvest
+      // customer and affiliate phone numbers. Neither is ever allowed —
+      // including the retry fields, which a client that could edit them could
+      // use to replay a message indefinitely.
+      match /affiliate_outbox/{outboxId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_fraud_signals/{signalId} {
+        allow read, write: if false;
+      }
+
+      match /affiliate_rate_limits/{bucketId} {
+        allow read, write: if false;
+      }
+    }
+
+    // The global affiliate identity and the code lookup that guarantees one
+    // code per string across every business. Both are server-owned: the lookup
+    // in particular is how a collision is detected inside a transaction, so a
+    // client that could write it could claim another affiliate's code.
+    match /affiliates/{affiliateId} {
+      allow read, write: if false;
+    }
+
+    match /affiliate_code_lookup/{normalizedCode} {
+      allow read, write: if false;
     }
 
     match /customer_identities/{docId} {
@@ -454,6 +565,58 @@ service cloud.firestore {
     match /merchant_onboarding_config/{configId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // ── Prospeção ────────────────────────────────────────────────────────
+    // The acquisition funnel: businesses MaisUm might sell to, before they
+    // are merchants. Written only by the Admin SDK behind the internal-admin
+    // claim, and read only through the `/admin/prospecting/*` API — no client
+    // ever touches these paths.
+    //
+    // Closed to everyone rather than opened to `isAdmin()`, deliberately.
+    // These documents hold contact details of people at businesses that have
+    // not asked to hear from MaisUm, and an admin's browser session is not
+    // the right place to be able to enumerate them. The API is the only door,
+    // and it leaves an audit trail; a Firestore console read would not.
+    //
+    // Spelled out one by one rather than left to the default deny, so the
+    // intent is explicit next to the collections that are readable.
+    match /prospects/{prospectId} {
+      allow read, write: if false;
+
+      match /{collectionId}/{docId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /prospect_companies/{companyId} {
+      allow read, write: if false;
+    }
+
+    // The deduplication keys. Closed for the same reason as the companies:
+    // a normalised phone number is a contact detail.
+    match /prospect_company_lookup/{keyId} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_usage/{usageId} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_spend/{periodKey} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_settings/{configId} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_jobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /prospecting_rate_limits/{bucketId} {
+      allow read, write: if false;
     }
 
     // Deny everything else by default.

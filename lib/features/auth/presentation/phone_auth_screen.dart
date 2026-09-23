@@ -19,6 +19,8 @@ import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/brand_mark.dart';
 import '../../../shared/widgets/keyboard_aware_page.dart';
 import '../../../design_system/components/maisum_button.dart';
+import '../../../design_system/components/google_logo.dart';
+import '../../../design_system/components/eyebrow_badge.dart';
 import '../../../design_system/components/loading_button.dart';
 import '../../../design_system/components/maisum_surface.dart';
 import '../../../design_system/components/maisum_text_field.dart';
@@ -29,8 +31,6 @@ import 'otp_verification_screen.dart';
 import 'post_auth_navigation.dart';
 
 const _defaultCountryDialCode = '+258';
-const _brandNavy = Color(0xFF102A5E);
-const _brandAccent = Color(0xFFF4C542);
 
 class PhoneAuthScreen extends ConsumerStatefulWidget {
   const PhoneAuthScreen({
@@ -268,6 +268,8 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
       final route = await resolvePostAuthRoute(ref.read);
       if (!mounted) return;
       context.go(route);
+    } on GoogleSignInCancelledException {
+      // The user closed the account picker — not an error, nothing to show.
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'auth_google_button');
       if (!mounted) return;
@@ -522,9 +524,12 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                                                 loadingLabel: 'A autenticar...',
                                                 variant: MaisUmButtonVariant
                                                     .outlined,
-                                                leadingIcon:
-                                                    Icons.g_mobiledata_rounded,
+                                                leadingWidget: const GoogleLogo(
+                                                  size: 20,
+                                                ),
                                                 radius: AppRadius.lg,
+                                                backgroundColor:
+                                                    AppColors.white,
                                                 foregroundColor:
                                                     AppColors.onSurface,
                                               ),
@@ -882,7 +887,10 @@ class _WelcomeScreen extends StatelessWidget {
                                   width: contentWidth,
                                   child: Column(
                                     children: [
-                                      const _WelcomeEyebrow(),
+                                      const EyebrowBadge(
+                                        label: 'Feito para pequenos negócios',
+                                        icon: Icons.auto_awesome_rounded,
+                                      ),
                                       SizedBox(height: tight ? 10 : 16),
                                       Text(
                                         'Clientes que voltam.\nNegócios que crescem.',
@@ -983,49 +991,6 @@ class _WelcomeBrand extends StatelessWidget {
               fontSize: 28,
               fontWeight: FontWeight.w900,
               letterSpacing: -0.7,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WelcomeEyebrow extends StatelessWidget {
-  const _WelcomeEyebrow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      decoration: BoxDecoration(
-        color: AppColors.secondary.withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(
-          color: AppColors.secondary.withValues(alpha: 0.28),
-        ),
-      ),
-      child: const Row(
-        children: [
-          Icon(
-            Icons.auto_awesome_rounded,
-            color: AppColors.secondary,
-            size: 16,
-          ),
-          SizedBox(width: AppSpacing.sm),
-          Flexible(
-            child: Text(
-              'Feito para pequenos negócios',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
             ),
           ),
         ],
@@ -1388,8 +1353,8 @@ class _WelcomePrimaryButton extends StatelessWidget {
         trailingIcon: Icons.arrow_forward_rounded,
         height: compact ? 56 : 60,
         radius: AppRadius.lg,
-        backgroundColor: _brandAccent,
-        foregroundColor: _brandNavy,
+        backgroundColor: AppColors.secondary,
+        foregroundColor: AppColors.primaryDarker,
       ),
     );
   }
@@ -1612,7 +1577,7 @@ class _CountryCodePrefix extends StatelessWidget {
                 key: const Key('default_country_code'),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: _brandNavy,
+                  color: AppColors.primaryDarker,
                   letterSpacing: 0.3,
                 ),
               ),

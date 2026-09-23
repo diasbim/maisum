@@ -12,7 +12,7 @@ class ConnectivityCheck {
   static void showNoConnectionSnackBar(BuildContext context) {
     AppFeedback.showMessage(
       context,
-      message: 'Sem conexão à internet. Verifique a sua ligação.',
+      message: 'Sem ligação à internet. Verifique e tente de novo.',
       isError: true,
     );
   }

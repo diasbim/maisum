@@ -7,6 +7,7 @@ import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../design_system/design_system.dart';
 import '../../../app/providers.dart';
+import '../../affiliates/domain/referral_validation.dart';
 import '../domain/sale.dart';
 import 'new_sale_screen.dart';
 import 'sale_cancellation_dialog.dart';
@@ -128,6 +129,28 @@ class _SaleHistoryTile extends ConsumerWidget {
   const _SaleHistoryTile({required this.data});
   final Map<String, dynamic> data;
 
+  /// What to say about a referral that is not yet settled, or was refused.
+  ///
+  /// Returns null for the ordinary case — most sales carry no code and must
+  /// look exactly as they always have.
+  static String? _referralNote(Sale sale, Map<String, dynamic> data) {
+    switch (sale.referralStatus) {
+      case ReferralSaleStatus.pendingSync:
+        return sale.referralBenefitAmount != null
+            ? 'Indicação pendente de confirmação · benefício já aplicado'
+            : 'Indicação pendente de confirmação';
+      case ReferralSaleStatus.rejected:
+        final message = data['referral_status_message'] as String?;
+        return message == null || message.trim().isEmpty
+            ? 'Indicação recusada · benefício mantido'
+            : 'Indicação recusada · $message';
+      case ReferralSaleStatus.pending:
+      case ReferralSaleStatus.attributed:
+      case null:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -191,6 +214,25 @@ class _SaleHistoryTile extends ConsumerWidget {
                     'Motivo: ${sale.cancellationReason}',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: AppColors.error,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                // The one line that says a referral is not settled. A sale with
+                // a code is otherwise indistinguishable from any other, and an
+                // owner reconciling a discount needs to know whether the
+                // affiliate behind it has been credited.
+                if (_referralNote(sale, data) != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    _referralNote(sale, data)!,
+                    key: Key('sale-referral-state-${sale.id}'),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: sale.referralStatus == ReferralSaleStatus.rejected
+                          ? AppColors.error
+                          : AppColors.amber,
+                      fontWeight: FontWeight.w600,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,

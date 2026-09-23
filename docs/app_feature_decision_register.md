@@ -13,6 +13,7 @@ Scope rule:
 
 Covered modules:
 
+- affiliates
 - appointments
 - auth
 - customers
@@ -29,6 +30,90 @@ Covered modules:
 - sync
 
 ## Module Decisions
+
+### Module: affiliates
+
+Feature name: Affiliate management, referral validation, and reward approval
+Problem: Businesses need to acquire new customers through trusted referrers
+without breaking the existing counter flow, offline sales, or loyalty ledger.
+Target user moment: During sale registration and daily owner review.
+
+Hard gate:
+
+- Increase daily sales registrations? Yes
+- Reduce friction? Yes
+- Improve retention? Yes
+- Improve WhatsApp engagement? Yes
+- Improve offline reliability? Yes
+
+Scoring:
+
+- Sales registrations (0-5): 4
+- Friction reduction (0-5): 4
+- Retention (0-5): 4
+- WhatsApp engagement (0-5): 3
+- Offline reliability (0-5): 4
+
+Weighted total:
+
+- Sales: (4/5) x 30 = 24
+- Friction: (4/5) x 25 = 20
+- Retention: (4/5) x 20 = 16
+- WhatsApp: (3/5) x 10 = 6
+- Offline: (4/5) x 15 = 12
+- Total = 78
+
+Evidence level: B
+Delivery risk: Medium
+Enabler override needed? No
+Decision: Build now, behind merchant config rollout
+Simplified MVP version:
+
+- Keep one optional referral-code step inside the existing sale flow.
+- Keep owner-managed affiliate, code, reward, and metrics surfaces; staff read
+  only.
+- Keep Firestore-owned attribution/reward/outbox decisions; do not add payout,
+  login, marketplace, or monetary settlement flows.
+
+Implementation status: Delivered through affiliates phases 1-9.
+Reused architecture:
+
+- Existing sale repository and sync queue.
+- Firestore as authoritative operational store.
+- Retention engine events and affiliate outbox.
+- Admin audit trail and Next.js server actions.
+
+Feature flag / rollout:
+
+- Merchant-scoped rollout gate is `businesses/{merchantId}.affiliate_config.enabled`.
+- `first_sale_reward_points > 0` is required before treating the programme as
+  active.
+- No separate paid entitlement was introduced in this release.
+
+Data authority:
+
+- Firestore is authoritative for affiliates, codes, attributions, rewards,
+  events, and reconciliation.
+- SQLite remains the offline projection/cache on device.
+- PostgreSQL remains compatibility/analytics only and is not part of the sale
+  commit transaction.
+
+Known limits:
+
+- No automatic payout, affiliate login, or marketplace.
+- No configured WhatsApp provider in-repo; the outbox stays
+  `NOT_CONFIGURED`/queued until an adapter is installed, while manual share
+  still works.
+- Reward approval is online-only.
+- The admin global affiliate detail lists linked merchant ids, but not the
+  per-link active/inactive state inline.
+- Uncached offline monetary codes are not retroactively discounted later; if a
+  locally granted offline benefit is later rejected, the sale keeps that
+  recorded benefit and the affiliate receives no reward.
+
+Coverage note: after adding this section, the checker may still report
+pre-existing missing modules outside `affiliates`; the exact remainder is
+tracked in `docs/afiliados/PLAN.md`.
 
 ### Module: appointments
 

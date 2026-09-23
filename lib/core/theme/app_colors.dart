@@ -28,6 +28,8 @@ class AppColors {
 
   // ── Status ────────────────────────────────────────────────────────────────
   static const Color green = Color(0xFF27A26A);
+  // Accessible green text on light surfaces (>= 4.5:1 on white and greenLight)
+  static const Color greenDark = Color(0xFF1B7A4B);
   static const Color greenLight = Color(0xFFE6F7F0);
   static const Color red = Color(0xFFC63110);
   static const Color redLight = Color(0xFFFCEAE6);

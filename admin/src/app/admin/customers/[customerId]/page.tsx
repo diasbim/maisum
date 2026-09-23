@@ -5,10 +5,11 @@ import {
   Badge,
   Card,
   EmptyState,
-  PageHeader,
-  Panel,
+  ErrorState,
   formatDateTime,
   load,
+  PageHeader,
+  Panel,
   parseSearch,
 } from '../../ui';
 
@@ -68,7 +69,7 @@ export default async function CustomerLedgerPage({
 
       <Panel>
         {result.error !== null ? (
-          <p className="error">{result.error}</p>
+          <ErrorState message={result.error} />
         ) : result.data === null || result.data.entries.length === 0 ? (
           <EmptyState message="Sem entradas no livro para este cliente neste negócio." />
         ) : (
@@ -88,9 +89,9 @@ export default async function CustomerLedgerPage({
               <table>
                 <thead>
                   <tr>
-                    <th>Quando</th>
-                    <th>Tipo</th>
-                    <th>Origem</th>
+                    <th scope="col">Quando</th>
+                    <th scope="col">Tipo</th>
+                    <th scope="col">Origem</th>
                     <th style={{ textAlign: 'right' }}>Pontos</th>
                     <th style={{ textAlign: 'right' }}>Saldo</th>
                     <th style={{ textAlign: 'right' }}>Valor</th>

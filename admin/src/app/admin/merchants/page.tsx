@@ -5,15 +5,17 @@ import { fetchMerchants } from '@/lib/admin-api';
 import {
   Badge,
   ChipFilter,
+  ClearFilters,
   EmptyState,
+  ErrorState,
+  formatDateTime,
+  load,
   PageHeader,
   Pagination,
   Panel,
-  TableSkeleton,
-  formatDateTime,
-  load,
   parseOffset,
   parseSearch,
+  TableSkeleton,
 } from '../ui';
 import { MerchantSearch } from './MerchantSearch';
 
@@ -54,15 +56,17 @@ async function MerchantTable({
     }),
   );
 
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
 
   if (result.data.items.length === 0) {
+    const filtered = Boolean(search || status);
     return (
       <EmptyState
+        action={filtered ? <ClearFilters href="/admin/merchants" /> : undefined}
         message={
-          search || status
+          filtered
             ? 'Nenhum negócio corresponde a estes filtros.'
-            : 'Nenhum negócio devolvido pela API.'
+            : 'Ainda não há negócios registados na plataforma.'
         }
       />
     );
@@ -74,12 +78,12 @@ async function MerchantTable({
         <table>
           <thead>
             <tr>
-              <th>Negócio</th>
-              <th>Telefone</th>
-              <th>Plano</th>
-              <th>Subscrição</th>
-              <th>Equipa</th>
-              <th>Atualizado</th>
+              <th scope="col">Negócio</th>
+              <th scope="col">Telefone</th>
+              <th scope="col">Plano</th>
+              <th scope="col">Subscrição</th>
+              <th scope="col">Equipa</th>
+              <th scope="col">Atualizado</th>
             </tr>
           </thead>
           <tbody>
@@ -91,7 +95,7 @@ async function MerchantTable({
                   >
                     {merchant.name || merchant.id}
                   </Link>
-                  <div style={{ color: 'var(--g500)', fontSize: 12 }}>
+                  <div style={{ color: 'var(--g500)', fontSize: '0.75rem' }}>
                     {merchant.id}
                   </div>
                 </td>

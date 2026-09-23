@@ -1,6 +1,14 @@
 import 'server-only';
 
 import type {
+  AdminAffiliateDto,
+  AffiliateCodeDto,
+  AffiliateMetricsDto,
+  AffiliateRewardDto,
+  MerchantAffiliateDto,
+  ReferralAttributionDto,
+} from '@contracts/affiliate_api_contracts';
+import type {
   AdminAuditEventDto,
   AdminCustomerLookupDto,
   AdminDirectoryEntryDto,
@@ -16,9 +24,21 @@ import type {
 } from '@contracts/admin_api_contracts';
 
 import { serverConfig } from './env';
+import {
+  buildListQuery,
+  toMerchantList,
+  type ListQuery,
+  type MerchantList,
+} from './merchant-list';
 import { getAdminSession } from './session';
 
 export type {
+  AdminAffiliateDto,
+  AffiliateCodeDto,
+  AffiliateMetricsDto,
+  AffiliateRewardDto,
+  MerchantAffiliateDto,
+  ReferralAttributionDto,
   AdminAuditEventDto,
   AdminCustomerLookupDto,
   AdminDirectoryEntryDto,
@@ -50,27 +70,24 @@ export type {
  * travelling with the request is theirs.
  */
 
-export class AdminApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly path: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'AdminApiError';
-  }
-
-  /** The caller is signed in but the API rejected the claim. */
-  get isForbidden(): boolean {
-    return this.status === 401 || this.status === 403;
-  }
-}
+/*
+ * The failure type and its wording live in their own module so they can be
+ * tested without pulling this server-only file, and firebase-admin with it,
+ * into a test process. Re-exported here so callers keep one import.
+ */
+export { AdminApiError } from './admin-api-error';
+import { AdminApiError, statusMessage } from './admin-api-error';
 
 type Envelope<T> = {
   success?: boolean;
   message?: string;
+  /** Sent by the affiliate routes beside the message; see `AdminApiError`. */
+  code?: string;
   data?: T;
   paging?: AdminPagingDto;
+  /** The affiliate lists carry both; see `pageResponse` in the Functions. */
+  total?: number;
+  truncated?: boolean;
 };
 
 export type Page<T> = {
@@ -81,14 +98,14 @@ export type Page<T> = {
 async function call<T>(
   path: string,
   init: {
-    method?: 'GET' | 'POST';
+    method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     params?: Record<string, string | number | undefined>;
     body?: unknown;
   } = {},
 ): Promise<Envelope<T>> {
   const session = await getAdminSession();
   if (!session) {
-    throw new AdminApiError(401, path, 'Sessao expirada. Entre novamente.');
+    throw new AdminApiError(401, path, 'A sessão expirou. Entre novamente para continuar.');
   }
 
   const config = serverConfig();
@@ -113,10 +130,13 @@ async function call<T>(
       cache: 'no-store',
     });
   } catch {
+    // The base URL is infrastructure, not something an operator can act on, so
+    // it stays in the server log rather than on the screen.
+    console.error(`[admin-api] unreachable: ${config.adminApiBaseUrl}${path}`);
     throw new AdminApiError(
       503,
       path,
-      `Nao foi possivel contactar a API em ${config.adminApiBaseUrl}.`,
+      'A API de administração não respondeu. Verifique a ligação e tente de novo.',
     );
   }
 
@@ -130,15 +150,26 @@ async function call<T>(
   }
 
   if (!response.ok) {
+    console.error(`[admin-api] ${response.status} ${path}`, body?.message);
     throw new AdminApiError(
       response.status,
       path,
-      body?.message ?? `A API respondeu ${response.status} em ${path}.`,
+      body?.message ?? statusMessage(response.status),
+      // Carried so a form can render the refusal against the field it names;
+      // only the affiliate routes send one.
+      typeof body?.code === 'string' && body.code.trim() !== ''
+        ? body.code.trim()
+        : null,
     );
   }
 
   if (body === null) {
-    throw new AdminApiError(502, path, 'A API devolveu JSON invalido.');
+    console.error(`[admin-api] malformed JSON from ${path}`);
+    throw new AdminApiError(
+      502,
+      path,
+      'A API devolveu uma resposta que não foi possível ler. Tente de novo.',
+    );
   }
 
   return body;
@@ -151,7 +182,7 @@ export async function fetchOperationsSummary(): Promise<AdminOperationsSummaryDt
     '/admin/operations/summary',
   );
   if (!body.data) {
-    throw new AdminApiError(502, '/admin/operations/summary', 'Resposta vazia.');
+    throw new AdminApiError(502, '/admin/operations/summary', 'A API não devolveu dados. Tente de novo.');
   }
   return body.data;
 }
@@ -189,6 +220,24 @@ export async function fetchMerchantDetail(
     if (caught instanceof AdminApiError && caught.status === 404) return null;
     throw caught;
   }
+}
+
+/**
+ * Overrides a business's subscription status by hand.
+ *
+ * For what billing cannot cover today: a manual payment confirmed outside the
+ * app, a business paused while a dispute is sorted out, a mistake undone.
+ * `reason` is required by the API and recorded only in the audit trail.
+ */
+export async function setSubscriptionStatus(input: {
+  merchantId: string;
+  status: 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELLED';
+  reason: string;
+}): Promise<void> {
+  await call(
+    `/admin/merchants/${encodeURIComponent(input.merchantId)}/subscription/status`,
+    { method: 'POST', body: { status: input.status, reason: input.reason } },
+  );
 }
 
 export async function fetchAuditEvents(options?: {
@@ -363,6 +412,23 @@ export async function fetchStaff(options?: {
   return { items: body.data ?? [], paging: body.paging ?? null };
 }
 
+/**
+ * Activates or deactivates a staff account, platform-wide for that business.
+ *
+ * The API refuses to deactivate a business's one remaining active owner, so a
+ * failure here can mean that rather than a network or auth problem.
+ */
+export async function setStaffStatus(input: {
+  merchantId: string;
+  userId: string;
+  status: 'ACTIVE' | 'INACTIVE';
+}): Promise<void> {
+  await call(
+    `/admin/merchants/${encodeURIComponent(input.merchantId)}/staff/${encodeURIComponent(input.userId)}/status`,
+    { method: 'POST', body: { status: input.status } },
+  );
+}
+
 export type AdminDirectory = {
   entries: AdminDirectoryEntryDto[];
   /** True when the Auth directory was larger than the scan cap. */
@@ -441,4 +507,217 @@ export async function fetchNfcCards(options: {
     },
   });
   return body.data ?? [];
+}
+
+/**
+ * Revokes an NFC card, platform-wide.
+ *
+ * For a card reported lost or stolen. The card can be relinked afterwards
+ * through the normal flow — a revoked card is free again — but nothing reads
+ * against it in the meantime.
+ */
+export async function revokeNfcCard(input: {
+  cardUid: string;
+}): Promise<void> {
+  await call(`/admin/nfc-cards/${encodeURIComponent(input.cardUid)}/revoke`, {
+    method: 'POST',
+  });
+}
+
+/* --------------------------------------------------------------- afiliados */
+
+/**
+ * The console's side of the referral programme.
+ *
+ * Internal staff govern the identity — one person, one phone, one record
+ * across every business they refer for — and the links to businesses. What
+ * they never get is a reachable number: `AdminAffiliateDto` carries
+ * `phone_masked` and the last four digits, which is enough to recognise
+ * somebody in a support call and not enough to contact them. The business that
+ * added them holds the real number, in `/merchant/affiliates`.
+ *
+ * The merchant-scoped reads below are the same rows a business owner sees, via
+ * `/admin/merchants/:merchantId/*`, so a drilldown does not require borrowing
+ * anyone's session.
+ */
+
+/** The affiliate lists answer with `total` and `truncated` beside `paging`. */
+function toAffiliatePage<T>(body: Envelope<T[]>): MerchantList<T> {
+  return toMerchantList({
+    data: body.data,
+    paging: body.paging,
+    total: body.total,
+    truncated: body.truncated,
+  });
+}
+
+export async function fetchAffiliates(
+  params: ListQuery = {},
+): Promise<MerchantList<AdminAffiliateDto>> {
+  const body = await call<AdminAffiliateDto[]>(
+    `/admin/affiliates${buildListQuery(params)}`,
+  );
+  return toAffiliatePage(body);
+}
+
+export async function fetchAffiliate(
+  affiliateId: string,
+): Promise<AdminAffiliateDto | null> {
+  try {
+    const body = await call<AdminAffiliateDto>(
+      `/admin/affiliates/${encodeURIComponent(affiliateId)}`,
+    );
+    return body.data ?? null;
+  } catch (caught) {
+    if (caught instanceof AdminApiError && caught.status === 404) return null;
+    throw caught;
+  }
+}
+
+/**
+ * Creates the identity with no business attached.
+ *
+ * The id is derived from the phone on the server, so adding somebody who
+ * already exists is a conflict rather than a second record for one person.
+ */
+export async function createAffiliate(input: {
+  name: string;
+  phone: string;
+}): Promise<AdminAffiliateDto | null> {
+  const body = await call<AdminAffiliateDto>('/admin/affiliates', {
+    method: 'POST',
+    body: { name: input.name, phone: input.phone },
+  });
+  return body.data ?? null;
+}
+
+export async function updateAffiliateName(input: {
+  affiliateId: string;
+  name: string;
+}): Promise<void> {
+  await call(`/admin/affiliates/${encodeURIComponent(input.affiliateId)}`, {
+    method: 'PATCH',
+    body: { name: input.name },
+  });
+}
+
+/**
+ * Suspends, reactivates or stands an affiliate down, platform-wide.
+ *
+ * Every one of these is recorded by the API in the audit trail with the state
+ * before and after and the operator's own name, which is the reason the portal
+ * forwards the caller's token rather than holding a credential of its own.
+ */
+export async function setAffiliateStatus(input: {
+  affiliateId: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+}): Promise<void> {
+  await call(
+    `/admin/affiliates/${encodeURIComponent(input.affiliateId)}/status`,
+    { method: 'POST', body: { status: input.status } },
+  );
+}
+
+export async function linkAffiliateToMerchant(input: {
+  affiliateId: string;
+  merchantId: string;
+  benefitType: string;
+  benefitValue: number;
+  usageLimit: number | null;
+  firstVisitOnly: boolean;
+  expiresAt: number;
+}): Promise<void> {
+  await call(
+    `/admin/affiliates/${encodeURIComponent(input.affiliateId)}/merchants/${encodeURIComponent(input.merchantId)}`,
+    {
+      method: 'POST',
+      body: {
+        benefit_type: input.benefitType,
+        benefit_value: input.benefitValue,
+        usage_limit: input.usageLimit,
+        first_visit_only: input.firstVisitOnly,
+        expires_at: input.expiresAt,
+      },
+    },
+  );
+}
+
+/** Detaches without erasing: the link goes inactive and the code is disabled. */
+export async function unlinkAffiliateFromMerchant(input: {
+  affiliateId: string;
+  merchantId: string;
+}): Promise<void> {
+  await call(
+    `/admin/affiliates/${encodeURIComponent(input.affiliateId)}/merchants/${encodeURIComponent(input.merchantId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function fetchMerchantAffiliates(
+  merchantId: string,
+  params: ListQuery = {},
+): Promise<MerchantList<MerchantAffiliateDto>> {
+  const body = await call<MerchantAffiliateDto[]>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/affiliates${buildListQuery(params)}`,
+  );
+  return toAffiliatePage(body);
+}
+
+export async function fetchMerchantAffiliateRewards(
+  merchantId: string,
+  params: ListQuery = {},
+): Promise<MerchantList<AffiliateRewardDto>> {
+  const body = await call<AffiliateRewardDto[]>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/affiliate-rewards${buildListQuery(params)}`,
+  );
+  return toAffiliatePage(body);
+}
+
+/**
+ * The attributions behind the totals.
+ *
+ * Until now the console could show that an affiliate had earned four hundred
+ * points and not which sales earned them. This is the record the metrics are
+ * made of, and it is the screen an operator needs when a merchant disputes one.
+ *
+ * Scoped to one business, like every other affiliate read here — the API has no
+ * cross-merchant list, deliberately.
+ */
+export async function fetchMerchantReferrals(
+  merchantId: string,
+  params: ListQuery = {},
+): Promise<MerchantList<ReferralAttributionDto>> {
+  // `buildListQuery` already serialises `affiliateId` as `affiliate_id`, which
+  // is the name the route reads.
+  const body = await call<ReferralAttributionDto[]>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/referrals${buildListQuery(params)}`,
+  );
+  return toAffiliatePage(body);
+}
+
+export async function fetchMerchantReferral(
+  merchantId: string,
+  attributionId: string,
+): Promise<{
+  attribution: ReferralAttributionDto;
+  rewards: AffiliateRewardDto[];
+} | null> {
+  const body = await call<{
+    attribution: ReferralAttributionDto;
+    rewards: AffiliateRewardDto[];
+  }>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/referrals/${encodeURIComponent(attributionId)}`,
+  );
+  return body.data ?? null;
+}
+
+export async function fetchMerchantAffiliateMetrics(
+  merchantId: string,
+  affiliateId?: string,
+): Promise<AffiliateMetricsDto | null> {
+  const body = await call<AffiliateMetricsDto>(
+    `/admin/merchants/${encodeURIComponent(merchantId)}/affiliate-metrics`,
+    { params: { affiliate_id: affiliateId } },
+  );
+  return body.data ?? null;
 }

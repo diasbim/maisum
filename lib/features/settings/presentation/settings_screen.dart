@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -87,7 +88,7 @@ const _paidSettingsFeatures = [
   _PaidSettingsFeature(
     icon: Icons.favorite_border_rounded,
     iconColor: AppColors.primaryDark,
-    title: 'Retenção inteligente',
+    title: 'Retenção de clientes',
     subtitle: 'Clientes recorrentes e em risco',
     route: '/retention',
     featureKey: FeatureKeys.engageViewRisk,
@@ -105,8 +106,8 @@ const _paidSettingsFeatures = [
   _PaidSettingsFeature(
     icon: Icons.playlist_add_check_circle_outlined,
     iconColor: AppColors.primaryDark,
-    title: 'Recuperação de clientes',
-    subtitle: 'Fila de ações premium',
+    title: 'Fila de recuperação',
+    subtitle: 'Clientes a contactar, por ordem de urgência',
     route: '/engage/actions',
     featureKey: FeatureKeys.engageManageRecovery,
     requiredPlanLabel: 'Business',
@@ -307,6 +308,10 @@ class SettingsScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            if (kDebugMode) ...[
+              const _Section('Modo de testes (debug)'),
+              const _DebugBypassPaidFeatureGateTile(),
+            ],
           ],
           const _Section('Segurança'),
           _SettingsTile(
@@ -504,7 +509,7 @@ class SettingsScreen extends ConsumerWidget {
                           if (selected)
                             const Icon(
                               Icons.check_circle_rounded,
-                              color: AppColors.green,
+                              color: AppColors.greenDark,
                             )
                           else if (plan == Plan.business)
                             MaisUmButton(
@@ -839,6 +844,36 @@ Future<void> _openPaidFeature(
   }
 }
 
+/// Debug-only toggle that flips [debugBypassPaidFeatureGateProvider], which
+/// `FeatureGate.check` reads to allow every paid module regardless of plan,
+/// entitlement, or quota. Lets QA run a full pass over premium features
+/// without needing a live subscription; never rendered outside kDebugMode.
+class _DebugBypassPaidFeatureGateTile extends ConsumerWidget {
+  const _DebugBypassPaidFeatureGateTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bypassState = ref.watch(debugBypassPaidFeatureGateProvider);
+    final enabled = bypassState.valueOrNull ?? false;
+
+    Future<void> toggle(bool value) => ref
+        .read(debugBypassPaidFeatureGateProvider.notifier)
+        .setEnabled(value);
+
+    return _SettingsTile(
+      icon: Icons.science_outlined,
+      iconColor: AppColors.error,
+      title: 'Liberar módulos pagos',
+      subtitle: 'Ignora plano/assinatura para testes (só em debug)',
+      trailing: Switch(
+        value: enabled,
+        onChanged: (value) => toggle(value),
+      ),
+      onTap: () => toggle(!enabled),
+    );
+  }
+}
+
 class _PaidSettingsFeature {
   const _PaidSettingsFeature({
     required this.icon,
@@ -1098,7 +1133,7 @@ class _AccountHeader extends StatelessWidget {
                     _HeaderPill(label: role),
                     _HeaderPill(
                       label: subscriptionStatus,
-                      color: AppColors.green,
+                      color: AppColors.greenDark,
                       backgroundColor: AppColors.greenLight,
                     ),
                   ],

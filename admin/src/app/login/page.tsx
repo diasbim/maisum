@@ -1,38 +1,38 @@
 import { Suspense } from 'react';
 
+import { Wordmark } from '../components/Wordmark';
 import { LoginForm } from './LoginForm';
 
 export const metadata = { title: 'Entrar | Portal MaisUm' };
 
-export default function LoginPage() {
+/**
+ * Rendered on the server, deliberately.
+ *
+ * If the form fell back to a plain submit, JavaScript is not running — so the
+ * explanation cannot come from the client component that also is not running.
+ */
+function SemJavascript() {
+  return (
+    <p className="error" role="alert" style={{ marginBottom: 16 }}>
+      Esta página precisa de JavaScript para entrar. Nada foi enviado. Verifique
+      se o navegador o tem ativo e volte a tentar.
+    </p>
+  );
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const semJavascript = params.erro === 'sem-javascript';
+
   return (
     <main className="auth-shell">
       <div className="auth-card">
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            marginBottom: 18,
-          }}
-        >
-          <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: 'var(--gold)',
-            }}
-          />
-          <span
-            style={{
-              fontFamily: 'var(--font-head), system-ui, sans-serif',
-              fontWeight: 800,
-              color: 'var(--navy)',
-            }}
-          >
-            MaisUm · Operações
-          </span>
+        <div style={{ marginBottom: 16 }}>
+          <Wordmark tone="onLight" area={null} />
         </div>
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: 6 }}>
           Entrar
@@ -44,8 +44,14 @@ export default function LoginPage() {
             fontSize: '0.88rem',
           }}
         >
-          Acesso restrito à equipa interna.
+          Para a equipa interna e para responsáveis de negócio.
         </p>
+        {semJavascript ? <SemJavascript /> : null}
+        <noscript>
+          <p className="error" role="alert" style={{ marginBottom: 16 }}>
+            Esta página precisa de JavaScript para entrar.
+          </p>
+        </noscript>
         <Suspense fallback={null}>
           <LoginForm />
         </Suspense>

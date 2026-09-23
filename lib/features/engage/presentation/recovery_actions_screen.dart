@@ -9,6 +9,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../design_system/components/maisum_app_bar.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
+import '../domain/engage_labels.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -272,8 +273,8 @@ class _TaskTile extends StatelessWidget {
         subtitle: Text(
           [
             if (item.customerPhone.isNotEmpty) item.customerPhone,
-            'Prioridade ${_priorityLabel(item.task.priority)}',
-            'Pendente',
+            'Prioridade ${EngageLabels.taskPriority(item.task.priority)}',
+            EngageLabels.taskStatus(item.task.status),
           ].join(' • '),
         ),
         trailing: Icon(
@@ -330,7 +331,7 @@ class _ActionPanel extends StatelessWidget {
                   .map(
                     (value) => DropdownMenuItem(
                       value: value,
-                      child: Text(_actionLabel(value)),
+                      child: Text(EngageLabels.actionType(value)),
                     ),
                   )
                   .toList(),
@@ -370,16 +371,3 @@ class _ActionPanel extends StatelessWidget {
   }
 }
 
-String _priorityLabel(String priority) => switch (priority) {
-      RecoveryTaskPriority.high => 'alta',
-      RecoveryTaskPriority.low => 'baixa',
-      _ => 'média',
-    };
-
-String _actionLabel(String action) => switch (action) {
-      RecoveryActionType.whatsapp => 'WhatsApp',
-      RecoveryActionType.call => 'Ligação',
-      RecoveryActionType.offer => 'Oferta',
-      RecoveryActionType.visit => 'Visita',
-      _ => action,
-    };

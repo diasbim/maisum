@@ -678,39 +678,74 @@ class EngageDao {
         ? 0
         : ((responsesRows.first['total'] as num?)?.toInt() ?? 0);
 
+    // Scoped to RATING questions by joining the question. Averaging every
+    // numeric answer would fold in any future numeric question type and quietly
+    // corrupt the satisfaction score.
     final ratingRows = await db.rawQuery('''
-      SELECT AVG(sra.answer_numeric) AS avg_rating
+      SELECT AVG(sra.answer_numeric) AS avg_rating, COUNT(*) AS rated
       FROM survey_response_answers sra
-      ${merchantId == null ? '' : 'WHERE sra.merchant_id = ?'}
-      ''', merchantArgs);
+      JOIN survey_questions sq ON sq.id = sra.question_id
+      WHERE sq.question_type = ?
+        AND sra.answer_numeric IS NOT NULL
+        ${merchantId == null ? '' : 'AND sra.merchant_id = ?'}
+      ''', [SurveyQuestionType.rating, ...merchantArgs]);
     final avgRating = ratingRows.isEmpty
         ? 0.0
         : ((ratingRows.first['avg_rating'] as num?)?.toDouble() ?? 0.0);
+    final ratedResponses = ratingRows.isEmpty
+        ? 0
+        : ((ratingRows.first['rated'] as num?)?.toInt() ?? 0);
 
-    final reasonsRows = await db.rawQuery('''
-      SELECT COALESCE(answer_text, '') AS answer_text, COUNT(*) AS c
-      FROM survey_response_answers
-      ${merchantId == null ? '' : 'WHERE merchant_id = ?'}
-      GROUP BY answer_text
-      ORDER BY c DESC
-      LIMIT 3
-      ''', merchantArgs);
+    final breakdownRows = await db.rawQuery('''
+      SELECT CAST(sra.answer_numeric AS INTEGER) AS score, COUNT(*) AS total
+      FROM survey_response_answers sra
+      JOIN survey_questions sq ON sq.id = sra.question_id
+      WHERE sq.question_type = ?
+        AND sra.answer_numeric IS NOT NULL
+        ${merchantId == null ? '' : 'AND sra.merchant_id = ?'}
+      GROUP BY score
+      ORDER BY score
+      ''', [SurveyQuestionType.rating, ...merchantArgs]);
 
-    final responseRate =
-        activeSurveys == 0 ? 0.0 : (responsesTotal / activeSurveys) * 100;
-
-    final topReasons = reasonsRows
-        .map((row) => (row['answer_text'] as String?) ?? '')
-        .where((text) => text.trim().isNotEmpty)
-        .toList();
+    // Only choice questions: their answers come from a fixed option set, so a
+    // frequency count means something. Counting free text would just rank one
+    // customer's sentence above another's.
+    final answerRows = await db.rawQuery('''
+      SELECT sra.answer_text AS label, COUNT(*) AS total
+      FROM survey_response_answers sra
+      JOIN survey_questions sq ON sq.id = sra.question_id
+      WHERE sq.question_type = ?
+        AND sra.answer_text IS NOT NULL
+        AND TRIM(sra.answer_text) <> ''
+        ${merchantId == null ? '' : 'AND sra.merchant_id = ?'}
+      GROUP BY sra.answer_text
+      ORDER BY total DESC, label ASC
+      LIMIT 5
+      ''', [SurveyQuestionType.multipleChoice, ...merchantArgs]);
 
     return EngageSurveyAnalytics(
-      responseRate: responseRate,
+      responsesPerSurvey:
+          activeSurveys == 0 ? 0.0 : responsesTotal / activeSurveys,
       customerSatisfaction: avgRating,
       responsesTotal: responsesTotal,
-      topChurnReasons: topReasons,
-      topRecoveryIncentives: topReasons,
-      staffRatings: topReasons,
+      ratedResponses: ratedResponses,
+      topAnswers: answerRows
+          .map(
+            (row) => SurveyAnswerTally(
+              label: (row['label'] as String?)?.trim() ?? '',
+              count: (row['total'] as num?)?.toInt() ?? 0,
+            ),
+          )
+          .where((tally) => tally.label.isNotEmpty)
+          .toList(),
+      ratingBreakdown: breakdownRows
+          .map(
+            (row) => SurveyRatingTally(
+              score: (row['score'] as num?)?.toInt() ?? 0,
+              count: (row['total'] as num?)?.toInt() ?? 0,
+            ),
+          )
+          .toList(),
     );
   }
 

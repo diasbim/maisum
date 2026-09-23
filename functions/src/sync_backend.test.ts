@@ -226,6 +226,7 @@ test('customer hard-delete checks cover all relevant sync tables', () => {
       'recovery_actions',
       'visit_reports',
       'survey_responses',
+      'return_bonuses',
     ],
   );
   assert.deepEqual(
@@ -242,6 +243,7 @@ test('customer hard-delete checks cover all relevant sync tables', () => {
       'recovery_actions',
       'visit_reports',
       'survey_responses',
+      'return_bonuses',
       'loyalty_ledger',
       'redemption_requests',
     ],

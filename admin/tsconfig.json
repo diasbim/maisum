@@ -37,6 +37,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     "../functions/src/admin_api_contracts.ts",
+    "../functions/src/affiliate_api_contracts.ts",
     "../functions/src/admin_access.ts",
     ".next/dev/types/**/*.ts"
   ],

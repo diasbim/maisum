@@ -1,7 +1,10 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-import { getAdminSession, hasValidNonAdminSession } from '@/lib/session';
-import { AdminNav } from './AdminNav';
+import { resolvePortalHome } from '@/lib/portal-home';
+import { getAdminSession } from '@/lib/session';
+import { Wordmark } from '../components/Wordmark';
+import { AdminNav, MobileNav } from './AdminNav';
 import { SessionRefresher } from './SessionRefresher';
 import { SignOutButton } from './SignOutButton';
 
@@ -18,11 +21,10 @@ export default async function AdminLayout({
 
   if (!session) {
     // A valid sign-in without the admin claim is a different problem from being
-    // signed out, and sending it to /login would loop.
-    if (await hasValidNonAdminSession()) {
-      redirect('/no-access');
-    }
-    redirect('/login');
+    // signed out, and sending it to /login would loop. It is also not always a
+    // dead end: a business owner who lands here has an area of their own, and
+    // `/no-access` would tell them the opposite of the truth.
+    redirect(await resolvePortalHome());
   }
 
   return (
@@ -38,13 +40,23 @@ export default async function AdminLayout({
 
       <header className="topbar">
         <div className="topbar__inner">
+          {/* Only rendered below the shell breakpoint, where the sidebar is
+              not on screen. */}
+          <MobileNav account={session.email ?? session.uid} />
+
           <div className="topbar__logo">
-            <span className="topbar__dot" />
-            MaisUm · Operações
+            <Wordmark tone="onDark" />
           </div>
-          <span style={{ marginLeft: 'auto' }} />
-          <span className="topbar__user">{session.email ?? session.uid}</span>
-          <SignOutButton />
+
+          <div className="topbar__account">
+            {/* The account was previously a dead label. It is the way into the
+                profile now, which is where "what does this login let me do"
+                is answered. */}
+            <Link className="topbar__user" href="/admin/perfil">
+              {session.email ?? session.uid}
+            </Link>
+            <SignOutButton />
+          </div>
         </div>
       </header>
 

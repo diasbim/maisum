@@ -387,12 +387,12 @@ class _RewardTile extends StatelessWidget {
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.circle, color: AppColors.green, size: 8),
+                      Icon(Icons.circle, color: AppColors.greenDark, size: 8),
                       SizedBox(width: 6),
                       Text(
                         AppStrings.recompensaAtiva,
                         style: TextStyle(
-                          color: AppColors.green,
+                          color: AppColors.greenDark,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),

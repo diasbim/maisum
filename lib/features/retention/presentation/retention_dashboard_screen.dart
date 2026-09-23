@@ -11,6 +11,7 @@ import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../design_system/components/maisum_app_bar.dart';
+import '../../../design_system/components/maisum_surface.dart';
 import '../../customers/domain/customer.dart';
 import '../../engage/domain/engage_models.dart';
 import '../../engage/providers/engage_providers.dart';
@@ -23,8 +24,37 @@ import '../services/retention_reminder_service.dart';
 import '../widgets/inactive_customer_card.dart';
 import '../widgets/recurring_customer_card.dart';
 
+/// Who keeps coming back, and who is slipping away.
+///
+/// Job: the merchant opens this to decide who to talk to today. The screen
+/// therefore leads with a plain sentence explaining where the two lists come
+/// from — the feature name alone ("Retenção inteligente") tells a shop owner
+/// nothing — and then splits into the two decisions: reward the loyal ones,
+/// recover the ones going quiet.
 class RetentionDashboardScreen extends ConsumerWidget {
   const RetentionDashboardScreen({super.key});
+
+  Future<void> _recalculate(BuildContext context, WidgetRef ref) async {
+    try {
+      await ref.read(retentionDashboardProvider.notifier).recalculate();
+      if (context.mounted) {
+        AppFeedback.showSuccessToast(
+          context,
+          message: 'Listas atualizadas',
+          subtitle: 'Recalculado com as vendas mais recentes.',
+        );
+      }
+    } catch (error, stackTrace) {
+      AppErrorReporter.report(error, stackTrace, hint: 'retention_recalculate');
+      if (context.mounted) {
+        AppFeedback.showMessage(
+          context,
+          message: 'Não foi possível atualizar. Tente novamente.',
+          isError: true,
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -34,13 +64,16 @@ class RetentionDashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: MaisUmAppBar(
-        title: 'Retenção inteligente',
+        title: 'Retenção de clientes',
         actions: [
           IconButton(
-            onPressed: () =>
-                ref.read(retentionDashboardProvider.notifier).recalculate(),
+            onPressed: () => _recalculate(context, ref),
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Recalcular',
+            tooltip: 'Recalcular listas',
+            constraints: const BoxConstraints(
+              minWidth: AppControlSize.iconButton,
+              minHeight: AppControlSize.iconButton,
+            ),
           ),
         ],
       ),
@@ -64,7 +97,7 @@ class RetentionDashboardScreen extends ConsumerWidget {
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageViewRisk,
-                  featureName: 'Retenção inteligente',
+                  featureName: 'Retenção de clientes',
                   reason: 'plan_restricted',
                 ),
               ),
@@ -85,21 +118,35 @@ class RetentionDashboardScreen extends ConsumerWidget {
             data: (data) => DefaultTabController(
               length: 2,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Padding(
                     padding: EdgeInsets.fromLTRB(
                       AppSpacing.xl,
-                      AppSpacing.sm,
-                      AppSpacing.xl,
                       AppSpacing.md,
+                      AppSpacing.xl,
+                      0,
+                    ),
+                    child: _RetentionIntro(),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.lg,
+                      AppSpacing.xl,
+                      AppSpacing.sm,
                     ),
                     child: TabBar(
-                      indicatorColor: AppColors.secondary,
+                      indicatorColor: AppColors.secondaryDark,
+                      indicatorWeight: 3,
                       labelColor: AppColors.primary,
                       unselectedLabelColor: AppColors.onSurfaceVariant,
+                      labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+                      unselectedLabelStyle:
+                          const TextStyle(fontWeight: FontWeight.w500),
                       tabs: [
-                        Tab(text: 'Recorrentes'),
-                        Tab(text: 'Em risco'),
+                        Tab(text: 'Fiéis · ${data.recurring.length}'),
+                        Tab(text: 'Em risco · ${data.inactive.length}'),
                       ],
                     ),
                   ),
@@ -121,49 +168,78 @@ class RetentionDashboardScreen extends ConsumerWidget {
   }
 }
 
-class _RecurringTab extends StatelessWidget {
+/// Says, in one sentence, where these lists come from. Without it the merchant
+/// has to guess whether the app is showing data it invented or data they fed it.
+class _RetentionIntro extends StatelessWidget {
+  const _RetentionIntro();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return MaisUmSurface(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      radius: AppRadius.card,
+      backgroundColor: AppColors.secondaryLight,
+      borderColor: AppColors.secondary,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.insights_rounded,
+            color: AppColors.secondaryForeground,
+            size: 22,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Quem volta e quem está a desaparecer',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    color: AppColors.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Calculado a partir das vendas que registou. Recompense os '
+                  'fiéis e chame de volta os que estão em risco.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: AppColors.onSurface,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecurringTab extends ConsumerWidget {
   const _RecurringTab({required this.customers});
 
   final List<RecurringCustomerSummary> customers;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (customers.isEmpty) {
       return const EmptyState(
-        title: 'Sem clientes recorrentes',
+        title: 'Ainda ninguém repetiu',
         subtitle:
-            'Assim que houver um padrão de retorno, os clientes aparecerão aqui.',
+            'Assim que um cliente voltar uma segunda vez, aparece aqui com o '
+            'ritmo de visitas dele.',
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 720;
-        const spacing = AppSpacing.md;
-        final cardWidth = isWide
-            ? (constraints.maxWidth - (AppSpacing.xl * 2) - spacing) / 2
-            : constraints.maxWidth - (AppSpacing.xl * 2);
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.xl,
-            AppSpacing.sm,
-            AppSpacing.xl,
-            AppSpacing.xxl,
-          ),
-          child: Wrap(
-            spacing: spacing,
-            runSpacing: spacing,
-            children: [
-              for (final customer in customers)
-                SizedBox(
-                  width: cardWidth,
-                  child: RecurringCustomerCard(customer: customer),
-                ),
-            ],
-          ),
-        );
-      },
+    return _RetentionList(
+      onRefresh: () => ref.read(retentionDashboardProvider.notifier).refresh(),
+      itemCount: customers.length,
+      itemBuilder: (index) => RecurringCustomerCard(customer: customers[index]),
     );
   }
 }
@@ -314,44 +390,73 @@ class _InactiveTabState extends ConsumerState<_InactiveTab> {
   Widget build(BuildContext context) {
     if (widget.customers.isEmpty) {
       return const EmptyState(
-        title: 'Sem clientes em risco',
-        subtitle: 'Bom trabalho. A base está saudável neste momento.',
+        title: 'Ninguém em risco agora',
+        subtitle:
+            'Todos os seus clientes voltaram dentro do prazo esperado. '
+            'Continue a registar vendas para manter esta lista atualizada.',
       );
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 720;
-        const spacing = AppSpacing.md;
-        final cardWidth = isWide
-            ? (constraints.maxWidth - (AppSpacing.xl * 2) - spacing) / 2
-            : constraints.maxWidth - (AppSpacing.xl * 2);
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.xl,
-            AppSpacing.sm,
-            AppSpacing.xl,
-            AppSpacing.xxl,
-          ),
-          child: Wrap(
-            spacing: spacing,
-            runSpacing: spacing,
-            children: [
-              for (final customer in widget.customers)
-                SizedBox(
-                  width: cardWidth,
-                  child: InactiveCustomerCard(
-                    customer: customer,
-                    isSending:
-                        _sendingCustomerIds.contains(customer.customerId),
-                    onSendReminder: () => _sendReminder(customer),
-                  ),
-                ),
-            ],
-          ),
+    return _RetentionList(
+      onRefresh: () => ref.read(retentionDashboardProvider.notifier).refresh(),
+      itemCount: widget.customers.length,
+      itemBuilder: (index) {
+        final customer = widget.customers[index];
+        return InactiveCustomerCard(
+          customer: customer,
+          isSending: _sendingCustomerIds.contains(customer.customerId),
+          onSendReminder: () => _sendReminder(customer),
         );
       },
+    );
+  }
+}
+
+/// Shared layout for both tabs: one column on a phone, two on a tablet, and
+/// pull-to-refresh, which is what a merchant reaches for after a sale.
+class _RetentionList extends StatelessWidget {
+  const _RetentionList({
+    required this.onRefresh,
+    required this.itemCount,
+    required this.itemBuilder,
+  });
+
+  final Future<void> Function() onRefresh;
+  final int itemCount;
+  final Widget Function(int index) itemBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return RefreshIndicator(
+      color: AppColors.secondaryDark,
+      onRefresh: onRefresh,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= AppBreakpoints.tablet + 120;
+          const spacing = AppSpacing.md;
+          final cardWidth = isWide
+              ? (constraints.maxWidth - (AppSpacing.xl * 2) - spacing) / 2
+              : constraints.maxWidth - (AppSpacing.xl * 2);
+
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl,
+              AppSpacing.sm,
+              AppSpacing.xl,
+              AppSpacing.xxl,
+            ),
+            child: Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: [
+                for (var index = 0; index < itemCount; index++)
+                  SizedBox(width: cardWidth, child: itemBuilder(index)),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

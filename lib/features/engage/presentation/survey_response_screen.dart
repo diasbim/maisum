@@ -7,8 +7,11 @@ import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../design_system/components/maisum_app_bar.dart';
+import '../../customers/domain/customer.dart';
+import '../../customers/presentation/widgets/customer_picker_field.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
+import '../domain/engage_labels.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -21,18 +24,16 @@ class SurveyResponseScreen extends ConsumerStatefulWidget {
 }
 
 class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
-  final _customerIdController = TextEditingController();
-  final _channelController = TextEditingController(text: 'manual');
+  Customer? _customer;
+  String _channel = SurveyChannel.manual;
   String? _selectedSurveyId;
   bool _submitting = false;
   final Map<String, dynamic> _answers = <String, dynamic>{};
 
-  @override
-  void dispose() {
-    _customerIdController.dispose();
-    _channelController.dispose();
-    super.dispose();
-  }
+  /// Bumped after every send. The answer fields keep their text in their own
+  /// element state, so clearing [_answers] alone left the previous customer's
+  /// words on screen — and sent them again for the next one.
+  int _formGeneration = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +43,7 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
     return Scaffold(
       backgroundColor: AppColors.offWhite,
       appBar: const MaisUmAppBar(
-        title: 'Enviar questionário',
+        title: 'Registar resposta',
         fallbackLocation: '/engage',
       ),
       body: accessAsync.when(
@@ -62,7 +63,7 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
               onAction: () => context.push(
                 featureUpsellLocation(
                   featureKey: FeatureKeys.engageManageSurveys,
-                  featureName: 'Submeter resposta ao questionário',
+                  featureName: 'Registar resposta',
                   reason: 'plan_restricted',
                 ),
               ),
@@ -117,19 +118,35 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
                     },
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  TextField(
-                    controller: _customerIdController,
-                    decoration: const InputDecoration(
-                      labelText: 'Customer ID (opcional)',
-                    ),
+                  CustomerPickerField(
+                    label: 'Cliente (opcional)',
+                    selected: _customer,
+                    optional: true,
+                    hintText: 'Resposta anónima',
+                    helperText: 'Ligar a resposta a um cliente permite '
+                        'recuperá-lo depois. Sem cliente, a resposta conta '
+                        'apenas para as médias.',
+                    onChanged: (customer) =>
+                        setState(() => _customer = customer),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  TextField(
-                    controller: _channelController,
+                  DropdownButtonFormField<String>(
+                    initialValue: _channel,
                     decoration: const InputDecoration(
-                      labelText: 'Canal',
-                      hintText: 'whatsapp, sms, in-app, manual',
+                      labelText: 'Como recebeu a resposta?',
                     ),
+                    items: SurveyChannel.values
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(EngageLabels.surveyChannel(value)),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() => _channel = value);
+                    },
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   Text(
@@ -193,20 +210,40 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
               setState(() => _answers[question.id] = selected),
         );
       case SurveyQuestionType.rating:
-        final value = _answers[question.id] as double?;
+        // A slider showed "3" before anyone touched it, so a required rating
+        // looked answered and then refused to submit. Five buttons have an
+        // honest empty state and are far easier to hit on a phone.
+        final value = (_answers[question.id] as num?)?.toInt();
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label),
-            Slider(
-              value: value ?? 3,
-              min: 1,
-              max: 5,
-              divisions: 4,
-              label: (value ?? 3).toStringAsFixed(0),
-              onChanged: (selected) =>
-                  setState(() => _answers[question.id] = selected),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                for (var score = 1; score <= 5; score++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.sm),
+                    child: _RatingOption(
+                      score: score,
+                      selected: value == score,
+                      onTap: () => setState(
+                        () => _answers[question.id] = score.toDouble(),
+                      ),
+                    ),
+                  ),
+              ],
             ),
+            if (value == null)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(
+                  '1 é muito mau, 5 é muito bom.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                ),
+              ),
           ],
         );
       case SurveyQuestionType.multipleChoice:
@@ -225,7 +262,12 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
         );
       default:
         return TextFormField(
+          // Keyed on the send generation so a new response starts empty.
+          key: ValueKey('${question.id}-$_formGeneration'),
           initialValue: (_answers[question.id] as String?) ?? '',
+          textCapitalization: TextCapitalization.sentences,
+          maxLines: 3,
+          minLines: 1,
           decoration: InputDecoration(labelText: label),
           onChanged: (value) => _answers[question.id] = value,
         );
@@ -235,14 +277,18 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
   Future<void> _submit(EngageSurvey survey) async {
     if (_submitting) return;
 
-    for (final question in survey.questions) {
+    for (var i = 0; i < survey.questions.length; i++) {
+      final question = survey.questions[i];
       if (!question.isRequired) continue;
       final value = _answers[question.id];
       final emptyString = value is String && value.trim().isEmpty;
       if (value == null || emptyString) {
+        // Name the question: "preencha as obrigatórias" leaves the merchant
+        // hunting through a five-question form for the one they missed.
         AppFeedback.showMessage(
           context,
-          message: 'Preencha as perguntas obrigatorias.',
+          message: 'Falta responder à pergunta ${i + 1}, que é obrigatória.',
+          isError: true,
         );
         return;
       }
@@ -277,12 +323,8 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
           .submitSurveyResponseWithResult(
             SurveySubmissionInput(
               surveyId: survey.id,
-              customerId: _customerIdController.text.trim().isEmpty
-                  ? null
-                  : _customerIdController.text.trim(),
-              channel: _channelController.text.trim().isEmpty
-                  ? 'manual'
-                  : _channelController.text.trim(),
+              customerId: _customer?.id,
+              channel: _channel,
               answers: answers,
             ),
           );
@@ -297,10 +339,14 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
         context,
         message: result.isQueued
             ? 'Resposta guardada para sincronizar'
-            : 'Resposta enviada com sucesso',
+            : 'Resposta registada',
+        subtitle: 'O formulário está pronto para o próximo cliente.',
       );
-      _answers.clear();
-      setState(() {});
+      setState(() {
+        _answers.clear();
+        _customer = null;
+        _formGeneration++;
+      });
     } catch (_) {
       if (!mounted) return;
       AppFeedback.showRetryableError(
@@ -314,5 +360,54 @@ class _SurveyResponseScreenState extends ConsumerState<SurveyResponseScreen> {
         setState(() => _submitting = false);
       }
     }
+  }
+}
+
+/// One point on the 1–5 scale. A real 48pt target, and selection is carried by
+/// the fill, the border and the check — never by colour alone.
+class _RatingOption extends StatelessWidget {
+  const _RatingOption({
+    required this.score,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final int score;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: 'Nota $score de 5',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          width: AppControlSize.iconButton,
+          height: AppControlSize.iconButton,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? AppColors.secondaryLight : AppColors.white,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(
+              color: selected ? AppColors.secondaryDark : AppColors.g300,
+              width: selected ? 2 : 1.2,
+            ),
+          ),
+          child: Text(
+            '$score',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: selected
+                      ? AppColors.primary
+                      : AppColors.onSurfaceVariant,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                ),
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.usageReconcileWeekly = exports.usageBackfillDaily = exports.retentionInactivityScanDaily = exports.retentionDomainEventPostgresProjection = exports.loyaltyLedgerSaleOnSaleWrite = exports.customerCoreCanonicalLinkOnCustomerWrite = exports.api = void 0;
+exports.merchantPolicyBootstrapOnBusinessWrite = exports.usageReconcileWeekly = exports.usageBackfillDaily = exports.retentionInactivityScanDaily = exports.retentionDomainEventPostgresProjection = exports.affiliateRetentionEventOnCreate = exports.affiliateOutboxRetrySweep = exports.prospectingJobSweep = exports.prospectingJobOnCreate = exports.affiliateOutboxOnCreate = exports.loyaltyLedgerSaleOnSaleWrite = exports.customerCoreCanonicalLinkOnCustomerWrite = exports.api = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-admin/firestore");
 const crypto_1 = require("crypto");
@@ -57,10 +57,30 @@ const customer_redemption_observability_js_1 = require("./customer_redemption_ob
 const customer_qr_js_1 = require("./customer_qr.js");
 const customer_nfc_js_1 = require("./customer_nfc.js");
 const cors_origins_js_1 = require("./cors_origins.js");
+const merchant_bootstrap_js_1 = require("./merchant_bootstrap.js");
 const admin_firestore_js_1 = require("./admin_firestore.js");
+const merchant_firestore_js_1 = require("./merchant_firestore.js");
+const merchant_collections_js_1 = require("./merchant_collections.js");
 const admin_audit_js_1 = require("./admin_audit.js");
 const customer_request_auth_js_1 = require("./customer_request_auth.js");
+const affiliate_routes_js_1 = require("./affiliate_routes.js");
+const prospecting_analysis_js_1 = require("./prospecting_analysis.js");
+const prospecting_config_js_1 = require("./prospecting_config.js");
+const prospecting_firestore_js_1 = require("./prospecting_firestore.js");
+const prospecting_llm_js_1 = require("./prospecting_llm.js");
+const prospecting_provider_aisa_js_1 = require("./prospecting_provider_aisa.js");
+const prospecting_provider_apollo_js_1 = require("./prospecting_provider_apollo.js");
+const prospecting_provider_places_js_1 = require("./prospecting_provider_places.js");
+const prospecting_templates_js_1 = require("./prospecting_templates.js");
+const prospecting_provider_fixtures_js_1 = require("./prospecting_provider_fixtures.js");
+const prospecting_routes_js_1 = require("./prospecting_routes.js");
+const prospecting_store_js_1 = require("./prospecting_store.js");
+const affiliate_sale_firestore_js_1 = require("./affiliate_sale_firestore.js");
+const affiliate_outbox_js_1 = require("./affiliate_outbox.js");
+const affiliate_outbox_firestore_js_1 = require("./affiliate_outbox_firestore.js");
+const survey_link_js_1 = require("./survey_link.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
+const retention_engine_js_1 = require("./retention_engine.js");
 const sync_backend_js_1 = require("./sync_backend.js");
 admin.initializeApp();
 const pool = new pg_1.Pool({
@@ -208,6 +228,12 @@ const ENTITY_CONFIG = {
         idField: 'id',
         selectSql: 'id, merchant_id, entity_type, entity_id, deleted_at',
     },
+    return_bonus: {
+        table: 'return_bonuses',
+        orderField: 'updated_at',
+        idField: 'id',
+        selectSql: '*',
+    },
 };
 const OWNER_ONLY_SYNC_ENTITIES = new Set([
     'subscription_state',
@@ -240,9 +266,42 @@ const DEFAULT_LOYALTY_POINTS_PER_MZN = 100;
 const DEFAULT_LOYALTY_CONFIG_VERSION = 1;
 const CUSTOMER_CORE_SECRET_ENV = 'CUSTOMER_IDENTITY_HMAC_SECRET';
 const customerIdentityHmacSecret = (0, params_1.defineSecret)(CUSTOMER_CORE_SECRET_ENV);
+/**
+ * The prospecting module's credentials.
+ *
+ * Declared here so the runtime is handed them through Secret Manager and they
+ * never appear in `.env.<projectId>`, a log line or an error body. The
+ * adapters read them from `process.env` at call time, which is where a
+ * declared secret lands — so a function that forgets to list them below has a
+ * provider that reports itself unconfigured rather than one that half-works.
+ *
+ * Each is optional in the sense that an unset one disables its provider
+ * cleanly: the chain skips it without calling it, and the console says the
+ * integration needs attention.
+ *
+ * `GOOGLE_PLACES_API_KEY` is the one that matters now — it is the only paid
+ * provider the default `providerPriority` reaches, so a deployment without it
+ * discovers nothing at all rather than discovering less.
+ */
+const googlePlacesApiKeySecret = (0, params_1.defineSecret)('GOOGLE_PLACES_API_KEY');
+const apolloApiKeySecret = (0, params_1.defineSecret)('APOLLO_API_KEY');
+const anthropicApiKeySecret = (0, params_1.defineSecret)('ANTHROPIC_API_KEY');
+const aisaApiKeySecret = (0, params_1.defineSecret)('AISA_API_KEY');
+const prospectingSecrets = [
+    googlePlacesApiKeySecret,
+    apolloApiKeySecret,
+    anthropicApiKeySecret,
+    aisaApiKeySecret,
+];
 const CUSTOMER_QR_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CUSTOMER_REDEMPTION_CODE_TTL_MS = 15 * 60 * 1000;
 const MAX_CUSTOMER_ACTIVITY_ENTRIES = 100;
+// A customer only ever holds a handful of live bonuses; the cap is a
+// guardrail against an unbounded read, not a product limit.
+const MAX_CUSTOMER_RETURN_BONUSES = 20;
+// How a survey answer that arrived through a shared link is recorded. Mirrors
+// SurveyChannel.link in engage_models.dart.
+const SURVEY_CHANNEL_LINK = 'link';
 const MOZAMBIQUE_PHONE_PREFIXES = new Set(['82', '83', '84', '85', '86', '87']);
 const CUSTOMER_SERVER_OWNED_FIELDS = [
     'canonical_customer_id',
@@ -304,6 +363,22 @@ const SALE_SERVER_OWNED_FIELDS = [
 ];
 const app = (0, express_1.default)();
 app.use(express_1.default.json({ limit: '1mb' }));
+/**
+ * The only unauthenticated surface, mounted deliberately above the auth
+ * middleware so that Express never reaches it for these paths.
+ *
+ * A customer answering a survey has no account and no token to present. What
+ * stands in for authentication is the signed link itself: `survey_link.ts`
+ * carries the business, the survey and — when the link was sent to someone in
+ * particular — the customer, so nothing here is read from a parameter the
+ * caller controls.
+ *
+ * Nothing else belongs here. `merchant_routes.test.ts` asserts that this is
+ * the only `app.use` above the auth middleware, because a second one added in
+ * a hurry would be an open door nobody would notice.
+ */
+const publicRouter = express_1.default.Router();
+app.use('/public', publicRouter);
 app.use(async (req, res, next) => {
     const allowDev = process.env.ALLOW_DEV_AUTH === 'true';
     const authHeader = req.headers.authorization;
@@ -512,6 +587,61 @@ function auditActorFrom(req) {
         role: req.appUserRole ?? null,
     };
 }
+/**
+ * Overrides a business's subscription status by hand.
+ *
+ * The one write path to `subscription_state` after the business is created —
+ * see `setSubscriptionStatus` for why that has been safe to be true so far.
+ * `reason` is required and lands only in the audit entry: it explains an
+ * operator's decision, and does not belong in a document the business's own
+ * app reads back.
+ */
+adminRouter.post('/merchants/:merchantId/subscription/status', async (req, res) => {
+    const merchantId = isNonEmptyString(req.params.merchantId)
+        ? req.params.merchantId.trim()
+        : null;
+    const payload = req.body ?? {};
+    const status = pickString(payload, 'status')?.trim().toUpperCase();
+    const reason = pickString(payload, 'reason')?.trim();
+    if (!merchantId) {
+        return res
+            .status(400)
+            .json({ success: false, message: 'Missing merchant id' });
+    }
+    if (!status || !admin_firestore_js_1.SUBSCRIPTION_STATUSES.includes(status)) {
+        return res.status(400).json({
+            success: false,
+            message: `Status must be one of ${admin_firestore_js_1.SUBSCRIPTION_STATUSES.join(', ')}.`,
+        });
+    }
+    if (!reason) {
+        return res
+            .status(400)
+            .json({ success: false, message: 'A reason is required.' });
+    }
+    try {
+        const result = await (0, admin_firestore_js_1.setSubscriptionStatus)({
+            merchantId,
+            status: status,
+        });
+        if (!result) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Merchant not found' });
+        }
+        await (0, admin_audit_js_1.recordAuditEvent)(auditActorFrom(req), {
+            action: 'subscription.override',
+            targetType: 'subscription_state',
+            targetId: merchantId,
+            merchantId,
+            details: { reason, before: result.before, after: result.after },
+        });
+        return res.json({ success: true, data: result.after });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'set_subscription_status', error);
+    }
+});
 adminRouter.post('/merchants/:merchantId/entitlements', async (req, res) => {
     const merchantId = isNonEmptyString(req.params.merchantId)
         ? req.params.merchantId.trim()
@@ -773,6 +903,67 @@ adminRouter.get('/access/staff', async (req, res) => {
     }
     catch (error) {
         return respondAdminServerError(res, 'get_access_staff', error);
+    }
+});
+/**
+ * Activates or deactivates a staff account, from the admin console.
+ *
+ * For an account reported compromised, or restoring one deactivated by
+ * mistake. Refuses to deactivate a business's one remaining active owner —
+ * `setStaffStatus` holds that check and the write in one transaction — since
+ * that would leave nobody able to manage the business's own team at all.
+ */
+adminRouter.post('/merchants/:merchantId/staff/:userId/status', async (req, res) => {
+    const merchantId = isNonEmptyString(req.params.merchantId)
+        ? req.params.merchantId.trim()
+        : null;
+    const userId = isNonEmptyString(req.params.userId)
+        ? req.params.userId.trim()
+        : null;
+    const status = pickString(req.body ?? {}, 'status')?.trim().toUpperCase();
+    if (!merchantId || !userId) {
+        return res
+            .status(400)
+            .json({ success: false, message: 'Missing merchant or staff id' });
+    }
+    if (status !== 'ACTIVE' && status !== 'INACTIVE') {
+        return res.status(400).json({
+            success: false,
+            message: 'Status must be ACTIVE or INACTIVE.',
+        });
+    }
+    try {
+        if (!(await (0, admin_firestore_js_1.merchantExists)(merchantId))) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Merchant not found' });
+        }
+        const result = await (0, admin_firestore_js_1.setStaffStatus)({ merchantId, userId, status });
+        if (!result.ok) {
+            if (result.reason === 'not_found') {
+                return res
+                    .status(404)
+                    .json({ success: false, message: 'Staff account not found' });
+            }
+            return res.status(409).json({
+                success: false,
+                message: 'This account is the only active owner of this business. Deactivate another owner first, or leave one active.',
+            });
+        }
+        await (0, admin_audit_js_1.recordAuditEvent)(auditActorFrom(req), {
+            action: 'staff.status',
+            targetType: 'app_user',
+            targetId: userId,
+            merchantId,
+            details: { before: result.before, after: result.after },
+        });
+        return res.json({
+            success: true,
+            data: (0, admin_api_contracts_js_1.toAdminStaffUser)({ ...result.after, id: userId, merchant_id: merchantId }),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'set_staff_status', error);
     }
 });
 /**
@@ -1071,6 +1262,40 @@ adminRouter.get('/nfc-cards', async (req, res) => {
     }
 });
 /**
+ * Revokes a card from the admin console.
+ *
+ * The same transition `revokeNfcCardLink` already performs for a customer
+ * revoking their own card or a merchant clearing one at the counter — an
+ * admin has no ownership to check, so this is the same call with no expected
+ * customer. Meant for a card reported lost or stolen: relinking it afterwards
+ * goes through the normal link flow, which treats a revoked card as free.
+ */
+adminRouter.post('/nfc-cards/:cardUid/revoke', async (req, res) => {
+    const normalized = isNonEmptyString(req.params.cardUid)
+        ? (0, customer_nfc_js_1.tryNormalizeNfcCardUid)(req.params.cardUid.trim())
+        : null;
+    if (!normalized) {
+        return res.status(400).json({ success: false, message: 'Invalid card UID.' });
+    }
+    try {
+        const before = await revokeNfcCardLink({ cardUid: normalized });
+        await (0, admin_audit_js_1.recordAuditEvent)(auditActorFrom(req), {
+            action: 'nfc_card.revoke',
+            targetType: 'nfc_card',
+            targetId: last4(normalized),
+            merchantId: null,
+            details: { canonical_customer_id: before.canonicalCustomerId },
+        });
+        return res.json({
+            success: true,
+            data: { card_uid_last4: last4(normalized), revoked: true },
+        });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+/**
  * Projects the businesses that already exist.
  *
  * The trigger only fires on writes from now on; every business created before
@@ -1078,6 +1303,577 @@ adminRouter.get('/nfc-cards', async (req, res) => {
  * like the other maintenance jobs, and defaults to a dry run.
  */
 app.use('/admin', adminRouter);
+/*
+ * The merchant's own view of their business.
+ *
+ * Separate from /admin because the question is different: /admin asks "is this
+ * person internal staff", and answers for every business. These ask "which
+ * business is this person allowed to be", and answer for exactly that one.
+ *
+ * The readers are the same ones the console uses — only the authorization in
+ * front of them is new. Every handler resolves the business from the token
+ * rather than from a parameter the caller controls.
+ */
+const merchantRouter = express_1.default.Router();
+/** The signed-in person, as the access predicate wants them. */
+function merchantIdentityFrom(req) {
+    const decoded = req.auth;
+    if (!decoded?.uid)
+        return null;
+    const phone = decoded.phone_number;
+    return {
+        identity: {
+            uid: decoded.uid,
+            phoneNumber: typeof phone === 'string' ? phone : null,
+        },
+        claims: decoded,
+    };
+}
+async function businessForRequest(req) {
+    const who = merchantIdentityFrom(req);
+    if (!who)
+        return { ok: false, status: 401 };
+    const requested = req.query?.merchant_id;
+    if (typeof requested === 'string' && requested.trim() !== '') {
+        const business = await (0, merchant_firestore_js_1.authorizeBusiness)(requested.trim(), who.identity, who.claims);
+        return business
+            ? { ok: true, business }
+            : { ok: false, status: 403 };
+    }
+    const accessible = await (0, merchant_firestore_js_1.listAccessibleBusinesses)(who.identity, who.claims);
+    if (accessible.length === 0)
+        return { ok: false, status: 403 };
+    return { ok: true, business: accessible[0] };
+}
+/**
+ * The resolve-or-deny step every record route repeats.
+ *
+ * Returns the business, or answers the request and returns null. Written once,
+ * and above every route, so that adding a route cannot quietly add one that
+ * skips the check — `merchant_routes.test.ts` reads this file and fails if one
+ * does.
+ */
+async function requireBusiness(req, res) {
+    const resolved = await businessForRequest(req);
+    if (resolved.ok)
+        return resolved.business;
+    res.status(resolved.status).json({
+        success: false,
+        message: resolved.status === 403
+            ? 'No business is associated with this account.'
+            : 'Unauthorized',
+    });
+    return null;
+}
+/** The paging and filtering every record route accepts. */
+function merchantRecordQuery(req) {
+    return {
+        search: pickQueryString(req.query.search) ?? undefined,
+        status: pickQueryString(req.query.status) ?? undefined,
+        limit: clampLimit(req.query.limit, 50, 200),
+        offset: Math.max(0, Math.floor(parseNumber(req.query.offset) ?? 0)),
+    };
+}
+function merchantPageResponse(res, query, page) {
+    return res.json({
+        success: true,
+        data: page.items,
+        paging: { limit: query.limit, offset: query.offset, has_more: page.hasMore },
+        total: page.total,
+        truncated: page.truncated,
+    });
+}
+merchantRouter.get('/businesses', async (req, res) => {
+    const who = merchantIdentityFrom(req);
+    if (!who) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+    try {
+        const businesses = await (0, merchant_firestore_js_1.listAccessibleBusinesses)(who.identity, who.claims);
+        return res.json({
+            success: true,
+            data: businesses.map((business) => ({
+                id: business.id,
+                name: business.name,
+            })),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_businesses', error);
+    }
+});
+merchantRouter.get('/profile', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const detail = await (0, admin_firestore_js_1.getMerchantDetail)(business.id);
+        if (!detail) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Business not found' });
+        }
+        return res.json({ success: true, data: detail });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_profile', error);
+    }
+});
+merchantRouter.get('/entitlements', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const entitlements = await (0, admin_firestore_js_1.listEntitlements)(business.id);
+        return res.json({ success: true, data: entitlements });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_entitlements', error);
+    }
+});
+merchantRouter.get('/customers', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listCustomers)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_customers', error);
+    }
+});
+merchantRouter.get('/customers/:customerId', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const customerId = String(req.params.customerId ?? '').trim();
+        const customer = customerId
+            ? await (0, merchant_collections_js_1.getCustomer)(business.id, customerId)
+            : null;
+        if (!customer) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Customer not found' });
+        }
+        // The visit history is the reason to open a customer at all, so it is part
+        // of the same response rather than a second round trip.
+        const sales = await (0, merchant_collections_js_1.listCustomerSales)(business.id, customer.id);
+        return res.json({ success: true, data: { ...customer, sales } });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_customer_detail', error);
+    }
+});
+merchantRouter.get('/catalog', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listCatalog)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_catalog', error);
+    }
+});
+merchantRouter.get('/rewards', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listRewards)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_rewards', error);
+    }
+});
+merchantRouter.get('/team', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listTeam)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_team', error);
+    }
+});
+/**
+ * The surfaces a business had no way to see.
+ *
+ * Every one resolves its business through `requireBusiness` before reading a
+ * single document, exactly as the routes above do — `merchant_routes.test.ts`
+ * reads this file and fails if one of them stops doing it.
+ */
+merchantRouter.get('/sales', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        const [page, totals] = await Promise.all([
+            (0, merchant_collections_js_1.listSales)(business.id, query),
+            (0, merchant_collections_js_1.totalsForSales)(business.id, query),
+        ]);
+        return res.json({
+            success: true,
+            data: page.items,
+            paging: { limit: query.limit, offset: query.offset, has_more: page.hasMore },
+            total: page.total,
+            truncated: page.truncated,
+            // Over every sale, not over the page: a takings figure that changed
+            // when you turned the page would be worse than none.
+            totals,
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_sales', error);
+    }
+});
+merchantRouter.get('/redemptions', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listRedemptions)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_redemptions', error);
+    }
+});
+merchantRouter.get('/appointments', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listAppointments)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_appointments', error);
+    }
+});
+merchantRouter.get('/return-bonuses', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listReturnBonuses)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_return_bonuses', error);
+    }
+});
+merchantRouter.get('/risk-scores', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listRiskScores)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_risk_scores', error);
+    }
+});
+merchantRouter.get('/recovery-tasks', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listRecoveryTasks)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_recovery_tasks', error);
+    }
+});
+merchantRouter.get('/visit-reports', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listVisitReports)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_visit_reports', error);
+    }
+});
+merchantRouter.get('/surveys', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listSurveys)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_surveys', error);
+    }
+});
+/**
+ * The portal's one write, for now.
+ *
+ * Everything else a business does — a sale, a redemption, a visit report —
+ * happens with the customer standing there, and belongs to the app. Closing a
+ * recovery task is the exception: it is bookkeeping about work already done,
+ * and the person doing it is as likely to be at a desk as at the till.
+ */
+merchantRouter.post('/recovery-tasks/:taskId/complete', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const taskId = (req.params.taskId ?? '').trim();
+        if (taskId === '') {
+            return res
+                .status(400)
+                .json({ success: false, message: 'Missing task id' });
+        }
+        const task = await (0, recovery_task_creation_js_1.completeRecoveryTask)(pool, {
+            merchantId: business.id,
+            taskId,
+            actorAppUserId: request.auth?.uid ?? null,
+            now: Date.now(),
+        });
+        if (!task) {
+            // Unknown, someone else's, or already closed. All three are "nothing to
+            // do", and telling them apart would confirm that another business's id
+            // exists.
+            return res
+                .status(404)
+                .json({ success: false, message: 'Task not found or already closed' });
+        }
+        await mirrorCompletedRecoveryTaskToFirestore(business.id, task);
+        return res.json({ success: true, data: task });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_complete_task', error);
+    }
+});
+merchantRouter.get('/survey-responses', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const query = merchantRecordQuery(request);
+        return merchantPageResponse(res, query, await (0, merchant_collections_js_1.listSurveyResponses)(business.id, query));
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_survey_responses', error);
+    }
+});
+merchantRouter.get('/usage', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        return res.json({
+            success: true,
+            data: await (0, merchant_collections_js_1.listUsageBalances)(business.id),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_usage', error);
+    }
+});
+merchantRouter.get('/customers/:customerId/ledger', async (req, res) => {
+    const request = req;
+    try {
+        const business = await requireBusiness(request, res);
+        if (!business)
+            return undefined;
+        const customerId = String(req.params.customerId ?? '').trim();
+        if (!customerId) {
+            return res
+                .status(404)
+                .json({ success: false, message: 'Customer not found' });
+        }
+        return res.json({
+            success: true,
+            data: await (0, merchant_collections_js_1.listCustomerLedger)(business.id, customerId),
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'merchant_customer_ledger', error);
+    }
+});
+/**
+ * The referral feature's own routes, on both routers.
+ *
+ * Declared in `affiliate_routes.ts` because this file is long enough, and
+ * mounted with every authority it needs handed to it explicitly: the business
+ * resolver above, the owner predicate, the audit actor, the phone normaliser
+ * and the identity derivation that needs the customer-core secret. Nothing
+ * over there can reach for a merchant id on the request or decide on its own
+ * who an owner is — `merchant_routes.test.ts` reads that file alongside this
+ * one and holds it to the same rules as every handler written above.
+ */
+(0, affiliate_routes_js_1.registerAffiliateRoutes)({
+    merchantRouter,
+    adminRouter,
+    requireBusiness,
+    isOwnerOrAdminRequest,
+    auditActorFrom,
+    respondServerError: respondAdminServerError,
+    normalizePhone: tryNormalizeMozambiquePhoneToE164,
+    affiliateIdForPhone: buildAffiliateIdentityId,
+    sweepAffiliateOutbox: ({ merchantId, limit }) => (0, affiliate_outbox_js_1.processAffiliateOutbox)(affiliateOutboxDeps(), { merchantId, limit }),
+});
+/**
+ * Which data providers this installation has, in the configured order.
+ *
+ * Built per request rather than once at module load, because the settings
+ * document decides the order and an operator changing it must not need a
+ * redeploy. A provider that is not configured is skipped by the chain without
+ * being called, so listing all three here costs nothing.
+ *
+ * `fixtures` is last and is only reachable when `PROSPECTING_FIXTURES_ENABLED`
+ * is on — it exists for the emulator and for the seeded development data, and
+ * an installation that turned it on in production would be discovering
+ * businesses that do not exist. The flag is the thing that stops that.
+ */
+function prospectingProviders(settings) {
+    const apollo = new prospecting_provider_apollo_js_1.ApolloProvider({
+        apiKey: process.env.APOLLO_API_KEY,
+    });
+    /**
+     * AIsa answers web research, and only web research.
+     *
+     * It is a gateway over thousands of APIs — search, Perplexity, finance,
+     * social, scholar — not a B2B contact database. There is no people search
+     * behind it, so it is absent from the discovery and person chains: putting
+     * it there would add a provider that can only ever fail, and every failure
+     * costs a call.
+     */
+    const aisa = new prospecting_provider_aisa_js_1.AisaProvider({
+        apiKey: process.env.PROSPECTING_AISA_ENABLED === 'true'
+            ? process.env.AISA_API_KEY
+            : undefined,
+    });
+    /**
+     * Places answers discovery and the listing detail, and nothing else.
+     *
+     * It describes storefronts, not companies: no headcount, no named owner, no
+     * corporate record. It is in the discovery chain and the detail chain, and
+     * absent from the person chains for the same reason AIsa is — a provider
+     * that can only fail there still costs a call each time it is asked.
+     */
+    const places = new prospecting_provider_places_js_1.PlacesProvider({
+        apiKey: process.env.PROSPECTING_PLACES_ENABLED === 'true'
+            ? process.env.GOOGLE_PLACES_API_KEY
+            : undefined,
+        searchCostUsd: prospecting_config_js_1.OPERATION_COST_USD.SEARCH_BUSINESSES,
+        detailCostUsd: prospecting_config_js_1.OPERATION_COST_USD.FETCH_LISTING_DETAILS,
+    });
+    const fixtures = process.env.PROSPECTING_FIXTURES_ENABLED === 'true'
+        ? new prospecting_provider_fixtures_js_1.FixtureProvider()
+        : new prospecting_provider_fixtures_js_1.NotConfiguredProvider('fixtures');
+    const byKey = { apollo, places, fixtures };
+    const ordered = settings.providerPriority
+        .map((key) => byKey[key])
+        .filter((provider) => provider !== undefined);
+    return {
+        discovery: ordered,
+        personDiscovery: ordered,
+        personEnrichment: ordered,
+        // AIsa first, fixtures behind it. An unconfigured AIsa is skipped without
+        // being called, so this order costs nothing when it is not set up.
+        webResearch: [aisa, fixtures],
+        // Places only. Nothing else in the registry has a second, dearer call to
+        // make about a listing, and a chain of providers that cannot answer is a
+        // chain of failures that each cost something.
+        listingDetail: [places],
+    };
+}
+function prospectingPipelineDeps(settings) {
+    return {
+        store: (0, prospecting_firestore_js_1.firestoreStore)(settings),
+        providers: prospectingProviders(settings),
+        settings,
+        now: Date.now,
+    };
+}
+/**
+ * The prospecting console's API.
+ *
+ * Mounted on the admin router, so it is already behind `isAdminRequest` and
+ * nothing over there re-checks the claim. Like the affiliate routes, it is
+ * handed every authority it needs: the audit actor, the settings reader, the
+ * provider registry and the model. It cannot reach for a provider key, decide
+ * who the caller is, or read a budget of its own.
+ *
+ * The whole surface is off unless `AI_PROSPECTING_ENABLED` says otherwise.
+ */
+(0, prospecting_routes_js_1.registerProspectingRoutes)({
+    adminRouter,
+    auditActorFrom,
+    respondServerError: respondAdminServerError,
+    flags: () => (0, prospecting_config_js_1.resolveProspectingFlags)(process.env),
+    readSettings: prospecting_store_js_1.readSettings,
+    writeSettings: prospecting_store_js_1.writeSettings,
+    pipelineDeps: prospectingPipelineDeps,
+    getProspect: prospecting_store_js_1.getProspect,
+    getCompany: prospecting_store_js_1.getCompany,
+    listProspects: prospecting_store_js_1.listProspects,
+    listContacts: prospecting_store_js_1.listContacts,
+    listActivities: prospecting_store_js_1.listActivities,
+    latestAnalysis: prospecting_store_js_1.latestAnalysis,
+    saveAnalysis: prospecting_store_js_1.saveAnalysis,
+    setProspectStatus: prospecting_store_js_1.setProspectStatus,
+    saveScores: prospecting_store_js_1.saveScores,
+    appendActivity: prospecting_store_js_1.appendActivity,
+    saveProspectAnalysisFields: async (input) => {
+        await prospecting_store_js_1.prospectingRefs.prospect(input.prospectId).set({
+            ai_summary: input.summary,
+            ai_reasoning: input.reasoning,
+            recommended_pitch: input.pitch,
+            recommended_channel: input.channel,
+            updated_at: input.now,
+        }, { merge: true });
+    },
+    createJob: prospecting_firestore_js_1.createJob,
+    getJob: prospecting_firestore_js_1.getJob,
+    cancelJob: prospecting_firestore_js_1.cancelJob,
+    // Fire and forget: the request returns a job id and the work happens in the
+    // trigger that this write fires. Awaiting the drive here would put a
+    // five-hundred-lead search inside an HTTP request.
+    scheduleJob: async () => { },
+    readSpend: (prospectId) => (0, prospecting_store_js_1.readSpend)({ now: Date.now(), prospectId }),
+    readFunnelCounts: prospecting_store_js_1.readFunnelCounts,
+    recordOutreachTemplate: prospecting_store_js_1.recordOutreachTemplate,
+    listUsage: prospecting_store_js_1.listUsage,
+    analysisService: () => new prospecting_analysis_js_1.LeadAnalysisService((0, prospecting_llm_js_1.resolveLlm)(process.env)),
+    outreachService: () => new prospecting_templates_js_1.TemplateOutreachService(),
+    consumeRateLimit: ({ actorId, action }) => (0, prospecting_firestore_js_1.consumeProspectingRateLimit)({ actorId, action }),
+    newId: () => (0, crypto_1.randomUUID)(),
+});
+app.use('/merchant', merchantRouter);
 app.get('/customer/session', async (req, res) => {
     try {
         const result = await handleCustomerSessionRequest(req);
@@ -1418,6 +2214,138 @@ app.post('/retention/classifications/scan', async (req, res) => {
         return respondCustomerCoreError(res, error);
     }
 });
+app.get('/customers/:customerId/bonuses', async (req, res) => {
+    const merchantId = req.merchantId;
+    const { customerId } = req.params;
+    try {
+        const result = await pool.query(`
+        SELECT * FROM return_bonuses
+        WHERE merchant_id = $1 AND customer_id = $2
+        ORDER BY created_at DESC
+      `, [merchantId, customerId]);
+        return res.json({ success: true, data: result.rows });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.post('/return-bonuses/:id/redeem', async (req, res) => {
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const { id } = req.params;
+    const payload = req.body ?? {};
+    const customerId = pickString(payload, 'customer_id') ?? pickString(payload, 'customerId');
+    const redemptionSaleId = pickString(payload, 'redemption_sale_id') ?? pickString(payload, 'redemptionSaleId');
+    try {
+        const bonus = await (0, retention_engine_js_1.redeemReturnBonus)(pool, {
+            merchantId,
+            customerId,
+            bonusId: id,
+            redemptionSaleId,
+            now: Date.now(),
+        });
+        await mirrorReturnBonusToFirestore(merchantId, bonus);
+        return res.json({ success: true, data: bonus });
+    }
+    catch (error) {
+        if (error instanceof retention_engine_js_1.RetentionEngineError) {
+            return res.status(error.status).json({ success: false, code: error.code, message: error.message });
+        }
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.get('/retention/config', async (req, res) => {
+    const merchantId = req.merchantId;
+    try {
+        await (0, retention_engine_js_1.seedDefaultRetentionRules)(pool, merchantId, Date.now());
+        const [config, rules] = await Promise.all([
+            (0, retention_engine_js_1.getReturnBonusConfig)(pool, merchantId),
+            (0, retention_engine_js_1.listRetentionRules)(pool, merchantId),
+        ]);
+        return res.json({
+            success: true,
+            data: {
+                return_bonus: {
+                    enabled: config.enabled,
+                    type: config.type,
+                    value: config.value,
+                    validity_hours: config.validityHours,
+                    minimum_purchase_amount: config.minimumPurchaseAmount,
+                },
+                rules,
+            },
+        });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
+app.put('/retention/config', async (req, res) => {
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    if (!isOwnerOrAdminRequest(authedReq)) {
+        return res.status(403).json({
+            success: false,
+            code: 'retention_config_owner_required',
+            message: 'Only a business owner or admin can change retention settings.',
+        });
+    }
+    const payload = req.body ?? {};
+    const now = Date.now();
+    try {
+        await (0, retention_engine_js_1.seedDefaultRetentionRules)(pool, merchantId, now);
+        const returnBonusPatch = payload.return_bonus;
+        if (returnBonusPatch && typeof returnBonusPatch === 'object') {
+            const patch = {};
+            const enabled = pickBoolean(returnBonusPatch, 'enabled');
+            if (enabled != null)
+                patch.enabled = enabled;
+            const type = pickString(returnBonusPatch, 'type');
+            if (type != null)
+                patch.type = type;
+            const value = pickNumber(returnBonusPatch, 'value');
+            if (value != null)
+                patch.value = value;
+            const validityHours = pickNumber(returnBonusPatch, 'validity_hours');
+            if (validityHours != null)
+                patch.validityHours = validityHours;
+            const minimumPurchaseAmount = pickNumber(returnBonusPatch, 'minimum_purchase_amount');
+            if (minimumPurchaseAmount != null)
+                patch.minimumPurchaseAmount = minimumPurchaseAmount;
+            await (0, retention_engine_js_1.upsertReturnBonusConfig)(pool, merchantId, patch, now);
+        }
+        const rulesPatch = payload.rules;
+        if (rulesPatch && typeof rulesPatch === 'object') {
+            for (const [ruleKey, enabled] of Object.entries(rulesPatch)) {
+                if (typeof enabled !== 'boolean' ||
+                    !(0, retention_engine_js_1.isMerchantEditableRetentionRuleKey)(ruleKey)) {
+                    continue;
+                }
+                await (0, retention_engine_js_1.setRetentionRuleEnabled)(pool, merchantId, ruleKey, enabled, now);
+            }
+        }
+        const [config, rules] = await Promise.all([
+            (0, retention_engine_js_1.getReturnBonusConfig)(pool, merchantId),
+            (0, retention_engine_js_1.listRetentionRules)(pool, merchantId),
+        ]);
+        return res.json({
+            success: true,
+            data: {
+                return_bonus: {
+                    enabled: config.enabled,
+                    type: config.type,
+                    value: config.value,
+                    validity_hours: config.validityHours,
+                    minimum_purchase_amount: config.minimumPurchaseAmount,
+                },
+                rules,
+            },
+        });
+    }
+    catch (error) {
+        return respondCustomerCoreError(res, error);
+    }
+});
 app.get('/sync/:entityType', async (req, res) => {
     const { entityType } = req.params;
     const config = ENTITY_CONFIG[entityType];
@@ -1719,6 +2647,8 @@ app.post('/sync/:entityType/:entityId', async (req, res) => {
                 return res.json({ success: true });
             case 'sync_tombstone':
                 throw new CustomerCoreError(400, 'sync_tombstone_read_only', 'sync_tombstone is server-managed and read-only');
+            case 'return_bonus':
+                throw new CustomerCoreError(400, 'return_bonus_read_only', 'return_bonus is server-managed; use POST /return-bonuses/:id/redeem to redeem it.');
             default:
                 throw new CustomerCoreError(404, 'sync_unknown_entity', 'Unknown entity');
         }
@@ -2203,6 +3133,314 @@ app.post('/engage/surveys', async (req, res) => {
         client.release();
     }
 });
+/* ------------------------------------------------ answering from a link */
+/**
+ * Where a survey link points.
+ *
+ * The portal serves `/q/<token>`, so this is the portal's own origin. It is
+ * configuration rather than a constant because the portal has no deploy target
+ * yet: until one exists there is no correct value, and inventing one would
+ * mean the app sending customers a link that goes nowhere.
+ */
+function surveyLinkBaseUrl() {
+    const raw = (process.env.SURVEY_LINK_BASE_URL ?? '').trim();
+    if (raw === '')
+        return null;
+    return raw.replace(/\/+$/, '');
+}
+/**
+ * Mints a link for a survey, optionally addressed to one customer.
+ *
+ * A GET because it changes nothing: the token is derived, not stored, so
+ * asking twice yields two equally valid links and neither is a write.
+ */
+app.get('/engage/surveys/:surveyId/link', async (req, res) => {
+    const authedReq = req;
+    const merchantId = authedReq.merchantId;
+    const surveyId = (req.params.surveyId ?? '').trim();
+    const customerId = pickQueryString(req.query.customer_id) ?? null;
+    if (surveyId === '') {
+        return res.status(400).json({ success: false, message: 'Missing survey id' });
+    }
+    try {
+        const result = await pool.query(`SELECT id, title, is_active FROM surveys WHERE id = $1 AND merchant_id = $2`, [surveyId, merchantId]);
+        const survey = result.rows[0];
+        if (!survey) {
+            return res.status(404).json({ success: false, message: 'Survey not found' });
+        }
+        if (survey.is_active === false) {
+            // Minting a link for a closed survey would produce one that 404s the
+            // moment the customer opens it.
+            return res.status(409).json({
+                success: false,
+                code: 'survey_closed',
+                message: 'Reactive o questionário antes de o enviar.',
+            });
+        }
+        const now = Date.now();
+        const token = (0, survey_link_js_1.createSurveyLinkToken)({
+            merchantId,
+            surveyId,
+            customerId,
+            issuedAt: now,
+            expiresAt: now + survey_link_js_1.SURVEY_LINK_TTL_MS,
+            secret: surveyLinkSecret(),
+        });
+        const base = surveyLinkBaseUrl();
+        return res.json({
+            success: true,
+            data: {
+                token,
+                // Null rather than a guessed origin: the app says so out loud instead
+                // of sending a customer somewhere that does not exist.
+                url: base === null ? null : `${base}/q/${token}`,
+                expires_at: now + survey_link_js_1.SURVEY_LINK_TTL_MS,
+                survey_title: survey.title ?? null,
+            },
+        });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'engage_survey_link', error);
+    }
+});
+function surveyLinkSecret() {
+    // Domain-separated inside `survey_link.ts` ("survey-link-v1."), so sharing
+    // the customer-core secret cannot produce a token that verifies as the other
+    // kind. One secret to provision and to rotate rather than two.
+    return requireCustomerCoreSecret();
+}
+async function readPublicSurvey(link) {
+    const surveyResult = await pool.query(`SELECT id, title, description, is_active
+       FROM surveys WHERE id = $1 AND merchant_id = $2`, [link.surveyId, link.merchantId]);
+    const survey = surveyResult.rows[0];
+    // An inactive survey reads the same as a missing one: the merchant closed
+    // it, and the person holding the link has no business being told which.
+    if (!survey || survey.is_active === false)
+        return null;
+    const questionResult = await pool.query(`SELECT id, question_text, question_type, options, is_required, sort_order
+       FROM survey_questions
+      WHERE survey_id = $1 AND merchant_id = $2
+      ORDER BY sort_order ASC`, [link.surveyId, link.merchantId]);
+    let businessName = null;
+    try {
+        const business = await businessDocumentRef(link.merchantId).get();
+        businessName = business.exists
+            ? maybePayloadString(snapshotDataRecord(business), 'name', 'business_name')
+            : null;
+    }
+    catch {
+        // A survey without the shop's name is still answerable.
+        businessName = null;
+    }
+    return {
+        survey: {
+            id: String(survey.id),
+            title: String(survey.title ?? ''),
+            description: survey.description == null ? null : String(survey.description),
+        },
+        business_name: businessName,
+        questions: questionResult.rows.map((row) => ({
+            id: String(row.id),
+            question_text: String(row.question_text ?? ''),
+            question_type: String(row.question_type ?? 'SHORT_TEXT'),
+            options: Array.isArray(row.options) ? row.options : [],
+            is_required: row.is_required === true,
+            sort_order: Number(row.sort_order ?? 0),
+        })),
+    };
+}
+publicRouter.get('/surveys/:token', async (req, res) => {
+    const link = (0, survey_link_js_1.verifySurveyLinkToken)({
+        token: (req.params.token ?? '').trim(),
+        secret: surveyLinkSecret(),
+        now: Date.now(),
+    });
+    if (!link) {
+        return res
+            .status(404)
+            .json({ success: false, code: 'invalid_link', message: 'Link inválido ou expirado.' });
+    }
+    try {
+        const survey = await readPublicSurvey(link);
+        if (!survey) {
+            return res
+                .status(404)
+                .json({ success: false, code: 'survey_closed', message: 'Este questionário já não está aberto.' });
+        }
+        return res.json({ success: true, data: { ...survey, named: link.customerId !== null } });
+    }
+    catch (error) {
+        return respondAdminServerError(res, 'public_survey_read', error);
+    }
+});
+publicRouter.post('/surveys/:token/responses', async (req, res) => {
+    const now = Date.now();
+    const link = (0, survey_link_js_1.verifySurveyLinkToken)({
+        token: (req.params.token ?? '').trim(),
+        secret: surveyLinkSecret(),
+        now,
+    });
+    if (!link) {
+        return res
+            .status(404)
+            .json({ success: false, code: 'invalid_link', message: 'Link inválido ou expirado.' });
+    }
+    const submitted = Array.isArray(req.body?.answers) ? req.body.answers : [];
+    if (submitted.length === 0) {
+        return res
+            .status(400)
+            .json({ success: false, code: 'no_answers', message: 'Não foi enviada nenhuma resposta.' });
+    }
+    const client = await pool.connect();
+    try {
+        const survey = await readPublicSurvey(link);
+        if (!survey) {
+            return res
+                .status(404)
+                .json({ success: false, code: 'survey_closed', message: 'Este questionário já não está aberto.' });
+        }
+        // Answers are matched against this survey's own questions. The merchant
+        // endpoint trusts the question ids it is given; an open endpoint must not,
+        // or one valid link would write answers onto every survey.
+        const questions = new Map(survey.questions.map((question) => [String(question.id), question]));
+        const answers = [];
+        for (const item of submitted) {
+            const row = (item ?? {});
+            const questionId = pickString(row, 'question_id') ?? pickString(row, 'questionId');
+            if (!questionId || !questions.has(questionId))
+                continue;
+            answers.push({
+                questionId,
+                text: pickString(row, 'answer_text') ?? pickString(row, 'answerText') ?? null,
+                numeric: pickNumber(row, 'answer_numeric') ?? pickNumber(row, 'answerNumeric') ?? null,
+                bool: pickBoolean(row, 'answer_bool') ?? pickBoolean(row, 'answerBool') ?? null,
+            });
+        }
+        const answered = new Set(answers.map((answer) => answer.questionId));
+        const missing = survey.questions.filter((question) => question.is_required === true && !answered.has(String(question.id)));
+        if (missing.length > 0) {
+            return res.status(400).json({
+                success: false,
+                code: 'missing_required',
+                message: 'Faltam respostas obrigatórias.',
+                data: { question_ids: missing.map((question) => String(question.id)) },
+            });
+        }
+        if (answers.length === 0) {
+            return res
+                .status(400)
+                .json({ success: false, code: 'no_answers', message: 'Não foi enviada nenhuma resposta.' });
+        }
+        // A link sent to one person answers once: the id is derived from the pair,
+        // so a second submit revises that answer instead of stuffing the ballot.
+        // A link with no customer has no such pair and gets a fresh id each time,
+        // which is what an open link is for.
+        const responseId = link.customerId === null
+            ? (0, crypto_1.randomUUID)()
+            : deterministicDocumentId('sr', [link.merchantId, link.surveyId, link.customerId]);
+        await client.query('BEGIN');
+        await client.query(`
+      INSERT INTO survey_responses (
+        id, merchant_id, survey_id, customer_id, submitted_at, channel,
+        created_at, updated_at, created_by_app_user_id, updated_by_app_user_id
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULL,NULL)
+      ON CONFLICT (id) DO UPDATE SET
+        submitted_at = EXCLUDED.submitted_at,
+        updated_at = EXCLUDED.updated_at
+      WHERE survey_responses.merchant_id = EXCLUDED.merchant_id
+      `, [responseId, link.merchantId, link.surveyId, link.customerId, now, SURVEY_CHANNEL_LINK, now, now]);
+        const mirroredAnswers = [];
+        for (const [index, answer] of answers.entries()) {
+            const answerId = deterministicDocumentId('sra', [
+                link.merchantId,
+                responseId,
+                answer.questionId,
+                String(index),
+            ]);
+            await client.query(`
+        INSERT INTO survey_response_answers (
+          id, merchant_id, response_id, question_id,
+          answer_text, answer_numeric, answer_bool,
+          created_at, updated_at, created_by_app_user_id, updated_by_app_user_id
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,NULL)
+        ON CONFLICT (id) DO UPDATE SET
+          answer_text = EXCLUDED.answer_text,
+          answer_numeric = EXCLUDED.answer_numeric,
+          answer_bool = EXCLUDED.answer_bool,
+          updated_at = EXCLUDED.updated_at
+        WHERE survey_response_answers.merchant_id = EXCLUDED.merchant_id
+        `, [
+                answerId,
+                link.merchantId,
+                responseId,
+                answer.questionId,
+                answer.text,
+                answer.numeric,
+                answer.bool,
+                now,
+                now,
+            ]);
+            mirroredAnswers.push({
+                id: answerId,
+                merchant_id: link.merchantId,
+                response_id: responseId,
+                question_id: answer.questionId,
+                answer_text: answer.text,
+                answer_numeric: answer.numeric,
+                answer_bool: answer.bool,
+                created_at: now,
+                updated_at: now,
+            });
+        }
+        await client.query('COMMIT');
+        // The portal reads Firestore, and no phone was involved in this write, so
+        // without the mirror the merchant would never see the answer they asked for.
+        try {
+            await mirrorSurveyResponseToFirestore(link.merchantId, {
+                id: responseId,
+                merchant_id: link.merchantId,
+                survey_id: link.surveyId,
+                customer_id: link.customerId,
+                submitted_at: now,
+                channel: SURVEY_CHANNEL_LINK,
+                created_at: now,
+                updated_at: now,
+            }, mirroredAnswers);
+        }
+        catch (error) {
+            console.error('public_survey_mirror_failed', { response_id: responseId, error });
+        }
+        try {
+            await runSurveyCompletedAutomation(link.merchantId, link.surveyId, link.customerId, mirroredAnswers, responseId, now);
+        }
+        catch (error) {
+            console.error('public_survey_automation_failed', { response_id: responseId, error });
+        }
+        return res.json({ success: true, data: { response_id: responseId } });
+    }
+    catch (error) {
+        try {
+            await client.query('ROLLBACK');
+        }
+        catch {
+            // The connection is already gone; the transaction died with it.
+        }
+        return respondAdminServerError(res, 'public_survey_response', error);
+    }
+    finally {
+        client.release();
+    }
+});
+/** Mirrors a link-answered survey response into the portal's read model. */
+async function mirrorSurveyResponseToFirestore(merchantId, response, answers) {
+    const businessRef = businessDocumentRef(merchantId);
+    const batch = admin.firestore().batch();
+    batch.set(businessRef.collection('survey_responses').doc(String(response.id)), response, { merge: true });
+    for (const answer of answers) {
+        batch.set(businessRef.collection('survey_response_answers').doc(String(answer.id)), answer, { merge: true });
+    }
+    await batch.commit();
+}
 app.post('/engage/survey-response', async (req, res) => {
     const authedReq = req;
     const merchantId = authedReq.merchantId;
@@ -2335,6 +3573,8 @@ app.post('/engage/survey-response', async (req, res) => {
 });
 app.get('/engage/analytics', async (req, res) => {
     const merchantId = req.merchantId;
+    // Satisfaction is the mean of RATING answers only. Averaging every numeric
+    // answer folds in any other numeric question type and corrupts the score.
     const totalsSql = `
     SELECT
       (SELECT COUNT(*)::int FROM surveys WHERE merchant_id = $1 AND is_active = true) AS active_surveys,
@@ -2342,42 +3582,82 @@ app.get('/engage/analytics', async (req, res) => {
       (
         SELECT AVG(sra.answer_numeric)
         FROM survey_response_answers sra
+        JOIN survey_questions sq ON sq.id = sra.question_id
         WHERE sra.merchant_id = $1
+          AND sq.question_type = 'RATING'
           AND sra.answer_numeric IS NOT NULL
-      ) AS customer_satisfaction
+      ) AS customer_satisfaction,
+      (
+        SELECT COUNT(*)::int
+        FROM survey_response_answers sra
+        JOIN survey_questions sq ON sq.id = sra.question_id
+        WHERE sra.merchant_id = $1
+          AND sq.question_type = 'RATING'
+          AND sra.answer_numeric IS NOT NULL
+      ) AS rated_responses
   `;
+    // Choice questions only: their answers come from a fixed option set, so a
+    // frequency count means something. Ranking free text just ranks one
+    // customer's sentence above another's.
     const topSql = `
-    SELECT COALESCE(answer_text, '') AS answer_text, COUNT(*)::int AS total
-    FROM survey_response_answers
-    WHERE merchant_id = $1
-      AND answer_text IS NOT NULL
-      AND answer_text <> ''
-    GROUP BY answer_text
-    ORDER BY total DESC
-    LIMIT 3
+    SELECT sra.answer_text AS label, COUNT(*)::int AS total
+    FROM survey_response_answers sra
+    JOIN survey_questions sq ON sq.id = sra.question_id
+    WHERE sra.merchant_id = $1
+      AND sq.question_type = 'MULTIPLE_CHOICE'
+      AND sra.answer_text IS NOT NULL
+      AND TRIM(sra.answer_text) <> ''
+    GROUP BY sra.answer_text
+    ORDER BY total DESC, label ASC
+    LIMIT 5
+  `;
+    const breakdownSql = `
+    SELECT sra.answer_numeric::int AS score, COUNT(*)::int AS total
+    FROM survey_response_answers sra
+    JOIN survey_questions sq ON sq.id = sra.question_id
+    WHERE sra.merchant_id = $1
+      AND sq.question_type = 'RATING'
+      AND sra.answer_numeric IS NOT NULL
+    GROUP BY score
+    ORDER BY score
   `;
     try {
-        const [totalsResult, topResult] = await Promise.all([
+        const [totalsResult, topResult, breakdownResult] = await Promise.all([
             pool.query(totalsSql, [merchantId]),
             pool.query(topSql, [merchantId]),
+            pool.query(breakdownSql, [merchantId]),
         ]);
         const totals = totalsResult.rows[0] ?? {};
         const activeSurveys = Number(totals.active_surveys ?? 0);
         const responsesTotal = Number(totals.responses_total ?? 0);
         const customerSatisfaction = Number(totals.customer_satisfaction ?? 0);
-        const topTexts = topResult.rows
-            .map((row) => String(row.answer_text ?? '').trim())
-            .filter((value) => value.length > 0);
-        const responseRate = activeSurveys === 0 ? 0 : (responsesTotal / activeSurveys) * 100;
+        const ratedResponses = Number(totals.rated_responses ?? 0);
+        const topAnswers = topResult.rows
+            .map((row) => ({
+            label: String(row.label ?? '').trim(),
+            count: Number(row.total ?? 0),
+        }))
+            .filter((entry) => entry.label.length > 0);
+        const ratingBreakdown = breakdownResult.rows.map((row) => ({
+            score: Number(row.score ?? 0),
+            count: Number(row.total ?? 0),
+        }));
+        // Responses per active survey, not a percentage: nothing records how many
+        // customers were asked, so the old "response rate" printed 500% off five
+        // answers to a single survey.
+        const responsesPerSurvey = activeSurveys === 0 ? 0 : responsesTotal / activeSurveys;
         return res.json({
             success: true,
             data: {
-                response_rate: responseRate,
+                responses_per_survey: responsesPerSurvey,
                 customer_satisfaction: customerSatisfaction,
                 responses_total: responsesTotal,
-                top_churn_reasons: topTexts,
-                top_recovery_incentives: topTexts,
-                staff_ratings: topTexts,
+                rated_responses: ratedResponses,
+                top_answers: topAnswers,
+                rating_breakdown: ratingBreakdown,
+                // Retained so an app build older than this deploy still lists the
+                // answers instead of an empty card.
+                top_churn_reasons: topAnswers.map((entry) => entry.label),
             },
         });
     }
@@ -2388,7 +3668,7 @@ app.get('/engage/analytics', async (req, res) => {
 exports.api = (0, https_1.onRequest)({
     cors: (0, cors_origins_js_1.allowedOrigins)(process.env, (0, cors_origins_js_1.runningInEmulator)(process.env)),
     invoker: 'public',
-    secrets: [customerIdentityHmacSecret],
+    secrets: [customerIdentityHmacSecret, ...prospectingSecrets],
 }, app);
 exports.customerCoreCanonicalLinkOnCustomerWrite = (0, firestore_2.onDocumentWritten)({
     document: 'businesses/{merchantId}/customers/{customerId}',
@@ -2489,6 +3769,52 @@ exports.loyaltyLedgerSaleOnSaleWrite = (0, firestore_2.onDocumentWritten)({
             allowLegacyBootstrap: false,
             saleUpdateMode: 'trigger',
         });
+        // Retention Engine SALE_COMPLETED hook (production path: the app
+        // writes sales to Firestore, not the REST /sync/sale endpoint, so this
+        // trigger — not upsertSale in index.ts's Express router — is what
+        // actually fires for real traffic today). Idempotent under retriggers
+        // via the return_bonuses unique (merchant_id, source_sale_id) index,
+        // and must never fail the sale write itself.
+        try {
+            const customerId = maybePayloadString(afterData, 'customer_id', 'customerId');
+            const amount = pickNumber(afterData, 'amount');
+            if (customerId && amount != null && amount > 0) {
+                await triggerSaleCompletedRetentionRules(merchantId, customerId, saleId, amount, Date.now());
+            }
+        }
+        catch (retentionError) {
+            console.error('retention_engine_sale_completed_failed', {
+                merchantId,
+                saleId,
+                error: retentionError,
+            });
+        }
+        // A referred customer coming back is recorded on the same hook, so an
+        // ordinary sale synced from the till counts as a return — the second
+        // visit almost never carries a code. Deterministic ids make a retrigger
+        // record one return and owe one reward; a failure here must never fail
+        // the sale, so it is logged like the retention hook above.
+        try {
+            const customerId = maybePayloadString(afterData, 'customer_id', 'customerId');
+            const amount = pickNumber(afterData, 'amount');
+            const cancellation = (maybePayloadString(afterData, 'cancellation_status', 'cancellationStatus') ?? '').toUpperCase();
+            if (customerId && amount != null && amount > 0 && cancellation !== 'CANCELLED') {
+                await (0, affiliate_sale_firestore_js_1.recordReferredCustomerReturnInFirestore)({
+                    merchantId,
+                    saleId,
+                    customerId,
+                    amount,
+                    occurredAt: pickNumber(afterData, 'created_at') ?? Date.now(),
+                });
+            }
+        }
+        catch (referralError) {
+            console.error('affiliate_customer_return_failed', {
+                merchantId,
+                saleId,
+                error: referralError,
+            });
+        }
     }
     catch (error) {
         if (error instanceof CustomerCoreError) {
@@ -2539,6 +3865,238 @@ exports.loyaltyLedgerSaleOnSaleWrite = (0, firestore_2.onDocumentWritten)({
             return;
         }
         throw error;
+    }
+});
+/* -- Referral notifications ---------------------------------------------- */
+/**
+ * The outbox worker's dependencies, assembled once per call.
+ *
+ * `resolveWhatsAppAdapter()` returns null until a provider is configured, and
+ * that is the point: delivery answers `not_configured`, the row stays queued
+ * without burning a retry, and nothing pretends a message went out. See
+ * `affiliate_outbox_firestore.ts` for what configuring one involves.
+ */
+function affiliateOutboxDeps() {
+    return {
+        store: affiliate_outbox_firestore_js_1.firestoreOutboxStore,
+        resolveContext: (0, affiliate_outbox_firestore_js_1.createFirestoreOutboxContextResolver)({
+            normalizePhone: tryNormalizeMozambiquePhoneToE164,
+        }),
+        adapter: (0, affiliate_outbox_firestore_js_1.resolveWhatsAppAdapter)(),
+    };
+}
+/**
+ * One queued referral message, delivered after the sale that queued it.
+ *
+ * On create, not on write: the worker updates the same document to record the
+ * outcome, and a write trigger would re-enter on its own update — an infinite
+ * loop that also sends repeatedly. Creation happens exactly once per fact,
+ * because the document id is derived from the merchant, the template and the
+ * sale.
+ *
+ * A duplicate firing of the create event is still possible — Firestore
+ * triggers are at-least-once — and is handled a second way: the worker claims
+ * the row transactionally, so the second firing finds it claimed or already
+ * sent and does nothing.
+ *
+ * Nothing here can affect the sale. The sale committed before this document
+ * existed, and every failure below is recorded on the outbox row rather than
+ * thrown — a throw would retrigger the function against a message that may
+ * already have been delivered.
+ */
+exports.affiliateOutboxOnCreate = (0, firestore_2.onDocumentCreated)('businesses/{merchantId}/affiliate_outbox/{outboxId}', async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+        ? event.params.merchantId.trim()
+        : '';
+    const outboxId = isNonEmptyString(event.params.outboxId)
+        ? event.params.outboxId.trim()
+        : '';
+    if (!merchantId || !outboxId)
+        return;
+    try {
+        await (0, affiliate_outbox_js_1.processOutboxMessage)(affiliateOutboxDeps(), merchantId, outboxId);
+    }
+    catch (error) {
+        console.error('affiliate_outbox_trigger_failed', {
+            merchant_id: merchantId,
+            outbox_id: outboxId,
+            error,
+        });
+    }
+});
+/**
+ * Retries transient failures, expired claims and messages queued while no
+ * provider was configured. The create trigger handles the fast path; this
+ * bounded sweep is the durable retry path.
+ */
+/**
+ * Runs a discovery job as soon as it is written.
+ *
+ * The same shape the referral outbox uses: the request writes a record and
+ * returns, and this trigger does the work. It drives the job in bounded
+ * batches inside a time budget, and whatever is left over stays claimable for
+ * the sweep below — so a search larger than one invocation finishes across
+ * several rather than timing out inside one.
+ *
+ * Failing here must not retry the whole job: the batches already committed
+ * their companies, and a retry would re-run the search and charge for it
+ * again. The error is logged and swallowed for that reason.
+ */
+exports.prospectingJobOnCreate = (0, firestore_2.onDocumentCreated)({
+    document: 'prospecting_jobs/{jobId}',
+    secrets: prospectingSecrets,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+}, async (event) => {
+    if (!(0, prospecting_config_js_1.resolveProspectingFlags)(process.env).prospectingEnabled)
+        return;
+    const jobId = typeof event.params.jobId === 'string' ? event.params.jobId : '';
+    if (jobId === '')
+        return;
+    try {
+        const settings = await (0, prospecting_store_js_1.readSettings)();
+        const job = await (0, prospecting_firestore_js_1.driveJob)({
+            jobId,
+            deps: prospectingPipelineDeps,
+            settings,
+            timeBudgetMs: 420000,
+        });
+        console.info('prospecting_job_drive_completed', {
+            event: 'prospecting_job_drive_completed',
+            job_id: jobId,
+            status: job?.status ?? null,
+            discovered: job?.discovered ?? 0,
+            spent_usd: job?.spent_usd ?? 0,
+        });
+    }
+    catch (error) {
+        console.error('prospecting_job_drive_failed', {
+            event: 'prospecting_job_drive_failed',
+            job_id: jobId,
+            error_name: error instanceof Error ? error.name : typeof error,
+            error_message: error instanceof Error ? error.message : String(error),
+        });
+    }
+});
+/**
+ * Picks up jobs a crashed or timed-out invocation left behind.
+ *
+ * The claim lease is what makes this safe: a job another worker still holds is
+ * skipped, and one whose lease has lapsed is taken over at its stored cursor.
+ * Nothing is processed twice, and nothing is stranded.
+ */
+exports.prospectingJobSweep = (0, scheduler_1.onSchedule)({
+    schedule: 'every 10 minutes',
+    timeZone: 'UTC',
+    secrets: prospectingSecrets,
+    timeoutSeconds: 540,
+    memory: '512MiB',
+}, async () => {
+    if (!(0, prospecting_config_js_1.resolveProspectingFlags)(process.env).prospectingEnabled)
+        return;
+    try {
+        const settings = await (0, prospecting_store_js_1.readSettings)();
+        const jobs = await (0, prospecting_firestore_js_1.listClaimableJobs)(5);
+        for (const job of jobs) {
+            await (0, prospecting_firestore_js_1.driveJob)({
+                jobId: job.id,
+                deps: prospectingPipelineDeps,
+                settings,
+                // Shorter than the trigger's, because the sweep may have several.
+                timeBudgetMs: 120000,
+            });
+        }
+        console.info('prospecting_job_sweep_completed', {
+            event: 'prospecting_job_sweep_completed',
+            considered: jobs.length,
+        });
+    }
+    catch (error) {
+        console.error('prospecting_job_sweep_failed', {
+            event: 'prospecting_job_sweep_failed',
+            error_name: error instanceof Error ? error.name : typeof error,
+            error_message: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+    }
+});
+exports.affiliateOutboxRetrySweep = (0, scheduler_1.onSchedule)({
+    schedule: 'every 5 minutes',
+    timeZone: 'UTC',
+    timeoutSeconds: 300,
+    memory: '256MiB',
+}, async () => {
+    try {
+        const summary = await (0, affiliate_outbox_js_1.processAffiliateOutbox)(affiliateOutboxDeps(), {
+            merchantId: null,
+        });
+        console.info('affiliate_outbox_sweep_completed', summary);
+    }
+    catch (error) {
+        console.error('affiliate_outbox_sweep_failed', {
+            error_name: error instanceof Error ? error.name : typeof error,
+            error_message: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+    }
+});
+/**
+ * A published referral event, handed to the Retention Engine.
+ *
+ * The events are written inside the sale transaction and this trigger fires
+ * once that transaction has committed, which is what "publish only after
+ * commit" means here: there is no moment at which a rule can act on a sale
+ * that later rolled back.
+ *
+ * The dispatch records rule executions; it does not send anything. The
+ * messages a referral produces are outbox rows delivered by the trigger above,
+ * and a second sender for the same fact is the one reliable way to send twice.
+ *
+ * Postgres is where the rule catalog lives, so a business with no rows there
+ * yet is seeded first. Every failure is logged and swallowed: a referral
+ * already recorded in Firestore must not be reprocessed because an analytics
+ * database was briefly unreachable.
+ */
+exports.affiliateRetentionEventOnCreate = (0, firestore_2.onDocumentCreated)('businesses/{merchantId}/affiliate_events/{eventId}', async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+        ? event.params.merchantId.trim()
+        : '';
+    const eventId = isNonEmptyString(event.params.eventId)
+        ? event.params.eventId.trim()
+        : '';
+    if (!merchantId || !eventId)
+        return;
+    const data = event.data ? snapshotDataRecord(event.data) : {};
+    const eventType = maybePayloadString(data, 'event_type', 'eventType');
+    if (!(0, retention_engine_js_1.isAffiliateRetentionEvent)(eventType))
+        return;
+    const subjectId = maybePayloadString(data, 'customer_id', 'customerId') ??
+        maybePayloadString(data, 'affiliate_id', 'affiliateId') ??
+        'unknown';
+    try {
+        const now = Date.now();
+        await (0, retention_engine_js_1.seedDefaultRetentionRules)(pool, merchantId, now);
+        const dispatched = await (0, retention_engine_js_1.dispatchAffiliateRetentionEvent)(pool, {
+            merchantId,
+            event: eventType,
+            sourceId: eventId,
+            subjectId,
+            now,
+        });
+        console.info('affiliate_retention_event_dispatched', {
+            merchant_id: merchantId,
+            event_id: eventId,
+            event_type: eventType,
+            rules: dispatched.map((entry) => `${entry.ruleKey}:${entry.status}`),
+        });
+    }
+    catch (error) {
+        console.error('affiliate_retention_event_failed', {
+            merchant_id: merchantId,
+            event_id: eventId,
+            event_type: eventType,
+            error,
+        });
     }
 });
 function resolveMerchantId(decoded) {
@@ -2835,6 +4393,24 @@ function buildCanonicalCustomerId(phoneE164) {
     return (0, crypto_1.createHmac)('sha256', secret)
         .update(`moz-phone-e164-v1:${phoneE164}`)
         .digest('hex');
+}
+/**
+ * The global affiliate identity, derived rather than looked up.
+ *
+ * Same construction as the canonical customer id and the same secret, with a
+ * different label so the two namespaces cannot collide. Deriving it is what
+ * makes "one affiliate per phone" safe under concurrency: two businesses
+ * adding the same person at the same instant address the same document, and
+ * the transaction — not a query that ran a moment ago — decides who created
+ * it. The phone never survives the call: what is stored, logged and audited is
+ * this digest.
+ */
+function buildAffiliateIdentityId(phoneE164) {
+    const secret = requireCustomerCoreSecret();
+    return `af_${(0, crypto_1.createHmac)('sha256', secret)
+        .update(`moz-affiliate-phone-v1:${phoneE164}`)
+        .digest('hex')
+        .slice(0, 40)}`;
 }
 function serializeCanonicalCustomerIdentity(identity) {
     return {
@@ -3379,6 +4955,32 @@ function serializeCustomerBusiness(relationship) {
         last_visit_at: pickNumber(customer, 'last_visit_at'),
     };
 }
+/**
+ * A Bónus de Regresso as the customer needs to see it: what it is worth, and
+ * until when. Everything else on the record — the sale that triggered it, the
+ * sale that consumed it, the merchant scoping — is the merchant's business.
+ *
+ * Only ACTIVE and unexpired bonuses are worth showing: the whole point of
+ * surfacing these is that a bonus nobody knows about brings nobody back, and a
+ * spent or lapsed one is not a reason to return.
+ */
+function serializeCustomerReturnBonus(bonusId, bonusData, now) {
+    const status = (maybePayloadString(bonusData, 'status') ?? '').toUpperCase();
+    const expiresAt = pickNumber(bonusData, 'expires_at') ?? pickNumber(bonusData, 'expiresAt');
+    const value = pickNumber(bonusData, 'value');
+    const type = maybePayloadString(bonusData, 'type');
+    if (status !== 'ACTIVE' || type == null || value == null)
+        return null;
+    if (expiresAt == null || expiresAt <= now)
+        return null;
+    return {
+        bonus_id: bonusId,
+        type,
+        value,
+        issued_at: pickNumber(bonusData, 'issued_at') ?? pickNumber(bonusData, 'issuedAt') ?? null,
+        expires_at: expiresAt,
+    };
+}
 function serializeCustomerReward(rewardId, rewardData, confirmedPoints) {
     const pointsRequired = pickNumber(rewardData, 'points_required') ?? pickNumber(rewardData, 'pointsRequired');
     if ((pickBoolean(rewardData, 'active') ?? true) !== true ||
@@ -3412,10 +5014,23 @@ async function readCustomerBusiness(account, merchantId) {
     const nextReward = activeRewards.find((reward) => reward.points_required > confirmedPoints) ??
         activeRewards.find((reward) => reward.eligible === true) ??
         null;
+    const now = Date.now();
+    // Bounded like the rewards read above: a customer with an unbounded bonus
+    // history must not turn one home-screen request into an unbounded read.
+    const bonusSnapshot = await businessReturnBonusesCollectionRef(merchantId)
+        .where('customer_id', '==', relationship.customerId)
+        .where('status', '==', 'ACTIVE')
+        .limit(MAX_CUSTOMER_RETURN_BONUSES)
+        .get();
+    const returnBonuses = bonusSnapshot.docs
+        .map((document) => serializeCustomerReturnBonus(document.id, snapshotDataRecord(document), now))
+        .filter((bonus) => bonus != null)
+        .sort((left, right) => left.expires_at - right.expires_at);
     return {
         ...serializeCustomerBusiness(relationship),
         rewards,
         next_reward: nextReward,
+        return_bonuses: returnBonuses,
     };
 }
 async function readCustomerActivity(account, maximumEntries) {
@@ -4568,9 +6183,16 @@ async function linkNfcCardToCanonicalCustomer(options) {
         return { cardUid, canonicalCustomerId, created: !snapshot.exists, reassigned };
     });
 }
+/**
+ * Revokes an active card link.
+ *
+ * Returns the link as it stood before the revoke, so a caller that needs to
+ * say what it undid — the admin route's audit entry — does not have to read
+ * the document a second time outside this transaction.
+ */
 async function revokeNfcCardLink(options) {
     const { cardUid } = options;
-    await admin.firestore().runTransaction(async (transaction) => {
+    return admin.firestore().runTransaction(async (transaction) => {
         const ref = nfcCardRef(cardUid);
         const snapshot = await transaction.get(ref);
         const existing = nfcCardLinkFromSnapshot(cardUid, snapshot);
@@ -4582,6 +6204,7 @@ async function revokeNfcCardLink(options) {
             throw new CustomerCoreError(403, 'nfc_card_owner_mismatch', 'This NFC card does not belong to the requesting account.');
         }
         transaction.set(ref, { status: 'REVOKED', updated_at: Date.now() }, { merge: true });
+        return existing;
     });
 }
 async function resolveBusinessRelationshipForCanonicalId(merchantId, canonicalCustomerId) {
@@ -4941,6 +6564,9 @@ function businessRewardsCollectionRef(merchantId) {
 function businessRedemptionsCollectionRef(merchantId) {
     return businessDocumentRef(merchantId).collection('redemptions');
 }
+function businessReturnBonusesCollectionRef(merchantId) {
+    return businessDocumentRef(merchantId).collection('return_bonuses');
+}
 function businessSyncTombstonesCollectionRef(merchantId) {
     return businessDocumentRef(merchantId).collection(SYNC_TOMBSTONE_COLLECTION);
 }
@@ -5053,13 +6679,17 @@ function loyaltyLedgerEntryFromData(data) {
         ? 'SALE_REVERSAL'
         : entryTypeRaw === 'REDEMPTION'
             ? 'REDEMPTION'
-            : 'SALE';
+            : entryTypeRaw === 'REFERRAL_BONUS'
+                ? 'REFERRAL_BONUS'
+                : 'SALE';
     const sourceTypeRaw = maybePayloadString(data, 'source_type')?.trim().toLowerCase();
     const sourceType = sourceTypeRaw === 'sale_cancellation'
         ? 'sale_cancellation'
         : sourceTypeRaw === 'redemption'
             ? 'redemption'
-            : 'sale';
+            : sourceTypeRaw === 'referral'
+                ? 'referral'
+                : 'sale';
     return {
         id: maybePayloadString(data, 'id') ?? '',
         merchant_id: maybePayloadString(data, 'merchant_id') ?? '',
@@ -7104,6 +8734,14 @@ async function upsertSale(merchantId, payload, entityId, req) {
         updatedByAppUserId,
     ]);
     if ((insertResult.rowCount ?? 0) > 0) {
+        // Retention evaluation must never block sale registration or fail the
+        // sync write; log and move on if anything here goes wrong.
+        try {
+            await triggerSaleCompletedRetentionRules(merchantId, customerId, id, amount, updatedAt);
+        }
+        catch (error) {
+            console.error('retention_engine_sale_completed_failed', { merchantId, saleId: id, error });
+        }
         return;
     }
     const existingSaleResult = await pool.query(`
@@ -7137,6 +8775,112 @@ async function upsertSale(merchantId, payload, entityId, req) {
     })) {
         throw new CustomerCoreError(409, 'sale_create_conflict', 'Sale already exists with immutable fields that differ from this create request.', { sale_id: id, merchant_id: merchantId });
     }
+}
+/**
+ * Postgres is the Retention Engine's source of truth (its unique indexes
+ * enforce "max 1 active bonus" / "max 1 bonus per sale" atomically), but the
+ * app currently reads and syncs exclusively through Firestore. Every
+ * Postgres mutation to a bonus is mirrored here so the client's normal
+ * return_bonus sync pull (businesses/{merchantId}/return_bonuses) sees it.
+ */
+/**
+ * Mirrors a closed recovery task into Firestore, and releases its open slot.
+ *
+ * Every other recovery-task write reaches Firestore from the phone, through
+ * `_processRecoveryTask` in `firestore_sync_service.dart`. The portal has no
+ * phone behind it, so the same transaction has to happen here — and the part
+ * that matters is the slot, not the task document.
+ *
+ * `recovery_task_open_slots/{customerId}` is what enforces one open task per
+ * customer: task creation refuses while a slot exists. Closing a task without
+ * deleting its slot would leave that customer unable to receive another task,
+ * permanently and silently. The slot is deleted only when it still points at
+ * this task, so a newer task's slot is never taken out from under it.
+ */
+async function mirrorCompletedRecoveryTaskToFirestore(merchantId, task) {
+    const taskId = pickString(task, 'id');
+    const customerId = pickString(task, 'customer_id');
+    if (!taskId)
+        return;
+    const businessRef = businessDocumentRef(merchantId);
+    const taskRef = businessRef.collection('recovery_tasks').doc(taskId);
+    const slotRef = customerId === undefined || customerId === null || customerId === ''
+        ? null
+        : businessRef.collection('recovery_task_open_slots').doc(customerId);
+    await admin.firestore().runTransaction(async (transaction) => {
+        // Firestore requires every read before any write in a transaction.
+        const slot = slotRef === null ? null : await transaction.get(slotRef);
+        transaction.set(taskRef, task, { merge: true });
+        if (slot !== null && slotRef !== null) {
+            const holder = (slot.data() ?? {}).task_id;
+            if (holder === taskId)
+                transaction.delete(slotRef);
+        }
+    });
+}
+async function mirrorReturnBonusToFirestore(merchantId, bonus) {
+    await admin
+        .firestore()
+        .collection('businesses')
+        .doc(merchantId)
+        .collection('return_bonuses')
+        .doc(bonus.id)
+        .set({
+        id: bonus.id,
+        merchant_id: bonus.merchant_id,
+        customer_id: bonus.customer_id,
+        type: bonus.type,
+        value: bonus.value,
+        status: bonus.status,
+        issued_at: bonus.issued_at,
+        expires_at: bonus.expires_at,
+        source_sale_id: bonus.source_sale_id,
+        redeemed_at: bonus.redeemed_at,
+        redemption_sale_id: bonus.redemption_sale_id,
+        created_at: bonus.created_at,
+        updated_at: bonus.updated_at,
+    }, { merge: true });
+}
+/**
+ * SALE_COMPLETED entry point for the Retention Engine (F1 Bónus de Regresso
+ * today; other MVP rules are evaluated against the seeded catalog but have
+ * no dispatcher yet). Mirrors the Firestore notification_queue write used by
+ * maybeQueueNearRewardReminder so both automated paths share one guardrail
+ * surface (priority + per-customer history) once that guardrail lands.
+ */
+async function triggerSaleCompletedRetentionRules(merchantId, customerId, saleId, saleAmount, now) {
+    await (0, retention_engine_js_1.seedDefaultRetentionRules)(pool, merchantId, now);
+    const result = await (0, retention_engine_js_1.evaluateSaleCompletedRetentionRules)(pool, {
+        merchantId,
+        customerId,
+        saleId,
+        saleAmount,
+        now,
+    });
+    if (!result.issued)
+        return;
+    await mirrorReturnBonusToFirestore(merchantId, result.bonus);
+    await admin
+        .firestore()
+        .collection('businesses')
+        .doc(merchantId)
+        .collection('notification_queue')
+        .add({
+        merchant_id: merchantId,
+        channel: 'whatsapp',
+        payload: {
+            type: 'return_bonus_issued',
+            customer_id: customerId,
+            bonus_id: result.bonus.id,
+            bonus_type: result.bonus.type,
+            bonus_value: result.bonus.value,
+            expires_at: result.bonus.expires_at,
+        },
+        priority: 3,
+        scheduled_at: now,
+        status: 'queued',
+        created_at: now,
+    });
 }
 async function upsertMerchantItem(merchantId, payload, entityId) {
     const id = pickString(payload, 'id') ?? entityId;
@@ -8486,6 +10230,24 @@ async function cancelSaleViaSync(req, payload, saleId) {
             sale_id: saleId,
         });
     }
+    // A cancelled referred sale takes its acquisition and any unpaid reward with
+    // it. This runs after the cancellation has committed and is idempotent by
+    // status — a replay of the same cancel moves nothing a second time — so a
+    // failure here is logged and reported rather than failing a cancellation the
+    // till has already been told about. `usage_count` is never given back.
+    let affiliateReversal = { status: 'not_referred' };
+    try {
+        affiliateReversal = await (0, affiliate_sale_firestore_js_1.reverseReferralSaleInFirestore)({
+            merchantId,
+            saleId,
+            cancelledAt: cancellationRequest.cancelledAt,
+            actorId: actorAppUserId,
+        });
+    }
+    catch (error) {
+        console.error('affiliate_sale_reversal_failed', { merchantId, saleId, error });
+        affiliateReversal = { status: 'FAILED' };
+    }
     return {
         merchant_id: merchantId,
         sale_id: saleId,
@@ -8500,6 +10262,7 @@ async function cancelSaleViaSync(req, payload, saleId) {
             cancellationRequest.replacementSaleId,
         already_cancelled: loyaltyResult.status === 'ALREADY_CANCELLED',
         replacement_sale_link_persisted: loyaltyResult.replacement_sale_link_persisted === true,
+        affiliate_reversal: affiliateReversal,
         loyalty: loyaltyResult,
     };
 }
@@ -9029,3 +10792,58 @@ async function reconcileUsageBalances(nowMs, monthsBack, metrics) {
   `;
     await pool.query(sql, [cutoffMs, metrics, nowMs]);
 }
+/**
+ * Seeds a business's policy documents.
+ *
+ * `firestore.rules` makes subscription_state, entitlements, feature_flags,
+ * remote_config and usage_balances read-only to clients — correctly, since a
+ * client that could write its own entitlements could grant itself a plan. The
+ * app tried anyway and was refused, so until now every business created from
+ * the app had none of them: no plan, no quota, and a plan screen in the portal
+ * with nothing on it.
+ *
+ * Written rather than merged, and only where absent. A business whose plan was
+ * later changed in the console must not be pulled back to Free by a later
+ * write to its own document, so anything already there is left exactly as it
+ * is — this only ever fills gaps.
+ *
+ * On write rather than on create, deliberately: businesses created before this
+ * existed are missing the same documents, and they get them the next time the
+ * business document is touched instead of needing a migration.
+ */
+exports.merchantPolicyBootstrapOnBusinessWrite = (0, firestore_2.onDocumentWritten)('businesses/{merchantId}', async (event) => {
+    const merchantId = isNonEmptyString(event.params.merchantId)
+        ? event.params.merchantId.trim()
+        : '';
+    if (!merchantId)
+        return;
+    const after = event.data?.after;
+    if (!after?.exists)
+        return;
+    const data = snapshotDataRecord(after);
+    const status = pickString(data, 'subscription_status') ?? 'TRIAL';
+    const documents = (0, merchant_bootstrap_js_1.bootstrapDocuments)({
+        merchantId,
+        subscriptionStatus: status,
+        now: Date.now(),
+    });
+    const db = admin.firestore();
+    const business = db.collection('businesses').doc(merchantId);
+    const missing = (await Promise.all(documents.map(async (doc) => {
+        const ref = business.collection(doc.collection).doc(doc.id);
+        const snapshot = await ref.get();
+        return snapshot.exists ? null : { ref, data: doc.data };
+    }))).filter((entry) => entry !== null);
+    if (missing.length === 0)
+        return;
+    const batch = db.batch();
+    for (const entry of missing) {
+        batch.set(entry.ref, entry.data);
+    }
+    await batch.commit();
+    console.log('merchant_policy_seeded', {
+        event: 'merchant_policy_seeded',
+        merchant_id: merchantId,
+        documents_written: missing.length,
+    });
+});
