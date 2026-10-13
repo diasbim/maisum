@@ -75,7 +75,7 @@ class _CatalogTab extends ConsumerWidget {
             const SizedBox(height: 12),
             if (items.isEmpty)
               EmptyState(
-                title: 'Nenhum ${title.toLowerCase()} cadastrado',
+                title: 'Nenhum ${title.toLowerCase()} registado',
                 subtitle: 'Crie itens para selecionar durante uma venda.',
               )
             else
@@ -379,7 +379,7 @@ class _CatalogItemSheetState extends ConsumerState<_CatalogItemSheet> {
     if (name.isEmpty) {
       AppFeedback.showMessage(
         context,
-        message: 'Informe o nome do item.',
+        message: 'Indique o nome do item.',
         isError: true,
       );
       return;

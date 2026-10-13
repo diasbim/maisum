@@ -38,7 +38,10 @@ final engageDaoProvider = Provider<EngageDao>(
 );
 
 final engageAccessProvider = FutureProvider<EngageAccess>((ref) async {
-  final gate = ref.read(app_providers.featureGateProvider);
+  // `watch` (not `read`): featureGateProvider recomputes when the debug
+  // bypass toggle in Settings changes, and this must recompute with it so
+  // Engage screens unlock immediately instead of showing a stale decision.
+  final gate = ref.watch(app_providers.featureGateProvider);
 
   final viewRisk = await gate.check(featureKey: FeatureKeys.engageViewRisk);
   final manageRecovery = await gate.check(

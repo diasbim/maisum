@@ -223,7 +223,10 @@ service cloud.firestore {
           .where((row) => row['is_enabled'] == 1)
           .map((row) => row['feature_key'])
           .toSet();
-      expect(enabledFeatures, {FeatureKeys.whatsappAutomation});
+      expect(enabledFeatures, {
+        FeatureKeys.whatsappAutomation,
+        FeatureKeys.retentionCore,
+      });
 
       final quotaRows = await db.query(
         'usage_balances',

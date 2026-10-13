@@ -21,6 +21,15 @@ final class CustomerFeatureDisabledException extends AppException {
   ]);
 }
 
+/// Thrown when the user closes the Google account picker without choosing
+/// an account. This is a normal, expected user action — not a failure — so
+/// it must never be reported as an error or surfaced with error styling.
+final class GoogleSignInCancelledException extends AppException {
+  const GoogleSignInCancelledException([
+    super.message = 'Login cancelado.',
+  ]);
+}
+
 final class ServerException extends AppException {
   const ServerException(
       {required this.statusCode, String message = 'Erro no servidor.'})

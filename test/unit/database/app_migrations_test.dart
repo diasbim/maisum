@@ -28,6 +28,27 @@ Future<Set<String>> _columns(Database db, String table) async {
   return rows.map((row) => row['name'] as String?).whereType<String>().toSet();
 }
 
+Future<bool> _tableExists(Database db, String table) async {
+  final rows = await db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?",
+    [table],
+  );
+  return rows.isNotEmpty;
+}
+
+Future<Set<String>> _indexes(Database db, String table) async {
+  final rows = await db.rawQuery('PRAGMA index_list($table)');
+  return rows.map((row) => row['name'] as String?).whereType<String>().toSet();
+}
+
+Future<String?> _indexSql(Database db, String indexName) async {
+  final rows = await db.rawQuery(
+    "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+    [indexName],
+  );
+  return rows.isEmpty ? null : rows.single['sql'] as String?;
+}
+
 void main() {
   test('migrates v13 to v14 and preserves data', () async {
     final db = await _openDb(version: 13);
@@ -300,5 +321,995 @@ void main() {
       ),
       throwsA(anything),
     );
+  });
+
+  test('v29 adds return_bonuses for the Retention Engine (Bónus de Regresso)',
+      () async {
+    final db = await _openDb(version: 28);
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+
+    await AppMigrations.migrate(db, fromVersion: 28, toVersion: 29);
+
+    final cols = await _columns(db, 'return_bonuses');
+    expect(
+      cols,
+      containsAll(<String>[
+        'id',
+        'merchant_id',
+        'customer_id',
+        'type',
+        'value',
+        'status',
+        'issued_at',
+        'expires_at',
+        'source_sale_id',
+        'redeemed_at',
+        'redemption_sale_id',
+        'created_at',
+        'updated_at',
+        'synced',
+      ]),
+    );
+
+    await db.insert('return_bonuses', {
+      'id': 'b1',
+      'merchant_id': 'm1',
+      'customer_id': 'c1',
+      'type': 'DISCOUNT',
+      'value': 20,
+      'status': 'ACTIVE',
+      'issued_at': 1000,
+      'expires_at': 2000,
+      'created_at': 1000,
+      'updated_at': 1000,
+      'synced': 0,
+    });
+    final rows =
+        await db.query('return_bonuses', where: 'id = ?', whereArgs: ['b1']);
+    expect(rows.single['status'], 'ACTIVE');
+  });
+
+  test('v30 creates the affiliate data foundation on a fresh database',
+      () async {
+    final db = await _openDb(version: 30);
+
+    for (final table in <String>[
+      'affiliates',
+      'affiliate_merchants',
+      'affiliate_codes',
+      'affiliate_code_lookup_cache',
+      'affiliate_attributions',
+      'affiliate_rewards',
+      'affiliate_events',
+      'affiliate_fraud_signals',
+    ]) {
+      expect(await _tableExists(db, table), isTrue, reason: table);
+    }
+
+    expect(
+      await _columns(db, 'sales'),
+      containsAll(<String>[
+        'gross_amount',
+        'referral_benefit_type',
+        'referral_benefit_value',
+        'referral_benefit_amount',
+        'affiliate_code_id',
+        'referral_status',
+      ]),
+    );
+    expect(
+      await _columns(db, 'sync_queue'),
+      containsAll(<String>[
+        'local_id',
+        'idempotency_key',
+        'last_sync_error',
+      ]),
+    );
+    expect(
+      await _indexes(db, 'affiliate_attributions'),
+      contains('idx_affiliate_attributions_non_rejected_customer'),
+    );
+    expect(
+      await _indexSql(
+        db,
+        'idx_affiliate_attributions_non_rejected_customer',
+      ),
+      contains("WHERE status <> 'REJECTED'"),
+    );
+    expect(
+      await _indexes(db, 'affiliate_rewards'),
+      contains('idx_affiliate_rewards_attribution_type'),
+    );
+    expect(
+      await _indexes(db, 'sync_queue'),
+      contains('idx_sync_queue_idempotency_key'),
+    );
+
+    final migrationLog = await db.query(
+      'migration_log',
+      where: 'version = ?',
+      whereArgs: [30],
+      limit: 1,
+    );
+    expect(migrationLog, hasLength(1));
+  });
+
+  test('v30 upgrades v29 data and preserves legacy sale and sync rows',
+      () async {
+    final db = await _openDb(version: 29);
+    await db.insert('merchants', {
+      'id': 'm1',
+      'phone': '+258841234567',
+      'merchant_name': 'Mais Um',
+      'slug': 'mais-um',
+      'subscription_status': 'TRIAL',
+      'created_at': 1,
+      'updated_at': 1,
+    });
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    await db.insert('customers', {
+      'id': 'c2',
+      'merchant_id': 'm1',
+      'name': 'Beatriz',
+      'phone': '841234568',
+      'total_points': 0,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    await db.insert('sales', {
+      'id': 's1',
+      'merchant_id': 'm1',
+      'customer_id': 'c1',
+      'amount': 250,
+      'points': 2,
+      'created_at': 10,
+      'updated_at': 10,
+      'confirmation_status': 'PENDING',
+      'cancellation_status': 'ACTIVE',
+      'synced': 0,
+    });
+    await db.insert('sync_queue', {
+      'id': 'q1',
+      'operation': 'create',
+      'entity_type': 'sale',
+      'entity_id': 's1',
+      'payload': '{"id":"s1"}',
+      'created_at': 11,
+      'retry_count': 1,
+      'status': 'failed',
+      'merchant_id': 'm1',
+      'device_id': 'device-1',
+      'next_attempt_at': 0,
+      'last_error': 'timeout',
+    });
+
+    await AppMigrations.migrate(db, fromVersion: 29, toVersion: 30);
+
+    final sale =
+        (await db.query('sales', where: 'id = ?', whereArgs: ['s1'])).single;
+    expect(sale['amount'], 250.0);
+    expect(sale['points'], 2);
+    expect(sale['gross_amount'], isNull);
+    expect(sale['affiliate_code_id'], isNull);
+    expect(sale['referral_status'], isNull);
+
+    final syncRow =
+        (await db.query('sync_queue', where: 'id = ?', whereArgs: ['q1']))
+            .single;
+    expect(syncRow['entity_id'], 's1');
+    expect(syncRow['status'], 'failed');
+    expect(syncRow['last_error'], 'timeout');
+    expect(syncRow['local_id'], 's1');
+    expect(syncRow['idempotency_key'], 'q1');
+    expect(syncRow['last_sync_error'], 'timeout');
+
+    expect(
+      await _indexes(db, 'sales'),
+      containsAll(<String>[
+        'idx_sales_affiliate_code',
+        'idx_sales_referral_status',
+      ]),
+    );
+  });
+
+  test('v30 enforces affiliate uniqueness constraints and active attribution',
+      () async {
+    final db = await _openDb(version: 30);
+    await db.insert('merchants', {
+      'id': 'm1',
+      'phone': '+258841234567',
+      'merchant_name': 'Mais Um',
+      'slug': 'mais-um',
+      'subscription_status': 'TRIAL',
+      'created_at': 1,
+      'updated_at': 1,
+    });
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    await db.insert('sales', {
+      'id': 's1',
+      'merchant_id': 'm1',
+      'customer_id': 'c1',
+      'amount': 300,
+      'points': 3,
+      'created_at': 10,
+      'updated_at': 10,
+      'confirmation_status': 'PENDING',
+      'cancellation_status': 'ACTIVE',
+      'synced': 0,
+    });
+
+    await db.insert('affiliates', {
+      'id': 'a1',
+      'phone': '+258841111111',
+      'normalized_phone': '258841111111',
+      'first_name': 'Ana',
+      'last_name': 'Silva',
+      'display_name': 'Ana Silva',
+      'status': 'ACTIVE',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 0,
+    });
+
+    expect(
+      () => db.insert('affiliates', {
+        'id': 'a2',
+        'phone': '+258841111111',
+        'normalized_phone': '258841111111',
+        'first_name': 'Outra',
+        'display_name': 'Outra Pessoa',
+        'status': 'ACTIVE',
+        'created_at': 10,
+        'updated_at': 10,
+        'synced': 0,
+      }),
+      throwsA(anything),
+    );
+
+    await db.insert('affiliate_merchants', {
+      'id': 'am1',
+      'merchant_id': 'm1',
+      'affiliate_id': 'a1',
+      'status': 'ACTIVE',
+      'linked_at': 10,
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 0,
+    });
+    expect(
+      () => db.insert('affiliate_merchants', {
+        'id': 'am2',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'status': 'ACTIVE',
+        'linked_at': 11,
+        'created_at': 11,
+        'updated_at': 11,
+        'synced': 0,
+      }),
+      throwsA(anything),
+    );
+
+    await db.insert('affiliate_codes', {
+      'id': 'code1',
+      'merchant_id': 'm1',
+      'affiliate_id': 'a1',
+      'code': 'AFI-ANA-2345',
+      'normalized_code': 'AFI-ANA-2345',
+      'benefit_type': 'POINTS',
+      'benefit_value': 50,
+      'usage_count': 0,
+      'first_visit_only': 1,
+      'status': 'ACTIVE',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 0,
+    });
+    expect(
+      () => db.insert('affiliate_codes', {
+        'id': 'code2',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'code': 'AFI-ANA-9876',
+        'normalized_code': 'AFI-ANA-9876',
+        'benefit_type': 'POINTS',
+        'benefit_value': 25,
+        'usage_count': 0,
+        'first_visit_only': 1,
+        'status': 'ACTIVE',
+        'created_at': 11,
+        'updated_at': 11,
+        'synced': 0,
+      }),
+      throwsA(anything),
+    );
+    expect(
+      () => db.insert('affiliate_codes', {
+        'id': 'code3',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'code': 'AFI-ANA-2345',
+        'normalized_code': 'AFI-ANA-2345',
+        'benefit_type': 'POINTS',
+        'benefit_value': 25,
+        'usage_count': 0,
+        'first_visit_only': 1,
+        'status': 'DISABLED',
+        'created_at': 11,
+        'updated_at': 11,
+        'synced': 0,
+      }),
+      throwsA(anything),
+    );
+
+    await db.insert('affiliate_attributions', {
+      'id': 'attr1',
+      'merchant_id': 'm1',
+      'affiliate_id': 'a1',
+      'affiliate_code_id': 'code1',
+      'customer_id': 'c1',
+      'qualifying_sale_id': 's1',
+      'status': 'CONFIRMED',
+      'attributed_at': 10,
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 0,
+    });
+    expect(
+      () => db.insert('affiliate_attributions', {
+        'id': 'attr2',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'affiliate_code_id': 'code1',
+        'customer_id': 'c1',
+        'qualifying_sale_id': 's1',
+        'status': 'CANCELLED',
+        'attributed_at': 11,
+        'created_at': 11,
+        'updated_at': 11,
+        'synced': 0,
+      }),
+      throwsA(anything),
+    );
+    expect(
+      () => db.insert('affiliate_attributions', {
+        'id': 'attr-invalid-status',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'affiliate_code_id': 'code1',
+        'customer_id': 'c2',
+        'status': 'ACTIVE',
+        'attributed_at': 11,
+        'created_at': 11,
+        'updated_at': 11,
+        'synced': 0,
+      }),
+      throwsA(anything),
+    );
+    await db.insert('affiliate_attributions', {
+      'id': 'attr3',
+      'merchant_id': 'm1',
+      'affiliate_id': 'a1',
+      'affiliate_code_id': 'code1',
+      'customer_id': 'c1',
+      'status': 'REJECTED',
+      'rejection_code': 'CUSTOMER_ALREADY_REFERRED',
+      'attributed_at': 12,
+      'created_at': 12,
+      'updated_at': 12,
+      'synced': 0,
+    });
+
+    await db.insert('affiliate_rewards', {
+      'id': 'reward1',
+      'merchant_id': 'm1',
+      'affiliate_id': 'a1',
+      'attribution_id': 'attr1',
+      'reward_type': 'FIRST_QUALIFYING_SALE',
+      'value_type': 'POINTS',
+      'reward_value': 50,
+      'status': 'PENDING',
+      'approval_required': 1,
+      'source_sale_id': 's1',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 0,
+    });
+    expect(
+      () => db.insert('affiliate_rewards', {
+        'id': 'reward2',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'attribution_id': 'attr1',
+        'reward_type': 'FIRST_QUALIFYING_SALE',
+        'value_type': 'POINTS',
+        'reward_value': 25,
+        'status': 'APPROVED',
+        'approval_required': 1,
+        'source_sale_id': 's1',
+        'created_at': 11,
+        'updated_at': 11,
+        'synced': 0,
+      }),
+      throwsA(anything),
+    );
+    expect(
+      () => db.insert('affiliate_rewards', {
+        'id': 'reward-invalid-type',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'attribution_id': 'attr1',
+        'reward_type': 'FIRST_SALE',
+        'value_type': 'AMOUNT',
+        'reward_value': 25,
+        'status': 'REJECTED',
+        'approval_required': 1,
+        'created_at': 11,
+        'updated_at': 11,
+        'synced': 0,
+      }),
+      throwsA(anything),
+    );
+    expect(
+      () => db.insert('affiliate_events', {
+        'id': 'event-invalid-type',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'event_type': 'ATTRIBUTION_CREATED',
+        'attribution_id': 'attr1',
+        'customer_id': 'c1',
+        'occurred_at': 11,
+        'created_at': 11,
+        'schema_version': 1,
+        'payload': '{}',
+      }),
+      throwsA(anything),
+    );
+    expect(
+      () => db.insert('affiliate_fraud_signals', {
+        'id': 'signal-invalid-type',
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'signal_type': 'SYNC_REJECTED',
+        'severity': 'MEDIUM',
+        'attribution_id': 'attr1',
+        'customer_id': 'c1',
+        'created_at': 11,
+        'metadata': '{}',
+      }),
+      throwsA(anything),
+    );
+  });
+
+  test('v31 adds the offline referral columns without touching v30 data',
+      () async {
+    final db = await _openDb(version: 30);
+    await db.insert('merchants', {
+      'id': 'm1',
+      'phone': '+258841234567',
+      'merchant_name': 'Mais Um',
+      'slug': 'mais-um',
+      'subscription_status': 'TRIAL',
+      'created_at': 1,
+      'updated_at': 1,
+    });
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    await db.insert('sales', {
+      'id': 's1',
+      'merchant_id': 'm1',
+      'customer_id': 'c1',
+      'amount': 250,
+      'points': 2,
+      'created_at': 10,
+      'updated_at': 10,
+      'confirmation_status': 'PENDING',
+      'cancellation_status': 'ACTIVE',
+      'gross_amount': 300,
+      'referral_benefit_type': 'FIXED_AMOUNT',
+      'referral_benefit_amount': 50,
+      'affiliate_code_id': 'code-1',
+      'referral_status': 'ATTRIBUTED',
+      'synced': 1,
+    });
+    await db.insert('affiliates', {
+      'id': 'a1',
+      'phone': '+258841111111',
+      'normalized_phone': '258841111111',
+      'first_name': 'Ana',
+      'display_name': 'Ana Silva',
+      'status': 'ACTIVE',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 1,
+    });
+    await db.insert('affiliate_codes', {
+      'id': 'code-1',
+      'merchant_id': 'm1',
+      'affiliate_id': 'a1',
+      'code': 'AFI-ANA-2345',
+      'normalized_code': 'AFI-ANA-2345',
+      'benefit_type': 'FIXED_AMOUNT',
+      'benefit_value': 50,
+      'usage_count': 0,
+      'first_visit_only': 1,
+      'status': 'ACTIVE',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 1,
+    });
+    await db.insert('affiliate_code_lookup_cache', {
+      'normalized_code': 'AFI-ANA-2345',
+      'code_id': 'code-1',
+      'merchant_id': 'm1',
+      'affiliate_id': 'a1',
+      'code': 'AFI-ANA-2345',
+      'status': 'ACTIVE',
+      'benefit_type': 'FIXED_AMOUNT',
+      'benefit_value': 50,
+      'usage_count': 0,
+      'first_visit_only': 1,
+      'cached_at': 900,
+      'updated_at': 900,
+    });
+
+    await AppMigrations.migrate(db, fromVersion: 30, toVersion: 31);
+
+    // v30 shipped; it is extended, never rewritten. Everything it stored is
+    // still exactly where it was.
+    final sale =
+        (await db.query('sales', where: 'id = ?', whereArgs: ['s1'])).single;
+    expect(sale['amount'], 250.0);
+    expect(sale['gross_amount'], 300.0);
+    expect(sale['referral_status'], 'ATTRIBUTED');
+    expect(sale['referral_code_input'], isNull);
+    expect(sale['referral_local_benefit_applied'], 0);
+
+    expect(
+      await _columns(db, 'sales'),
+      containsAll(<String>[
+        'referral_code_input',
+        'affiliate_id',
+        'referral_rejection_code',
+        'referral_status_message',
+        'referral_local_benefit_applied',
+        'referral_idempotency_key',
+      ]),
+    );
+    for (final table in <String>[
+      'affiliates',
+      'affiliate_merchants',
+      'affiliate_codes',
+    ]) {
+      expect(
+        await _columns(db, table),
+        containsAll(<String>[
+          'provisional',
+          'local_id',
+          'sync_status',
+          'last_sync_error',
+        ]),
+        reason: table,
+      );
+    }
+    expect(
+      await _columns(db, 'affiliate_code_lookup_cache'),
+      containsAll(<String>[
+        'affiliate_display_name',
+        'affiliate_first_name',
+        'affiliate_status',
+        'link_status',
+        'refreshed_at',
+      ]),
+    );
+    expect(
+      await _columns(db, 'affiliate_attributions'),
+      containsAll(<String>['idempotency_key', 'sync_status']),
+    );
+    expect(
+      await _columns(db, 'affiliate_rewards'),
+      contains('idempotency_key'),
+    );
+
+    // An existing cache row is backfilled rather than left with a null
+    // refreshed_at, which would read as "never confirmed".
+    final cached = (await db.query('affiliate_code_lookup_cache')).single;
+    expect(cached['refreshed_at'], 900);
+    expect(cached['affiliate_status'], 'ACTIVE');
+    expect(cached['link_status'], 'ACTIVE');
+
+    final affiliate =
+        (await db.query('affiliates', where: 'id = ?', whereArgs: ['a1']))
+            .single;
+    expect(affiliate['provisional'], 0);
+    expect(affiliate['sync_status'], isNull);
+
+    final migrationLog = await db.query(
+      'migration_log',
+      where: 'version = ?',
+      whereArgs: [31],
+      limit: 1,
+    );
+    expect(migrationLog, hasLength(1));
+  });
+
+  test('v31 stores a locally decided referral and a provisional affiliate',
+      () async {
+    final db = await _openDb(version: 31);
+    await db.insert('merchants', {
+      'id': 'm1',
+      'phone': '+258841234567',
+      'merchant_name': 'Mais Um',
+      'slug': 'mais-um',
+      'subscription_status': 'TRIAL',
+      'created_at': 1,
+      'updated_at': 1,
+    });
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 0,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+
+    await db.insert('sales', {
+      'id': 'sale_offline',
+      'merchant_id': 'm1',
+      'customer_id': 'c1',
+      'amount': 250,
+      'points': 2,
+      'created_at': 10,
+      'updated_at': 10,
+      'confirmation_status': 'PENDING',
+      'cancellation_status': 'ACTIVE',
+      'gross_amount': 300,
+      'referral_benefit_type': 'FIXED_AMOUNT',
+      'referral_benefit_value': 50,
+      'referral_benefit_amount': 50,
+      'referral_status': 'PENDING_SYNC',
+      'referral_code_input': 'AFI-ANA-2345',
+      'referral_local_benefit_applied': 1,
+      'referral_idempotency_key': 'sale:till-1:local-1',
+      'synced': 0,
+    });
+    final sale = (await db.query('sales')).single;
+    expect(sale['referral_status'], 'PENDING_SYNC');
+    expect(sale['referral_local_benefit_applied'], 1);
+
+    await db.insert('affiliates', {
+      'id': 'local_1',
+      'phone': '+258849998888',
+      'normalized_phone': '258849998888',
+      'first_name': 'Beatriz',
+      'display_name': 'Beatriz Cossa',
+      'status': 'ACTIVE',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 0,
+      'provisional': 1,
+      'local_id': 'local-1',
+      'sync_status': 'PENDING',
+    });
+    await db.insert('affiliate_codes', {
+      'id': 'acl_local-1',
+      'merchant_id': 'm1',
+      'affiliate_id': 'local_1',
+      'code': 'LOCAL-BEATRIZ-A1B2C3',
+      'normalized_code': 'LOCAL-BEATRIZ-A1B2C3',
+      'benefit_type': 'FIXED_AMOUNT',
+      'benefit_value': 40,
+      'usage_count': 0,
+      'first_visit_only': 1,
+      'status': 'ACTIVE',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 0,
+      'provisional': 1,
+      'local_id': 'local-1',
+      'sync_status': 'PENDING',
+    });
+
+    final provisional = await db.query(
+      'affiliate_codes',
+      where: 'provisional = ?',
+      whereArgs: [1],
+    );
+    expect(provisional, hasLength(1));
+    expect(provisional.single['code'], startsWith('LOCAL-'));
+    // The global uniqueness the server owns is untouched by a local guess: a
+    // provisional code is not in the AFI- namespace at all.
+    expect(provisional.single['normalized_code'], isNot(startsWith('AFI-')));
+  });
+
+  /* ------------------------------------------- the whole affiliate upgrade */
+
+  /// The three questions a released upgrade actually has to answer.
+  ///
+  /// The tests above each check one step. These check the path a device
+  /// actually takes: a phone on the last release opens the new build once and
+  /// jumps v29 → v31 in a single call, and a phone installing for the first
+  /// time gets the same schema by a different route. A migration that only
+  /// works one step at a time, or a fresh install that ends up with a different
+  /// schema from an upgraded one, is a bug nobody sees until the store rollout.
+
+  test('a device on v29 reaches v31 in one jump and keeps its data', () async {
+    final db = await _openDb(version: 29);
+    await db.insert('merchants', {
+      'id': 'm1',
+      'phone': '+258841234567',
+      'merchant_name': 'Mais Um',
+      'slug': 'mais-um',
+      'subscription_status': 'TRIAL',
+      'created_at': 1,
+      'updated_at': 1,
+    });
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 12,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    await db.insert('sales', {
+      'id': 's1',
+      'merchant_id': 'm1',
+      'customer_id': 'c1',
+      'amount': 250,
+      'points': 2,
+      'created_at': 10,
+      'updated_at': 10,
+      'confirmation_status': 'CONFIRMED',
+      'cancellation_status': 'ACTIVE',
+      'synced': 1,
+    });
+    await db.insert('sync_queue', {
+      'id': 'q1',
+      'operation': 'create',
+      'entity_type': 'sale',
+      'entity_id': 's1',
+      'payload': '{}',
+      'retry_count': 0,
+      'status': 'pending',
+      'created_at': 10,
+    });
+
+    // The one call the app makes at launch, from the version it found.
+    await AppMigrations.migrate(db, fromVersion: 29, toVersion: 31);
+
+    // Every affiliate table exists, including the v31 offline ones.
+    for (final table in <String>[
+      'affiliates',
+      'affiliate_merchants',
+      'affiliate_codes',
+      'affiliate_code_lookup_cache',
+      'affiliate_attributions',
+      'affiliate_rewards',
+      'affiliate_events',
+      'affiliate_fraud_signals',
+    ]) {
+      expect(await _tableExists(db, table), isTrue, reason: table);
+    }
+    expect(
+      await _columns(db, 'sales'),
+      containsAll(<String>[
+        'gross_amount',
+        'referral_benefit_type',
+        'referral_status',
+        'referral_code_input',
+        'referral_local_benefit_applied',
+        'referral_idempotency_key',
+        'referral_rejection_code',
+        'referral_status_message',
+      ]),
+    );
+    expect(
+      await _columns(db, 'sync_queue'),
+      containsAll(<String>[
+        'local_id',
+        'idempotency_key',
+        'last_sync_error',
+        'device_id',
+      ]),
+    );
+
+    // And the rows that were already there are untouched.
+    final sale = (await db.query('sales')).single;
+    expect(sale['id'], 's1');
+    expect(sale['amount'], 250);
+    expect(sale['points'], 2);
+    expect(sale['confirmation_status'], 'CONFIRMED');
+    // The new columns default to "this sale had no referral", which is what
+    // every sale made before the feature existed actually was.
+    expect(sale['gross_amount'], isNull);
+    expect(sale['referral_status'], isNull);
+    expect(sale['affiliate_code_id'], isNull);
+
+    expect((await db.query('customers')).single['total_points'], 12);
+    final queued = (await db.query('sync_queue')).single;
+    expect(queued['id'], 'q1');
+    expect(queued['entity_type'], 'sale');
+    // The queue row predates the column, so the migration backfills a key from
+    // the row's own id rather than leaving it null — an operation with no
+    // idempotency key is one the server cannot recognise on a retry.
+    expect(queued['idempotency_key'], 'q1');
+  });
+
+  test('a fresh install and an upgraded device end up with the same schema',
+      () async {
+    final upgraded = await _openDb(version: 29);
+    await AppMigrations.migrate(upgraded, fromVersion: 29, toVersion: 31);
+    final fresh = await _openDb(version: 31);
+
+    Future<Set<String>> affiliateTables(Database db) async {
+      final rows = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name LIKE 'affiliate%'",
+      );
+      return rows.map((row) => row['name'] as String).toSet();
+    }
+
+    expect(await affiliateTables(upgraded), await affiliateTables(fresh));
+
+    for (final table in <String>[
+      ...await affiliateTables(fresh),
+      'sales',
+      'sync_queue',
+    ]) {
+      expect(
+        await _columns(upgraded, table),
+        await _columns(fresh, table),
+        reason: '$table differs between a fresh install and an upgrade',
+      );
+      expect(
+        await _indexes(upgraded, table),
+        await _indexes(fresh, table),
+        reason: '$table has different indexes after an upgrade',
+      );
+    }
+  });
+
+  test('a fresh v31 enforces every affiliate constraint the server relies on',
+      () async {
+    final db = await _openDb(version: 31);
+    await db.insert('merchants', {
+      'id': 'm1',
+      'phone': '+258841234567',
+      'merchant_name': 'Mais Um',
+      'slug': 'mais-um',
+      'subscription_status': 'TRIAL',
+      'created_at': 1,
+      'updated_at': 1,
+    });
+    await db.insert('customers', {
+      'id': 'c1',
+      'merchant_id': 'm1',
+      'name': 'Ana',
+      'phone': '841234567',
+      'total_points': 0,
+      'created_at': 1,
+      'updated_at': 1,
+      'synced': 0,
+    });
+    await db.insert('affiliates', {
+      'id': 'a1',
+      'phone': '+258841111111',
+      'normalized_phone': '258841111111',
+      'first_name': 'Ana',
+      'display_name': 'Ana Silva',
+      'status': 'ACTIVE',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 1,
+    });
+    await db.insert('affiliate_codes', {
+      'id': 'code-1',
+      'merchant_id': 'm1',
+      'affiliate_id': 'a1',
+      'code': 'AFI-ANA-2345',
+      'normalized_code': 'AFI-ANA-2345',
+      'benefit_type': 'FIXED_AMOUNT',
+      'benefit_value': 50,
+      'usage_count': 0,
+      'first_visit_only': 1,
+      'status': 'ACTIVE',
+      'created_at': 10,
+      'updated_at': 10,
+      'synced': 1,
+    });
+
+    Future<void> insertAttribution(String id, String status) {
+      return db.insert('affiliate_attributions', {
+        'id': id,
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'affiliate_code_id': 'code-1',
+        'customer_id': 'c1',
+        'status': status,
+        'attributed_at': 20,
+        'created_at': 20,
+        'updated_at': 20,
+        'synced': 1,
+      });
+    }
+
+    await insertAttribution('aa-1', 'CONFIRMED');
+    // Two live attributions for one customer would be two affiliates each
+    // owed a reward for the same acquisition.
+    await expectLater(
+      insertAttribution('aa-2', 'CONFIRMED'),
+      throwsA(isA<DatabaseException>()),
+    );
+    // A rejected one is not a claim, so it may coexist.
+    await insertAttribution('aa-3', 'REJECTED');
+    expect(await db.query('affiliate_attributions'), hasLength(2));
+
+    Future<void> insertReward(String id, String type) {
+      return db.insert('affiliate_rewards', {
+        'id': id,
+        'merchant_id': 'm1',
+        'affiliate_id': 'a1',
+        'attribution_id': 'aa-1',
+        'reward_type': type,
+        'value_type': 'POINTS',
+        'reward_value': 100,
+        'status': 'PENDING',
+        'created_at': 30,
+        'updated_at': 30,
+        'synced': 1,
+      });
+    }
+
+    await insertReward('ar-1', 'FIRST_QUALIFYING_SALE');
+    // One reward per attribution per type: the duplicate-reward conflict rule
+    // the sync path relies on being decided by the database.
+    await expectLater(
+      insertReward('ar-2', 'FIRST_QUALIFYING_SALE'),
+      throwsA(isA<DatabaseException>()),
+    );
+    await insertReward('ar-3', 'CUSTOMER_RETURN');
+    expect(await db.query('affiliate_rewards'), hasLength(2));
   });
 }

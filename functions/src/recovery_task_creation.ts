@@ -69,6 +69,51 @@ export const CREATE_OPEN_RECOVERY_TASK_SQL = `
   RETURNING recovery_tasks.*, recovery_tasks.id = $1 AS creation_created
 `;
 
+/**
+ * Completing a task, scoped to its own business.
+ *
+ * `status` is compared case-insensitively because the two writers disagree:
+ * the app stores `open`/`completed` lower-case, and nothing stops a future
+ * caller from sending `OPEN`. Re-completing a task that is already completed
+ * returns no row rather than touching `updated_at`, so a double click does not
+ * rewrite who closed it and when.
+ */
+export const COMPLETE_RECOVERY_TASK_SQL = `
+  UPDATE recovery_tasks
+  SET status = 'completed',
+    updated_at = $3,
+    updated_by_app_user_id = $4
+  WHERE id = $1
+    AND merchant_id = $2
+    AND LOWER(status) <> 'completed'
+  RETURNING *
+`;
+
+export type CompleteRecoveryTaskInput = {
+  merchantId: string;
+  taskId: string;
+  actorAppUserId: string | null;
+  now: number;
+};
+
+/**
+ * Returns the task as it now stands, or null when there was nothing to close —
+ * an unknown id, another business's task, or one already completed. The caller
+ * decides which of those it wants to tell the user apart.
+ */
+export async function completeRecoveryTask(
+  db: Queryable,
+  input: CompleteRecoveryTaskInput,
+): Promise<Record<string, unknown> | null> {
+  const result = await db.query(COMPLETE_RECOVERY_TASK_SQL, [
+    input.taskId,
+    input.merchantId,
+    input.now,
+    input.actorAppUserId,
+  ]);
+  return result.rows[0] ?? null;
+}
+
 export async function createOrGetOpenRecoveryTask(
   db: Queryable,
   input: CreateRecoveryTaskInput,

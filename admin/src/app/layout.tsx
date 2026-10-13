@@ -38,7 +38,14 @@ export default function RootLayout({
       lang="pt-MZ"
       className={`${headingFont.variable} ${bodyFont.variable}`}
     >
-      <body>{children}</body>
+      {/*
+       * suppressHydrationWarning here, not elsewhere: browser extensions
+       * (Grammarly, password managers, ...) inject attributes like
+       * `data-gr-ext-installed` onto <body> before React hydrates. That's a
+       * mismatch React can't control and isn't a bug in this tree, so it's
+       * silenced at the one element extensions actually touch.
+       */}
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

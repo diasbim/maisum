@@ -16,6 +16,12 @@ import '../features/auth/presentation/post_auth_navigation.dart';
 import '../features/auth/presentation/role_gate_screen.dart';
 import '../features/auth/presentation/splash_screen.dart';
 import '../features/admin_portal/presentation/admin_portal_shell.dart';
+import '../features/affiliates/presentation/affiliate_code_screen.dart';
+import '../features/affiliates/presentation/affiliate_create_screen.dart';
+import '../features/affiliates/presentation/affiliate_detail_screen.dart';
+import '../features/affiliates/presentation/affiliate_list_screen.dart';
+import '../features/affiliates/presentation/affiliate_metrics_screen.dart';
+import '../features/affiliates/presentation/affiliate_rewards_screen.dart';
 import '../features/catalog/presentation/merchant_catalog_screen.dart';
 import '../features/customers/presentation/customer_detail_screen.dart';
 import '../features/customers/presentation/customer_create_screen.dart';
@@ -26,6 +32,7 @@ import '../features/engage/presentation/recovery_actions_screen.dart';
 import '../features/engage/presentation/survey_analytics_screen.dart';
 import '../features/engage/presentation/survey_builder_screen.dart';
 import '../features/engage/presentation/survey_response_screen.dart';
+import '../features/engage/presentation/survey_send_screen.dart';
 import '../features/engage/presentation/visit_report_screen.dart';
 import '../features/rewards/presentation/create_reward_screen.dart';
 import '../features/rewards/presentation/rewards_screen.dart';
@@ -102,6 +109,7 @@ const _ownerOnlyRoutes = {
   '/merchant-onboarding/review',
   '/subscription-admin',
   '/staff-management',
+  '/affiliates/new',
 };
 
 const _pinSetupBypassRoutes = {
@@ -527,6 +535,42 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: '/sales', builder: (_, __) => const SalesHistoryScreen()),
       GoRoute(
+        path: '/affiliates',
+        builder: (_, __) => const AffiliateListScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (_, __) => const AffiliateCreateScreen(),
+          ),
+          GoRoute(
+            path: 'metrics',
+            builder: (_, __) => const AffiliateMetricsScreen(),
+          ),
+          // Declared before `:affiliateId` so a literal segment is never read
+          // as an id.
+          GoRoute(
+            path: 'rewards',
+            builder: (_, state) => AffiliateRewardsScreen(
+              affiliateId: state.uri.queryParameters['affiliateId'],
+            ),
+          ),
+          GoRoute(
+            path: ':affiliateId',
+            builder: (_, state) => AffiliateDetailScreen(
+              affiliateId: state.pathParameters['affiliateId']!,
+            ),
+            routes: [
+              GoRoute(
+                path: 'code',
+                builder: (_, state) => AffiliateCodeScreen(
+                  affiliateId: state.pathParameters['affiliateId']!,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      GoRoute(
         path: '/catalog',
         builder: (_, __) => const MerchantCatalogScreen(),
       ),
@@ -553,6 +597,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/engage/surveys/new',
         builder: (_, __) => const SurveyBuilderScreen(),
+      ),
+      GoRoute(
+        path: '/engage/surveys/send',
+        builder: (_, __) => const SurveySendScreen(),
       ),
       GoRoute(
         path: '/engage/surveys/respond',

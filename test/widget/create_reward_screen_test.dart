@@ -50,4 +50,35 @@ void main() {
     expect(nameField.controller?.text, 'Brinde especial');
     expect(pointsField.controller?.text, '600');
   });
+
+  testWidgets('translates the points target into money the merchant knows',
+      (tester) async {
+    await tester.pumpWidget(_buildScreen());
+    await tester.pumpAndSettle();
+
+    // 500 points at the default 100 MZN per point.
+    await tester.enterText(find.byType(TextFormField).at(1), '500');
+    await tester.pump();
+
+    expect(find.text('50 000 MZN em compras'), findsOneWidget);
+  });
+
+  testWidgets('stops claiming a template once the form is edited by hand',
+      (tester) async {
+    await tester.pumpWidget(_buildScreen(template: 'desconto_20'));
+    await tester.pumpAndSettle();
+
+    MaisUmSurface chip() => tester.widget<MaisUmSurface>(
+          find.descendant(
+            of: find.byKey(const Key('reward_template_desconto_20')),
+            matching: find.byType(MaisUmSurface),
+          ),
+        );
+    expect(chip().selected, isTrue);
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'Outra coisa');
+    await tester.pump();
+
+    expect(chip().selected, isFalse);
+  });
 }

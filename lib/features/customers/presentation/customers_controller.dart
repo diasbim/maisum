@@ -140,3 +140,13 @@ final recentCustomersProvider = FutureProvider<List<Customer>>((ref) {
 final archivedCustomersProvider = FutureProvider<List<Customer>>((ref) {
   return ref.read(customerRepositoryProvider).getArchived();
 });
+
+/// Backs the customer picker. A family over the search text so a screen that
+/// only needs to choose a customer does not have to take the whole list
+/// controller — and so tests can override the lookup without a database.
+final customerSearchProvider =
+    FutureProvider.family<List<Customer>, String>((ref, query) {
+  final repository = ref.read(customerRepositoryProvider);
+  final trimmed = query.trim();
+  return trimmed.isEmpty ? repository.getAll() : repository.search(trimmed);
+});

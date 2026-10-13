@@ -33,6 +33,14 @@ _$SaleImpl _$$SaleImplFromJson(Map<String, dynamic> json) => _$SaleImpl(
       cancelledByAppUserId: json['cancelledByAppUserId'] as String?,
       cancellationReason: json['cancellationReason'] as String?,
       replacementSaleId: json['replacementSaleId'] as String?,
+      referralBenefitType:
+          _referralBenefitTypeFromJson(json['referralBenefitType']),
+      grossAmount: (json['grossAmount'] as num?)?.toDouble(),
+      referralBenefitValue: (json['referralBenefitValue'] as num?)?.toDouble(),
+      referralBenefitAmount:
+          (json['referralBenefitAmount'] as num?)?.toDouble(),
+      affiliateCodeId: json['affiliateCodeId'] as String?,
+      referralStatus: _referralSaleStatusFromJson(json['referralStatus']),
       items: (json['items'] as List<dynamic>?)
               ?.map((e) => SaleItem.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -60,6 +68,13 @@ Map<String, dynamic> _$$SaleImplToJson(_$SaleImpl instance) =>
       'cancelledByAppUserId': instance.cancelledByAppUserId,
       'cancellationReason': instance.cancellationReason,
       'replacementSaleId': instance.replacementSaleId,
+      'referralBenefitType':
+          _referralBenefitTypeToJson(instance.referralBenefitType),
+      'grossAmount': instance.grossAmount,
+      'referralBenefitValue': instance.referralBenefitValue,
+      'referralBenefitAmount': instance.referralBenefitAmount,
+      'affiliateCodeId': instance.affiliateCodeId,
+      'referralStatus': _referralSaleStatusToJson(instance.referralStatus),
       'items': instance.items,
       'synced': instance.synced,
     };

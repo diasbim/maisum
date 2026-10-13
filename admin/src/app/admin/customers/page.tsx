@@ -3,12 +3,14 @@ import Link from 'next/link';
 import { lookupCustomer } from '@/lib/admin-api';
 import {
   Card,
+  ClearFilters,
   DefinitionList,
   EmptyState,
-  PageHeader,
-  Panel,
+  ErrorState,
   formatDateTime,
   load,
+  PageHeader,
+  Panel,
   parseSearch,
 } from '../ui';
 
@@ -111,11 +113,14 @@ export default async function CustomersPage({
 
       {result === null ? null : result.error !== null ? (
         <Panel>
-          <p className="error">{result.error}</p>
+          <ErrorState message={result.error} />
         </Panel>
       ) : result.data === null ? (
         <Panel>
-          <EmptyState message="Nenhum cliente corresponde a esta procura." />
+          <EmptyState
+            action={<ClearFilters href="/admin/customers" label="Limpar procura" />}
+            message="Nenhum cliente corresponde a esta procura."
+          />
         </Panel>
       ) : (
         <>
@@ -148,7 +153,7 @@ export default async function CustomersPage({
                 {result.data.cards.length === 0 ? (
                   <p className="muted">Sem cartões associados.</p>
                 ) : (
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.85rem' }}>
+                  <ul style={{ margin: 0, paddingLeft: 16, fontSize: '0.85rem' }}>
                     {result.data.cards.map((card) => (
                       <li key={card.card_uid_last4 + card.created_at}>
                         ••••{card.card_uid_last4} · {card.status}
@@ -171,10 +176,10 @@ export default async function CustomersPage({
                 <table>
                   <thead>
                     <tr>
-                      <th>Negócio</th>
-                      <th>Id no negócio</th>
-                      <th>Ligado em</th>
-                      <th>Pontos</th>
+                      <th scope="col">Negócio</th>
+                      <th scope="col">Id no negócio</th>
+                      <th scope="col">Ligado em</th>
+                      <th scope="col">Pontos</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -193,7 +193,10 @@ void main() {
       service = FirestoreSyncService(
         fakeFirestore,
         businessUid,
-        authoritativeSyncHandler: (item) async => handled.add(item),
+        authoritativeSyncHandler: (item) async {
+          handled.add(item);
+          return null;
+        },
       );
       final items = [
         SyncItem(

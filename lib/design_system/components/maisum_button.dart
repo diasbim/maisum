@@ -21,6 +21,7 @@ class MaisUmButton extends StatelessWidget {
     this.enabled = true,
     this.variant = MaisUmButtonVariant.primary,
     this.leadingIcon,
+    this.leadingWidget,
     this.trailingIcon,
     this.iconColor,
     this.height = AppControlSize.button,
@@ -38,6 +39,11 @@ class MaisUmButton extends StatelessWidget {
   final bool enabled;
   final MaisUmButtonVariant variant;
   final IconData? leadingIcon;
+
+  /// A custom leading widget (e.g. a brand logo) shown instead of
+  /// [leadingIcon] when provided. Use this for third-party brand marks that
+  /// must not be recolored/resized like a generic [Icon].
+  final Widget? leadingWidget;
   final IconData? trailingIcon;
   final Color? iconColor;
   final double height;
@@ -75,6 +81,7 @@ class MaisUmButton extends StatelessWidget {
               key: const ValueKey('label'),
               label: label,
               leadingIcon: leadingIcon,
+              leadingWidget: leadingWidget,
               trailingIcon: trailingIcon,
               iconColor: iconColor,
             ),
@@ -160,12 +167,14 @@ class _ButtonLabel extends StatelessWidget {
     super.key,
     required this.label,
     this.leadingIcon,
+    this.leadingWidget,
     this.trailingIcon,
     this.iconColor,
   });
 
   final String label;
   final IconData? leadingIcon;
+  final Widget? leadingWidget;
   final IconData? trailingIcon;
   final Color? iconColor;
 
@@ -175,7 +184,10 @@ class _ButtonLabel extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (leadingIcon != null) ...[
+        if (leadingWidget != null) ...[
+          leadingWidget!,
+          const SizedBox(width: AppSpacing.sm),
+        ] else if (leadingIcon != null) ...[
           Icon(leadingIcon, size: 20, color: iconColor),
           const SizedBox(width: AppSpacing.sm),
         ],

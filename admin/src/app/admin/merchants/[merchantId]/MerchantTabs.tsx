@@ -10,6 +10,7 @@ export function MerchantTabs({ merchantId }: { merchantId: string }) {
   const tabs = [
     { href: base, label: 'Resumo' },
     { href: `${base}/entitlements`, label: 'Entitlements' },
+    { href: `${base}/afiliados`, label: 'Afiliados' },
     { href: `${base}/audit`, label: 'Auditoria' },
   ];
 

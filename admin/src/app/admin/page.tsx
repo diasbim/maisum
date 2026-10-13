@@ -10,12 +10,13 @@ import {
 import {
   Badge,
   EmptyState,
+  ErrorState,
+  formatDateTime,
+  load,
   MetricsSkeleton,
   PageHeader,
   Panel,
   TableSkeleton,
-  formatDateTime,
-  load,
 } from './ui';
 
 export const metadata = { title: 'Visão geral | Portal MaisUm' };
@@ -62,7 +63,7 @@ const GROUPS: Array<{
 
 async function MetricsPanel() {
   const result = await load(fetchOperationsSummary);
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
 
   const summary = result.data;
   return (
@@ -91,10 +92,12 @@ async function MetricsPanel() {
 
 async function RecentMerchants() {
   const result = await load(() => fetchMerchants({ limit: 8 }));
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
 
   if (result.data.items.length === 0) {
-    return <EmptyState message="Nenhum negócio devolvido pela API." />;
+    return (
+      <EmptyState message="Ainda não há negócios registados na plataforma." />
+    );
   }
 
   return (
@@ -103,11 +106,11 @@ async function RecentMerchants() {
         <table>
           <thead>
             <tr>
-              <th>Negócio</th>
-              <th>Plano</th>
-              <th>Subscrição</th>
-              <th>Equipa</th>
-              <th>Atualizado</th>
+              <th scope="col">Negócio</th>
+              <th scope="col">Plano</th>
+              <th scope="col">Subscrição</th>
+              <th scope="col">Equipa</th>
+              <th scope="col">Atualizado</th>
             </tr>
           </thead>
           <tbody>
@@ -133,7 +136,7 @@ async function RecentMerchants() {
           </tbody>
         </table>
       </div>
-      <p style={{ marginTop: 10, fontSize: 13 }}>
+      <p style={{ marginTop: 8, fontSize: '0.82rem' }}>
         <Link href="/admin/merchants">Ver todos os negócios →</Link>
       </p>
     </>
@@ -142,7 +145,7 @@ async function RecentMerchants() {
 
 async function RecentAudit() {
   const result = await load(() => fetchAuditEvents({ limit: 8 }));
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
 
   if (result.data.items.length === 0) {
     return <EmptyState message="Sem eventos de auditoria registados." />;
@@ -154,10 +157,10 @@ async function RecentAudit() {
         <table>
           <thead>
             <tr>
-              <th>Quando</th>
-              <th>Ação</th>
-              <th>Alvo</th>
-              <th>Autor</th>
+              <th scope="col">Quando</th>
+              <th scope="col">Ação</th>
+              <th scope="col">Alvo</th>
+              <th scope="col">Autor</th>
             </tr>
           </thead>
           <tbody>
@@ -175,7 +178,7 @@ async function RecentAudit() {
           </tbody>
         </table>
       </div>
-      <p style={{ marginTop: 10, fontSize: 13 }}>
+      <p style={{ marginTop: 8, fontSize: '0.82rem' }}>
         <Link href="/admin/audit">Ver todo o histórico →</Link>
       </p>
     </>

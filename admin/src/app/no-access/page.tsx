@@ -19,8 +19,9 @@ export default function NoAccessPage() {
             fontSize: '0.88rem',
           }}
         >
-          A sua conta autenticou com sucesso, mas não tem a permissão de
-          administrador interno. Peça a um administrador para a conceder.
+          A sua conta entrou com sucesso, mas não tem acesso a este portal: não
+          é da equipa interna, e não está associada a nenhum negócio. Se gere um
+          negócio na MaisUm, peça que associem esta conta a ele.
         </p>
         <div style={{ background: 'var(--navy)', borderRadius: 'var(--r)', padding: 12 }}>
           <SignOutButton />

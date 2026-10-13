@@ -9,6 +9,12 @@ class FeatureKeys {
   static const String engageManageVisits = 'engage_manage_visits';
   static const String engageManageSurveys = 'engage_manage_surveys';
 
+  /// The Retention Engine's P0 automations (Bónus de Regresso, Near Reward,
+  /// Re-engagement, Win-back). Free on every plan by design: unlike Engage's
+  /// manual recovery queue/dashboard, these are core loyalty behaviour, not a
+  /// paid upsell.
+  static const String retentionCore = 'retention_core';
+
   static const List<String> all = [
     whatsappAutomation,
     campaigns,
@@ -19,5 +25,6 @@ class FeatureKeys {
     engageManageRecovery,
     engageManageVisits,
     engageManageSurveys,
+    retentionCore,
   ];
 }

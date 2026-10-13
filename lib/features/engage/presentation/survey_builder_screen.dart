@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import '../../../core/errors/app_error_reporter.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
 import '../../../core/widgets/app_feedback.dart';
@@ -9,6 +10,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../design_system/components/maisum_app_bar.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
+import '../domain/engage_labels.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -68,88 +70,86 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(AppSpacing.xl),
+          return Column(
             children: [
-              const Text(
-                'Modelo rápido',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: _templates
-                    .map(
-                      (template) => ActionChip(
-                        label: Text(template.title),
-                        onPressed: () => _applyTemplate(template),
-                      ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              TextField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Título',
-                  hintText: 'Ex.: Porque não voltou?',
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              TextField(
-                controller: _descriptionController,
-                maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Descrição (opcional)',
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Perguntas (max 5)',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                  ),
-                  TextButton.icon(
-                    onPressed: _questions.length >= 5 ? null : _addQuestion,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Adicionar'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              if (_questions.isEmpty)
-                const Text('Adicione pelo menos uma pergunta.')
-              else
-                ..._questions.asMap().entries.map(
-                      (entry) => Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: _QuestionCard(
-                          index: entry.key,
-                          value: entry.value,
-                          onChanged: (value) =>
-                              setState(() => _questions[entry.key] = value),
-                          onRemove: () =>
-                              setState(() => _questions.removeAt(entry.key)),
-                        ),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.all(AppSpacing.xl),
+                  children: [
+                    const Text(
+                      'Modelo rápido',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: _templates
+                          .map(
+                            (template) => ActionChip(
+                              label: Text(template.title),
+                              onPressed: () => _applyTemplate(template),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    TextField(
+                      controller: _titleController,
+                      decoration: const InputDecoration(
+                        labelText: 'Título',
+                        hintText: 'Ex.: Porque não voltou?',
                       ),
                     ),
-              const SizedBox(height: AppSpacing.lg),
-              FilledButton.icon(
-                onPressed: _submitting ? null : _publish,
-                icon: _submitting
-                    ? const SizedBox(
-                        height: 16,
-                        width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.publish_outlined),
-                label: Text(
-                  _submitting ? 'A publicar...' : 'Publicar questionário',
+                    const SizedBox(height: AppSpacing.md),
+                    TextField(
+                      controller: _descriptionController,
+                      maxLines: 2,
+                      decoration: const InputDecoration(
+                        labelText: 'Descrição (opcional)',
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Perguntas (máx. 5)',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                        TextButton.icon(
+                          onPressed:
+                              _questions.length >= 5 ? null : _addQuestion,
+                          icon: const Icon(Icons.add),
+                          label: const Text('Adicionar'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    if (_questions.isEmpty)
+                      const Text('Adicione pelo menos uma pergunta.')
+                    else
+                      ..._questions.asMap().entries.map(
+                            (entry) => Padding(
+                              padding:
+                                  const EdgeInsets.only(bottom: AppSpacing.sm),
+                              child: _QuestionCard(
+                                key: ValueKey(entry.value.draftId ?? entry.key),
+                                index: entry.key,
+                                value: entry.value,
+                                onChanged: (value) => setState(
+                                    () => _questions[entry.key] = value),
+                                onRemove: () => setState(
+                                    () => _questions.removeAt(entry.key)),
+                              ),
+                            ),
+                          ),
+                  ],
                 ),
               ),
+              _publishBar(),
             ],
           );
         },
@@ -157,24 +157,71 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
     );
   }
 
+  /// Pinned rather than trailing the list. On a 1080x2400 phone a template
+  /// alone pushes the publish button below the fold, so the one action the
+  /// screen exists for was off-screen the moment the merchant had anything
+  /// worth publishing.
+  Widget _publishBar() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.white,
+        border: Border(top: BorderSide(color: AppColors.g100)),
+      ),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.md,
+        AppSpacing.xl,
+        AppSpacing.md,
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        height: AppControlSize.button,
+        child: FilledButton.icon(
+          onPressed: _submitting ? null : _publish,
+          icon: _submitting
+              ? const SizedBox(
+                  height: 16,
+                  width: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.publish_outlined),
+          label: Text(
+            _submitting ? 'A publicar…' : 'Publicar questionário',
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Monotonic, never reused — so a new question can never collide with the
+  /// key of one just removed.
+  int _nextDraftId = 0;
+
+  String _newDraftId() => 'draft-${_nextDraftId++}';
+
   void _applyTemplate(_SurveyTemplate template) {
     setState(() {
       _titleController.text = template.title;
       _descriptionController.text = template.description;
       _questions
         ..clear()
-        ..addAll(template.questions);
+        ..addAll(
+          template.questions.map(
+            (question) => question.copyWith(draftId: _newDraftId()),
+          ),
+        );
     });
   }
 
   void _addQuestion() {
     setState(() {
       _questions.add(
-        const _DraftQuestion(
+        _DraftQuestion(
+          draftId: _newDraftId(),
           questionText: '',
           questionType: SurveyQuestionType.shortText,
           isRequired: true,
-          options: <String>[],
+          options: const <String>[],
         ),
       );
     });
@@ -248,12 +295,33 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
       if (!mounted) return;
       AppFeedback.showSuccessToast(
         context,
-        message: 'Questionário publicado com sucesso',
+        message: 'Questionário publicado',
+        subtitle: 'Já pode recolher respostas.',
       );
-      Navigator.of(context).pop();
-    } catch (error) {
+
+      // Guarded: an unguarded pop asserts when this screen is the first route
+      // (a deep link, or a notification opening it directly). With nowhere to
+      // go back to, leave a clean form instead of a published one.
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop();
+        return;
+      }
+      setState(() {
+        _titleController.clear();
+        _descriptionController.clear();
+        _questions.clear();
+      });
+    } catch (error, stackTrace) {
+      // The raw exception is English and names internals — useless to a shop
+      // owner, and it loses the work they just typed if they cannot retry.
+      AppErrorReporter.report(error, stackTrace, hint: 'survey_publish');
       if (!mounted) return;
-      AppFeedback.showMessage(context, message: error.toString());
+      AppFeedback.showRetryableError(
+        context,
+        message: 'Não foi possível publicar. As perguntas continuam aqui.',
+        onRetry: _publish,
+      );
     } finally {
       if (mounted) {
         setState(() => _submitting = false);
@@ -264,6 +332,7 @@ class _SurveyBuilderScreenState extends ConsumerState<SurveyBuilderScreen> {
 
 class _QuestionCard extends StatelessWidget {
   const _QuestionCard({
+    super.key,
     required this.index,
     required this.value,
     required this.onChanged,
@@ -307,10 +376,15 @@ class _QuestionCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             DropdownButtonFormField<String>(
               initialValue: value.questionType,
-              decoration: const InputDecoration(labelText: 'Tipo'),
+              decoration: const InputDecoration(
+                labelText: 'Tipo de resposta',
+              ),
               items: SurveyQuestionType.values
                   .map(
-                    (item) => DropdownMenuItem(value: item, child: Text(item)),
+                    (item) => DropdownMenuItem(
+                      value: item,
+                      child: Text(EngageLabels.questionType(item)),
+                    ),
                   )
                   .toList(),
               onChanged: (selected) {
@@ -321,7 +395,7 @@ class _QuestionCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             SwitchListTile.adaptive(
               value: value.isRequired,
-              title: const Text('Obrigatoria'),
+              title: const Text('Obrigatória'),
               contentPadding: EdgeInsets.zero,
               onChanged: (selected) =>
                   onChanged(value.copyWith(isRequired: selected)),
@@ -355,20 +429,28 @@ class _DraftQuestion {
     required this.questionType,
     required this.isRequired,
     required this.options,
+    this.draftId,
   });
 
+  /// Identity that survives a reorder or a removal. The question cards keep
+  /// their text in an uncontrolled [TextFormField], so without a stable key
+  /// Flutter reuses the element of the removed card and the text of the wrong
+  /// question stays on screen while the data underneath has already moved on.
+  final String? draftId;
   final String questionText;
   final String questionType;
   final bool isRequired;
   final List<String> options;
 
   _DraftQuestion copyWith({
+    String? draftId,
     String? questionText,
     String? questionType,
     bool? isRequired,
     List<String>? options,
   }) {
     return _DraftQuestion(
+      draftId: draftId ?? this.draftId,
       questionText: questionText ?? this.questionText,
       questionType: questionType ?? this.questionType,
       isRequired: isRequired ?? this.isRequired,
@@ -391,7 +473,7 @@ class _SurveyTemplate {
 
 const List<_SurveyTemplate> _templates = [
   _SurveyTemplate(
-    title: 'Why Didn\'t You Return?',
+    title: 'Porque não voltou?',
     description: 'Compreender os principais motivos de inatividade.',
     questions: [
       _DraftQuestion(
@@ -409,7 +491,7 @@ const List<_SurveyTemplate> _templates = [
     ],
   ),
   _SurveyTemplate(
-    title: 'Customer Satisfaction',
+    title: 'Satisfação do cliente',
     description: 'Medir a satisfação geral com a experiência.',
     questions: [
       _DraftQuestion(
@@ -445,7 +527,7 @@ const List<_SurveyTemplate> _templates = [
     ],
   ),
   _SurveyTemplate(
-    title: 'Promotion Interest',
+    title: 'Interesse em promoções',
     description: 'Identificar o interesse em promoções.',
     questions: [
       _DraftQuestion(
@@ -463,7 +545,7 @@ const List<_SurveyTemplate> _templates = [
     ],
   ),
   _SurveyTemplate(
-    title: 'General Feedback',
+    title: 'Opinião geral',
     description: 'Coletar feedback aberto do cliente.',
     questions: [
       _DraftQuestion(

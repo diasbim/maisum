@@ -1,19 +1,23 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 
+import { setStaffStatusAction } from '@/lib/actions';
 import { fetchAdminDirectory, fetchStaff } from '@/lib/admin-api';
+import { ActionForm, Check } from '../forms';
 import {
   Badge,
   ChipFilter,
+  ClearFilters,
   EmptyState,
+  ErrorState,
+  formatDateTime,
+  load,
   PageHeader,
   Pagination,
   Panel,
-  TableSkeleton,
-  formatDateTime,
-  load,
   parseOffset,
   parseSearch,
+  TableSkeleton,
 } from '../ui';
 
 export const metadata = { title: 'Acessos | Portal MaisUm' };
@@ -38,7 +42,7 @@ const STATUSES = [
  */
 async function Directory() {
   const result = await load(fetchAdminDirectory);
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
 
   if (result.data.entries.length === 0) {
     return <EmptyState message="Nenhuma conta com claim de administrador." />;
@@ -62,10 +66,10 @@ async function Directory() {
         <table>
           <thead>
             <tr>
-              <th>Conta</th>
-              <th>Claim que concede</th>
-              <th>Estado</th>
-              <th>Último início de sessão</th>
+              <th scope="col">Conta</th>
+              <th scope="col">Claim que concede</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Último início de sessão</th>
             </tr>
           </thead>
           <tbody>
@@ -108,6 +112,51 @@ async function Directory() {
   );
 }
 
+/**
+ * Toggles one staff account between active and deactivated.
+ *
+ * Only offered for accounts already accepted (`ACTIVE` or `INACTIVE`): an
+ * invite still pending is a different lifecycle, not a switch to flip here.
+ * Reactivating asks for no confirmation; deactivating does, since it ends
+ * that person's ability to sign in to this business immediately.
+ */
+function StaffStatusButton({
+  merchantId,
+  userId,
+  status,
+}: {
+  merchantId: string;
+  userId: string;
+  status: string;
+}) {
+  if (status !== 'ACTIVE' && status !== 'INACTIVE') {
+    return <span className="muted">—</span>;
+  }
+
+  const nextStatus = status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+
+  return (
+    <ActionForm
+      action={setStaffStatusAction}
+      submitLabel={status === 'ACTIVE' ? 'Desativar' : 'Reativar'}
+      pendingLabel="A gravar…"
+      variant={status === 'ACTIVE' ? 'btn-outline btn-sm' : 'btn-navy btn-sm'}
+    >
+      <input type="hidden" name="merchant_id" value={merchantId} />
+      <input type="hidden" name="user_id" value={userId} />
+      <input type="hidden" name="status" value={nextStatus} />
+      {status === 'ACTIVE' ? (
+        <Check
+          name="confirm"
+          label="Confirmo"
+          hint="A conta deixa de conseguir iniciar sessão."
+          danger
+        />
+      ) : null}
+    </ActionForm>
+  );
+}
+
 async function Staff({
   search,
   status,
@@ -126,9 +175,14 @@ async function Staff({
     }),
   );
 
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
   if (result.data.items.length === 0) {
-    return <EmptyState message="Nenhuma conta corresponde a estes filtros." />;
+    return (
+      <EmptyState
+        action={<ClearFilters href="/admin/access" />}
+        message="Nenhuma conta corresponde a estes filtros."
+      />
+    );
   }
 
   return (
@@ -137,12 +191,13 @@ async function Staff({
         <table>
           <thead>
             <tr>
-              <th>Telefone</th>
-              <th>Negócio</th>
-              <th>Papel</th>
-              <th>Estado</th>
-              <th>Último início de sessão</th>
-              <th>Criada</th>
+              <th scope="col">Telefone</th>
+              <th scope="col">Negócio</th>
+              <th scope="col">Papel</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Último início de sessão</th>
+              <th scope="col">Criada</th>
+              <th scope="col">Ação</th>
             </tr>
           </thead>
           <tbody>
@@ -165,6 +220,13 @@ async function Staff({
                 </td>
                 <td>{formatDateTime(user.last_login_at)}</td>
                 <td>{formatDateTime(user.created_at)}</td>
+                <td>
+                  <StaffStatusButton
+                    merchantId={user.merchant_id}
+                    userId={user.id}
+                    status={user.status}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

@@ -122,12 +122,16 @@ class _AdminNavigationRail extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Text(
-                'Administração MaisUm',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: AppColors.white,
-                      fontWeight: FontWeight.w800,
-                    ),
+              Expanded(
+                child: Text(
+                  'Administração MaisUm',
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
               ),
             ],
           ),
@@ -1736,13 +1740,16 @@ class _PlanUpsertPanelState extends ConsumerState<_PlanUpsertPanel> {
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Ativo'),
-                value: _isActive,
-                onChanged: isSaving
-                    ? null
-                    : (value) => setState(() => _isActive = value),
+              child: Material(
+                type: MaterialType.transparency,
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Ativo'),
+                  value: _isActive,
+                  onChanged: isSaving
+                      ? null
+                      : (value) => setState(() => _isActive = value),
+                ),
               ),
             ),
           ],
@@ -1893,12 +1900,16 @@ class _PriceUpsertPanelState extends ConsumerState<_PriceUpsertPanel> {
           ],
         ),
         const SizedBox(height: 12),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Ativo'),
-          value: _isActive,
-          onChanged:
-              isSaving ? null : (value) => setState(() => _isActive = value),
+        Material(
+          type: MaterialType.transparency,
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Ativo'),
+            value: _isActive,
+            onChanged: isSaving
+                ? null
+                : (value) => setState(() => _isActive = value),
+          ),
         ),
         const SizedBox(height: 14),
         Align(
@@ -2018,13 +2029,16 @@ class _PlanFeatureUpsertPanelState
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Ativado'),
-                value: _isEnabled,
-                onChanged: isSaving
-                    ? null
-                    : (value) => setState(() => _isEnabled = value),
+              child: Material(
+                type: MaterialType.transparency,
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Ativado'),
+                  value: _isEnabled,
+                  onChanged: isSaving
+                      ? null
+                      : (value) => setState(() => _isEnabled = value),
+                ),
               ),
             ),
           ],

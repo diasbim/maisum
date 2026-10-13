@@ -1,0 +1,215 @@
+# Runs the repository's tests.
+#
+# Until this existed, nothing did: the only workflow here deployed docs/ to
+# Pages, so the functions suite and the portal suite only ran when someone
+# remembered to. A suite that guards against quiet failures is worth nothing
+# if it is not run.
+#
+# The three projects are separate jobs rather than steps so a Flutter failure
+# still tells you whether the backend is fine, and so they run in parallel.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the older run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  functions:
+    name: functions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the engines pin in functions/package.json.
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - run: npm ci
+        working-directory: functions
+
+      # Compiles, then runs node --test over the emitted JS. This also guards
+      # the admin-claims parity between functions/ and the portal.
+      - run: npm test
+        working-directory: functions
+
+  admin:
+    name: admin portal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      - run: npm ci
+        working-directory: admin
+
+      - run: npm run typecheck
+        working-directory: admin
+
+      - run: npm test
+        working-directory: admin
+
+      # The build catches what typecheck cannot — a 'use server' file exporting
+      # a non-async value, a bad route export — which is how those surface.
+      # .env.local is gitignored, so the values are stubs: nothing here reaches
+      # a network, and the config is read per-request rather than at build time.
+      - run: npm run build
+        working-directory: admin
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: ci-not-a-real-key
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci.example.invalid
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci-project
+          FIREBASE_PROJECT_ID: ci-project
+          ADMIN_API_BASE_URL: http://127.0.0.1:9
+
+  app:
+    name: flutter app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # integration_test/ is excluded: it needs a device, which this runner
+      # has none of.
+      - run: flutter test
+
+  ios:
+    name: flutter app (iOS build)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # GoogleService-Info.plist is gitignored like android/app/google-services.json
+      # (see firebase.json / lib/firebase_options.dart for the same app's other
+      # platforms). The values below are the standard client identifiers Firebase
+      # itself documents as safe to ship inside a distributed app; access control
+      # is enforced by Firestore rules and App Check, not by hiding this file.
+      - name: escrever GoogleService-Info.plist
+        run: |
+          cat > ios/Runner/GoogleService-Info.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CLIENT_ID</key>
+            <string>517299605672-brpravevidme3nn2osmvr9u9su7pr586.apps.googleusercontent.com</string>
+            <key>REVERSED_CLIENT_ID</key>
+            <string>com.googleusercontent.apps.517299605672-brpravevidme3nn2osmvr9u9su7pr586</string>
+            <key>ANDROID_CLIENT_ID</key>
+            <string>517299605672-5vi5ersr1uq4rapb257rkfeg6nm8kodb.apps.googleusercontent.com</string>
+            <key>API_KEY</key>
+            <string>AIzaSyCdKWPIZrwgyOjwRxUDd4AXbmW939m0FIs</string>
+            <key>GCM_SENDER_ID</key>
+            <string>517299605672</string>
+            <key>PLIST_VERSION</key>
+            <string>1</string>
+            <key>BUNDLE_ID</key>
+            <string>com.tsintsivadigital.maisum</string>
+            <key>PROJECT_ID</key>
+            <string>loyaltyos-fc4dd</string>
+            <key>STORAGE_BUCKET</key>
+            <string>loyaltyos-fc4dd.firebasestorage.app</string>
+            <key>IS_ADS_ENABLED</key>
+            <false></false>
+            <key>IS_ANALYTICS_ENABLED</key>
+            <false></false>
+            <key>IS_APPINVITE_ENABLED</key>
+            <true></true>
+            <key>IS_GCM_ENABLED</key>
+            <true></true>
+            <key>IS_SIGNIN_ENABLED</key>
+            <true></true>
+            <key>GOOGLE_APP_ID</key>
+            <string>1:517299605672:ios:b34613825197e48ec7329d</string>
+          </dict>
+          </plist>
+          PLIST
+
+      # No signing identity on this runner, so this only proves the Dart code,
+      # native plugin glue (CocoaPods) and Firebase config compile together —
+      # it does not produce an installable/distributable artifact.
+      - run: flutter build ios --no-codesign
+
+  smoke:
+    name: portal smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
+
+      # The emulators are Java, and the functions build is what they serve.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - run: npm ci
+        working-directory: functions
+      - run: npm run build
+        working-directory: functions
+      - run: npm ci
+        working-directory: admin
+
+      - run: npm install -g firebase-tools
+
+      # Everything below runs against emulators on this runner. The seed
+      # script refuses any host that is not loopback, so nothing here can
+      # reach the real project even if a credential leaked into the env.
+      - name: emuladores
+        run: |
+          firebase emulators:start --only auth,functions,firestore \
+            --project loyaltyos-fc4dd > /tmp/emulators.log 2>&1 &
+          npx wait-on -t 120000 tcp:127.0.0.1:9099 tcp:127.0.0.1:8085 tcp:127.0.0.1:5099
+
+      - name: portal
+        working-directory: admin
+        run: |
+          npm run dev > /tmp/next.log 2>&1 &
+          npx wait-on -t 120000 http://127.0.0.1:3000/login
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: demo-emulator-key
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: loyaltyos-fc4dd.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: loyaltyos-fc4dd
+          NEXT_PUBLIC_FIREBASE_AUTH_EMULATOR_HOST: http://127.0.0.1:9099
+          FIREBASE_PROJECT_ID: loyaltyos-fc4dd
+          FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
+          ADMIN_API_BASE_URL: http://127.0.0.1:5099/loyaltyos-fc4dd/us-central1/api
+
+      - run: npm run smoke
+        working-directory: admin
+
+      - name: logs, se falhou
+        if: failure()
+        run: tail -100 /tmp/next.log /tmp/emulators.log

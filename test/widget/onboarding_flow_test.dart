@@ -668,6 +668,80 @@ void main() {
       expect(route, '/dashboard');
     });
 
+    testWidgets(
+        'an owner who kept the suggested business name still gets through',
+        (tester) async {
+      // "Minha Loja" is what the app itself fills the name field with, and it
+      // was also the string that marked a business as never onboarded. An
+      // owner who accepted the suggestion finished all six steps and was sent
+      // back to the first screen on every sign-in, with no way through. The
+      // business is bootstrapped under the owner's own uid, which is what
+      // makes the fallback `/onboarding-entry` rather than the setup route.
+      final firestore = FakeFirebaseFirestore();
+      await firestore.collection('businesses').doc('user-1').set({
+        ..._completeBusinessData(),
+        'merchant_name': 'Minha Loja',
+        'business_profile_version': 1,
+      });
+
+      final session = AuthSession(
+        userId: 'user-1',
+        merchantId: 'user-1',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+
+      WidgetRef? capturedRef;
+
+      await tester.pumpWidget(
+        _buildPostAuthRouteProbe(
+          session: session,
+          firestore: firestore,
+          planConfirmed: true,
+          onRefReady: (ref) => capturedRef = ref,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final route = await resolvePostAuthRoute(capturedRef!.read);
+      expect(route, '/dashboard');
+    });
+
+    testWidgets(
+        'a business auto-named before onboarding existed still goes to setup',
+        (tester) async {
+      // The other half of the same rule: no profile version means these
+      // screens never ran, so the default name is still evidence of a business
+      // that was created for someone rather than by them.
+      final firestore = FakeFirebaseFirestore();
+      final legacy = Map<String, dynamic>.from(_completeBusinessData())
+        ..['merchant_name'] = 'Minha Loja'
+        ..remove('business_profile_version');
+      await firestore.collection('businesses').doc('user-1').set(legacy);
+
+      final session = AuthSession(
+        userId: 'user-1',
+        merchantId: 'user-1',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+
+      WidgetRef? capturedRef;
+
+      await tester.pumpWidget(
+        _buildPostAuthRouteProbe(
+          session: session,
+          firestore: firestore,
+          planConfirmed: true,
+          onRefReady: (ref) => capturedRef = ref,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final route = await resolvePostAuthRoute(capturedRef!.read);
+      expect(route, '/onboarding-entry');
+    });
+
     testWidgets('routes to onboarding entry when session has no merchant id',
         (tester) async {
       final firestore = FakeFirebaseFirestore();
@@ -889,7 +963,7 @@ void main() {
       );
       await _tapVisibleText(tester, 'Continuar');
 
-      expect(find.text('Informe o bairro ou distrito.'), findsOneWidget);
+      expect(find.text('Indique o bairro ou distrito.'), findsOneWidget);
       expect(find.text('Dados do negócio'), findsOneWidget);
     });
 
@@ -1069,7 +1143,8 @@ void main() {
       await _tapVisibleText(tester, 'Adicionar depois');
 
       expect(find.text('Segunda Firestore'), findsOneWidget);
-      expect(find.text('09:15 - 17:45'), findsOneWidget);
+      expect(find.text('09:15'), findsOneWidget);
+      expect(find.text('17:45'), findsOneWidget);
       await _tapVisibleText(tester, 'Configurar depois');
 
       await _tapVisibleText(tester, 'Configurar depois');
@@ -1109,6 +1184,66 @@ void main() {
         isNull,
       );
       expect(find.text('onboarding-plan-route'), findsOneWidget);
+    });
+
+    testWidgets(
+        'working hours page lets the operator adjust the default open/close time',
+        (tester) async {
+      final firestore = FakeFirebaseFirestore();
+      await _seedMerchantOnboardingConfig(firestore);
+      final storage = _SpySecureStorageService(initialPlanConfirmed: false);
+      final session = AuthSession(
+        userId: 'user-1',
+        merchantId: 'merchant-1',
+        merchantName: 'Minha Loja',
+        firebaseUid: 'firebase-user-1',
+        phone: '+258840000001',
+        expiresAt: DateTime.now().add(const Duration(days: 2)),
+      );
+
+      await tester.pumpWidget(
+        _buildMerchantOnboardingFlow(
+          session: session,
+          firestore: firestore,
+          storage: storage,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(
+        const Key('business_type_option_barber_from_firestore'),
+      ));
+      await tester.pumpAndSettle();
+      await _tapVisibleText(tester, 'Continuar');
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Nome do negócio *'),
+        'Barbearia Firebase',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Cidade *'),
+        'Matola',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Bairro ou distrito *'),
+        'Matola A',
+      );
+      await tester.pumpAndSettle();
+      await _tapVisibleText(tester, 'Continuar');
+      await _tapVisibleText(tester, 'Adicionar depois');
+
+      // The default template is the same for every merchant; without a way
+      // to correct it, every business onboarded through this screen would be
+      // stuck with whatever hours Firestore happens to default to.
+      expect(find.text('09:15'), findsOneWidget);
+      await tester.tap(find.text('09:15'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TimePickerDialog), findsOneWidget);
+
+      // Cancelling must not silently change anything.
+      await _tapVisibleText(tester, 'Cancel');
+      expect(find.text('09:15'), findsOneWidget);
     });
 
     testWidgets('editing business type from review returns to review',

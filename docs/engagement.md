@@ -25,26 +25,25 @@ Recover customers before they churn.
 
 # Implementation Status Snapshot
 
-Last update: current workspace iteration
+Last update: 2026-09-22
 
 Completed now
 
 * Milestones 1-6: database foundation, risk engine, dashboard, recovery queue, actions, and visits implemented in app + backend.
-* Milestones 7-11 (fast path): surveys vertical slice implemented (builder-lite, submit flow, analytics endpoint stubs, sync wiring).
-* Milestone 13: Engage endpoint documentation added in OpenAPI file at docs/engage_openapi.yaml.
-* Milestone 14 (partial): automation hooks wired in backend for RED-risk task creation, near-reward reminders, and survey-completed side effects.
+* Milestones 7-11 (fast path): surveys vertical slice implemented (builder-lite, submit flow, analytics endpoint, sync wiring).
+* Milestone 13: Engage endpoint documentation added in OpenAPI file at docs/engage_openapi.yaml, including the survey share-link endpoint
+  (`GET /engage/surveys/{surveyId}/link`), which was implemented in code but missing from the spec.
+* Milestone 14: automation hooks wired in backend for RED-risk task creation (`recovery_task_creation.test.ts`), near-reward reminders, and
+  survey-completed side effects (`retention_engine.ts` / `retention_engine.test.ts`).
+* Backend build and test suite are healthy: `npm --prefix functions test` passes (1003/1003) with no install or network blockers.
 
 Pending / needs hardening
 
-* Backend environment stabilization for functions TypeScript build (dependencies/types install is currently blocked by network resolution in this environment).
-* Automation E2E validation and trigger-tuning against real business scenarios.
-* Final acceptance sweep for endpoint schema parity between code and OpenAPI.
-
-Immediate unblock checklist
-
-* Restore npm registry connectivity in functions workspace and complete npm install.
-* Re-run functions build and diagnostics, then lock remaining typing issues.
-* Execute focused tests for RED task auto-creation, near-reward reminder enqueue, and survey-completed risk adjustment.
+* The `/engage/*` HTTP routes are registered inline on the main Express app in `functions/src/index.ts` rather than through an injectable
+  router (the way `prospecting_routes.ts` is), so they have no route-level (request/response) test coverage today — only the underlying
+  logic (survey link tokens, recovery task creation, retention engine) is unit-tested. Extracting them into a `registerEngageRoutes(router,
+  deps)` module, mirroring `prospecting_routes.ts`, would enable the same fast, no-HTTP route tests the prospecting endpoints have.
+* Automation E2E validation and trigger-tuning against real business scenarios (i.e. against a live/staging deployment, not unit tests).
 
 ---
 

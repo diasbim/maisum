@@ -61,6 +61,11 @@ exports.CUSTOMER_DELETE_DEPENDENCY_CHECKS = [
         tableName: 'survey_responses',
         sql: 'SELECT 1 FROM survey_responses WHERE merchant_id = $1 AND customer_id = $2 LIMIT 1',
     },
+    {
+        label: 'return_bonuses',
+        tableName: 'return_bonuses',
+        sql: 'SELECT 1 FROM return_bonuses WHERE merchant_id = $1 AND customer_id = $2 LIMIT 1',
+    },
 ];
 exports.OPTIONAL_CUSTOMER_DELETE_DEPENDENCY_CHECKS = [
     {
