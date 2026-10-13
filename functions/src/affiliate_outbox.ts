@@ -359,13 +359,17 @@ export function composeOutboxMessage(
     return { ok: false, outcome: { status: 'skipped', reason: 'no_phone' } };
   }
 
-  const body = renderAffiliateMessage(record.template, {
+  // Rendered once and carried twice: as text for a provider that accepts it,
+  // and as the values themselves for one that needs an approved template's
+  // parameters. Same object, so the two cannot drift.
+  const variables = {
     points: context.points,
     merchantName: context.merchantName ?? undefined,
     statusText: AFFILIATE_ADDRESSED_TEMPLATES.includes(record.template)
       ? rewardStatusText(context.rewardStatus ?? 'PENDING')
       : undefined,
-  });
+  };
+  const body = renderAffiliateMessage(record.template, variables);
 
   return {
     ok: true,
@@ -377,6 +381,7 @@ export function composeOutboxMessage(
       template: record.template,
       toPhoneE164: phone,
       body,
+      variables,
     },
   };
 }

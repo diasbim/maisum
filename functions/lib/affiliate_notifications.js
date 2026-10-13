@@ -104,6 +104,20 @@ exports.DELIVERY_SKIP_REASON = [
     'affiliate_inactive',
 ];
 /**
+ * Whether an adapter's thrown error says it is worth another attempt.
+ *
+ * Read off the error rather than required by the type, so an adapter that
+ * knows nothing about its failures stays valid and gets the retrying default.
+ * Duck-typed on purpose: `instanceof` across module boundaries is one
+ * duplicated dependency away from silently answering false.
+ */
+function retryableFrom(error) {
+    if (typeof error !== 'object' || error === null)
+        return true;
+    const flag = error.retryable;
+    return typeof flag === 'boolean' ? flag : true;
+}
+/**
  * Sends one message, or says plainly why it did not.
  *
  * `not_configured` is deliberately distinct from `failed`: the first is the
@@ -126,10 +140,12 @@ async function deliverAffiliateMessage(message, options) {
     catch (error) {
         return {
             status: 'failed',
-            // Without a provider there is no error taxonomy yet, so everything is
-            // treated as worth retrying. A permanent failure retried a few times is
-            // cheap; a transient one dropped is a message the affiliate never gets.
-            retryable: true,
+            // An adapter that classifies its own failures is believed; one that does
+            // not gets the safe default. A permanent failure retried a few times is
+            // cheap, a transient one dropped is a message the affiliate never gets —
+            // but an unapproved template or a number that is not on WhatsApp fails
+            // identically forever, and retrying it keeps a dead row in the queue.
+            retryable: retryableFrom(error),
             error: error instanceof Error ? error.message : String(error),
         };
     }

@@ -168,6 +168,7 @@ import {
   firestoreOutboxStore,
   resolveWhatsAppAdapter,
 } from './affiliate_outbox_firestore.js';
+import { cloudAdapterFrom } from './affiliate_whatsapp_cloud.js';
 import {
   createSurveyLinkToken,
   SURVEY_LINK_TTL_MS,
@@ -461,6 +462,24 @@ const prospectingSecrets = [
   anthropicApiKeySecret,
   aisaApiKeySecret,
 ];
+
+/**
+ * The WhatsApp sender's credentials.
+ *
+ * Both halves are needed and neither is optional: the access token proves who
+ * is sending, the phone number id says which registered number it goes out
+ * from. `cloudAdapterFrom` returns null unless both are present, so a
+ * deployment with one of them keeps answering `not_configured` instead of
+ * failing every row in the backlog.
+ *
+ * Listed on every function that delivers — the create trigger and the retry
+ * sweep. A function that forgets to list them has an adapter that reports
+ * itself unconfigured rather than one that half-works, which is the quiet
+ * failure `GOOGLE_PLACES_API_KEY` already demonstrated once.
+ */
+const whatsappAccessTokenSecret = defineSecret('WHATSAPP_ACCESS_TOKEN');
+const whatsappPhoneNumberIdSecret = defineSecret('WHATSAPP_PHONE_NUMBER_ID');
+const whatsappSecrets = [whatsappAccessTokenSecret, whatsappPhoneNumberIdSecret];
 const CUSTOMER_QR_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CUSTOMER_REDEMPTION_CODE_TTL_MS = 15 * 60 * 1000;
 const MAX_CUSTOMER_ACTIVITY_ENTRIES = 100;
@@ -4681,8 +4700,31 @@ function affiliateOutboxDeps(): OutboxDeps {
     resolveContext: createFirestoreOutboxContextResolver({
       normalizePhone: tryNormalizeMozambiquePhoneToE164,
     }),
-    adapter: resolveWhatsAppAdapter(),
+    adapter: whatsappAdapter(),
   };
+}
+
+/**
+ * The sender in force.
+ *
+ * Built per call rather than once at module load, because a secret read at
+ * load time in one function's process is not the secret another function was
+ * granted — and because rotating the token should take effect on the next
+ * sweep, not the next cold start.
+ *
+ * `setWhatsAppAdapter` still wins when something has set one: that seam is
+ * what the outbox tests inject through, and taking it away would make the
+ * sweep untestable without the network.
+ */
+function whatsappAdapter() {
+  const configured = resolveWhatsAppAdapter();
+  if (configured !== null) return configured;
+  if (process.env.AFFILIATE_WHATSAPP_ENABLED !== 'true') return null;
+  return cloudAdapterFrom({
+    accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+    language: process.env.WHATSAPP_TEMPLATE_LANGUAGE,
+  });
 }
 
 /**
@@ -4705,7 +4747,10 @@ function affiliateOutboxDeps(): OutboxDeps {
  * already have been delivered.
  */
 export const affiliateOutboxOnCreate = onDocumentCreated(
-  'businesses/{merchantId}/affiliate_outbox/{outboxId}',
+  {
+    document: 'businesses/{merchantId}/affiliate_outbox/{outboxId}',
+    secrets: whatsappSecrets,
+  },
   async (event) => {
     const merchantId = isNonEmptyString(event.params.merchantId)
       ? event.params.merchantId.trim()
@@ -4837,6 +4882,7 @@ export const affiliateOutboxRetrySweep = onSchedule(
     timeZone: 'UTC',
     timeoutSeconds: 300,
     memory: '256MiB',
+    secrets: whatsappSecrets,
   },
   async () => {
     try {

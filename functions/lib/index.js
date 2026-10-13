@@ -78,6 +78,7 @@ const prospecting_store_js_1 = require("./prospecting_store.js");
 const affiliate_sale_firestore_js_1 = require("./affiliate_sale_firestore.js");
 const affiliate_outbox_js_1 = require("./affiliate_outbox.js");
 const affiliate_outbox_firestore_js_1 = require("./affiliate_outbox_firestore.js");
+const affiliate_whatsapp_cloud_js_1 = require("./affiliate_whatsapp_cloud.js");
 const survey_link_js_1 = require("./survey_link.js");
 const recovery_task_creation_js_1 = require("./recovery_task_creation.js");
 const retention_engine_js_1 = require("./retention_engine.js");
@@ -293,6 +294,23 @@ const prospectingSecrets = [
     anthropicApiKeySecret,
     aisaApiKeySecret,
 ];
+/**
+ * The WhatsApp sender's credentials.
+ *
+ * Both halves are needed and neither is optional: the access token proves who
+ * is sending, the phone number id says which registered number it goes out
+ * from. `cloudAdapterFrom` returns null unless both are present, so a
+ * deployment with one of them keeps answering `not_configured` instead of
+ * failing every row in the backlog.
+ *
+ * Listed on every function that delivers — the create trigger and the retry
+ * sweep. A function that forgets to list them has an adapter that reports
+ * itself unconfigured rather than one that half-works, which is the quiet
+ * failure `GOOGLE_PLACES_API_KEY` already demonstrated once.
+ */
+const whatsappAccessTokenSecret = (0, params_1.defineSecret)('WHATSAPP_ACCESS_TOKEN');
+const whatsappPhoneNumberIdSecret = (0, params_1.defineSecret)('WHATSAPP_PHONE_NUMBER_ID');
+const whatsappSecrets = [whatsappAccessTokenSecret, whatsappPhoneNumberIdSecret];
 const CUSTOMER_QR_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const CUSTOMER_REDEMPTION_CODE_TTL_MS = 15 * 60 * 1000;
 const MAX_CUSTOMER_ACTIVITY_ENTRIES = 100;
@@ -3882,8 +3900,32 @@ function affiliateOutboxDeps() {
         resolveContext: (0, affiliate_outbox_firestore_js_1.createFirestoreOutboxContextResolver)({
             normalizePhone: tryNormalizeMozambiquePhoneToE164,
         }),
-        adapter: (0, affiliate_outbox_firestore_js_1.resolveWhatsAppAdapter)(),
+        adapter: whatsappAdapter(),
     };
+}
+/**
+ * The sender in force.
+ *
+ * Built per call rather than once at module load, because a secret read at
+ * load time in one function's process is not the secret another function was
+ * granted — and because rotating the token should take effect on the next
+ * sweep, not the next cold start.
+ *
+ * `setWhatsAppAdapter` still wins when something has set one: that seam is
+ * what the outbox tests inject through, and taking it away would make the
+ * sweep untestable without the network.
+ */
+function whatsappAdapter() {
+    const configured = (0, affiliate_outbox_firestore_js_1.resolveWhatsAppAdapter)();
+    if (configured !== null)
+        return configured;
+    if (process.env.AFFILIATE_WHATSAPP_ENABLED !== 'true')
+        return null;
+    return (0, affiliate_whatsapp_cloud_js_1.cloudAdapterFrom)({
+        accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+        phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+        language: process.env.WHATSAPP_TEMPLATE_LANGUAGE,
+    });
 }
 /**
  * One queued referral message, delivered after the sale that queued it.
@@ -3904,7 +3946,10 @@ function affiliateOutboxDeps() {
  * thrown — a throw would retrigger the function against a message that may
  * already have been delivered.
  */
-exports.affiliateOutboxOnCreate = (0, firestore_2.onDocumentCreated)('businesses/{merchantId}/affiliate_outbox/{outboxId}', async (event) => {
+exports.affiliateOutboxOnCreate = (0, firestore_2.onDocumentCreated)({
+    document: 'businesses/{merchantId}/affiliate_outbox/{outboxId}',
+    secrets: whatsappSecrets,
+}, async (event) => {
     const merchantId = isNonEmptyString(event.params.merchantId)
         ? event.params.merchantId.trim()
         : '';
@@ -4025,6 +4070,7 @@ exports.affiliateOutboxRetrySweep = (0, scheduler_1.onSchedule)({
     timeZone: 'UTC',
     timeoutSeconds: 300,
     memory: '256MiB',
+    secrets: whatsappSecrets,
 }, async () => {
     try {
         const summary = await (0, affiliate_outbox_js_1.processAffiliateOutbox)(affiliateOutboxDeps(), {

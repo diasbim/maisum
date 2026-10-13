@@ -233,13 +233,17 @@ function composeOutboxMessage(record, context) {
     if (phone === '') {
         return { ok: false, outcome: { status: 'skipped', reason: 'no_phone' } };
     }
-    const body = (0, affiliate_notifications_js_1.renderAffiliateMessage)(record.template, {
+    // Rendered once and carried twice: as text for a provider that accepts it,
+    // and as the values themselves for one that needs an approved template's
+    // parameters. Same object, so the two cannot drift.
+    const variables = {
         points: context.points,
         merchantName: context.merchantName ?? undefined,
         statusText: exports.AFFILIATE_ADDRESSED_TEMPLATES.includes(record.template)
             ? (0, affiliate_notifications_js_1.rewardStatusText)(context.rewardStatus ?? 'PENDING')
             : undefined,
-    });
+    };
+    const body = (0, affiliate_notifications_js_1.renderAffiliateMessage)(record.template, variables);
     return {
         ok: true,
         message: {
@@ -250,6 +254,7 @@ function composeOutboxMessage(record, context) {
             template: record.template,
             toPhoneE164: phone,
             body,
+            variables,
         },
     };
 }

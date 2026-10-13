@@ -114,6 +114,20 @@ export type OutboxMessage = {
   /** Already normalised to E.164. Masked before it reaches any log. */
   toPhoneE164: string;
   body: string;
+  /**
+   * The values `body` was rendered from.
+   *
+   * Carried beside the rendered text, not instead of it. A provider that
+   * accepts free text sends `body`; WhatsApp's Cloud API cannot — a
+   * business-initiated message must be an approved template, submitted as a
+   * name plus ordered parameters, and those parameters are these values. Both
+   * are derived in the same place from the same context, so they cannot
+   * disagree.
+   *
+   * Optional because a message built before this field existed has none, and
+   * the adapter says so plainly rather than sending a template with holes.
+   */
+  variables?: TemplateVariables;
 };
 
 export type DeliveryOutcome =
@@ -143,6 +157,20 @@ export type WhatsAppAdapter = {
 };
 
 /**
+ * Whether an adapter's thrown error says it is worth another attempt.
+ *
+ * Read off the error rather than required by the type, so an adapter that
+ * knows nothing about its failures stays valid and gets the retrying default.
+ * Duck-typed on purpose: `instanceof` across module boundaries is one
+ * duplicated dependency away from silently answering false.
+ */
+function retryableFrom(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return true;
+  const flag = (error as { retryable?: unknown }).retryable;
+  return typeof flag === 'boolean' ? flag : true;
+}
+
+/**
  * Sends one message, or says plainly why it did not.
  *
  * `not_configured` is deliberately distinct from `failed`: the first is the
@@ -170,10 +198,12 @@ export async function deliverAffiliateMessage(
   } catch (error) {
     return {
       status: 'failed',
-      // Without a provider there is no error taxonomy yet, so everything is
-      // treated as worth retrying. A permanent failure retried a few times is
-      // cheap; a transient one dropped is a message the affiliate never gets.
-      retryable: true,
+      // An adapter that classifies its own failures is believed; one that does
+      // not gets the safe default. A permanent failure retried a few times is
+      // cheap, a transient one dropped is a message the affiliate never gets —
+      // but an unapproved template or a number that is not on WhatsApp fails
+      // identically forever, and retrying it keeps a dead row in the queue.
+      retryable: retryableFrom(error),
       error: error instanceof Error ? error.message : String(error),
     };
   }

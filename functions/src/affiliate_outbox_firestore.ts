@@ -26,18 +26,22 @@ import {
  *
  * ── The provider gap ────────────────────────────────────────────────────────
  *
- * There is no WhatsApp provider in this repository: no credentials, no webhook
- * for delivery receipts, no opt-in policy agreed with a provider, and no HTTP
- * integration convention anywhere in `functions/` to copy. Inventing one — a
- * URL and a token read from the environment, a body shape guessed at — would
- * produce code nobody can test against the real thing and a message format
- * that is probably wrong.
+ * There used to be no WhatsApp provider here, and this section said what
+ * filling the gap would take. It has been filled: `affiliate_whatsapp_cloud.ts`
+ * implements the adapter against Meta's Cloud API, and `index.ts` builds one
+ * when `AFFILIATE_WHATSAPP_ENABLED` is on and both credentials exist.
  *
- * So the boundary is explicit and empty. `resolveWhatsAppAdapter()` returns
- * null, delivery answers `not_configured`, and the row stays claimable without
- * burning a retry or claiming success. When a provider is chosen, one call to
- * `setWhatsAppAdapter` at startup is the whole integration, and the backlog
- * sends itself on the next sweep.
+ * The boundary itself has not moved, and that is why the change was one file.
+ * `resolveWhatsAppAdapter()` still returns null by default, delivery still
+ * answers `not_configured`, and the row stays claimable without burning a
+ * retry or claiming success — which is still the state of any deployment that
+ * has not been given credentials, and still the state the outbox tests run in.
+ *
+ * What the Cloud API forced was one thing, and it was not here: a
+ * business-initiated message must be an approved template submitted as a name
+ * plus ordered parameters, so `OutboxMessage` now carries the values it was
+ * rendered from beside the rendered text. Nothing persisted changed — the body
+ * was always rendered at send time, from context read fresh.
  *
  * Manual sharing is unaffected: the merchant app's `url_launcher` share sheet
  * is a separate path that needs none of this.
@@ -282,12 +286,17 @@ export function setWhatsAppAdapter(adapter: WhatsAppAdapter | null): void {
 }
 
 /**
- * The provider in force, which is none.
+ * The provider something has explicitly set, if any.
  *
- * Returning null is a deliberate answer, not an oversight: see the note at the
- * top of this file. Operational configuration — credentials, the template
- * approval a provider requires, the delivery-receipt webhook — is documented
- * when a provider is actually chosen.
+ * Null is a deliberate answer and not an oversight. It means "nobody injected
+ * one here", which is the normal case: `index.ts` builds the Cloud API adapter
+ * from configuration instead, and falls back to this. The seam stays because
+ * it is what the outbox tests inject a double through, and removing it would
+ * make the sweep untestable without the network.
+ *
+ * Still undone, and deliberately out of this module: the delivery-receipt
+ * webhook. Without it a message reads as `SENT` once Meta accepts it, which is
+ * not the same as delivered or read.
  */
 export function resolveWhatsAppAdapter(): WhatsAppAdapter | null {
   return configuredAdapter;
