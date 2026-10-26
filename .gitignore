@@ -66,3 +66,8 @@ app.*.map.json
 
 # Cache local do arnês de prospeção. Respostas pagas do Places, por place_id.
 functions/scripts/.cache/
+
+# Capturas do arnês da app. Artefactos de execução: ficam em disco para se
+# verem, fora do git porque uma captura antiga ao lado de uma nova engana
+# quem a lê — ver os Gotchas em .claude/skills/run-maisum/SKILL.md.
+.claude/skills/run-maisum/shots/
