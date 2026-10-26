@@ -348,7 +348,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/otp',
         builder: (_, state) {
-          final args = state.extra as OtpScreenArgs;
+          // `extra` is not serialisable, so it does not survive a process
+          // restart, a deep link, or anything that reaches /otp without
+          // having just asked for a code. The cast used to be unchecked, and
+          // every one of those cases threw inside the route builder — a
+          // crash where the honest answer is "ask for a code first".
+          final args = state.extra;
+          if (args is! OtpScreenArgs) {
+            return const OtpSessionLostScreen();
+          }
           final screen = OTPVerificationScreen(
             phoneNumber: args.phone,
             verificationId: args.verificationId,
