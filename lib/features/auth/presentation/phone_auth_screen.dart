@@ -29,6 +29,7 @@ import 'auth_controller.dart';
 import '../domain/auth_session.dart';
 import 'otp_verification_screen.dart';
 import 'post_auth_navigation.dart';
+import '../../../core/services/firebase_auth_service.dart';
 
 const _defaultCountryDialCode = '+258';
 
@@ -229,15 +230,13 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
                 context.go('/customer-disabled');
                 return;
               }
-              final rawMessage = e.toString().trim();
-              final message = rawMessage.startsWith('Exception: ')
-                  ? rawMessage.substring('Exception: '.length)
-                  : rawMessage;
               AppFeedback.showMessage(
                 context,
-                message: message.isEmpty
-                    ? 'Não foi possível autenticar automaticamente. Introduza o código por SMS.'
-                    : message,
+                message: authErrorMessage(
+                  e,
+                  fallback:
+                      'Não foi possível autenticar automaticamente. Introduza o código por SMS.',
+                ),
                 isError: true,
               );
             }
@@ -273,15 +272,12 @@ class _PhoneAuthScreenState extends ConsumerState<PhoneAuthScreen>
     } catch (e, st) {
       AppErrorReporter.report(e, st, hint: 'auth_google_button');
       if (!mounted) return;
-      final rawMessage = e.toString().trim();
-      final message = rawMessage.startsWith('Exception: ')
-          ? rawMessage.substring('Exception: '.length)
-          : rawMessage;
       AppFeedback.showMessage(
         context,
-        message: message.isEmpty
-            ? 'Não foi possível autenticar com o Google. Tente novamente.'
-            : message,
+        message: authErrorMessage(
+          e,
+          fallback: 'Não foi possível autenticar com o Google. Tente novamente.',
+        ),
         isError: true,
       );
     } finally {

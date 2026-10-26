@@ -16,6 +16,7 @@ import 'auth_controller.dart';
 import '../domain/auth_session.dart';
 import 'post_auth_navigation.dart';
 import 'phone_auth_screen.dart';
+import '../../../core/services/firebase_auth_service.dart';
 
 class OtpScreenArgs {
   const OtpScreenArgs({
@@ -155,15 +156,9 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       setState(() => _isVerifying = false);
       _pinController.clear();
       if (!mounted) return;
-      final rawMessage = e.toString().trim();
-      final message = rawMessage.startsWith('Exception: ')
-          ? rawMessage.substring('Exception: '.length)
-          : rawMessage;
       AppFeedback.showMessage(
         context,
-        message: message.isEmpty
-            ? 'Não foi possível validar o código. Tente novamente.'
-            : message,
+        message: authErrorMessage(e),
         isError: true,
       );
     }
