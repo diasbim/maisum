@@ -89,9 +89,68 @@ jobs:
 
       - run: flutter pub get
 
-      # integration_test/ is excluded: it needs a device, which this runner
-      # has none of.
+      # integration_test/ needs a device; it runs in the `e2e` job below.
       - run: flutter test
+
+  e2e:
+    # The 29 end-to-end tests, on a real Android emulator.
+    #
+    # They used to run nowhere. The comment above said integration_test/ was
+    # excluded because the runner has no device, which was true and left 29
+    # tests that no pull request ever executed. One of them had been failing
+    # for roughly two months before anyone ran it by hand — a sign-out button
+    # that had drifted below the fold, which is exactly the kind of thing only
+    # a device finds.
+    #
+    # Separate job, not an extra step on `app`: this one is slow and needs KVM
+    # and a specific runner, and a unit-test failure should still report in
+    # seconds rather than waiting behind an emulator boot.
+    name: flutter app (end to end)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Hardware acceleration. Without it the emulator falls back to software
+      # rendering and the suite goes from minutes to "timed out".
+      - name: ativar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - run: flutter pub get
+
+      # Gradle rebuilds the APK once per test file, which locally was the
+      # whole cost of the run — ~22 minutes, almost none of it in the tests.
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: testes end to end
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          # `pumpAndSettle` waits for animations to stop; system animations
+          # make that slower and, at worst, never.
+          disable-animations: true
+          # No Firebase emulators and no credentials here on purpose: every
+          # test overrides its providers and says so in its own header —
+          # "stands up no Firebase, reads no credentials and makes no network
+          # call". The one that needs auth uses firebase_auth_mocks.
+          script: flutter test integration_test -d emulator-5554
 
   ios:
     name: flutter app (iOS build)

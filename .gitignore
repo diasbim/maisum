@@ -71,3 +71,6 @@ functions/scripts/.cache/
 # verem, fora do git porque uma captura antiga ao lado de uma nova engana
 # quem a lê — ver os Gotchas em .claude/skills/run-maisum/SKILL.md.
 .claude/skills/run-maisum/shots/
+
+# Despejos de diagnóstico do Android, criados pelo emulador ao apanhar um ANR.
+bugreport-*.zip
