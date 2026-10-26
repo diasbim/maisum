@@ -63,7 +63,7 @@ class WorkingHoursPage extends ConsumerWidget {
         return OnboardingScaffold(
           step: MerchantOnboardingStep.workingHours,
           title: 'Horário de funcionamento',
-          subtitle: 'Escolha os dias em que atende clientes.',
+          subtitle: 'Escolha os dias e toque na hora para ajustar o horário.',
           onBack: () => context.go(backRoute),
           errorMessage: state.errorMessage,
           primaryLabel: 'Usar este horário',
@@ -149,6 +149,36 @@ class _WorkingHoursTile extends StatelessWidget {
   final WorkingHours hours;
   final ValueChanged<WorkingHours> onChanged;
 
+  Future<void> _pickTime(
+    BuildContext context, {
+    required String initial,
+    required ValueChanged<String> onPicked,
+  }) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _parseTime(initial),
+      // The stored value is always 24h ("09:00"), regardless of the device's
+      // locale, so the picker has to match or a 9 PM tap could save as "09:00".
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+        child: child!,
+      ),
+    );
+    if (picked != null) onPicked(_formatTime(picked));
+  }
+
+  static TimeOfDay _parseTime(String value) {
+    final parts = value.split(':');
+    final hour = int.tryParse(parts.elementAtOrNull(0) ?? '') ?? 9;
+    final minute = int.tryParse(parts.elementAtOrNull(1) ?? '') ?? 0;
+    return TimeOfDay(hour: hour.clamp(0, 23), minute: minute.clamp(0, 59));
+  }
+
+  static String _formatTime(TimeOfDay time) {
+    String pad(int n) => n.toString().padLeft(2, '0');
+    return '${pad(time.hour)}:${pad(time.minute)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -173,13 +203,41 @@ class _WorkingHoursTile extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            hours.isOpen ? '${hours.openTime} - ${hours.closeTime}' : 'Fechado',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: AppColors.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
+          if (hours.isOpen) ...[
+            _TimeButton(
+              value: hours.openTime,
+              semanticLabel: 'Hora de abertura de $label',
+              onTap: () => _pickTime(
+                context,
+                initial: hours.openTime,
+                onPicked: (value) => onChanged(hours.copyWith(openTime: value)),
+              ),
             ),
-          ),
+            Text(
+              ' – ',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            _TimeButton(
+              value: hours.closeTime,
+              semanticLabel: 'Hora de fecho de $label',
+              onTap: () => _pickTime(
+                context,
+                initial: hours.closeTime,
+                onPicked: (value) =>
+                    onChanged(hours.copyWith(closeTime: value)),
+              ),
+            ),
+          ] else
+            Text(
+              'Fechado',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: AppColors.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           Switch(
             value: hours.isOpen,
             activeThumbColor: AppColors.secondary,
@@ -190,3 +248,61 @@ class _WorkingHoursTile extends StatelessWidget {
     );
   }
 }
+
+/// A tappable "HH:mm" pill that opens a time picker.
+///
+/// Plain text next to a switch read as a label, not a control — nothing
+/// hinted that the hour itself could be changed, so every merchant onboarded
+/// with the same default template and had no way to correct it afterwards.
+class _TimeButton extends StatelessWidget {
+  const _TimeButton({
+    required this.value,
+    required this.semanticLabel,
+    required this.onTap,
+  });
+
+  final String value;
+  final String semanticLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      label: '$semanticLabel, $value',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm,
+            vertical: AppSpacing.xs,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.primaryDarker,
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.underline,
+                  decorationColor: AppColors.secondary,
+                  decorationStyle: TextDecorationStyle.dotted,
+                ),
+              ),
+              const SizedBox(width: 2),
+              const Icon(
+                Icons.edit_rounded,
+                size: 12,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

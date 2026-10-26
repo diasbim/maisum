@@ -126,6 +126,7 @@ const sync_backend_js_1 = require("./sync_backend.js");
         'recovery_actions',
         'visit_reports',
         'survey_responses',
+        'return_bonuses',
     ]);
     strict_1.default.deepEqual((0, sync_backend_js_1.buildCustomerDeleteDependencyChecks)(['loyalty_ledger', 'redemption_requests']).map((item) => item.label), [
         'sales',
@@ -137,6 +138,7 @@ const sync_backend_js_1 = require("./sync_backend.js");
         'recovery_actions',
         'visit_reports',
         'survey_responses',
+        'return_bonuses',
         'loyalty_ledger',
         'redemption_requests',
     ]);

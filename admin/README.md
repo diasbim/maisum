@@ -69,21 +69,88 @@ npm run typecheck  # tsc --noEmit
 
 ## Estado
 
-Consola completa. Onze superfícies:
+Portal web operativo em duas áreas protegidas. A consola interna continua a
+servir operações de plataforma; o espaço `/negocio/*` cobre operações do
+próprio negócio sem acesso direto a Firestore ou PostgreSQL.
+
+### Consola interna
 
 | Secção | Rota | O que faz |
 | --- | --- | --- |
 | Visão geral | `/admin` | métricas agrupadas, negócios e auditoria recentes |
 | Negócios | `/admin/merchants` | procura, filtro por estado, paginação |
-| Detalhe | `/admin/merchants/[id]` | resumo, entitlements, auditoria do negócio |
+| Detalhe | `/admin/merchants/[id]` | resumo, entitlements, afiliados, auditoria do negócio |
 | Planos | `/admin/plans` | catálogo e edição de planos, preços e funcionalidades |
 | Reconciliação | `/admin/plans/reconciliacao` | anunciado contra provisionado |
 | Clientes | `/admin/customers` | procura por telefone, cartão ou id |
 | Livro de pontos | `/admin/customers/[id]` | entradas e saldo num negócio |
 | Cartões NFC | `/admin/nfc` | consulta de cartão ou dos cartões de um cliente |
+| Afiliados | `/admin/afiliados` | diretório global, procura, estado, criação da identidade |
+| Ficha do afiliado | `/admin/afiliados/[id]` | identidade, negócios ligados, ligar/desligar, suspensão |
 | Operações | `/admin/operations` | quatro trabalhos de manutenção |
 | Retenção | `/admin/retention` | política e varrimento de classificações |
 | Acessos | `/admin/access` | administradores da plataforma e contas de equipa |
+| Prospeção | `/admin/prospecao` | orçamento, procura de negócios, lista de leads |
+| Ficha do lead | `/admin/prospecao/[id]` | pontuação, evidências, decisores, mensagem, funil |
+| Definições de prospeção | `/admin/prospecao/definicoes` | orçamentos, pontuação mínima, cidades, consumo |
+
+### Prospeção
+
+O topo do funil, que até aqui vivia inteiro numa caixa de WhatsApp (§4.1 do
+plano). Descobre negócios que a MaisUm pode vir a servir, pontua-os, procura
+quem decide, e escreve a primeira mensagem — que uma pessoa revê e envia.
+
+Três regras moldam toda a superfície:
+
+**Nada é inventado.** Um email estimado é mostrado riscado e marcado como tal;
+um dado desconhecido aparece na lista de desconhecidos em vez de ser omitido; e
+cada afirmação da análise diz se foi observada ou deduzida, com a fonte.
+
+**Nada é gasto em silêncio.** Todas as chamadas pagas passam por um guarda que
+lê os orçamentos configurados, e todas deixam uma linha no registo de consumo —
+incluindo as que falham, porque os fornecedores cobram por chamadas que não
+devolvem nada. Quando um limite é atingido, o enriquecimento pago pára e a
+consola diz qual limite foi.
+
+**Nada é enviado.** O servidor gera o rascunho e regista que o gerou. A única
+coisa que pode registar uma mensagem como enviada é uma pessoa a dizer que a
+enviou, e os leads em «não contactar» ou «pediu para sair» não admitem nem uma
+coisa nem a outra.
+
+#### Fornecedores
+
+| Fornecedor | Para quê | Custo |
+| --- | --- | --- |
+| **Apollo** | descoberta de negócios, procura e enriquecimento de pessoas | estimado pela tabela |
+| **AIsa** | pesquisa web (Perplexity Sonar, através do gateway) | **real**, do cabeçalho `X-AISA-Price-USD` |
+| **Anthropic** | análise do lead e redação das mensagens | estimado pela tabela |
+
+AIsa é um *gateway* sobre milhares de APIs, não uma base de contactos: não tem
+procura de pessoas, por isso serve só a cadeia de pesquisa web. Em troca é o
+único que diz quanto cobrou — as linhas de consumo dele têm custo real, e a
+consola deixa de lhes chamar «estimado».
+
+A pesquisa devolve as páginas que consultou (`citations`) ao lado da resposta,
+e o adaptador **descarta qualquer afirmação cuja fonte não esteja nessa lista**.
+É a verificação mais forte do módulo contra invenção, e só é possível porque
+esta API separa o que leu daquilo que concluiu.
+
+Dados de desenvolvimento: `npm run seed:prospecting` (só emulador; os domínios
+estão sob `.test` e os telefones num bloco que não é atribuído).
+
+### Superfícies de afiliados
+
+| Âmbito | Rota | Quem escreve | O que faz |
+| --- | --- | --- | --- |
+| Negócio | `/negocio/afiliados` | `OWNER` | lista afiliados ligados, estado do código, partilha e métricas |
+| Negócio | `/negocio/afiliados/novo` | `OWNER` | cria afiliado + código do negócio numa só operação |
+| Negócio | `/negocio/afiliados/[affiliateId]` | `OWNER` | detalhe do afiliado, estado, recompensas e partilha |
+| Negócio | `/negocio/afiliados/[affiliateId]/codigo` | `OWNER` | edita benefício, validade, limite e ativa/desativa o código |
+| Negócio | `/negocio/afiliados/recompensas` | `OWNER` | aprova ou cancela recompensas pendentes |
+| Negócio | as mesmas rotas | `STAFF` | leitura apenas; a API recusa mutações e o portal desativa controlos |
+| Admin interno | `/admin/afiliados` | admin claim | diretório global, criação de identidade e pesquisa |
+| Admin interno | `/admin/afiliados/[affiliateId]` | admin claim | renomear, ativar/inativar/suspender e ligar/desligar negócios |
+| Admin interno | `/admin/merchants/[merchantId]/afiliados` | admin claim | leitura do programa de um negócio, métricas e pendências |
 
 ### Como as páginas estão construídas
 
@@ -98,13 +165,28 @@ operador passa um problema a outro.
 
 **As mutações são server actions.** O cookie de sessão é lido no servidor e o
 ID token nunca chega ao browser. Não existe um único `fetch` do cliente para a
-API de administração.
+API. `src/lib/actions.ts` governa as escritas da consola interna
+(`/admin/afiliados*`); `src/lib/merchant-actions.ts` governa as escritas do
+espaço do negócio (`/negocio/afiliados*`) e revalida as páginas afetadas.
+
+**Regras owner/staff são duplicadas por intenção.** O portal esconde botões de
+edição a quem não é `OWNER`, mas a autoridade é a API: leituras merchant ficam
+abertas a qualquer membro autenticado do negócio, enquanto criar/editar
+afiliados, alterar códigos, sincronizar criação offline e aprovar/cancelar
+recompensas exigem `OWNER` (ou administrador interno quando a rota é `/admin/*`).
 
 **Trabalhos de manutenção simulam por omissão.** A caixa *Aplicar* é o único
 controlo que altera dados de produção, e está destacada como tal; a mensagem de
 resultado diz qual dos dois modos correu.
 
 ### Fronteiras deliberadas
+
+**Um afiliado não tem login.** O programa de indicações vive inteiro nos dois
+lados do portal e na aplicação: o negócio gere quem indica e o que o código
+vale, a consola gere a identidade e as ligações. Não existe sessão, claim nem
+ecrã para o próprio afiliado, e a consola vê a máscara do telefone e os
+últimos quatro dígitos — o número contactável fica com o negócio que o
+registou.
 
 **Não há listagem de clientes.** O id canónico é um HMAC do telefone, portanto
 um telefone resolve para um registo sem varrimento — e não existe consulta que
@@ -127,7 +209,9 @@ os tokens revogados.
   `merchants`. Se estiver vazia em produção, as superfícies de leitura ficam
   vazias — os negócios visíveis localmente são semeados.
 - **B7**, CORS restrito à origem do portal. Depende do hostname.
-- Fases 7 a 9: testes de ponta a ponta, CI e entrega, runbook.
+- O detalhe global do afiliado lista os `merchant_ids` ligados, mas não mostra
+  ainda o estado por ligação nessa própria tabela; para distinguir ativo de
+  desligado é preciso abrir a vista do negócio.
 
 ## Produção
 

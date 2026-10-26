@@ -62,6 +62,10 @@ class MaisUmTextField extends StatelessWidget {
   Widget build(BuildContext context) {
     final borderColor = _borderColor(validationState);
     final borderWidth = validationState == ValidationState.focused ? 2.0 : 1.0;
+    // Only a floor, and one that grows with the user's text size. A fixed
+    // maxHeight clipped every multi-line field to a single line, and clipped
+    // single-line fields as soon as the phone was set above ~130% text scale.
+    final minHeight = MediaQuery.textScalerOf(context).scale(60).clamp(60.0, 160.0);
     final decoration = InputDecoration(
       labelText: useFloatingLabel ? label : null,
       hintText: hintText,
@@ -74,7 +78,7 @@ class MaisUmTextField extends StatelessWidget {
       filled: true,
       fillColor: Colors.white,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      constraints: const BoxConstraints(minHeight: 60, maxHeight: 60),
+      constraints: BoxConstraints(minHeight: minHeight),
       border: _outline(borderColor, borderWidth),
       enabledBorder: _outline(borderColor, borderWidth),
       focusedBorder: _outline(borderColor, borderWidth),

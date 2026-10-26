@@ -56,7 +56,6 @@ class AppMigrations {
       name: 'sync backoff',
       up: _createV10Schema,
     ),
-    const MigrationStep(version: 11, name: 'sms inbox', up: _createV11Schema),
     const MigrationStep(
       version: 12,
       name: 'analytics + notifications',
@@ -141,6 +140,21 @@ class AppMigrations {
       version: 28,
       name: 'customer nfc card cache',
       up: _createV28Schema,
+    ),
+    const MigrationStep(
+      version: 29,
+      name: 'retention engine: return bonuses',
+      up: _createV29Schema,
+    ),
+    const MigrationStep(
+      version: 30,
+      name: 'affiliates foundation',
+      up: _createV30Schema,
+    ),
+    const MigrationStep(
+      version: 31,
+      name: 'affiliates offline queue projection',
+      up: _createV31Schema,
     ),
   ];
 
@@ -280,6 +294,18 @@ class _SchemaVerifier {
       'cancelled_by_app_user_id',
       'cancellation_reason',
       'replacement_sale_id',
+      'gross_amount',
+      'referral_benefit_type',
+      'referral_benefit_value',
+      'referral_benefit_amount',
+      'affiliate_code_id',
+      'referral_status',
+      'referral_code_input',
+      'affiliate_id',
+      'referral_rejection_code',
+      'referral_status_message',
+      'referral_local_benefit_applied',
+      'referral_idempotency_key',
     },
     'rewards': {
       'id',
@@ -314,6 +340,150 @@ class _SchemaVerifier {
       'device_id',
       'next_attempt_at',
       'last_error',
+      'local_id',
+      'idempotency_key',
+      'last_sync_error',
+    },
+    'affiliates': {
+      'id',
+      'phone',
+      'normalized_phone',
+      'first_name',
+      'last_name',
+      'display_name',
+      'status',
+      'created_at',
+      'updated_at',
+      'synced',
+      'provisional',
+      'local_id',
+      'sync_status',
+      'last_sync_error',
+    },
+    'affiliate_merchants': {
+      'id',
+      'merchant_id',
+      'affiliate_id',
+      'status',
+      'linked_at',
+      'created_at',
+      'updated_at',
+      'synced',
+      'provisional',
+      'local_id',
+      'sync_status',
+      'last_sync_error',
+    },
+    'affiliate_codes': {
+      'id',
+      'merchant_id',
+      'affiliate_id',
+      'code',
+      'normalized_code',
+      'benefit_type',
+      'benefit_value',
+      'starts_at',
+      'expires_at',
+      'usage_limit',
+      'usage_count',
+      'first_visit_only',
+      'status',
+      'created_at',
+      'updated_at',
+      'synced',
+      'provisional',
+      'local_id',
+      'sync_status',
+      'last_sync_error',
+    },
+    'affiliate_code_lookup_cache': {
+      'normalized_code',
+      'code_id',
+      'merchant_id',
+      'affiliate_id',
+      'code',
+      'status',
+      'benefit_type',
+      'benefit_value',
+      'starts_at',
+      'expires_at',
+      'usage_limit',
+      'usage_count',
+      'first_visit_only',
+      'cached_at',
+      'updated_at',
+      'affiliate_display_name',
+      'affiliate_first_name',
+      'affiliate_status',
+      'link_status',
+      'refreshed_at',
+    },
+    'affiliate_attributions': {
+      'id',
+      'merchant_id',
+      'affiliate_id',
+      'affiliate_code_id',
+      'customer_id',
+      'qualifying_sale_id',
+      'status',
+      'rejection_code',
+      'attributed_at',
+      'first_sale_at',
+      'created_at',
+      'updated_at',
+      'synced',
+      'idempotency_key',
+      'sync_status',
+    },
+    'affiliate_rewards': {
+      'id',
+      'merchant_id',
+      'affiliate_id',
+      'attribution_id',
+      'reward_type',
+      'value_type',
+      'reward_value',
+      'status',
+      'approval_required',
+      'source_sale_id',
+      'approved_at',
+      'approved_by_app_user_id',
+      'cancelled_at',
+      'cancelled_by_app_user_id',
+      'cancellation_reason',
+      'paid_at',
+      'paid_by_app_user_id',
+      'created_at',
+      'updated_at',
+      'synced',
+      'idempotency_key',
+    },
+    'affiliate_events': {
+      'id',
+      'merchant_id',
+      'affiliate_id',
+      'event_type',
+      'attribution_id',
+      'reward_id',
+      'sale_id',
+      'customer_id',
+      'payload',
+      'occurred_at',
+      'created_at',
+      'schema_version',
+    },
+    'affiliate_fraud_signals': {
+      'id',
+      'merchant_id',
+      'affiliate_id',
+      'signal_type',
+      'severity',
+      'attribution_id',
+      'reward_id',
+      'sale_id',
+      'customer_id',
+      'metadata',
+      'created_at',
     },
     'sync_state': {'entity_type', 'last_value', 'last_doc_id'},
     'appointments': {
@@ -345,6 +515,22 @@ class _SchemaVerifier {
       'total_spent',
       'is_recurring',
       'recovered',
+      'updated_at',
+      'synced',
+    },
+    'return_bonuses': {
+      'id',
+      'merchant_id',
+      'customer_id',
+      'type',
+      'value',
+      'status',
+      'issued_at',
+      'expires_at',
+      'source_sale_id',
+      'redeemed_at',
+      'redemption_sale_id',
+      'created_at',
       'updated_at',
       'synced',
     },
@@ -525,7 +711,6 @@ class _SchemaVerifier {
       await _createV8Schema(txn);
       await _createV9Schema(txn);
       await _createV10Schema(txn);
-      await _createV11Schema(txn);
       await _createV12Schema(txn);
       await _createV13Schema(txn);
       await _createV14Schema(txn);
@@ -543,6 +728,8 @@ class _SchemaVerifier {
       await _createV26Schema(txn);
       await _createV27Schema(txn);
       await _createV28Schema(txn);
+      await _createV29Schema(txn);
+      await _createV30Schema(txn);
     });
   }
 
@@ -847,35 +1034,6 @@ Future<void> _createV10Schema(DatabaseExecutor db) async {
     db,
     'sync_queue',
     'next_attempt_at INTEGER NOT NULL DEFAULT 0',
-  );
-}
-
-Future<void> _createV11Schema(DatabaseExecutor db) async {
-  await db.execute('''
-    CREATE TABLE IF NOT EXISTS sms_inbox (
-      id TEXT PRIMARY KEY,
-      address TEXT,
-      body TEXT NOT NULL,
-      received_at INTEGER NOT NULL,
-      processed INTEGER NOT NULL DEFAULT 0
-    )
-  ''');
-  await db.execute(
-    'CREATE INDEX IF NOT EXISTS idx_sms_inbox_processed ON sms_inbox(processed, received_at)',
-  );
-
-  await db.execute('''
-    CREATE TABLE IF NOT EXISTS sms_transactions (
-      id TEXT PRIMARY KEY,
-      provider TEXT NOT NULL,
-      transaction_id TEXT,
-      amount REAL NOT NULL,
-      phone TEXT,
-      received_at INTEGER NOT NULL
-    )
-  ''');
-  await db.execute(
-    'CREATE INDEX IF NOT EXISTS idx_sms_transactions_provider ON sms_transactions(provider, transaction_id)',
   );
 }
 
@@ -1606,6 +1764,500 @@ Future<void> _createV28Schema(DatabaseExecutor db) async {
     'ON customers(merchant_id, nfc_card_uid) '
     'WHERE nfc_card_uid IS NOT NULL',
   );
+}
+
+Future<void> _createV29Schema(DatabaseExecutor db) async {
+  // Retention Engine (F1 Bónus de Regresso): server-issued, server-redeemed.
+  // The client only reads a pulled-down cache for display; expiration and
+  // redemption are always re-validated server-side (never trusted locally).
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS return_bonuses (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      value REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ACTIVE',
+      issued_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      source_sale_id TEXT,
+      redeemed_at INTEGER,
+      redemption_sale_id TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_return_bonuses_merchant_customer ON return_bonuses(merchant_id, customer_id, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_return_bonuses_merchant_status ON return_bonuses(merchant_id, status, expires_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_return_bonuses_synced ON return_bonuses(merchant_id, synced)',
+  );
+}
+
+Future<void> _createV30Schema(DatabaseExecutor db) async {
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS affiliates (
+      id TEXT PRIMARY KEY,
+      phone TEXT NOT NULL,
+      normalized_phone TEXT NOT NULL,
+      first_name TEXT NOT NULL,
+      last_name TEXT,
+      display_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE', 'INACTIVE', 'SUSPENDED')),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_affiliates_normalized_phone '
+    'ON affiliates(normalized_phone)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliates_status_updated '
+    'ON affiliates(status, updated_at)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS affiliate_merchants (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      affiliate_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE', 'INACTIVE')),
+      linked_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+      FOREIGN KEY (affiliate_id) REFERENCES affiliates(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_affiliate_merchants_scope '
+    'ON affiliate_merchants(merchant_id, affiliate_id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_merchants_status '
+    'ON affiliate_merchants(merchant_id, status, updated_at)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS affiliate_codes (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      affiliate_id TEXT NOT NULL,
+      code TEXT NOT NULL,
+      normalized_code TEXT NOT NULL,
+      benefit_type TEXT NOT NULL
+        CHECK (benefit_type IN ('FIXED_AMOUNT', 'PERCENTAGE', 'POINTS')),
+      benefit_value REAL NOT NULL,
+      starts_at INTEGER,
+      expires_at INTEGER,
+      usage_limit INTEGER,
+      usage_count INTEGER NOT NULL DEFAULT 0,
+      first_visit_only INTEGER NOT NULL DEFAULT 1,
+      status TEXT NOT NULL DEFAULT 'ACTIVE'
+        CHECK (status IN ('ACTIVE', 'DISABLED')),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+      FOREIGN KEY (affiliate_id) REFERENCES affiliates(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_affiliate_codes_scope '
+    'ON affiliate_codes(merchant_id, affiliate_id)',
+  );
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_affiliate_codes_normalized '
+    'ON affiliate_codes(normalized_code)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_codes_status '
+    'ON affiliate_codes(merchant_id, status, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_codes_affiliate '
+    'ON affiliate_codes(merchant_id, affiliate_id, updated_at)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS affiliate_code_lookup_cache (
+      normalized_code TEXT PRIMARY KEY,
+      code_id TEXT NOT NULL,
+      merchant_id TEXT NOT NULL,
+      affiliate_id TEXT NOT NULL,
+      code TEXT NOT NULL,
+      status TEXT NOT NULL
+        CHECK (status IN ('ACTIVE', 'DISABLED')),
+      benefit_type TEXT NOT NULL
+        CHECK (benefit_type IN ('FIXED_AMOUNT', 'PERCENTAGE', 'POINTS')),
+      benefit_value REAL NOT NULL,
+      starts_at INTEGER,
+      expires_at INTEGER,
+      usage_limit INTEGER,
+      usage_count INTEGER NOT NULL DEFAULT 0,
+      first_visit_only INTEGER NOT NULL DEFAULT 1,
+      cached_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (code_id) REFERENCES affiliate_codes(id),
+      FOREIGN KEY (affiliate_id) REFERENCES affiliates(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_affiliate_code_lookup_cache_scope '
+    'ON affiliate_code_lookup_cache(merchant_id, code_id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_code_lookup_cache_affiliate '
+    'ON affiliate_code_lookup_cache(merchant_id, affiliate_id, updated_at)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS affiliate_attributions (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      affiliate_id TEXT NOT NULL,
+      affiliate_code_id TEXT NOT NULL,
+      customer_id TEXT NOT NULL,
+      qualifying_sale_id TEXT,
+      status TEXT NOT NULL DEFAULT 'CONFIRMED'
+        CHECK (status IN ('CONFIRMED', 'REJECTED', 'CANCELLED')),
+      rejection_code TEXT
+        CHECK (
+          rejection_code IS NULL OR rejection_code IN (
+            'CODE_NOT_FOUND',
+            'CODE_DISABLED',
+            'CODE_NOT_STARTED',
+            'CODE_EXPIRED',
+            'CODE_USAGE_LIMIT_REACHED',
+            'AFFILIATE_INACTIVE',
+            'SELF_REFERRAL_NOT_ALLOWED',
+            'CUSTOMER_NOT_ELIGIBLE',
+            'CUSTOMER_ALREADY_REFERRED',
+            'BENEFIT_INVALID'
+          )
+        ),
+      attributed_at INTEGER NOT NULL,
+      first_sale_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+      FOREIGN KEY (affiliate_id) REFERENCES affiliates(id),
+      FOREIGN KEY (affiliate_code_id) REFERENCES affiliate_codes(id),
+      FOREIGN KEY (customer_id) REFERENCES customers(id),
+      FOREIGN KEY (qualifying_sale_id) REFERENCES sales(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_affiliate_attributions_non_rejected_customer '
+    'ON affiliate_attributions(merchant_id, customer_id) '
+    "WHERE status <> 'REJECTED'",
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_attributions_affiliate '
+    'ON affiliate_attributions(merchant_id, affiliate_id, status, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_attributions_sale '
+    'ON affiliate_attributions(merchant_id, qualifying_sale_id)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS affiliate_rewards (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      affiliate_id TEXT NOT NULL,
+      attribution_id TEXT NOT NULL,
+      reward_type TEXT NOT NULL
+        CHECK (reward_type IN ('FIRST_QUALIFYING_SALE', 'CUSTOMER_RETURN')),
+      value_type TEXT NOT NULL
+        CHECK (value_type IN ('POINTS', 'FIXED_AMOUNT')),
+      reward_value REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'PENDING'
+        CHECK (status IN ('PENDING', 'APPROVED', 'PAID', 'CANCELLED')),
+      approval_required INTEGER NOT NULL DEFAULT 1,
+      source_sale_id TEXT,
+      approved_at INTEGER,
+      approved_by_app_user_id TEXT,
+      cancelled_at INTEGER,
+      cancelled_by_app_user_id TEXT,
+      cancellation_reason TEXT,
+      paid_at INTEGER,
+      paid_by_app_user_id TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      synced INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+      FOREIGN KEY (affiliate_id) REFERENCES affiliates(id),
+      FOREIGN KEY (attribution_id) REFERENCES affiliate_attributions(id),
+      FOREIGN KEY (source_sale_id) REFERENCES sales(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_affiliate_rewards_attribution_type '
+    'ON affiliate_rewards(merchant_id, attribution_id, reward_type)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_rewards_status '
+    'ON affiliate_rewards(merchant_id, status, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_rewards_affiliate '
+    'ON affiliate_rewards(merchant_id, affiliate_id, reward_type, updated_at)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS affiliate_events (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      affiliate_id TEXT NOT NULL,
+      event_type TEXT NOT NULL
+        CHECK (
+          event_type IN (
+            'AFFILIATE_CREATED',
+            'AFFILIATE_CODE_CREATED',
+            'REFERRAL_CODE_VALIDATED',
+            'REFERRAL_ATTRIBUTED',
+            'REFERRAL_REJECTED',
+            'AFFILIATE_REWARD_CREATED',
+            'AFFILIATE_REWARD_APPROVED',
+            'AFFILIATE_REWARD_CANCELLED',
+            'REFERRED_CUSTOMER_RETURNED'
+          )
+        ),
+      attribution_id TEXT,
+      reward_id TEXT,
+      sale_id TEXT,
+      customer_id TEXT,
+      payload TEXT,
+      occurred_at INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+      FOREIGN KEY (affiliate_id) REFERENCES affiliates(id),
+      FOREIGN KEY (attribution_id) REFERENCES affiliate_attributions(id),
+      FOREIGN KEY (reward_id) REFERENCES affiliate_rewards(id),
+      FOREIGN KEY (sale_id) REFERENCES sales(id),
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_events_occurred '
+    'ON affiliate_events(merchant_id, occurred_at, id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_events_affiliate '
+    'ON affiliate_events(merchant_id, affiliate_id, occurred_at, id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_events_type '
+    'ON affiliate_events(merchant_id, event_type, occurred_at, id)',
+  );
+
+  await db.execute('''
+    CREATE TABLE IF NOT EXISTS affiliate_fraud_signals (
+      id TEXT PRIMARY KEY,
+      merchant_id TEXT NOT NULL,
+      affiliate_id TEXT,
+      signal_type TEXT NOT NULL
+        CHECK (
+          signal_type IN (
+            'OFFLINE_CODE_REJECTED',
+            'VALIDATION_BURST',
+            'SELF_REFERRAL_ATTEMPT',
+            'DUPLICATE_ATTRIBUTION_ATTEMPT'
+          )
+        ),
+      severity TEXT NOT NULL
+        CHECK (severity IN ('LOW', 'MEDIUM', 'HIGH')),
+      attribution_id TEXT,
+      reward_id TEXT,
+      sale_id TEXT,
+      customer_id TEXT,
+      metadata TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (merchant_id) REFERENCES merchants(id),
+      FOREIGN KEY (affiliate_id) REFERENCES affiliates(id),
+      FOREIGN KEY (attribution_id) REFERENCES affiliate_attributions(id),
+      FOREIGN KEY (reward_id) REFERENCES affiliate_rewards(id),
+      FOREIGN KEY (sale_id) REFERENCES sales(id),
+      FOREIGN KEY (customer_id) REFERENCES customers(id)
+    )
+  ''');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_fraud_signals_severity '
+    'ON affiliate_fraud_signals(merchant_id, severity, created_at, id)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_fraud_signals_affiliate '
+    'ON affiliate_fraud_signals(merchant_id, affiliate_id, created_at, id)',
+  );
+
+  await _addColumnIfMissing(db, 'sales', 'gross_amount REAL');
+  await _addColumnIfMissing(db, 'sales', 'referral_benefit_type TEXT');
+  await _addColumnIfMissing(db, 'sales', 'referral_benefit_value REAL');
+  await _addColumnIfMissing(db, 'sales', 'referral_benefit_amount REAL');
+  await _addColumnIfMissing(db, 'sales', 'affiliate_code_id TEXT');
+  await _addColumnIfMissing(db, 'sales', 'referral_status TEXT');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sales_affiliate_code '
+    'ON sales(merchant_id, affiliate_code_id, created_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sales_referral_status '
+    'ON sales(merchant_id, referral_status, updated_at)',
+  );
+
+  await _addColumnIfMissing(db, 'sync_queue', 'local_id TEXT');
+  await _addColumnIfMissing(db, 'sync_queue', 'idempotency_key TEXT');
+  await _addColumnIfMissing(db, 'sync_queue', 'last_sync_error TEXT');
+  await db.execute(
+    'UPDATE sync_queue SET local_id = entity_id '
+    "WHERE local_id IS NULL OR local_id = ''",
+  );
+  await db.execute(
+    'UPDATE sync_queue SET idempotency_key = id '
+    "WHERE idempotency_key IS NULL OR idempotency_key = ''",
+  );
+  await db.execute(
+    'UPDATE sync_queue SET last_sync_error = last_error '
+    'WHERE last_sync_error IS NULL AND last_error IS NOT NULL',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sync_queue_local_id '
+    'ON sync_queue(merchant_id, entity_type, local_id)',
+  );
+  await db.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_queue_idempotency_key '
+    'ON sync_queue(merchant_id, idempotency_key) '
+    'WHERE idempotency_key IS NOT NULL',
+  );
+}
+
+/// Offline referrals: what a till has decided on its own and not yet had
+/// confirmed.
+///
+/// Purely additive over v30, which shipped and is not touched again. Every
+/// column here answers one question the offline path asks and v30 cannot:
+/// whether a row is a local guess awaiting the server (`provisional`,
+/// `sync_status`, `last_sync_error`), who a cached code belongs to in words a
+/// cashier can read (`affiliate_display_name` and the two statuses), and what
+/// code a sale carried when the cache could not price it
+/// (`referral_code_input`).
+///
+/// `referral_local_benefit_applied` is the one the server needs most: a
+/// rejected code whose discount was already given to a customer standing at the
+/// counter keeps that discount, and the only way to know a discount was given
+/// is to have written down that it was.
+Future<void> _createV31Schema(DatabaseExecutor db) async {
+  // A provisional affiliate is one this device invented while offline. It is
+  // real enough to appear in the list and be worked with, and never real
+  // enough to share: the code it carries is local and the server has not
+  // agreed to it yet.
+  for (final table in <String>[
+    'affiliates',
+    'affiliate_merchants',
+    'affiliate_codes',
+  ]) {
+    await _addColumnIfMissing(
+      db,
+      table,
+      'provisional INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(db, table, 'local_id TEXT');
+    await _addColumnIfMissing(db, table, 'sync_status TEXT');
+    await _addColumnIfMissing(db, table, 'last_sync_error TEXT');
+  }
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliates_provisional '
+    'ON affiliates(provisional, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_codes_provisional '
+    'ON affiliate_codes(merchant_id, provisional, updated_at)',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_merchants_provisional '
+    'ON affiliate_merchants(merchant_id, provisional, updated_at)',
+  );
+
+  // The cache the till prices an offline sale from. v30 stores the code's own
+  // terms; these add the affiliate the cashier reads out and the two statuses
+  // that make a code unusable even when the code itself is ACTIVE.
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    'affiliate_display_name TEXT',
+  );
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    'affiliate_first_name TEXT',
+  );
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    "affiliate_status TEXT NOT NULL DEFAULT 'ACTIVE'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    "link_status TEXT NOT NULL DEFAULT 'ACTIVE'",
+  );
+  await _addColumnIfMissing(
+    db,
+    'affiliate_code_lookup_cache',
+    'refreshed_at INTEGER',
+  );
+  await db.execute(
+    'UPDATE affiliate_code_lookup_cache SET refreshed_at = cached_at '
+    'WHERE refreshed_at IS NULL',
+  );
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_affiliate_code_lookup_cache_refreshed '
+    'ON affiliate_code_lookup_cache(merchant_id, refreshed_at)',
+  );
+
+  // What a sale carried, as opposed to what it was worth. `affiliate_code_id`
+  // is only filled when the cache could resolve the code; a code typed with no
+  // cache entry is still kept, verbatim and normalised, because the server can
+  // still attribute it and a discarded code is an affiliate never paid.
+  await _addColumnIfMissing(db, 'sales', 'referral_code_input TEXT');
+  await _addColumnIfMissing(db, 'sales', 'affiliate_id TEXT');
+  await _addColumnIfMissing(db, 'sales', 'referral_rejection_code TEXT');
+  await _addColumnIfMissing(db, 'sales', 'referral_status_message TEXT');
+  await _addColumnIfMissing(
+    db,
+    'sales',
+    'referral_local_benefit_applied INTEGER NOT NULL DEFAULT 0',
+  );
+  await _addColumnIfMissing(db, 'sales', 'referral_idempotency_key TEXT');
+  await db.execute(
+    'CREATE INDEX IF NOT EXISTS idx_sales_referral_code_input '
+    'ON sales(merchant_id, referral_code_input, created_at)',
+  );
+
+  // The keys the prompt fixes, stored beside the rows they identify so a
+  // replay of the same fact converges on the same record instead of a second
+  // one. Derived values only: a phone reaches these columns already hashed.
+  await _addColumnIfMissing(
+    db,
+    'affiliate_attributions',
+    'idempotency_key TEXT',
+  );
+  await _addColumnIfMissing(db, 'affiliate_rewards', 'idempotency_key TEXT');
+  await _addColumnIfMissing(db, 'affiliate_attributions', 'sync_status TEXT');
 }
 
 Future<void> _addColumnIfMissing(

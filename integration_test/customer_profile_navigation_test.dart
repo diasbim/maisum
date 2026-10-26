@@ -70,7 +70,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Ana Mucavele'), findsOneWidget);
-    expect(find.text('Terminar sessão'), findsOneWidget);
+
+    // Scrolled into view before being asserted, like every other tile below.
+    // The list builds lazily, so a child below the fold is not in the tree at
+    // all and `find.text` answers zero — which reads as "the sign-out button
+    // is gone" when it is only further down than it used to be. This
+    // assertion was written when the profile was short enough for it to fit,
+    // and six changes to the screen since have pushed it past the edge.
+    final signOutTile = find.widgetWithText(ListTile, 'Terminar sessão');
+    await tester.scrollUntilVisible(signOutTile, 200);
+    await tester.pumpAndSettle();
+    expect(signOutTile, findsOneWidget);
 
     final notificationsTile =
         find.widgetWithText(ListTile, 'Notificações push');

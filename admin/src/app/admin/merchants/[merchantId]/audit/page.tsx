@@ -3,11 +3,12 @@ import { Suspense } from 'react';
 import { fetchAuditEvents } from '@/lib/admin-api';
 import {
   EmptyState,
-  Pagination,
-  TableSkeleton,
+  ErrorState,
   formatDateTime,
   load,
+  Pagination,
   parseOffset,
+  TableSkeleton,
 } from '../../../ui';
 import { AuditDetails } from '../../../audit/AuditDetails';
 
@@ -27,7 +28,7 @@ async function Events({
     fetchAuditEvents({ merchantId, limit: PAGE_SIZE, offset }),
   );
 
-  if (result.error !== null) return <p className="error">{result.error}</p>;
+  if (result.error !== null) return <ErrorState message={result.error} />;
   if (result.data.items.length === 0) {
     return <EmptyState message="Sem eventos de auditoria para este negócio." />;
   }
@@ -38,11 +39,11 @@ async function Events({
         <table>
           <thead>
             <tr>
-              <th>Quando</th>
-              <th>Ação</th>
-              <th>Alvo</th>
-              <th>Autor</th>
-              <th>Detalhe</th>
+              <th scope="col">Quando</th>
+              <th scope="col">Ação</th>
+              <th scope="col">Alvo</th>
+              <th scope="col">Autor</th>
+              <th scope="col">Detalhe</th>
             </tr>
           </thead>
           <tbody>

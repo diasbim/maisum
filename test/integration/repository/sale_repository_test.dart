@@ -120,6 +120,58 @@ void main() {
       expect(payload, isNot(contains('replacement_sale_id')));
     });
 
+    /// The sale with no code, unchanged.
+    ///
+    /// Affiliates added an online-first path for a referred sale, and the one
+    /// thing that must not have happened is that an ordinary sale started
+    /// using it. This asserts the shape of the old path directly: the same
+    /// local transaction, the same two queue rows, no referral columns, and —
+    /// the part no other test would notice — nothing that could have gone over
+    /// the network, since this repository has no client to do it with.
+    test('a sale with no code keeps the local path and writes no referral',
+        () async {
+      final sale = await repo.createSale(customerId: customerId, amount: 200);
+
+      final database = await AppDatabase.instance.database;
+      final rows = await database.query(
+        'sales',
+        where: 'id = ?',
+        whereArgs: [sale.id],
+      );
+      final stored = rows.single;
+      for (final column in [
+        'gross_amount',
+        'referral_benefit_type',
+        'referral_benefit_value',
+        'referral_benefit_amount',
+        'affiliate_code_id',
+        'referral_status',
+      ]) {
+        expect(stored[column], isNull, reason: column);
+      }
+      expect(stored['synced'], 0, reason: 'an offline sale is still unsynced');
+      expect(sale.isReferred, isFalse);
+
+      // Exactly the two rows the path has always queued: the customer and the
+      // sale. A referred sale queues neither the same way.
+      final pending = await syncDao.getPending();
+      expect(
+        pending.map((item) => '${item.operation}:${item.entityType}').toList(),
+        ['update:customer', 'create:sale'],
+      );
+      final payload = jsonDecode(
+        pending.firstWhere((item) => item.entityType == 'sale').payload,
+      ) as Map<String, dynamic>;
+      for (final field in [
+        'gross_amount',
+        'referral_benefit_type',
+        'affiliate_code_id',
+        'referral_status',
+      ]) {
+        expect(payload, isNot(contains(field)), reason: field);
+      }
+    });
+
     test('does not create a sale for an archived customer', () async {
       await customerDao.setArchived(
         customerId,

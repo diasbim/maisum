@@ -1,14 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_layout.dart';
+import '../../../core/utils/pt_date_format.dart';
 import '../../../core/widgets/app_feedback.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../design_system/components/maisum_app_bar.dart';
+import '../../customers/domain/customer.dart';
+import '../../customers/presentation/widgets/customer_picker_field.dart';
 import '../../subscription/domain/feature_keys.dart';
 import '../../subscription/presentation/feature_upsell_screen.dart';
+import '../domain/engage_labels.dart';
 import '../domain/engage_models.dart';
 import '../providers/engage_providers.dart';
 
@@ -20,17 +26,18 @@ class VisitReportScreen extends ConsumerStatefulWidget {
 }
 
 class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
-  final _customerIdController = TextEditingController();
-  final _taskIdController = TextEditingController();
   final _notesController = TextEditingController();
+  Customer? _customer;
+
+  /// The open recovery task this visit closes, chosen from the tasks that
+  /// belong to [_customer]. Never typed: task ids are UUIDs too.
+  RecoveryTaskQueueItem? _linkedTask;
   String _result = VisitResultType.interested;
   bool _completeLinkedTask = false;
   bool _submitting = false;
 
   @override
   void dispose() {
-    _customerIdController.dispose();
-    _taskIdController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -38,6 +45,11 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
   @override
   Widget build(BuildContext context) {
     final accessAsync = ref.watch(engageAccessProvider);
+    // A failed overview must not block the report: the task picker simply
+    // disappears and the visit is still recordable.
+    final openTasks =
+        ref.watch(engageOverviewProvider).valueOrNull?.pendingTasks ??
+            const <RecoveryTaskQueueItem>[];
 
     return Scaffold(
       backgroundColor: AppColors.offWhite,
@@ -78,31 +90,32 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: AppSpacing.md),
-              TextField(
-                controller: _customerIdController,
-                decoration: const InputDecoration(
-                  labelText: 'Customer ID',
-                  hintText: 'ID do cliente visitado',
-                ),
+              CustomerPickerField(
+                label: 'Cliente visitado',
+                selected: _customer,
+                hintText: 'Escolher o cliente visitado',
+                onChanged: (customer) => setState(() {
+                  _customer = customer;
+                  // The previous task belonged to the previous customer.
+                  _linkedTask = null;
+                  _completeLinkedTask = false;
+                }),
               ),
               const SizedBox(height: AppSpacing.md),
-              TextField(
-                controller: _taskIdController,
-                decoration: const InputDecoration(
-                  labelText: 'Task ID (opcional)',
-                  hintText: 'Tarefa vinculada à visita',
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
+              ..._taskSection(openTasks),
               DropdownButtonFormField<String>(
                 initialValue: _result,
                 items: VisitResultType.values
                     .map(
-                      (value) =>
-                          DropdownMenuItem(value: value, child: Text(value)),
+                      (value) => DropdownMenuItem(
+                        value: value,
+                        child: Text(EngageLabels.visitResult(value)),
+                      ),
                     )
                     .toList(),
-                decoration: const InputDecoration(labelText: 'Resultado'),
+                decoration: const InputDecoration(
+                  labelText: 'Como correu a visita?',
+                ),
                 onChanged: (value) {
                   if (value == null) return;
                   setState(() => _result = value);
@@ -118,14 +131,18 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                value: _completeLinkedTask,
-                onChanged: (value) {
-                  setState(() => _completeLinkedTask = value ?? false);
-                },
-                title: const Text('Concluir tarefa vinculada automaticamente'),
-              ),
+              if (_linkedTask != null)
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  value: _completeLinkedTask,
+                  onChanged: (value) {
+                    setState(() => _completeLinkedTask = value ?? false);
+                  },
+                  title: const Text('Concluir a tarefa ao guardar'),
+                  subtitle: Text(
+                    'A tarefa de ${_linkedTask!.customerName} passa a concluída.',
+                  ),
+                ),
               const SizedBox(height: AppSpacing.md),
               FilledButton.icon(
                 onPressed: _submitting ? null : _submit,
@@ -145,14 +162,72 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
     );
   }
 
+  /// The open recovery tasks of the chosen customer, offered as a choice
+  /// rather than as an id to transcribe. Shown only once a customer is picked,
+  /// and only when that customer actually has open tasks — otherwise the
+  /// section is noise.
+  List<Widget> _taskSection(List<RecoveryTaskQueueItem> openTasks) {
+    final customer = _customer;
+    if (customer == null) return const [];
+
+    final tasks = openTasks
+        .where((item) => item.task.customerId == customer.id)
+        .toList();
+    if (tasks.isEmpty) return const [];
+
+    return [
+      Text(
+        'Tarefa de recuperação (opcional)',
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: AppColors.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      DropdownButtonFormField<String?>(
+        initialValue: _linkedTask?.task.id,
+        decoration: const InputDecoration(
+          labelText: 'Esta visita fecha alguma tarefa?',
+        ),
+        items: [
+          const DropdownMenuItem<String?>(
+            child: Text('Nenhuma tarefa'),
+          ),
+          ...tasks.map(
+            (item) => DropdownMenuItem<String?>(
+              value: item.task.id,
+              // Priority plus the day it was opened: a customer can have more
+              // than one task, and the priority alone would not tell them apart.
+              child: Text(
+                'Prioridade ${EngageLabels.taskPriority(item.task.priority)} '
+                '• ${PtDateFormat.dayMonthTime(item.task.createdAt)}',
+              ),
+            ),
+          ),
+        ],
+        onChanged: (value) => setState(() {
+          _linkedTask = value == null
+              ? null
+              : tasks.firstWhere((item) => item.task.id == value);
+          if (_linkedTask == null) _completeLinkedTask = false;
+        }),
+      ),
+      const SizedBox(height: AppSpacing.md),
+    ];
+  }
+
   Future<void> _submit() async {
     if (_submitting) return;
 
-    final customerId = _customerIdController.text.trim();
-    final taskId = _taskIdController.text.trim();
+    final customerId = _customer?.id ?? '';
+    final taskId = _linkedTask?.task.id ?? '';
 
     if (customerId.isEmpty) {
-      AppFeedback.showMessage(context, message: 'Informe o customer ID.');
+      AppFeedback.showMessage(
+        context,
+        message: 'Escolha o cliente visitado.',
+        isError: true,
+      );
       return;
     }
 
@@ -183,7 +258,7 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
             context,
             message: saveResult.isQueued
                 ? 'Relatório guardado para sincronizar, mas a tarefa não foi concluída.'
-                : 'Relatório salvo, mas a tarefa não foi concluída.',
+                : 'Relatório guardado, mas a tarefa não foi concluída.',
             onRetry: () => _completeLinkedTaskAfterSave(taskId),
           );
           return;
@@ -195,10 +270,18 @@ class _VisitReportScreenState extends ConsumerState<VisitReportScreen> {
         context,
         message: saveResult.isQueued
             ? 'Relatório guardado para sincronizar'
-            : 'Relatório salvo',
-        subtitle: _result,
+            : 'Relatório guardado',
+        // Never the raw VisitResultType: that would read "Needs Promotion".
+        subtitle:
+            '${_customer?.name ?? 'Cliente'} • ${EngageLabels.visitResult(_result)}',
       );
       _notesController.clear();
+      setState(() {
+        _linkedTask = null;
+        _completeLinkedTask = false;
+      });
+      // A completed task must leave the pending queue the picker reads from.
+      unawaited(ref.read(engageOverviewProvider.notifier).softRefresh());
     } catch (_) {
       if (!mounted) return;
       AppFeedback.showRetryableError(

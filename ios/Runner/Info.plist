@@ -38,6 +38,8 @@
 	</dict>
 	<key>NFCReaderUsageDescription</key>
 	<string>Precisamos de ler cartões NFC físicos para identificar o cliente e registar vendas ou benefícios.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Precisamos da câmara para ler códigos QR de clientes e negócios.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

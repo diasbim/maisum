@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CREATE_OPEN_RECOVERY_TASK_SQL = void 0;
+exports.COMPLETE_RECOVERY_TASK_SQL = exports.CREATE_OPEN_RECOVERY_TASK_SQL = void 0;
+exports.completeRecoveryTask = completeRecoveryTask;
 exports.createOrGetOpenRecoveryTask = createOrGetOpenRecoveryTask;
 const crypto_1 = require("crypto");
 exports.CREATE_OPEN_RECOVERY_TASK_SQL = `
@@ -40,6 +41,39 @@ exports.CREATE_OPEN_RECOVERY_TASK_SQL = `
     END
   RETURNING recovery_tasks.*, recovery_tasks.id = $1 AS creation_created
 `;
+/**
+ * Completing a task, scoped to its own business.
+ *
+ * `status` is compared case-insensitively because the two writers disagree:
+ * the app stores `open`/`completed` lower-case, and nothing stops a future
+ * caller from sending `OPEN`. Re-completing a task that is already completed
+ * returns no row rather than touching `updated_at`, so a double click does not
+ * rewrite who closed it and when.
+ */
+exports.COMPLETE_RECOVERY_TASK_SQL = `
+  UPDATE recovery_tasks
+  SET status = 'completed',
+    updated_at = $3,
+    updated_by_app_user_id = $4
+  WHERE id = $1
+    AND merchant_id = $2
+    AND LOWER(status) <> 'completed'
+  RETURNING *
+`;
+/**
+ * Returns the task as it now stands, or null when there was nothing to close —
+ * an unknown id, another business's task, or one already completed. The caller
+ * decides which of those it wants to tell the user apart.
+ */
+async function completeRecoveryTask(db, input) {
+    const result = await db.query(exports.COMPLETE_RECOVERY_TASK_SQL, [
+        input.taskId,
+        input.merchantId,
+        input.now,
+        input.actorAppUserId,
+    ]);
+    return result.rows[0] ?? null;
+}
 async function createOrGetOpenRecoveryTask(db, input) {
     const id = input.id ?? (0, crypto_1.randomUUID)();
     const result = await db.query(exports.CREATE_OPEN_RECOVERY_TASK_SQL, [

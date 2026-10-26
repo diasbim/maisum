@@ -16,6 +16,7 @@ import 'auth_controller.dart';
 import '../domain/auth_session.dart';
 import 'post_auth_navigation.dart';
 import 'phone_auth_screen.dart';
+import '../../../core/services/firebase_auth_service.dart';
 
 class OtpScreenArgs {
   const OtpScreenArgs({
@@ -84,7 +85,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
   }
 
   void _resendCode() {
-    if (_resendTimer > 0) return;
+    if (_resendTimer > 0 && _hasSession) return;
     _pinController.clear();
     setState(() => _resendTimer = 60);
     _startResendTimer();
@@ -108,7 +109,23 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
         );
   }
 
+  /// Whether this screen still has a session a code could be checked against.
+  ///
+  /// False after the verification id is lost — the screen survives, the
+  /// session behind it does not. Checked before anything is typed, because
+  /// the alternative is letting someone enter a correct code and telling them
+  /// it is wrong.
+  bool get _hasSession => _verificationId.trim().isNotEmpty;
+
   void _verifyOTP([String? pin]) async {
+    if (!_hasSession) {
+      AppFeedback.showMessage(
+        context,
+        message: 'A sessão expirou. Toque em "Reenviar código".',
+        isError: true,
+      );
+      return;
+    }
     final otp = pin ?? _pinController.text;
     if (otp.length != 6) {
       if (!mounted) return;
@@ -155,15 +172,9 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       setState(() => _isVerifying = false);
       _pinController.clear();
       if (!mounted) return;
-      final rawMessage = e.toString().trim();
-      final message = rawMessage.startsWith('Exception: ')
-          ? rawMessage.substring('Exception: '.length)
-          : rawMessage;
       AppFeedback.showMessage(
         context,
-        message: message.isEmpty
-            ? 'Não foi possível validar o código. Tente novamente.'
-            : message,
+        message: authErrorMessage(e),
         isError: true,
       );
     }
@@ -309,6 +320,10 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.xxxl),
+                    if (!_hasSession) ...[
+                      const _SessionLostNotice(key: Key('otp_session_lost')),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
                     Center(
                       child: Pinput(
                         key: const Key('otp_input'),
@@ -324,7 +339,7 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                         submittedPinTheme: submittedTheme,
                         errorPinTheme: errorTheme,
                         onCompleted: _verifyOTP,
-                        enabled: !_isVerifying,
+                        enabled: !_isVerifying && _hasSession,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xxl),
@@ -354,7 +369,10 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
                     const SizedBox(height: AppSpacing.lg),
                     AuthGradientButton(
                       key: const Key('verify_button'),
-                      onPressed: _isVerifying ? null : _verifyOTP,
+                      // Disabled with a reason shown above, rather than a
+                      // button that submits into a session that is gone.
+                      onPressed:
+                          _isVerifying || !_hasSession ? null : _verifyOTP,
                       isLoading: _isVerifying,
                       label: 'Verificar',
                       icon: Icons.check_rounded,
@@ -371,7 +389,10 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
   }
 
   Widget _buildResendRow(ThemeData theme) {
-    if (_resendTimer > 0) {
+    // The countdown exists to stop someone spamming SMS they are waiting for.
+    // With no session there is nothing to wait for, and the countdown would
+    // be holding shut the only door out of the screen.
+    if (_resendTimer > 0 && _hasSession) {
       return Wrap(
         alignment: WrapAlignment.center,
         crossAxisAlignment: WrapCrossAlignment.center,
@@ -418,6 +439,113 @@ class _OTPVerificationScreenState extends ConsumerState<OTPVerificationScreen> {
       foregroundColor: AppColors.secondary,
       fullWidth: false,
       height: 40,
+    );
+  }
+}
+
+/// What `/otp` shows when it is reached without a verification session.
+///
+/// `extra` carries the verification id and is not serialisable, so it is gone
+/// after a process restart, after a deep link, and any other way of arriving
+/// here without having just asked for a code. The route used to cast it
+/// unchecked and throw — a crash, where the honest answer is short and the
+/// way out is one tap.
+///
+/// Deliberately not a snackbar over an empty code field: a screen that asks
+/// for six digits it can never accept is worse than no screen, because the
+/// person spends the attempt and reads a failure that sounds like their
+/// fault.
+class OtpSessionLostScreen extends StatelessWidget {
+  const OtpSessionLostScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Scaffold(
+      backgroundColor: AppColors.cream,
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.sms_failed_outlined,
+                  size: 48,
+                  color: AppColors.primary,
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  'A sessão de verificação expirou',
+                  style: text.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Por segurança, o código deixa de ser válido passado algum '
+                  'tempo. Introduza o seu número para receber um novo.',
+                  style: text.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.xl),
+                SizedBox(
+                  width: double.infinity,
+                  child: AuthGradientButton(
+                    key: const Key('otp_session_lost_restart'),
+                    onPressed: () => context.go('/login'),
+                    isLoading: false,
+                    label: 'Receber novo código',
+                    icon: Icons.arrow_forward_rounded,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Said before anything is typed, not after it fails.
+///
+/// The screen can outlive the session it depends on. When that happens the
+/// six boxes still render and the button still looks ready, so the only
+/// signal used to be an error after the person had found their code and
+/// typed it — which reads as "you got it wrong".
+class _SessionLostNotice extends StatelessWidget {
+  const _SessionLostNotice({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: AppColors.secondaryLight,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.secondary),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Colour is not the only carrier: the icon says it too.
+          const Icon(Icons.schedule_rounded, size: 20, color: AppColors.secondaryDark),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'A sessão de verificação expirou. Toque em "Reenviar código" '
+              'para receber um novo.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.primary,
+                  ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

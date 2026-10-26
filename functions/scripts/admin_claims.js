@@ -35,16 +35,27 @@ const {
   hasAdminClaims,
   withAdminClaim,
 } = require('../lib/admin_access.js');
+const {
+  merchantIdsFromClaims,
+  withMerchantClaim,
+} = require('../lib/merchant_access.js');
 
 function parseArgs(argv) {
-  const args = { action: null, email: null, uid: null, confirmed: false };
+  const args = {
+    action: null,
+    email: null,
+    uid: null,
+    merchant: null,
+    confirmed: false,
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     switch (arg) {
       case '--grant':
       case '--revoke':
       case '--list':
-        if (args.action) fail(`Specify only one of --grant, --revoke, --list.`);
+      case '--list-merchants':
+        if (args.action) fail(`Specify only one action.`);
         args.action = arg.slice(2);
         break;
       case '--email':
@@ -52,6 +63,11 @@ function parseArgs(argv) {
         break;
       case '--uid':
         args.uid = argv[++i] ?? null;
+        break;
+      // Grants access to one business instead of internal admin access. The
+      // two are independent: someone can be internal staff and run a shop.
+      case '--merchant':
+        args.merchant = argv[++i] ?? null;
         break;
       case '--yes':
         args.confirmed = true;
@@ -73,7 +89,12 @@ function printUsage() {
     'Usage:\n' +
       '  node scripts/admin_claims.js --list\n' +
       '  node scripts/admin_claims.js --grant  (--email <e> | --uid <u>) --yes\n' +
-      '  node scripts/admin_claims.js --revoke (--email <e> | --uid <u>) --yes\n',
+      '  node scripts/admin_claims.js --revoke (--email <e> | --uid <u>) --yes\n' +
+      '\n' +
+      'Business access (independent of admin access):\n' +
+      '  node scripts/admin_claims.js --list-merchants\n' +
+      '  node scripts/admin_claims.js --grant  --merchant <id> (--email <e>|--uid <u>) --yes\n' +
+      '  node scripts/admin_claims.js --revoke --merchant <id> (--email <e>|--uid <u>) --yes\n',
   );
 }
 
@@ -117,6 +138,47 @@ async function listAdmins(auth) {
   }
 }
 
+/** The audit verb for the grant that actually changed. */
+function auditAction(grant, merchant) {
+  if (merchant) {
+    return grant ? 'merchant_claim_granted' : 'merchant_claim_revoked';
+  }
+  return grant ? 'admin_claim_granted' : 'admin_claim_revoked';
+}
+
+async function listMerchantUsers(auth) {
+  const holders = [];
+  let pageToken;
+  do {
+    const page = await auth.listUsers(1000, pageToken);
+    for (const user of page.users) {
+      const ids = merchantIdsFromClaims(user.customClaims ?? {});
+      if (ids.length > 0) {
+        holders.push({
+          uid: user.uid,
+          email: user.email ?? '(no email)',
+          ids: ids.join(', '),
+        });
+      }
+    }
+    pageToken = page.pageToken;
+  } while (pageToken);
+
+  if (holders.length === 0) {
+    // Not the same as "no merchants": most are reached by the owner field or
+    // by phone match on the business document, and carry no claim at all.
+    process.stdout.write(
+      'No user holds a merchant claim. Merchants matched by owner field or ' +
+        'phone do not appear here.\n',
+    );
+    return;
+  }
+  process.stdout.write(`${holders.length} user(s) with a merchant claim:\n`);
+  for (const entry of holders) {
+    process.stdout.write(`  ${entry.email}  uid=${entry.uid}  ${entry.ids}\n`);
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.action) {
@@ -125,12 +187,14 @@ async function main() {
 
   // Checked before touching credentials or the network, so a mistyped command
   // fails immediately and locally.
-  if (args.action !== 'list') {
+  const isList = args.action === 'list' || args.action === 'list-merchants';
+  if (!isList) {
     if (!args.email && !args.uid) {
       fail('Provide --email or --uid.');
     }
     if (!args.confirmed) {
-      fail(`Refusing to ${args.action} admin access without --yes.`);
+      const what = args.merchant ? `access to ${args.merchant}` : "admin access";
+      fail(`Refusing to ${args.action} ${what} without --yes.`);
     }
   }
 
@@ -142,16 +206,19 @@ async function main() {
     admin.app().options.projectId ??
     '(unknown project)';
 
-  if (args.action === 'list') {
+  if (isList) {
     process.stdout.write(`Project: ${projectId}\n`);
-    await listAdmins(auth);
+    await (args.action === 'list' ? listAdmins(auth) : listMerchantUsers(auth));
     return;
   }
 
   const grant = args.action === 'grant';
   const user = await resolveUser(auth, args);
   const before = user.customClaims ?? {};
-  const after = withAdminClaim(before, grant);
+  // Business access and admin access are separate grants on the same user.
+  const after = args.merchant
+    ? withMerchantClaim(before, args.merchant, grant)
+    : withAdminClaim(before, grant);
   await auth.setCustomUserClaims(user.uid, after);
 
   if (!grant) {
@@ -165,14 +232,17 @@ async function main() {
   // PostgreSQL question (Q2 in docs/web_admin_portal_code_plan.md) is settled.
   process.stdout.write(
     `AUDIT ${new Date().toISOString()} ` +
-      `action=${grant ? 'admin_claim_granted' : 'admin_claim_revoked'} ` +
+      `action=${auditAction(grant, args.merchant)} ` +
       `project=${projectId} uid=${user.uid} email=${user.email ?? ''} ` +
       `before=${JSON.stringify(before)} after=${JSON.stringify(after)}\n`,
   );
+  const granted = args.merchant
+    ? `access to business "${args.merchant}"`
+    : `"${PRIMARY_ADMIN_CLAIM}"`;
   process.stdout.write(
     grant
-      ? `Granted "${PRIMARY_ADMIN_CLAIM}". The user must obtain a fresh ID ` +
-          'token before the portal recognizes it (sign out and back in).\n'
+      ? `Granted ${granted}. The user must obtain a fresh ID token before ` +
+          'the portal recognizes it (sign out and back in).\n'
       : 'Revoked, and refresh tokens invalidated.\n',
   );
 }

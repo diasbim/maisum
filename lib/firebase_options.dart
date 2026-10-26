@@ -10,6 +10,8 @@ class DefaultFirebaseOptions {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
+      case TargetPlatform.iOS:
+        return ios;
       default:
         throw UnsupportedError(
           'DefaultFirebaseOptions not configured for ${defaultTargetPlatform.name}. '
@@ -19,10 +21,20 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDiD3ozFKrqrfP7nyeb3bYX8kYLB2wpAUs',
+    apiKey: 'AIzaSyDUuadd7-Osnf8BGsOQ1H52EaFwXj42s1I',
     appId: '1:517299605672:android:392da87b191d830cc7329d',
     messagingSenderId: '517299605672',
     projectId: 'loyaltyos-fc4dd',
     storageBucket: 'loyaltyos-fc4dd.firebasestorage.app',
+  );
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyCdKWPIZrwgyOjwRxUDd4AXbmW939m0FIs',
+    appId: '1:517299605672:ios:b34613825197e48ec7329d',
+    messagingSenderId: '517299605672',
+    projectId: 'loyaltyos-fc4dd',
+    storageBucket: 'loyaltyos-fc4dd.firebasestorage.app',
+    androidClientId: '517299605672-5vi5ersr1uq4rapb257rkfeg6nm8kodb.apps.googleusercontent.com',
+    iosClientId: '517299605672-brpravevidme3nn2osmvr9u9su7pr586.apps.googleusercontent.com',
+    iosBundleId: 'com.tsintsivadigital.maisum',
   );
 }

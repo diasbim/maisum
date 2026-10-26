@@ -53,6 +53,7 @@ app.*.map.json
 
 # Firebase local app config
 /android/app/google-services.json
+/ios/Runner/GoogleService-Info.plist
 
 # Node.js dependencies (local only)
 /node_modules/
@@ -60,3 +61,16 @@ app.*.map.json
 
 # Firebase Functions local environment values
 /functions/.env*
+# ...except the template, which is the only record of what those files hold.
+!/functions/.env.example
+
+# Cache local do arnês de prospeção. Respostas pagas do Places, por place_id.
+functions/scripts/.cache/
+
+# Capturas do arnês da app. Artefactos de execução: ficam em disco para se
+# verem, fora do git porque uma captura antiga ao lado de uma nova engana
+# quem a lê — ver os Gotchas em .claude/skills/run-maisum/SKILL.md.
+.claude/skills/run-maisum/shots/
+
+# Despejos de diagnóstico do Android, criados pelo emulador ao apanhar um ANR.
+bugreport-*.zip

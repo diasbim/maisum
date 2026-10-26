@@ -595,6 +595,22 @@ class EngageRepository {
     );
   }
 
+  /// The link a customer opens to answer a survey.
+  ///
+  /// Server-only, deliberately: the token is signed with a secret the phone
+  /// does not hold, so there is nothing sensible to queue offline. The caller
+  /// is told so rather than handed a link that would never verify.
+  Future<SurveyLink> getSurveyLink(
+    String surveyId, {
+    String? customerId,
+  }) async {
+    final api = _api;
+    if (!_useRemote || api == null) {
+      throw const NetworkException('Ligue-se à internet para criar o link.');
+    }
+    return api.getSurveyLink(surveyId, customerId: customerId);
+  }
+
   Future<EngageSurveyAnalytics> getSurveyAnalytics() async {
     final api = _api;
     if (_useRemote && api != null) {

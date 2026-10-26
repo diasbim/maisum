@@ -1,0 +1,1495 @@
+import type * as admin from 'firebase-admin';
+import type express from 'express';
+
+import { recordAuditEvent, type AuditActor } from './admin_audit.js';
+import {
+  AFFILIATE_API_MESSAGE,
+  AffiliateApiError,
+  affiliateApiError,
+  ownerOnlyError,
+  parseAffiliateName,
+  parseAffiliateStatus,
+  parseBenefit,
+  parseBodyObject,
+  parseCodeText,
+  parseFirstVisitOnly,
+  parseIdParam,
+  parseOfflineAffiliateCreate,
+  parseOfflineReferralSale,
+  parseOptionalSaleAmount,
+  parsePhone,
+  parseReferralSaleCommit,
+  parseUsageLimit,
+  parseValidity,
+  parseValidityPair,
+  rateLimitedResponse,
+  referralValidationResponse,
+  type AffiliateApiMessageKey,
+  type AffiliateRewardDto,
+} from './affiliate_api_contracts.js';
+import { DEFAULT_CODE_VALIDITY_DAYS } from './affiliate_contracts.js';
+import { CLOCK_SKEW_SIGNAL_MS } from './affiliate_engine.js';
+import { VALIDATE_CODE_POLICY } from './affiliate_rate_limit.js';
+import {
+  commitOfflineReferralSaleToFirestore,
+  commitReferralSaleToFirestore,
+} from './affiliate_sale_firestore.js';
+import {
+  affiliateMetrics,
+  appendAffiliateEvent,
+  consumeRateLimit,
+  createAffiliateForMerchant,
+  createCodeForLinkedAffiliate,
+  createGlobalAffiliate,
+  getAffiliate,
+  getAttribution,
+  getMerchantAffiliate,
+  getMerchantCode,
+  linkAffiliateToMerchant,
+  listAllAffiliates,
+  listAttributions,
+  listMerchantAffiliates,
+  listMerchantCodes,
+  listRewards,
+  merchantExists,
+  setAffiliateStatus,
+  setCodeStatus,
+  setLinkStatus,
+  transitionReward,
+  unlinkAffiliateFromMerchant,
+  updateAffiliateName,
+  updateMerchantAffiliateName,
+  updateCode,
+  validateReferralCode,
+  type AffiliateCodeDefaults,
+} from './affiliate_store.js';
+import { maskPhone } from './affiliate_notifications.js';
+import type { RecordQuery } from './merchant_records.js';
+
+/**
+ * The HTTP surface of the referral feature.
+ *
+ * It lives outside index.ts because that file is already thirteen thousand
+ * lines, and because everything these handlers need — the business resolver,
+ * the owner predicate, the audit actor, the phone normaliser, the identity
+ * derivation that needs a secret — is passed in rather than reached for. The
+ * point is not tidiness: it is that a handler here cannot invent its own idea
+ * of who the caller is, because it has no way to ask.
+ *
+ * The merchant handlers are written out one by one, each repeating
+ * `requireBusiness` and `business.id`, rather than sharing a wrapper that would
+ * hide the resolve. That repetition is the thing `merchant_routes.test.ts`
+ * reads — it scans this file along with index.ts — and a handler that stopped
+ * doing it would fail that test rather than quietly serve another business's
+ * affiliates.
+ *
+ * Admin routes are declared first and merchant routes last, deliberately: the
+ * scanner bounds a merchant handler at the next merchant handler, so an admin
+ * route written underneath one would be read as part of it.
+ */
+
+/**
+ * The same request shape index.ts's auth middleware produces.
+ *
+ * Declared structurally rather than imported so this module has no dependency
+ * back on index.ts — and kept identical field for field, so a drift in either
+ * definition is a compile error at the mount point rather than a cast that
+ * quietly hides a missing field.
+ */
+export type AffiliateRequest = express.Request & {
+  merchantId: string;
+  appUserId?: string;
+  appUserRole?: string;
+  auth?: admin.auth.DecodedIdToken;
+  adminKeyGranted?: boolean;
+};
+
+export type AffiliateRouteDeps = {
+  merchantRouter: express.Router;
+  adminRouter: express.Router;
+  /** Answers the request and returns null when the caller may not act. */
+  requireBusiness: (
+    req: AffiliateRequest,
+    res: express.Response,
+  ) => Promise<{ id: string; name: string | null } | null>;
+  isOwnerOrAdminRequest: (req: AffiliateRequest) => boolean;
+  auditActorFrom: (req: AffiliateRequest) => AuditActor;
+  respondServerError: (
+    res: express.Response,
+    operation: string,
+    error: unknown,
+  ) => express.Response;
+  /** `tryNormalizeMozambiquePhoneToE164`, the product's one definition. */
+  normalizePhone: (raw: unknown) => string | null;
+  /** HMAC of the normalised phone: one identity per person, race-free. */
+  affiliateIdForPhone: (phoneE164: string) => string;
+  /**
+   * Processes the queued referral messages that are due.
+   *
+   * Injected rather than imported so this module keeps no opinion about where
+   * the queue lives, and so the route can be exercised without Firestore.
+   */
+  sweepAffiliateOutbox: (input: {
+    merchantId: string | null;
+    limit?: number;
+  }) => Promise<Record<string, number>>;
+  now?: () => number;
+};
+
+const MAX_PAGE = 200;
+const DEFAULT_PAGE = 50;
+
+/* ------------------------------------------------------------------ helpers */
+
+function clock(deps: AffiliateRouteDeps): number {
+  return deps.now ? deps.now() : Date.now();
+}
+
+function queryString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+}
+
+function pageQuery(req: AffiliateRequest): RecordQuery & { affiliateId?: string } {
+  const rawLimit = Number(req.query.limit);
+  const rawOffset = Number(req.query.offset);
+  return {
+    search: queryString(req.query.search),
+    status: queryString(req.query.status),
+    limit:
+      Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(Math.floor(rawLimit), MAX_PAGE)
+        : DEFAULT_PAGE,
+    offset:
+      Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0,
+    affiliateId: queryString(req.query.affiliate_id),
+  };
+}
+
+function pageResponse<T>(
+  res: express.Response,
+  query: { limit: number; offset: number },
+  page: { items: T[]; hasMore: boolean; total: number; truncated: boolean },
+) {
+  return res.json({
+    success: true,
+    data: page.items,
+    paging: { limit: query.limit, offset: query.offset, has_more: page.hasMore },
+    total: page.total,
+    truncated: page.truncated,
+  });
+}
+
+/**
+ * Translates a refusal, or hands an unexpected failure to the existing logger.
+ *
+ * An `AffiliateApiError` is something the caller did and is told about in
+ * Portuguese with a stable code. Anything else is a bug, and the response says
+ * only "Server error" while the cause goes to Cloud Logging — the same split
+ * `respondAdminServerError` already makes.
+ */
+function respond(
+  deps: AffiliateRouteDeps,
+  res: express.Response,
+  operation: string,
+  error: unknown,
+): express.Response {
+  if (error instanceof AffiliateApiError) {
+    return res
+      .status(error.status)
+      .json({ success: false, code: error.code, message: error.message });
+  }
+  return deps.respondServerError(res, operation, error);
+}
+
+/** Raises the one 403 every mutation shares. Read routes never call it. */
+function requireOwnerOrAdmin(
+  deps: AffiliateRouteDeps,
+  req: AffiliateRequest,
+): void {
+  if (!deps.isOwnerOrAdminRequest(req)) throw ownerOnlyError();
+}
+
+function actorIdOf(req: AffiliateRequest): string {
+  const appUserId = req.appUserId?.trim();
+  if (appUserId) return appUserId;
+  const uid = req.auth?.uid?.trim();
+  return uid && uid !== '' ? uid : 'anonymous';
+}
+
+function notFound(code: AffiliateApiMessageKey): AffiliateApiError {
+  return affiliateApiError(404, code);
+}
+
+/**
+ * Derives the global identity, or says plainly that it cannot.
+ *
+ * The derivation needs the customer-core HMAC secret, and without it there is
+ * no safe identity to write — a fallback id would create a second affiliate
+ * for a phone that already has one. A bare throw would surface as "Server
+ * error" with no clue; this names the cause with a stable code.
+ */
+function affiliateIdFor(deps: AffiliateRouteDeps, phoneE164: string): string {
+  try {
+    return deps.affiliateIdForPhone(phoneE164);
+  } catch {
+    throw affiliateApiError(500, 'identity_unavailable');
+  }
+}
+
+/**
+ * The code settings a create or a link carries.
+ *
+ * `benefit_type` and `benefit_value` are required: the plan fixes a default
+ * validity, a default usage limit and a default eligibility, but it does not
+ * fix what a code is worth, and guessing one would create a discount nobody
+ * chose.
+ */
+function parseCodeDefaults(
+  payload: Record<string, unknown>,
+  now: number,
+): AffiliateCodeDefaults {
+  return {
+    benefit: parseBenefit(payload.benefit_type, payload.benefit_value),
+    validity: parseValidity(
+      payload.starts_at,
+      payload.expires_at,
+      now,
+      DEFAULT_CODE_VALIDITY_DAYS,
+    ),
+    usageLimit: parseUsageLimit(payload.usage_limit),
+    firstVisitOnly: parseFirstVisitOnly(payload.first_visit_only, true),
+  };
+}
+
+/* ======================================================================== */
+
+export function registerAffiliateRoutes(deps: AffiliateRouteDeps): void {
+  const { adminRouter, merchantRouter } = deps;
+
+  /* ------------------------------------------------------------- admin */
+
+  adminRouter.get('/affiliates', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const query = pageQuery(request);
+      return pageResponse(res, query, await listAllAffiliates(query));
+    } catch (error) {
+      return respond(deps, res, 'admin_affiliates', error);
+    }
+  });
+
+  adminRouter.post('/affiliates', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const payload = parseBodyObject(req.body);
+      const name = parseAffiliateName(payload.name);
+      const phoneE164 = parsePhone(payload.phone, deps.normalizePhone);
+      const now = clock(deps);
+
+      const affiliate = await createGlobalAffiliate({
+        affiliateId: affiliateIdFor(deps, phoneE164),
+        phoneE164,
+        name,
+        now,
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate.create',
+        targetType: 'affiliate',
+        targetId: affiliate.id,
+        merchantId: null,
+        details: { name: affiliate.name, phone_masked: maskPhone(phoneE164) },
+      });
+
+      return res.json({ success: true, data: affiliate });
+    } catch (error) {
+      return respond(deps, res, 'admin_create_affiliate', error);
+    }
+  });
+
+  adminRouter.get('/affiliates/:affiliateId', async (req, res) => {
+    try {
+      const affiliateId = parseIdParam(req.params.affiliateId, 'affiliate_not_found');
+      const affiliate = await getAffiliate(affiliateId);
+      if (affiliate === null) throw notFound('affiliate_not_found');
+      return res.json({ success: true, data: affiliate });
+    } catch (error) {
+      return respond(deps, res, 'admin_affiliate_detail', error);
+    }
+  });
+
+  adminRouter.patch('/affiliates/:affiliateId', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const affiliateId = parseIdParam(req.params.affiliateId, 'affiliate_not_found');
+      const payload = parseBodyObject(req.body);
+      const name = parseAffiliateName(payload.name);
+
+      const change = await updateAffiliateName({
+        affiliateId,
+        name,
+        now: clock(deps),
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate.update',
+        targetType: 'affiliate',
+        targetId: affiliateId,
+        merchantId: null,
+        details: { before: change.before.name, after: change.after.name },
+      });
+
+      return res.json({ success: true, data: change.after });
+    } catch (error) {
+      return respond(deps, res, 'admin_update_affiliate', error);
+    }
+  });
+
+  adminRouter.post('/affiliates/:affiliateId/status', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const affiliateId = parseIdParam(req.params.affiliateId, 'affiliate_not_found');
+      const payload = parseBodyObject(req.body);
+      const status = parseAffiliateStatus(payload.status);
+
+      const change = await setAffiliateStatus({
+        affiliateId,
+        status,
+        now: clock(deps),
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate.status',
+        targetType: 'affiliate',
+        targetId: affiliateId,
+        merchantId: null,
+        details: { before: change.before.status, after: change.after.status },
+      });
+
+      return res.json({ success: true, data: change.after });
+    } catch (error) {
+      return respond(deps, res, 'admin_affiliate_status', error);
+    }
+  });
+
+  adminRouter.post(
+    '/affiliates/:affiliateId/merchants/:merchantId',
+    async (req, res) => {
+      const request = req as unknown as AffiliateRequest;
+      try {
+        const affiliateId = parseIdParam(
+          req.params.affiliateId,
+          'affiliate_not_found',
+        );
+        const merchantId = parseIdParam(req.params.merchantId, 'merchant_not_found');
+        if (!(await merchantExists(merchantId))) throw notFound('merchant_not_found');
+
+        const payload = parseBodyObject(req.body);
+        const now = clock(deps);
+        const linked = await linkAffiliateToMerchant({
+          merchantId,
+          affiliateId,
+          defaults: parseCodeDefaults(payload, now),
+          now,
+        });
+
+        await appendAffiliateEvent(merchantId, {
+          eventType: 'AFFILIATE_CREATED',
+          affiliateId,
+          metadata: { source: 'admin_link', code_id: linked.code?.id ?? null },
+        });
+        await recordAuditEvent(deps.auditActorFrom(request), {
+          action: 'affiliate.link',
+          targetType: 'affiliate_merchant',
+          targetId: affiliateId,
+          merchantId,
+          details: { code_id: linked.code?.id ?? null },
+        });
+
+        return res.json({ success: true, data: linked });
+      } catch (error) {
+        return respond(deps, res, 'admin_link_affiliate', error);
+      }
+    },
+  );
+
+  adminRouter.delete(
+    '/affiliates/:affiliateId/merchants/:merchantId',
+    async (req, res) => {
+      const request = req as unknown as AffiliateRequest;
+      try {
+        const affiliateId = parseIdParam(
+          req.params.affiliateId,
+          'affiliate_not_found',
+        );
+        const merchantId = parseIdParam(req.params.merchantId, 'merchant_not_found');
+        if (!(await merchantExists(merchantId))) throw notFound('merchant_not_found');
+
+        await unlinkAffiliateFromMerchant({
+          merchantId,
+          affiliateId,
+          now: clock(deps),
+        });
+
+        await recordAuditEvent(deps.auditActorFrom(request), {
+          action: 'affiliate.unlink',
+          targetType: 'affiliate_merchant',
+          targetId: affiliateId,
+          merchantId,
+          details: {},
+        });
+
+        return res.json({ success: true });
+      } catch (error) {
+        return respond(deps, res, 'admin_unlink_affiliate', error);
+      }
+    },
+  );
+
+  adminRouter.get('/merchants/:merchantId/affiliates', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const merchantId = parseIdParam(req.params.merchantId, 'merchant_not_found');
+      if (!(await merchantExists(merchantId))) throw notFound('merchant_not_found');
+
+      const query = pageQuery(request);
+      return pageResponse(res, query, await listMerchantAffiliates(merchantId, query));
+    } catch (error) {
+      return respond(deps, res, 'admin_merchant_affiliates', error);
+    }
+  });
+
+  adminRouter.get('/merchants/:merchantId/affiliate-rewards', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const merchantId = parseIdParam(req.params.merchantId, 'merchant_not_found');
+      if (!(await merchantExists(merchantId))) throw notFound('merchant_not_found');
+
+      const query = pageQuery(request);
+      return pageResponse(res, query, await listRewards(merchantId, query));
+    } catch (error) {
+      return respond(deps, res, 'admin_merchant_affiliate_rewards', error);
+    }
+  });
+
+  /**
+   * The attributions themselves, which the console could not see until now.
+   *
+   * Everything else about the engine was visible — the affiliates, their
+   * codes, the rewards, the totals — but not the records those totals are made
+   * of. "This affiliate earned 400 points" was a number an operator had to take
+   * on trust, with no way to answer *which sales*, or to look at the one
+   * attribution a merchant is disputing.
+   *
+   * Scoped to one business, like every other read here, and deliberately so.
+   * A cross-merchant list would need a collection-group index on
+   * `affiliate_attributions`, and `affiliate_security_contracts.test.ts` allows
+   * exactly one of those — the outbox sweep, which no client can reach. The
+   * isolation is worth more than the convenience of a single global table, and
+   * the merchant is already in the URL of the screen that wants this.
+   */
+  adminRouter.get('/merchants/:merchantId/referrals', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const merchantId = parseIdParam(req.params.merchantId, 'merchant_not_found');
+      if (!(await merchantExists(merchantId))) throw notFound('merchant_not_found');
+
+      const query = pageQuery(request);
+      const affiliateId = queryString(request.query.affiliate_id) ?? undefined;
+      return pageResponse(
+        res,
+        query,
+        await listAttributions(merchantId, { ...query, affiliateId }),
+      );
+    } catch (error) {
+      return respond(deps, res, 'admin_merchant_referrals', error);
+    }
+  });
+
+  adminRouter.get('/merchants/:merchantId/referrals/:attributionId', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const merchantId = parseIdParam(req.params.merchantId, 'merchant_not_found');
+      if (!(await merchantExists(merchantId))) throw notFound('merchant_not_found');
+
+      const attributionId = parseIdParam(
+        req.params.attributionId,
+        'referral_not_found',
+      );
+      const attribution = await getAttribution(merchantId, attributionId);
+      // `getAttribution` already refuses a row whose own `merchant_id`
+      // disagrees with the path, so a guessed id from another business reads
+      // as absent rather than as someone else's record.
+      if (attribution === null) throw notFound('referral_not_found');
+
+      // The rewards this attribution produced, which is the question anyone
+      // opening one record actually has: did the affiliate get paid for it?
+      const rewards = await listRewards(merchantId, {
+        limit: MAX_PAGE,
+        offset: 0,
+        affiliateId: attribution.affiliate_id,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          attribution,
+          rewards: rewards.items.filter(
+            (reward: AffiliateRewardDto) => reward.attribution_id === attribution.id,
+          ),
+        },
+      });
+    } catch (error) {
+      return respond(deps, res, 'admin_merchant_referral', error);
+    }
+  });
+
+  adminRouter.get('/merchants/:merchantId/affiliate-metrics', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const merchantId = parseIdParam(req.params.merchantId, 'merchant_not_found');
+      if (!(await merchantExists(merchantId))) throw notFound('merchant_not_found');
+
+      const affiliateId = queryString(request.query.affiliate_id) ?? null;
+      return res.json({
+        success: true,
+        data: await affiliateMetrics({ merchantId, affiliateId }),
+      });
+    } catch (error) {
+      return respond(deps, res, 'admin_merchant_affiliate_metrics', error);
+    }
+  });
+
+  /**
+   * The outbox retry sweep.
+   *
+   * The create trigger delivers the common case; this exists for the ones it
+   * cannot — a message that failed and is waiting on its backoff, one whose
+   * worker died mid-delivery, and the whole `NOT_CONFIGURED` backlog on the
+   * day a provider is finally configured. It is an endpoint rather than a
+   * scheduled function because the repository has no scheduler dependency to
+   * extend for this, and adding one for a retry sweep is not a trade worth
+   * making; `x-admin-key` already authenticates exactly this kind of batch
+   * automation.
+   *
+   * Bounded per call, and every message inside is claimed transactionally, so
+   * calling it twice at once cannot send anything twice.
+   */
+  adminRouter.post('/affiliates/outbox/sweep', async (req, res) => {
+    try {
+      const payload = parseBodyObject(req.body ?? {});
+      const merchantId =
+        typeof payload.merchant_id === 'string' && payload.merchant_id.trim() !== ''
+          ? payload.merchant_id.trim()
+          : null;
+      const rawLimit = Number(payload.limit);
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : undefined;
+
+      const summary = await deps.sweepAffiliateOutbox({ merchantId, limit });
+      return res.json({ success: true, data: summary });
+    } catch (error) {
+      return respond(deps, res, 'admin_affiliate_outbox_sweep', error);
+    }
+  });
+
+  /* ---------------------------------------------------------- merchant */
+
+  merchantRouter.post('/affiliates', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const payload = parseBodyObject(req.body);
+      const name = parseAffiliateName(payload.name);
+      const phoneE164 = parsePhone(payload.phone, deps.normalizePhone);
+      const now = clock(deps);
+
+      const created = await createAffiliateForMerchant({
+        merchantId: business.id,
+        affiliateId: affiliateIdFor(deps, phoneE164),
+        phoneE164,
+        name,
+        defaults: parseCodeDefaults(payload, now),
+        now,
+      });
+
+      await appendAffiliateEvent(business.id, {
+        eventType: 'AFFILIATE_CREATED',
+        affiliateId: created.affiliate.id,
+        metadata: { identity_created: created.identityCreated },
+      });
+      await appendAffiliateEvent(business.id, {
+        eventType: 'AFFILIATE_CODE_CREATED',
+        affiliateId: created.affiliate.id,
+        metadata: { code_id: created.code.id, code: created.code.code },
+      });
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate.create',
+        targetType: 'affiliate',
+        targetId: created.affiliate.id,
+        merchantId: business.id,
+        details: {
+          // The phone is never written to the trail in full; the last four
+          // digits are enough to recognise the person in a support call.
+          phone_masked: maskPhone(phoneE164),
+          identity_created: created.identityCreated,
+          code_id: created.code.id,
+          benefit_type: created.code.benefit_type,
+          benefit_value: created.code.benefit_value,
+        },
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          ...created.affiliate,
+          merchant_id: business.id,
+          link_status: created.link.status,
+          linked_at: created.link.linkedAt,
+          code: created.code,
+        },
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_create_affiliate', error);
+    }
+  });
+
+  merchantRouter.get('/affiliates', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const query = pageQuery(request);
+      return pageResponse(res, query, await listMerchantAffiliates(business.id, query));
+    } catch (error) {
+      return respond(deps, res, 'merchant_affiliates', error);
+    }
+  });
+
+  // Declared before `/affiliates/:affiliateId`, because Express matches in
+  // registration order and would otherwise read "metrics" as an id.
+  merchantRouter.get('/affiliates/metrics', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      return res.json({
+        success: true,
+        data: await affiliateMetrics({ merchantId: business.id, affiliateId: null }),
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_affiliate_metrics', error);
+    }
+  });
+
+  merchantRouter.get('/affiliates/:affiliateId/metrics', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const affiliateId = parseIdParam(req.params.affiliateId, 'affiliate_not_found');
+      // The link is the isolation boundary: without it there are no metrics to
+      // read, and an id borrowed from another business answers "not found".
+      const affiliate = await getMerchantAffiliate(business.id, affiliateId);
+      if (affiliate === null) throw notFound('affiliate_not_found');
+
+      return res.json({
+        success: true,
+        data: await affiliateMetrics({ merchantId: business.id, affiliateId }),
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_affiliate_metrics_one', error);
+    }
+  });
+
+  merchantRouter.get('/affiliates/:affiliateId', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const affiliateId = parseIdParam(req.params.affiliateId, 'affiliate_not_found');
+      const affiliate = await getMerchantAffiliate(business.id, affiliateId);
+      if (affiliate === null) throw notFound('affiliate_not_found');
+
+      return res.json({ success: true, data: affiliate });
+    } catch (error) {
+      return respond(deps, res, 'merchant_affiliate_detail', error);
+    }
+  });
+
+  merchantRouter.patch('/affiliates/:affiliateId', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const affiliateId = parseIdParam(req.params.affiliateId, 'affiliate_not_found');
+      const existing = await getMerchantAffiliate(business.id, affiliateId);
+      if (existing === null) throw notFound('affiliate_not_found');
+
+      const payload = parseBodyObject(req.body);
+      const name = parseAffiliateName(payload.name);
+      const change = await updateMerchantAffiliateName({
+        merchantId: business.id,
+        affiliateId,
+        name,
+        now: clock(deps),
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate.update',
+        targetType: 'affiliate',
+        targetId: affiliateId,
+        merchantId: business.id,
+        details: {
+          before: change.before.displayName,
+          after: change.after.displayName,
+        },
+      });
+
+      return res.json({
+        success: true,
+        // The code keeps the name it was minted with: it is printed, shared and
+        // typed by customers, so renaming the person cannot rename it.
+        data: {
+          ...existing,
+          name: change.after.displayName,
+          first_name: change.after.firstName,
+          last_name: change.after.lastName,
+        },
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_update_affiliate', error);
+    }
+  });
+
+  merchantRouter.post('/affiliates/:affiliateId/activate', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const affiliateId = parseIdParam(req.params.affiliateId, 'affiliate_not_found');
+      const change = await setLinkStatus({
+        merchantId: business.id,
+        affiliateId,
+        status: 'ACTIVE',
+        now: clock(deps),
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate.link_status',
+        targetType: 'affiliate_merchant',
+        targetId: affiliateId,
+        merchantId: business.id,
+        details: { before: change.before, after: change.after },
+      });
+
+      return res.json({
+        success: true,
+        data: await getMerchantAffiliate(business.id, affiliateId),
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_activate_affiliate', error);
+    }
+  });
+
+  merchantRouter.post('/affiliates/:affiliateId/deactivate', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const affiliateId = parseIdParam(req.params.affiliateId, 'affiliate_not_found');
+      const change = await setLinkStatus({
+        merchantId: business.id,
+        affiliateId,
+        status: 'INACTIVE',
+        now: clock(deps),
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate.link_status',
+        targetType: 'affiliate_merchant',
+        targetId: affiliateId,
+        merchantId: business.id,
+        details: { before: change.before, after: change.after },
+      });
+
+      return res.json({
+        success: true,
+        data: await getMerchantAffiliate(business.id, affiliateId),
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_deactivate_affiliate', error);
+    }
+  });
+
+  merchantRouter.post('/affiliate-codes', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const payload = parseBodyObject(req.body);
+      const affiliateId = parseIdParam(payload.affiliate_id, 'affiliate_not_found');
+      const now = clock(deps);
+
+      const code = await createCodeForLinkedAffiliate({
+        merchantId: business.id,
+        affiliateId,
+        defaults: parseCodeDefaults(payload, now),
+        now,
+      });
+
+      await appendAffiliateEvent(business.id, {
+        eventType: 'AFFILIATE_CODE_CREATED',
+        affiliateId,
+        metadata: { code_id: code.id, code: code.code },
+      });
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate_code.create',
+        targetType: 'affiliate_code',
+        targetId: code.id,
+        merchantId: business.id,
+        details: {
+          affiliate_id: affiliateId,
+          benefit_type: code.benefit_type,
+          benefit_value: code.benefit_value,
+        },
+      });
+
+      return res.json({ success: true, data: code });
+    } catch (error) {
+      return respond(deps, res, 'merchant_create_affiliate_code', error);
+    }
+  });
+
+  merchantRouter.get('/affiliate-codes', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const query = pageQuery(request);
+      return pageResponse(res, query, await listMerchantCodes(business.id, query));
+    } catch (error) {
+      return respond(deps, res, 'merchant_affiliate_codes', error);
+    }
+  });
+
+  merchantRouter.get('/affiliate-codes/:codeId', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const codeId = parseIdParam(req.params.codeId, 'code_not_found');
+      const code = await getMerchantCode(business.id, codeId);
+      if (code === null) throw notFound('code_not_found');
+
+      return res.json({ success: true, data: code });
+    } catch (error) {
+      return respond(deps, res, 'merchant_affiliate_code_detail', error);
+    }
+  });
+
+  merchantRouter.patch('/affiliate-codes/:codeId', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const codeId = parseIdParam(req.params.codeId, 'code_not_found');
+      const payload = parseBodyObject(req.body);
+      const now = clock(deps);
+
+      // Each field is applied only when it was actually sent. A PATCH that
+      // omitted the dates must not reset the code's validity to the default.
+      const change = await updateCode({
+        merchantId: business.id,
+        codeId,
+        patch: {
+          benefit:
+            payload.benefit_type === undefined && payload.benefit_value === undefined
+              ? undefined
+              : parseBenefit(payload.benefit_type, payload.benefit_value),
+          validity:
+            payload.starts_at === undefined && payload.expires_at === undefined
+              ? undefined
+              : parseValidityPair(payload.starts_at, payload.expires_at, now),
+          usageLimit:
+            payload.usage_limit === undefined
+              ? undefined
+              : parseUsageLimit(payload.usage_limit),
+          firstVisitOnly:
+            payload.first_visit_only === undefined
+              ? undefined
+              : parseFirstVisitOnly(payload.first_visit_only, true),
+        },
+        now,
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate_code.update',
+        targetType: 'affiliate_code',
+        targetId: codeId,
+        merchantId: business.id,
+        details: { before: change.before, after: change.after },
+      });
+
+      return res.json({ success: true, data: change.after });
+    } catch (error) {
+      return respond(deps, res, 'merchant_update_affiliate_code', error);
+    }
+  });
+
+  merchantRouter.post('/affiliate-codes/:codeId/enable', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const codeId = parseIdParam(req.params.codeId, 'code_not_found');
+      const change = await setCodeStatus({
+        merchantId: business.id,
+        codeId,
+        status: 'ACTIVE',
+        now: clock(deps),
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate_code.status',
+        targetType: 'affiliate_code',
+        targetId: codeId,
+        merchantId: business.id,
+        details: { before: change.before.status, after: change.after.status },
+      });
+
+      return res.json({ success: true, data: change.after });
+    } catch (error) {
+      return respond(deps, res, 'merchant_enable_affiliate_code', error);
+    }
+  });
+
+  merchantRouter.post('/affiliate-codes/:codeId/disable', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const codeId = parseIdParam(req.params.codeId, 'code_not_found');
+      const change = await setCodeStatus({
+        merchantId: business.id,
+        codeId,
+        status: 'DISABLED',
+        now: clock(deps),
+      });
+
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate_code.status',
+        targetType: 'affiliate_code',
+        targetId: codeId,
+        merchantId: business.id,
+        details: { before: change.before.status, after: change.after.status },
+      });
+
+      return res.json({ success: true, data: change.after });
+    } catch (error) {
+      return respond(deps, res, 'merchant_disable_affiliate_code', error);
+    }
+  });
+
+  /**
+   * The one referral endpoint a till calls, and the only one rate limited.
+   *
+   * Any authenticated member of the business may call it: validating a code is
+   * part of serving a customer, not of managing affiliates. The budget is
+   * spent before the body is read, so a caller cannot walk the code space by
+   * sending malformed requests, and a refusal says nothing about whether the
+   * code exists.
+   */
+  merchantRouter.post('/referrals/validate-code', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const now = clock(deps);
+      const decision = await consumeRateLimit({
+        merchantId: business.id,
+        actorId: actorIdOf(request),
+        action: 'validate_code',
+        policy: VALIDATE_CODE_POLICY,
+        now,
+      });
+      if (!decision.allowed) {
+        const refusal = rateLimitedResponse(decision.retryAfterMs);
+        res.setHeader('Retry-After', refusal.headers['Retry-After']);
+        return res.status(refusal.status).json(refusal.body);
+      }
+
+      const payload = parseBodyObject(req.body);
+      const rawCode = parseCodeText(payload.code);
+      const customerPhoneE164 =
+        payload.customer_phone === undefined || payload.customer_phone === null
+          ? null
+          : parsePhone(payload.customer_phone, deps.normalizePhone);
+      const saleAmount = parseOptionalSaleAmount(payload.sale_amount);
+
+      const outcome = await validateReferralCode({
+        merchantId: business.id,
+        rawCode,
+        customerPhoneE164,
+        saleAmount,
+        now,
+      });
+
+      // Append-only, both ways round: a rejection is as much a fact about this
+      // till as an acceptance, and the metrics screen counts both.
+      await appendAffiliateEvent(business.id, {
+        eventType: outcome.validation.ok
+          ? 'REFERRAL_CODE_VALIDATED'
+          : 'REFERRAL_REJECTED',
+        affiliateId: outcome.affiliateId,
+        customerId: outcome.customerId,
+        dedupeKey: outcome.dedupeKey,
+        metadata: {
+          code_id: outcome.codeId,
+          reason: outcome.validation.ok ? null : outcome.validation.reason,
+          had_customer_phone: customerPhoneE164 !== null,
+          had_sale_amount: saleAmount !== null,
+        },
+      });
+
+      const body = referralValidationResponse(outcome, now);
+
+      return res.json({ success: true, data: body });
+    } catch (error) {
+      return respond(deps, res, 'merchant_validate_code', error);
+    }
+  });
+
+  /**
+   * The authoritative referred sale: one command, one transaction.
+   *
+   * Open to any authenticated member of the business, like validating a code
+   * and for the same reason — this is the till confirming a sale with a
+   * customer standing there, not an owner managing affiliates. What it may
+   * change is fixed by `parseReferralSaleCommit`, which reads the sale's local
+   * identity, the customer, the gross amount and the code, and nothing else.
+   * The benefit, the loyalty points, the reward and the affiliate all come off
+   * stored records inside the transaction.
+   *
+   * The preview the till was shown is advisory and is not trusted here: every
+   * check runs again against what Firestore holds now and against the real
+   * amount, so a code that expired between the preview and the confirmation is
+   * refused with a reason the cashier can act on — and the sale is simply made
+   * without a code instead.
+   */
+  merchantRouter.post('/referral-sales/commit', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const payload = parseBodyObject(req.body);
+      const parsed = parseReferralSaleCommit(payload, deps.normalizePhone);
+
+      const outcome = await commitReferralSaleToFirestore({
+        merchantId: business.id,
+        deviceId: parsed.deviceId,
+        localSaleId: parsed.localSaleId,
+        customerId: parsed.customerId,
+        customerPhoneE164: parsed.customerPhoneE164,
+        grossAmount: parsed.grossAmount,
+        rawCode: parsed.rawCode,
+        items: parsed.items,
+        appUserId: actorIdOf(request),
+        now: clock(deps),
+      });
+
+      switch (outcome.status) {
+        case 'committed':
+        case 'replayed':
+          // A replay answers exactly what the first call answered, apart from
+          // saying so: a till that retried after a dropped response must not
+          // be able to tell the difference and sell twice.
+          return res.json({
+            success: true,
+            data: { outcome: outcome.status, ...outcome.result },
+          });
+        case 'rejected':
+          // Not an error: the request was well formed and the answer is that
+          // this code cannot be used for this sale. The till is told why, in
+          // the same shape `validate-code` uses, and sells without a code.
+          return res.json({
+            success: true,
+            data: {
+              outcome: 'rejected',
+              code: 'referral_rejected',
+              reason: outcome.reason,
+              message: outcome.message,
+            },
+          });
+        case 'conflict':
+          throw affiliateApiError(409, 'sale_conflict');
+        default:
+          throw affiliateApiError(404, 'customer_not_found');
+      }
+    } catch (error) {
+      return respond(deps, res, 'merchant_commit_referral_sale', error);
+    }
+  });
+
+  /**
+   * The queued offline sale, reconciled.
+   *
+   * Reached only by the sync queue, which sends it once per sale and retries it
+   * with the same `local_sale_id` until it is answered. Every answer is a 200
+   * with an outcome the client can act on, because a sale that has already been
+   * paid for has no failure mode left that a status code could describe:
+   *
+   *   `committed` / `replayed` — the acquisition and reward exist, or existed;
+   *   `rejected` — the code was refused, the sale and any discount stand, and
+   *   the refusal is recorded with its reason and a fraud signal;
+   *   `deferred` — the customer has not synced yet, so try again shortly;
+   *   `conflict` — the same local id was reused for a different sale, which is
+   *   a caller bug and is refused with a 409 rather than retried forever.
+   *
+   * Open to any authenticated member of the business, like the online commit
+   * and for the same reason: it is a till reporting a sale it made.
+   */
+  merchantRouter.post('/referral-sales/sync', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const body = parseBodyObject(req.body);
+      const payload = parseBodyObject(body.payload ?? body);
+      const now = clock(deps);
+      const parsed = parseOfflineReferralSale(payload, deps.normalizePhone, now);
+
+      const outcome = await commitOfflineReferralSaleToFirestore({
+        merchantId: business.id,
+        deviceId: parsed.deviceId,
+        localSaleId: parsed.localSaleId,
+        customerId: parsed.customerId,
+        customerPhoneE164: parsed.customerPhoneE164,
+        grossAmount: parsed.grossAmount,
+        rawCode: parsed.rawCode,
+        items: parsed.items,
+        appUserId: actorIdOf(request),
+        now,
+        offlineBenefitApplied: parsed.offlineBenefitApplied,
+        appliedBenefit: parsed.appliedBenefit,
+        localCreatedAt: parsed.localCreatedAt,
+      });
+
+      switch (outcome.status) {
+        case 'committed':
+        case 'replayed':
+          if (outcome.result.clock_skew_ms > CLOCK_SKEW_SIGNAL_MS) {
+            // Recorded, never used to refuse: a device whose clock is a day out
+            // still made a real sale to a real customer.
+            console.warn('affiliate_offline_clock_skew', {
+              merchant_id: business.id,
+              device_id: parsed.deviceId,
+              clock_skew_ms: outcome.result.clock_skew_ms,
+            });
+          }
+          return res.json({
+            success: true,
+            data: { outcome: outcome.status, ...outcome.result },
+          });
+        case 'rejected':
+          if (outcome.result.clock_skew_ms > CLOCK_SKEW_SIGNAL_MS) {
+            console.warn('affiliate_offline_clock_skew', {
+              merchant_id: business.id,
+              device_id: parsed.deviceId,
+              clock_skew_ms: outcome.result.clock_skew_ms,
+            });
+          }
+          // Still a success: the operation is complete and must not be sent
+          // again. What was refused is the code, not the request.
+          return res.json({
+            success: true,
+            data: {
+              outcome: 'rejected',
+              code: 'referral_rejected',
+              reason: outcome.reason,
+              message: outcome.message,
+              ...outcome.result,
+            },
+          });
+        case 'deferred':
+          return res.json({
+            success: true,
+            data: {
+              outcome: 'deferred',
+              reason: 'customer_not_found',
+              message: AFFILIATE_API_MESSAGE.customer_not_found,
+            },
+          });
+        default:
+          throw affiliateApiError(409, 'sale_conflict');
+      }
+    } catch (error) {
+      return respond(deps, res, 'merchant_sync_referral_sale', error);
+    }
+  });
+
+  /**
+   * An affiliate added offline, registered for real.
+   *
+   * Owner-only, exactly like the online create — an offline queue is not a way
+   * around RBAC, and the device's own check is a courtesy that this repeats
+   * because it is the only one that counts.
+   *
+   * Idempotent by construction: the identity is derived from the phone, so a
+   * replay finds the link already made and answers with the affiliate that
+   * exists rather than refusing. The `local_affiliate_id` comes back untouched
+   * so the device can replace the right provisional row.
+   */
+  merchantRouter.post('/affiliates/sync', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const body = parseBodyObject(req.body);
+      const payload = parseBodyObject(body.payload ?? body);
+      const now = clock(deps);
+      const queued = parseOfflineAffiliateCreate(payload, now);
+      const name = parseAffiliateName(payload.name);
+      const phoneE164 = parsePhone(payload.phone, deps.normalizePhone);
+      const affiliateId = affiliateIdFor(deps, phoneE164);
+
+      let created: Awaited<ReturnType<typeof createAffiliateForMerchant>> | null =
+        null;
+      try {
+        created = await createAffiliateForMerchant({
+          merchantId: business.id,
+          affiliateId,
+          phoneE164,
+          name,
+          defaults: parseCodeDefaults(payload, queued.createdAt),
+          now: queued.createdAt,
+        });
+      } catch (error) {
+        // The one refusal a replay is expected to hit. Anything else — a
+        // suspended affiliate, a bad benefit — is a real refusal and is
+        // reported as one.
+        if (
+          !(error instanceof AffiliateApiError) ||
+          error.code !== 'affiliate_already_linked'
+        ) {
+          throw error;
+        }
+      }
+
+      if (created !== null) {
+        await appendAffiliateEvent(business.id, {
+          eventType: 'AFFILIATE_CREATED',
+          affiliateId: created.affiliate.id,
+          dedupeKey: queued.idempotencyKey,
+          metadata: {
+            identity_created: created.identityCreated,
+            source: 'OFFLINE',
+          },
+        });
+        await appendAffiliateEvent(business.id, {
+          eventType: 'AFFILIATE_CODE_CREATED',
+          affiliateId: created.affiliate.id,
+          dedupeKey: queued.idempotencyKey,
+          metadata: { code_id: created.code.id, code: created.code.code },
+        });
+        await recordAuditEvent(deps.auditActorFrom(request), {
+          action: 'affiliate.create',
+          targetType: 'affiliate',
+          targetId: created.affiliate.id,
+          merchantId: business.id,
+          details: {
+            phone_masked: maskPhone(phoneE164),
+            identity_created: created.identityCreated,
+            code_id: created.code.id,
+            source: 'offline_sync',
+            device_id: queued.deviceId,
+          },
+        });
+      }
+
+      const affiliate =
+        created !== null
+          ? {
+              ...created.affiliate,
+              merchant_id: business.id,
+              link_status: created.link.status,
+              linked_at: created.link.linkedAt,
+              code: created.code,
+            }
+          : await getMerchantAffiliate(business.id, affiliateId);
+      if (!affiliate) throw notFound('affiliate_not_found');
+
+      return res.json({
+        success: true,
+        data: {
+          outcome: created === null ? 'replayed' : 'committed',
+          local_id: queued.localId,
+          local_affiliate_id: queued.localAffiliateId,
+          affiliate,
+        },
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_sync_affiliate', error);
+    }
+  });
+
+  merchantRouter.get('/referrals', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const query = pageQuery(request);
+      return pageResponse(res, query, await listAttributions(business.id, query));
+    } catch (error) {
+      return respond(deps, res, 'merchant_referrals', error);
+    }
+  });
+
+  merchantRouter.get('/referrals/:attributionId', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const attributionId = parseIdParam(
+        req.params.attributionId,
+        'referral_not_found',
+      );
+      const attribution = await getAttribution(business.id, attributionId);
+      if (attribution === null) throw notFound('referral_not_found');
+
+      const rewards = await listRewards(business.id, {
+        limit: MAX_PAGE,
+        offset: 0,
+        affiliateId: attribution.affiliate_id,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          ...attribution,
+          rewards: rewards.items.filter(
+            (reward) => reward.attribution_id === attribution.id,
+          ),
+        },
+      });
+    } catch (error) {
+      return respond(deps, res, 'merchant_referral_detail', error);
+    }
+  });
+
+  merchantRouter.get('/affiliate-rewards', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+
+      const query = pageQuery(request);
+      return pageResponse(res, query, await listRewards(business.id, query));
+    } catch (error) {
+      return respond(deps, res, 'merchant_affiliate_rewards', error);
+    }
+  });
+
+  merchantRouter.post('/affiliate-rewards/:rewardId/approve', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const rewardId = parseIdParam(req.params.rewardId, 'reward_not_found');
+      // No amount is read from the request. What the reward is worth was
+      // decided when it was created, from the business's own settings.
+      const change = await transitionReward({
+        merchantId: business.id,
+        rewardId,
+        to: 'APPROVED',
+        actorId: actorIdOf(request),
+        now: clock(deps),
+      });
+
+      await appendAffiliateEvent(business.id, {
+        eventType: 'AFFILIATE_REWARD_APPROVED',
+        affiliateId: change.after.affiliate_id,
+        metadata: { reward_id: rewardId, value: change.after.value },
+      });
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate_reward.approve',
+        targetType: 'affiliate_reward',
+        targetId: rewardId,
+        merchantId: business.id,
+        details: { before: change.before.status, after: change.after.status },
+      });
+
+      return res.json({ success: true, data: change.after });
+    } catch (error) {
+      return respond(deps, res, 'merchant_approve_affiliate_reward', error);
+    }
+  });
+
+  merchantRouter.post('/affiliate-rewards/:rewardId/cancel', async (req, res) => {
+    const request = req as unknown as AffiliateRequest;
+    try {
+      const business = await deps.requireBusiness(request, res);
+      if (!business) return undefined;
+      requireOwnerOrAdmin(deps, request);
+
+      const rewardId = parseIdParam(req.params.rewardId, 'reward_not_found');
+      const change = await transitionReward({
+        merchantId: business.id,
+        rewardId,
+        to: 'CANCELLED',
+        actorId: actorIdOf(request),
+        now: clock(deps),
+      });
+
+      await appendAffiliateEvent(business.id, {
+        eventType: 'AFFILIATE_REWARD_CANCELLED',
+        affiliateId: change.after.affiliate_id,
+        metadata: { reward_id: rewardId, value: change.after.value },
+      });
+      await recordAuditEvent(deps.auditActorFrom(request), {
+        action: 'affiliate_reward.cancel',
+        targetType: 'affiliate_reward',
+        targetId: rewardId,
+        merchantId: business.id,
+        details: { before: change.before.status, after: change.after.status },
+      });
+
+      return res.json({ success: true, data: change.after });
+    } catch (error) {
+      return respond(deps, res, 'merchant_cancel_affiliate_reward', error);
+    }
+  });
+}

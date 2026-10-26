@@ -13,6 +13,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/sync_status_bar.dart';
 import '../../../design_system/design_system.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../affiliates/providers/affiliate_providers.dart';
 import '../../sync/sync_controller.dart';
 import '../../sync/sync_service.dart';
 import '../../../app/providers.dart' as app_providers;
@@ -349,6 +350,20 @@ class _DashboardBody extends ConsumerWidget {
                     onTap: () => context.push('/retention'),
                   ),
                 ),
+                // One entry, and only when the business has the programme on.
+                // A shortcut to a feature that is switched off is a dead end
+                // the owner has to learn to ignore.
+                if (ref.watch(affiliateFeatureEnabledProvider))
+                  SizedBox(
+                    width: tileWidth,
+                    child: _MiniActionTile(
+                      key: const Key('dashboard-affiliates-tile'),
+                      label: 'Afiliados',
+                      subtitle: 'Códigos, indicações e recompensas',
+                      icon: Icons.handshake_rounded,
+                      onTap: () => context.push('/affiliates'),
+                    ),
+                  ),
               ],
             );
           },
@@ -1061,6 +1076,7 @@ class _SkeletonBlock extends StatelessWidget {
 
 class _MiniActionTile extends StatelessWidget {
   const _MiniActionTile({
+    super.key,
     required this.label,
     required this.subtitle,
     required this.icon,

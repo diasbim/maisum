@@ -71,8 +71,8 @@ export function LoginForm() {
       });
 
       if (!response.ok) {
-        // The account authenticated but is not an admin, so drop the Firebase
-        // session too rather than leaving a half-signed-in state.
+        // The account authenticated but has no portal access, so drop the
+        // Firebase session too rather than leaving a half-signed-in state.
         await signOut(auth).catch(() => undefined);
         const body: unknown = await response.json().catch(() => null);
         const message =
@@ -83,8 +83,21 @@ export function LoginForm() {
         return;
       }
 
+      // The exchange says which area this account belongs to; a business owner
+      // sent to /admin would only bounce off its guard.
+      const body: unknown = await response.json().catch(() => null);
+      const area =
+        typeof body === 'object' && body !== null && 'area' in body
+          ? String((body as { area: unknown }).area)
+          : 'admin';
+      const home = area === 'merchant' ? '/negocio' : '/admin';
+
       const next = params.get('next');
-      router.replace(next && next.startsWith('/') ? next : '/admin');
+      // A saved destination is only honoured inside the area the account can
+      // actually reach.
+      const destination =
+        next && next.startsWith(home) ? next : home;
+      router.replace(destination);
       router.refresh();
     } catch (caught) {
       setError(describe(caught));
@@ -93,10 +106,21 @@ export function LoginForm() {
     }
   }
 
+  // Signing in happens in the browser, so this action is never reached while
+  // the page works. It exists for when it does not: a form with no method
+  // submits as a GET and puts the password in the query string, where it
+  // reaches the address bar, the history and every log along the way.
+  const semJavascript = (() => {
+    const next = params.get('next');
+    return next !== null && next.startsWith('/')
+      ? `/login/sem-javascript?next=${encodeURIComponent(next)}`
+      : '/login/sem-javascript';
+  })();
+
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} method="post" action={semJavascript}>
       {error ? (
-        <p className="error" style={{ marginBottom: 16 }}>
+        <p className="error" role="alert" style={{ marginBottom: 16 }}>
           {error}
         </p>
       ) : null}
@@ -108,7 +132,9 @@ export function LoginForm() {
           type="email"
           name="email"
           autoComplete="username"
+          autoFocus
           required
+          disabled={busy}
           value={email}
           onChange={(event) => setEmail(event.target.value)}
         />
@@ -122,6 +148,7 @@ export function LoginForm() {
           name="password"
           autoComplete="current-password"
           required
+          disabled={busy}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
@@ -130,6 +157,7 @@ export function LoginForm() {
         className="btn btn-gold btn-lg"
         type="submit"
         disabled={busy}
+        aria-busy={busy}
         style={{ width: "100%" }}
       >
         {busy ? 'A entrar…' : 'Entrar'}

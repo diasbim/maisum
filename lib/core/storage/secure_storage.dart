@@ -284,21 +284,6 @@ class SecureStorageService {
         aOptions: _androidOptions,
       );
 
-  // SMS permission onboarding
-  Future<void> setSmsPermissionPrompted(bool value) => _storage.write(
-        key: AppConstants.smsPermissionPromptedKey,
-        value: value ? '1' : '0',
-        aOptions: _androidOptions,
-      );
-
-  Future<bool> hasSmsPermissionPrompted() async {
-    final raw = await _storage.read(
-      key: AppConstants.smsPermissionPromptedKey,
-      aOptions: _androidOptions,
-    );
-    return raw == '1';
-  }
-
   // Onboarding plan selection
   Future<void> saveMerchantOnboardingDraft(
     String value, {
@@ -363,6 +348,25 @@ class SecureStorageService {
     }
     // Legacy users may not have this key, so treat missing state as already confirmed.
     return true;
+  }
+
+  /// Debug-only toggle used by QA to bypass paid-module gating so that
+  /// premium features can be exercised end-to-end without a live
+  /// subscription. Read and set only from debug builds (see
+  /// `FeatureGate.check` and the Settings screen), but stored the same as
+  /// any other preference so it survives app restarts during a test pass.
+  Future<void> setDebugBypassPaidFeatureGate(bool value) => _storage.write(
+        key: AppConstants.debugBypassPaidFeatureGateKey,
+        value: value ? '1' : '0',
+        aOptions: _androidOptions,
+      );
+
+  Future<bool> getDebugBypassPaidFeatureGate() async {
+    final raw = await _storage.read(
+      key: AppConstants.debugBypassPaidFeatureGateKey,
+      aOptions: _androidOptions,
+    );
+    return raw == '1';
   }
 
   String _onboardingPlanConfirmedKey({String? merchantId, String? role}) {

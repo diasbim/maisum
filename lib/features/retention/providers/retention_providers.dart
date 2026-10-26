@@ -25,7 +25,10 @@ final inactiveCustomersProvider =
 });
 
 final retentionPremiumAccessProvider = FutureProvider<bool>((ref) async {
-  final gate = ref.read(featureGateProvider);
+  // `watch` (not `read`): featureGateProvider recomputes when the debug
+  // bypass toggle in Settings changes, and this must recompute with it so
+  // the dashboard unlocks immediately instead of showing a stale decision.
+  final gate = ref.watch(featureGateProvider);
   final decision = await gate.check(featureKey: FeatureKeys.engageViewRisk);
   return decision.allowed;
 });

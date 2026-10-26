@@ -6,6 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
@@ -46,13 +47,18 @@ import '../features/rewards/data/reward_dao.dart';
 import '../features/rewards/data/reward_repository.dart';
 import '../features/retention/data/retention_dao.dart';
 import '../features/retention/data/retention_repository.dart';
+import '../features/retention/data/return_bonus_api.dart';
+import '../features/retention/data/return_bonus_dao.dart';
+import '../features/retention/data/return_bonus_repository.dart';
 import '../features/sales/data/sale_dao.dart';
 import '../features/sales/data/sale_item_dao.dart';
 import '../features/sales/data/sale_item_repository.dart';
 import '../features/sales/data/sale_repository.dart';
 import '../features/settings/data/staff_management_repository.dart';
 import '../features/settings/domain/staff_member.dart';
+import '../features/affiliates/providers/affiliate_providers.dart';
 import '../features/sync/data/sync_dao.dart';
+import '../features/sync/data/sync_projection.dart';
 import '../features/sync/data/sync_transport.dart';
 import '../features/sync/domain/sync_item.dart';
 import '../features/subscription/data/subscription_dao.dart';
@@ -136,13 +142,22 @@ final firestoreSyncServiceProvider = Provider<FirestoreSyncService?>((ref) {
         );
       }
       final payload = jsonDecode(item.payload) as Map<String, dynamic>;
+      // The affiliate operations are decided by the referral domain, not by the
+      // generic per-entity sync writer, so they are addressed to the routes
+      // that own them. Everything else keeps the path it has always used.
+      final path = switch (item.entityType) {
+        'affiliate' => '/merchant/affiliates/sync',
+        'referral_sale' => '/merchant/referral-sales/sync',
+        _ => '/sync/${Uri.encodeComponent(item.entityType)}/'
+            '${Uri.encodeComponent(item.entityId)}',
+      };
       try {
         final response = await apiClient.post(
-          '/sync/${Uri.encodeComponent(item.entityType)}/'
-          '${Uri.encodeComponent(item.entityId)}',
+          path,
           bearerToken: token,
           body: {
             'operation': item.operation,
+            'entity_id': item.entityId,
             'payload': payload,
           },
         );
@@ -152,6 +167,24 @@ final firestoreSyncServiceProvider = Provider<FirestoreSyncService?>((ref) {
             code: 'failed-precondition',
           );
         }
+        final data = response.data;
+        final canonical = data is Map<String, dynamic>
+            ? data
+            : data is Map
+                ? data.map((key, value) => MapEntry(key.toString(), value))
+                : null;
+        // `deferred` is the server saying the record this depends on has not
+        // arrived yet — a customer still in the queue behind this sale. It is
+        // not a refusal and must not consume a retry budget as if it were, so
+        // it is raised as the transient failure it is.
+        if (canonical != null && canonical['outcome'] == 'deferred') {
+          throw SyncTransportException(
+            (canonical['message'] as String?) ??
+                'Aguarda que o cliente sincronize.',
+            code: 'unavailable',
+          );
+        }
+        return canonical;
       } on NetworkException catch (error) {
         throw SyncTransportException(error.message, code: 'unavailable');
       } on ServerException catch (error) {
@@ -554,6 +587,30 @@ final retentionRepositoryProvider = Provider<RetentionRepository>(
   ),
 );
 
+final returnBonusDaoProvider = Provider<ReturnBonusDao>(
+  (ref) => ReturnBonusDao(
+    ref.read(appDatabaseProvider),
+    merchantId: ref.watch(activeMerchantIdProvider),
+  ),
+);
+
+final returnBonusApiProvider = Provider<ReturnBonusApi>(
+  (ref) => ReturnBonusApi(ref.read(cloudFunctionsApiClientProvider)),
+);
+
+final returnBonusRepositoryProvider = Provider<ReturnBonusRepository>(
+  (ref) => ReturnBonusRepository(
+    ref.read(returnBonusDaoProvider),
+    ref.read(returnBonusApiProvider),
+    ref.read(connectivityServiceProvider),
+    resolveBearerToken: () async {
+      final token = await ref.read(secureStorageServiceProvider).getToken();
+      if (token != null && token.isNotEmpty) return token;
+      return ref.read(firebaseAuthInstanceProvider).currentUser?.getIdToken();
+    },
+  ),
+);
+
 final staffManagementRepositoryProvider = Provider<StaffManagementRepository>(
   (ref) => StaffManagementRepository(
     ref.read(appDatabaseProvider),
@@ -601,10 +658,39 @@ final usageTrackerProvider = Provider<UsageTracker>(
   ),
 );
 
+/// QA-only, debug-build controller for the paid-feature-gate bypass toggle
+/// surfaced in Settings. Persists via secure storage so a tester's choice
+/// survives app restarts during a test pass; always resolves to `false`
+/// outside `kDebugMode` regardless of any stored value.
+class DebugBypassPaidFeatureGateController extends AsyncNotifier<bool> {
+  @override
+  Future<bool> build() async {
+    if (!kDebugMode) return false;
+    return ref
+        .read(secureStorageServiceProvider)
+        .getDebugBypassPaidFeatureGate();
+  }
+
+  Future<void> setEnabled(bool value) async {
+    if (!kDebugMode) return;
+    state = AsyncData(value);
+    await ref
+        .read(secureStorageServiceProvider)
+        .setDebugBypassPaidFeatureGate(value);
+  }
+}
+
+final debugBypassPaidFeatureGateProvider =
+    AsyncNotifierProvider<DebugBypassPaidFeatureGateController, bool>(
+  DebugBypassPaidFeatureGateController.new,
+);
+
 final featureGateProvider = Provider<FeatureGate>(
   (ref) => FeatureGate(
     ref.read(subscriptionDaoProvider),
     ref.read(usageQuotaEngineProvider),
+    debugBypassEnabled: kDebugMode &&
+        (ref.watch(debugBypassPaidFeatureGateProvider).valueOrNull ?? false),
   ),
 );
 
@@ -664,12 +750,16 @@ final authRepositoryProvider = Provider<AuthRepository>(
 
 final syncServiceProvider = Provider<SyncService>((ref) {
   final merchantId = ref.watch(activeMerchantIdProvider);
+  final affiliateProjection = ref.watch(affiliateLocalRepositoryProvider);
   final svc = SyncService(
     ref.read(appDatabaseProvider),
     ref.read(syncDaoProvider),
     ref.watch(syncTransportProvider),
     ref.read(connectivityServiceProvider),
     analytics: ref.read(analyticsServiceProvider),
+    projections: <SyncProjection>[
+      if (affiliateProjection != null) affiliateProjection,
+    ],
   );
   if (merchantId != null && merchantId.isNotEmpty) {
     svc.init();

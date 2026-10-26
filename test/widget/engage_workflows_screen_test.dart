@@ -256,7 +256,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Guardar relatório'), findsOneWidget);
-      expect(find.byType(CheckboxListTile), findsOneWidget);
+      // The customer is chosen, never typed. The "conclude the task" checkbox
+      // only appears once a task is actually linked, so it is absent here.
+      expect(find.text('Escolher o cliente visitado'), findsOneWidget);
+      expect(find.byType(CheckboxListTile), findsNothing);
     });
   });
 }

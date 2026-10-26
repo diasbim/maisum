@@ -8,7 +8,16 @@ import '../../features/sync/data/sync_transport.dart';
 import '../../features/sync/domain/sync_item.dart';
 
 typedef UsageEventSyncHandler = Future<void> Function(SyncItem item);
-typedef AuthoritativeSyncHandler = Future<void> Function(SyncItem item);
+
+/// Sends an operation the server must decide and hands back what it decided.
+///
+/// The return value is the canonical entity, or null when there is nothing to
+/// project. It exists because an affiliate created offline and a referral sale
+/// committed offline are both answered with a record the client has to write
+/// over its own guess — an id it did not choose, a status it may not like.
+typedef AuthoritativeSyncHandler = Future<Map<String, dynamic>?> Function(
+  SyncItem item,
+);
 
 class FirestoreSyncService implements SyncTransport {
   FirestoreSyncService(
@@ -50,6 +59,7 @@ class FirestoreSyncService implements SyncTransport {
     'usage_event': 'usage_events',
     'app_user': 'app_users',
     'sync_tombstone': 'sync_tombstones',
+    'return_bonus': 'return_bonuses',
   };
 
   @override
@@ -146,7 +156,14 @@ class FirestoreSyncService implements SyncTransport {
       final isCustomerArchiveMutation = item.entityType == 'customer' &&
           item.operation == 'update' &&
           payload.containsKey('archived_at');
+      // Affiliates and referral sales are server-decided in full: the code's
+      // uniqueness, the acquisition and the reward cannot be settled by a
+      // client, and `firestore.rules` refuses a direct write of any of them.
+      // They go to the API for the same reason an archive does.
+      final isAffiliateMutation =
+          item.entityType == 'affiliate' || item.entityType == 'referral_sale';
       final isAuthoritativeMutation = isCustomerArchiveMutation ||
+          isAffiliateMutation ||
           (item.entityType == 'customer' && item.operation == 'delete') ||
           (item.entityType == 'sale' && item.operation == 'cancel');
       if (isAuthoritativeMutation) {
@@ -157,8 +174,10 @@ class FirestoreSyncService implements SyncTransport {
             code: 'unavailable',
           );
         }
-        await handler(item);
-        return null;
+        final canonical = await handler(item);
+        return canonical == null
+            ? null
+            : SyncProcessResult(canonicalEntity: canonical);
       }
 
       final collection = _collectionMap[item.entityType] ?? item.entityType;
